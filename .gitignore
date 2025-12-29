@@ -1,0 +1,69 @@
+# Go项目忽略规则
+# 二进制文件
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+prerender-shield
+
+# 依赖包目录
+gopkg.in/
+vendor/
+
+# 编译产生的目录
+__pycache__/
+
+# Go编译产生的文件
+*.o
+*.a
+*.test
+*.out
+
+# 测试覆盖率文件
+coverage.txt
+profile.out
+
+# 编辑器配置文件
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 配置文件（如果不需要提交）
+# configs/config.yml
+
+# 日志文件
+logs/
+*.log
+
+# 临时文件
+tmp/
+temp/
+
+# Docker相关文件（如果不需要提交）
+# docker-compose.override.yml
+
+# 前端项目忽略规则
+web/node_modules/
+web/build/
+web/dist/
+web/.eslintcache
+web/*.local
+web/.env
+web/.env.local
+web/.env.*.local
+
+# 数据库文件
+data/
+!data/.gitkeep
+
+# 证书文件
+/etc/prerender-shield/certs/

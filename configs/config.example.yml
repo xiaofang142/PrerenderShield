@@ -1,0 +1,63 @@
+# PrerenderShield 配置文件
+
+# 服务器配置
+server:
+  address: "0.0.0.0"
+  port: 8080
+
+# 防火墙配置
+firewall:
+  enabled: true
+  rules_path: "/etc/prerender-shield/rules"
+  action:
+    default_action: "block"
+    block_message: "Request blocked by PrerenderShield"
+
+# 预渲染配置
+prerender:
+  enabled: true
+  pool_size: 5
+  timeout: 30
+  cache_ttl: 3600
+  preheat:
+    enabled: false
+    sitemap_url: ""
+    schedule: "0 0 * * *"
+    concurrency: 5
+    default_priority: 0
+
+# 路由配置
+routing:
+  rules:
+    - id: "rule1"
+      pattern: "*"
+      action: "prerender"
+      priority: 1
+
+# SSL配置
+ssl:
+  enabled: false
+  let_encrypt: false
+  domains:
+    - "example.com"
+  acme_email: "admin@example.com"
+  acme_server: "https://acme-v02.api.letsencrypt.org/directory"
+  acme_challenge: "http01"
+  cert_path: "/etc/prerender-shield/certs/cert.pem"
+  key_path: "/etc/prerender-shield/certs/key.pem"
+
+# 缓存配置
+cache:
+  type: "memory"
+  redis_url: "localhost:6379"
+  memory_size: 1000
+
+# 存储配置
+storage:
+  type: "postgres"
+  postgres_url: "postgres://prerender:prerender@localhost:5432/prerender?sslmode=disable"
+
+# 监控配置
+monitoring:
+  enabled: true
+  prometheus_address: ":9090"

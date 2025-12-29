@@ -1,0 +1,34 @@
+global:
+  scrape_interval:     15s # 默认抓取间隔
+  evaluation_interval: 15s # 默认评估间隔
+
+# 规则文件列表
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+# 抓取配置列表
+scrape_configs:
+  # 监控Prometheus自身
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # 监控PrerenderShield应用
+  - job_name: 'prerender-shield'
+    static_configs:
+      - targets: ['prerender-shield:8080']
+    metrics_path: '/metrics'  # 假设应用暴露的指标路径是/metrics
+    scrape_interval: 10s      # 每10秒抓取一次
+
+  # 监控Redis（如果使用了Redis）
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 15s
+
+  # 监控Docker容器
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['host.docker.internal:9323']
+    scrape_interval: 20s
