@@ -81,8 +81,8 @@ type Monitor struct {
 
 // Config 监控配置
 type Config struct {
-	Enabled            bool
-	PrometheusAddress  string
+	Enabled           bool
+	PrometheusAddress string
 }
 
 // NewMonitor 创建新的监控管理器
@@ -115,7 +115,7 @@ func (m *Monitor) Start() error {
 	go func() {
 		m.wg.Add(1)
 		defer m.wg.Done()
-		
+
 		http.Handle("/metrics", promhttp.Handler())
 		http.ListenAndServe(":9090", nil)
 	}()
@@ -148,14 +148,14 @@ func isStaticResource(path string) bool {
 		".mp4", ".mp3", ".avi", ".mov", ".wmv",
 		".csv", ".xls", ".xlsx", ".doc", ".docx",
 	}
-	
+
 	// 检查路径是否以静态资源扩展名结尾
 	for _, ext := range staticExtensions {
 		if len(path) >= len(ext) && path[len(path)-len(ext):] == ext {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -165,34 +165,70 @@ func (m *Monitor) RecordRequest(method, path string, status int, duration time.D
 	if isStaticResource(path) {
 		return
 	}
-	
+
+	// 更新Prometheus指标
 	requestsTotal.WithLabelValues(method, path, string(rune(status))).Inc()
 	responseTime.WithLabelValues(method, path).Observe(duration.Seconds())
+
+	// 更新实时统计数据
+	statsStore.mu.Lock()
+	statsStore.totalRequests++
+	statsStore.mu.Unlock()
 }
 
 // RecordCrawlerRequest 记录爬虫请求
 func (m *Monitor) RecordCrawlerRequest() {
+	// 更新Prometheus指标
 	crawlerRequests.Inc()
+
+	// 更新实时统计数据
+	statsStore.mu.Lock()
+	statsStore.crawlerRequests++
+	statsStore.mu.Unlock()
 }
 
 // RecordBlockedRequest 记录被阻止的请求
 func (m *Monitor) RecordBlockedRequest() {
+	// 更新Prometheus指标
 	blockedRequests.Inc()
+
+	// 更新实时统计数据
+	statsStore.mu.Lock()
+	statsStore.blockedRequests++
+	statsStore.mu.Unlock()
 }
 
 // RecordCacheHit 记录缓存命中
 func (m *Monitor) RecordCacheHit() {
+	// 更新Prometheus指标
 	cacheHits.Inc()
+
+	// 更新实时统计数据
+	statsStore.mu.Lock()
+	statsStore.cacheHits++
+	statsStore.mu.Unlock()
 }
 
 // RecordCacheMiss 记录缓存未命中
 func (m *Monitor) RecordCacheMiss() {
+	// 更新Prometheus指标
 	cacheMisses.Inc()
+
+	// 更新实时统计数据
+	statsStore.mu.Lock()
+	statsStore.cacheMisses++
+	statsStore.mu.Unlock()
 }
 
 // SetActiveBrowsers 设置活跃浏览器数量
 func (m *Monitor) SetActiveBrowsers(count int) {
+	// 更新Prometheus指标
 	activeBrowsers.Set(float64(count))
+
+	// 更新实时统计数据
+	statsStore.mu.Lock()
+	statsStore.activeBrowsers = count
+	statsStore.mu.Unlock()
 }
 
 // RecordRenderTime 记录渲染时间
@@ -200,14 +236,42 @@ func (m *Monitor) RecordRenderTime(duration time.Duration) {
 	renderTime.Observe(duration.Seconds())
 }
 
+// 实时统计数据存储
+var statsStore = struct {
+	mu              sync.Mutex
+	totalRequests   int64
+	crawlerRequests int64
+	blockedRequests int64
+	cacheHits       int64
+	cacheMisses     int64
+	activeBrowsers  int
+}{
+	totalRequests:   0,
+	crawlerRequests: 0,
+	blockedRequests: 0,
+	cacheHits:       0,
+	cacheMisses:     0,
+	activeBrowsers:  0,
+}
+
 // GetStats 获取统计数据
 func (m *Monitor) GetStats() map[string]interface{} {
-	// 这里应该返回实时的统计数据
-	// 暂时返回模拟数据
+	statsStore.mu.Lock()
+	defer statsStore.mu.Unlock()
+
+	// 计算缓存命中率
+	var cacheHitRate float64 = 0
+	if statsStore.cacheHits+statsStore.cacheMisses > 0 {
+		cacheHitRate = (float64(statsStore.cacheHits) / float64(statsStore.cacheHits+statsStore.cacheMisses)) * 100
+	}
+
 	return map[string]interface{}{
-		"requestsPerSecond": 12.5,
-		"cpuUsage":         25.3,
-		"memoryUsage":      67.8,
-		"diskUsage":        45.2,
+		"totalRequests":   float64(statsStore.totalRequests),
+		"crawlerRequests": float64(statsStore.crawlerRequests),
+		"blockedRequests": float64(statsStore.blockedRequests),
+		"cacheHits":       float64(statsStore.cacheHits),
+		"cacheMisses":     float64(statsStore.cacheMisses),
+		"cacheHitRate":    cacheHitRate,
+		"activeBrowsers":  float64(statsStore.activeBrowsers),
 	}
 }

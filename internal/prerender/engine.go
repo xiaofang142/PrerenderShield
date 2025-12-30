@@ -7,44 +7,46 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/launcher"
 	"github.com/google/uuid"
 )
 
 // LRUCacheNode LRU缓存节点
 type LRUCacheNode struct {
-	key          string
-	value        *CachedRenderResult
-	prev, next   *LRUCacheNode
+	key        string
+	value      *CachedRenderResult
+	prev, next *LRUCacheNode
 }
 
 // LRUCache LRU缓存
 type LRUCache struct {
-	capacity     int
-	cache        map[string]*LRUCacheNode
-	head, tail   *LRUCacheNode
-	mutex        sync.RWMutex
+	capacity   int
+	cache      map[string]*LRUCacheNode
+	head, tail *LRUCacheNode
+	mutex      sync.RWMutex
 }
 
 // Engine 预渲染引擎
 type Engine struct {
-	SiteName       string
-	config         PrerenderConfig
-	browserPool    []*Browser
-	idleBrowsers   chan *Browser
-	taskQueue      chan *RenderTask
-	isRunning      bool
-	mutex          sync.RWMutex
-	preheatManager *PreheatManager
-	workerWg       sync.WaitGroup
-	ctx            context.Context
-	cancel         context.CancelFunc
-	healthCheckTicker *time.Ticker
+	SiteName             string
+	config               PrerenderConfig
+	browserPool          []*Browser
+	idleBrowsers         chan *Browser
+	taskQueue            chan *RenderTask
+	isRunning            bool
+	mutex                sync.RWMutex
+	preheatManager       *PreheatManager
+	workerWg             sync.WaitGroup
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	healthCheckTicker    *time.Ticker
 	dynamicScalingTicker *time.Ticker // 动态扩容检查定时器
-	queueLengthHistory []int          // 任务队列长度历史，用于动态扩容决策
-	queueMutex        sync.RWMutex    // 队列长度历史互斥锁
-	activeTasks       int             // 当前活跃任务数
-	taskMutex         sync.RWMutex    // 活跃任务数互斥锁
-	renderCache      *LRUCache        // 渲染缓存，使用LRU机制
+	queueLengthHistory   []int        // 任务队列长度历史，用于动态扩容决策
+	queueMutex           sync.RWMutex // 队列长度历史互斥锁
+	activeTasks          int          // 当前活跃任务数
+	taskMutex            sync.RWMutex // 活跃任务数互斥锁
+	renderCache          *LRUCache    // 渲染缓存，使用LRU机制
 	// 默认爬虫协议头列表
 	defaultCrawlerHeaders []string
 }
@@ -65,19 +67,20 @@ type Browser struct {
 	Healthy    bool
 	ErrorCount int
 	CreatedAt  time.Time
+	Instance   *rod.Browser // 实际的浏览器实例
 }
 
 // RenderTask 渲染任务
 type RenderTask struct {
-	ID     string
-	URL    string
+	ID      string
+	URL     string
 	Options RenderOptions
-	Result chan *RenderResult
+	Result  chan *RenderResult
 }
 
 // RenderOptions 渲染选项
 type RenderOptions struct {
-	Timeout  int
+	Timeout   int
 	WaitUntil string
 }
 
@@ -90,27 +93,27 @@ type RenderResult struct {
 
 // CachedRenderResult 缓存的渲染结果
 type CachedRenderResult struct {
-	Result     *RenderResult
-	URL        string
-	CreatedAt  time.Time
+	Result      *RenderResult
+	URL         string
+	CreatedAt   time.Time
 	ContentHash string // 内容哈希，用于检测内容变化
 }
 
 // PrerenderConfig 预渲染配置
 type PrerenderConfig struct {
-	Enabled          bool
-	PoolSize         int           // 初始浏览器池大小
-	MinPoolSize      int           // 最小浏览器池大小
-	MaxPoolSize      int           // 最大浏览器池大小
-	Timeout          int
-	CacheTTL         int
-	Preheat          PreheatConfig
-	IdleTimeout      int           // 浏览器空闲超时时间（秒）
-	DynamicScaling   bool          // 是否启用动态扩容/缩容
-	ScalingFactor    float64       // 扩容因子，如0.5表示每次增加50%
-	ScalingInterval  int           // 扩容检查间隔（秒）
-	CrawlerHeaders   []string      // 爬虫协议头列表
-	UseDefaultHeaders bool         // 是否使用默认爬虫协议头
+	Enabled           bool
+	PoolSize          int // 初始浏览器池大小
+	MinPoolSize       int // 最小浏览器池大小
+	MaxPoolSize       int // 最大浏览器池大小
+	Timeout           int
+	CacheTTL          int
+	Preheat           PreheatConfig
+	IdleTimeout       int      // 浏览器空闲超时时间（秒）
+	DynamicScaling    bool     // 是否启用动态扩容/缩容
+	ScalingFactor     float64  // 扩容因子，如0.5表示每次增加50%
+	ScalingInterval   int      // 扩容检查间隔（秒）
+	CrawlerHeaders    []string // 爬虫协议头列表
+	UseDefaultHeaders bool     // 是否使用默认爬虫协议头
 }
 
 // PreheatConfig 缓存预热配置
@@ -140,12 +143,12 @@ func NewLRUCache(capacity int) *LRUCache {
 	if capacity <= 0 {
 		capacity = 1000 // 默认容量1000
 	}
-	
+
 	head := &LRUCacheNode{}
 	tail := &LRUCacheNode{}
 	head.next = tail
 	tail.prev = head
-	
+
 	return &LRUCache{
 		capacity: capacity,
 		cache:    make(map[string]*LRUCacheNode),
@@ -172,12 +175,12 @@ func (c *LRUCache) addToHead(node *LRUCacheNode) {
 func (c *LRUCache) Get(key string) (*CachedRenderResult, bool) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	
+
 	node, ok := c.cache[key]
 	if !ok {
 		return nil, false
 	}
-	
+
 	// 将访问的节点移到头部
 	c.mutex.RUnlock()
 	c.mutex.Lock()
@@ -185,7 +188,7 @@ func (c *LRUCache) Get(key string) (*CachedRenderResult, bool) {
 	c.addToHead(node)
 	c.mutex.Unlock()
 	c.mutex.RLock()
-	
+
 	return node.value, true
 }
 
@@ -193,7 +196,7 @@ func (c *LRUCache) Get(key string) (*CachedRenderResult, bool) {
 func (c *LRUCache) Put(key string, value *CachedRenderResult) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	// 如果键已存在，更新值并移到头部
 	if node, ok := c.cache[key]; ok {
 		node.value = value
@@ -201,7 +204,7 @@ func (c *LRUCache) Put(key string, value *CachedRenderResult) {
 		c.addToHead(node)
 		return
 	}
-	
+
 	// 如果缓存已满，移除尾部节点
 	if len(c.cache) >= c.capacity {
 		// 移除尾部节点
@@ -209,7 +212,7 @@ func (c *LRUCache) Put(key string, value *CachedRenderResult) {
 		c.removeNode(removed)
 		delete(c.cache, removed.key)
 	}
-	
+
 	// 添加新节点
 	newNode := &LRUCacheNode{
 		key:   key,
@@ -223,7 +226,7 @@ func (c *LRUCache) Put(key string, value *CachedRenderResult) {
 func (c *LRUCache) Remove(key string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	if node, ok := c.cache[key]; ok {
 		c.removeNode(node)
 		delete(c.cache, key)
@@ -234,10 +237,10 @@ func (c *LRUCache) Remove(key string) {
 func (c *LRUCache) ClearExpired(ttl time.Duration) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	now := time.Now()
 	current := c.head.next
-	
+
 	for current != c.tail {
 		next := current.next
 		if now.Sub(current.value.CreatedAt) > ttl {
@@ -252,7 +255,7 @@ func (c *LRUCache) ClearExpired(ttl time.Duration) {
 // NewEngine 创建新的预渲染引擎
 func NewEngine(siteName string, config PrerenderConfig) (*Engine, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// 设置默认值
 	if config.MinPoolSize == 0 {
 		config.MinPoolSize = 2 // 默认最小浏览器数
@@ -299,19 +302,19 @@ func NewEngine(siteName string, config PrerenderConfig) (*Engine, error) {
 	}
 
 	engine := &Engine{
-		SiteName:            siteName,
-		config:              config,
-		taskQueue:           make(chan *RenderTask, 100),
-		idleBrowsers:        make(chan *Browser, config.MaxPoolSize),
-		isRunning:           false,
-		ctx:                 ctx,
-		cancel:              cancel,
-		queueLengthHistory:  make([]int, 0, 10), // 保存最近10次的队列长度
-		activeTasks:         0,
-		renderCache:         NewLRUCache(1000), // 渲染缓存初始化，容量1000
+		SiteName:              siteName,
+		config:                config,
+		taskQueue:             make(chan *RenderTask, 100),
+		idleBrowsers:          make(chan *Browser, config.MaxPoolSize),
+		isRunning:             false,
+		ctx:                   ctx,
+		cancel:                cancel,
+		queueLengthHistory:    make([]int, 0, 10), // 保存最近10次的队列长度
+		activeTasks:           0,
+		renderCache:           NewLRUCache(1000), // 渲染缓存初始化，容量1000
 		defaultCrawlerHeaders: defaultCrawlerHeaders,
 	}
-	
+
 	return engine, nil
 }
 
@@ -330,23 +333,23 @@ func NewEngineManager() *EngineManager {
 func (em *EngineManager) AddSite(siteName string, config PrerenderConfig) error {
 	em.mutex.Lock()
 	defer em.mutex.Unlock()
-	
+
 	// 检查站点是否已存在
 	if _, exists := em.engines[siteName]; exists {
 		return fmt.Errorf("site %s already exists", siteName)
 	}
-	
+
 	// 创建新引擎实例
 	engine, err := NewEngine(siteName, config)
 	if err != nil {
 		return err
 	}
-	
+
 	// 启动引擎
 	if err := engine.Start(); err != nil {
 		return err
 	}
-	
+
 	em.engines[siteName] = engine
 	return nil
 }
@@ -355,15 +358,15 @@ func (em *EngineManager) AddSite(siteName string, config PrerenderConfig) error 
 func (em *EngineManager) RemoveSite(siteName string) error {
 	em.mutex.Lock()
 	defer em.mutex.Unlock()
-	
+
 	engine, exists := em.engines[siteName]
 	if !exists {
 		return fmt.Errorf("site %s not found", siteName)
 	}
-	
+
 	// 停止引擎
 	engine.Stop()
-	
+
 	// 移除引擎
 	delete(em.engines, siteName)
 	return nil
@@ -373,7 +376,7 @@ func (em *EngineManager) RemoveSite(siteName string) error {
 func (em *EngineManager) GetEngine(siteName string) (*Engine, bool) {
 	em.mutex.RLock()
 	defer em.mutex.RUnlock()
-	
+
 	engine, exists := em.engines[siteName]
 	return engine, exists
 }
@@ -382,7 +385,7 @@ func (em *EngineManager) GetEngine(siteName string) (*Engine, bool) {
 func (em *EngineManager) ListSites() []string {
 	em.mutex.RLock()
 	defer em.mutex.RUnlock()
-	
+
 	var sites []string
 	for site := range em.engines {
 		sites = append(sites, site)
@@ -398,13 +401,13 @@ func (em *EngineManager) StartAll() error {
 		engines[k] = v
 	}
 	em.mutex.RUnlock()
-	
+
 	for siteName, engine := range engines {
 		if err := engine.Start(); err != nil {
 			return fmt.Errorf("failed to start engine for site %s: %v", siteName, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -416,11 +419,11 @@ func (em *EngineManager) StopAll() error {
 		engines[k] = v
 	}
 	em.mutex.RUnlock()
-	
+
 	for _, engine := range engines {
 		engine.Stop()
 	}
-	
+
 	em.cancel()
 	return nil
 }
@@ -429,38 +432,38 @@ func (em *EngineManager) StopAll() error {
 func (e *Engine) Start() error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
-	
+
 	if e.isRunning {
 		return nil
 	}
-	
+
 	// 初始化浏览器池
 	if err := e.initBrowserPool(); err != nil {
 		return err
 	}
-	
+
 	// 初始化预热管理器
 	e.preheatManager = &PreheatManager{
 		config: e.config,
 		engine: e,
 	}
-	
+
 	// 启动任务处理器
 	e.startWorkers()
-	
+
 	// 启动浏览器健康检查
 	e.startHealthCheck()
-	
+
 	// 启动动态扩容检查（如果启用）
 	if e.config.DynamicScaling {
 		e.startDynamicScaling()
 	}
-	
+
 	// 启动缓存清理（如果启用缓存）
 	if e.config.CacheTTL > 0 {
 		e.startCacheCleanup()
 	}
-	
+
 	e.isRunning = true
 	return nil
 }
@@ -485,32 +488,32 @@ func (e *Engine) startCacheCleanup() {
 func (e *Engine) Stop() error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
-	
+
 	if !e.isRunning {
 		return nil
 	}
-	
+
 	// 停止健康检查
 	if e.healthCheckTicker != nil {
 		e.healthCheckTicker.Stop()
 		e.healthCheckTicker = nil
 	}
-	
+
 	// 停止动态扩容检查
 	if e.dynamicScalingTicker != nil {
 		e.dynamicScalingTicker.Stop()
 		e.dynamicScalingTicker = nil
 	}
-	
+
 	// 取消上下文
 	e.cancel()
-	
+
 	// 等待工作协程结束
 	e.workerWg.Wait()
-	
+
 	// 关闭浏览器池
 	e.closeBrowserPool()
-	
+
 	e.isRunning = false
 	return nil
 }
@@ -527,14 +530,14 @@ func (e *Engine) isStaticResource(url string) bool {
 		".mp4", ".mp3", ".avi", ".mov", ".wmv",
 		".csv", ".xls", ".xlsx", ".doc", ".docx",
 	}
-	
+
 	// 检查URL是否以静态资源扩展名结尾
 	for _, ext := range staticExtensions {
 		if len(url) >= len(ext) && url[len(url)-len(ext):] == ext {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -545,26 +548,26 @@ func (e *Engine) isPaymentReturn(url string) bool {
 		"/payment/return", "/pay/callback", "/order/notify", "/payment/callback",
 		"/pay/return", "/checkout/return", "/checkout/callback",
 	}
-	
+
 	// 检查URL是否包含支付返回路径
 	for _, path := range paymentPaths {
 		if strings.Contains(url, path) {
 			return true
 		}
 	}
-	
+
 	// 检查URL是否包含支付相关的查询参数
 	paymentParams := []string{
 		"?type=payment", "&type=payment", "?action=return", "&action=return",
 		"?notify=1", "&notify=1", "?callback=1", "&callback=1",
 	}
-	
+
 	for _, param := range paymentParams {
 		if strings.Contains(url, param) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -579,7 +582,7 @@ func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) 
 			Error:   "",
 		}, nil
 	}
-	
+
 	// 尝试从缓存获取
 	if e.config.CacheTTL > 0 {
 		cachedResult, exists := e.getFromCache(url)
@@ -590,12 +593,12 @@ func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) 
 
 	// 创建渲染任务
 	task := &RenderTask{
-		ID:     uuid.New().String(),
-		URL:    url,
+		ID:      uuid.New().String(),
+		URL:     url,
 		Options: options,
-		Result: make(chan *RenderResult, 1),
+		Result:  make(chan *RenderResult, 1),
 	}
-	
+
 	// 发送到任务队列
 	select {
 	case e.taskQueue <- task:
@@ -654,9 +657,9 @@ func (e *Engine) addToCache(url string, result *RenderResult) {
 
 	// 创建缓存结果
 	cachedResult := &CachedRenderResult{
-		Result:     result,
-		URL:        url,
-		CreatedAt:  time.Now(),
+		Result:      result,
+		URL:         url,
+		CreatedAt:   time.Now(),
 		ContentHash: contentHash,
 	}
 
@@ -680,17 +683,17 @@ func (e *Engine) TriggerPreheat() error {
 func (e *Engine) GetCrawlerHeaders() []string {
 	// 合并默认和自定义爬虫协议头
 	allHeaders := make([]string, 0)
-	
+
 	// 如果启用了默认爬虫协议头，添加默认列表
 	if e.config.UseDefaultHeaders {
 		allHeaders = append(allHeaders, e.defaultCrawlerHeaders...)
 	}
-	
+
 	// 添加自定义爬虫协议头
 	if len(e.config.CrawlerHeaders) > 0 {
 		allHeaders = append(allHeaders, e.config.CrawlerHeaders...)
 	}
-	
+
 	// 去重
 	uniqueHeaders := make([]string, 0, len(allHeaders))
 	seen := make(map[string]bool)
@@ -700,34 +703,58 @@ func (e *Engine) GetCrawlerHeaders() []string {
 			uniqueHeaders = append(uniqueHeaders, header)
 		}
 	}
-	
+
 	return uniqueHeaders
 }
 
 // IsCrawlerRequest 检查请求是否来自爬虫
 func (e *Engine) IsCrawlerRequest(userAgent string) bool {
 	crawlerHeaders := e.GetCrawlerHeaders()
-	
+
 	// 如果没有配置爬虫协议头，默认返回false
 	if len(crawlerHeaders) == 0 {
 		return false
 	}
-	
+
 	// 检查User-Agent是否包含任何爬虫协议头
 	for _, header := range crawlerHeaders {
 		if strings.Contains(strings.ToLower(userAgent), strings.ToLower(header)) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
 // initBrowserPool 初始化浏览器池
 func (e *Engine) initBrowserPool() error {
 	e.browserPool = make([]*Browser, 0, e.config.PoolSize)
-	
+
 	for i := 0; i < e.config.PoolSize; i++ {
+		// 启动一个新的浏览器实例
+		launchOpts := launcher.New()
+		launchOpts.Set("headless")
+		launchOpts.Set("no-sandbox")
+		launchOpts.Set("disable-dev-shm-usage")
+		launchOpts.Set("disable-gpu")
+		launchOpts.Set("disable-setuid-sandbox")
+		launchOpts.Set("single-process")
+		launchOpts.Set("disable-accelerated-2d-canvas")
+		launchOpts.Set("disable-javascript-harmony")
+		launchOpts.Set("disable-features", "site-per-process")
+		launchOpts.Set("ignore-certificate-errors")
+		launchOpts.Set("disable-web-security")
+
+		// 启动浏览器
+		browserURL, err := launchOpts.Launch()
+		if err != nil {
+			return fmt.Errorf("failed to launch browser: %v", err)
+		}
+
+		// 连接到浏览器
+		rodBrowser := rod.New().ControlURL(browserURL).MustConnect()
+
+		// 创建浏览器实例
 		browser := &Browser{
 			ID:         fmt.Sprintf("browser-%d", i),
 			Status:     "available",
@@ -735,12 +762,13 @@ func (e *Engine) initBrowserPool() error {
 			Healthy:    true,
 			ErrorCount: 0,
 			CreatedAt:  time.Now(),
+			Instance:   rodBrowser,
 		}
 		e.browserPool = append(e.browserPool, browser)
 		// 添加到空闲浏览器通道
 		e.idleBrowsers <- browser
 	}
-	
+
 	return nil
 }
 
@@ -750,9 +778,15 @@ func (e *Engine) closeBrowserPool() {
 	for i, browser := range e.browserPool {
 		browser.Status = "closed"
 		browser.Healthy = false
+
+		// 关闭实际的浏览器实例
+		if browser.Instance != nil {
+			browser.Instance.MustClose()
+		}
+
 		e.browserPool[i] = browser
 	}
-	
+
 	// 关闭空闲浏览器通道
 	close(e.idleBrowsers)
 	e.browserPool = nil
@@ -819,6 +853,32 @@ func (e *Engine) replaceBrowser(index int, oldBrowser *Browser) {
 		return
 	}
 
+	// 启动一个新的浏览器实例
+	launchOpts := launcher.New()
+	launchOpts.Set("headless")
+	launchOpts.Set("no-sandbox")
+	launchOpts.Set("disable-dev-shm-usage")
+	launchOpts.Set("disable-gpu")
+	launchOpts.Set("disable-setuid-sandbox")
+	launchOpts.Set("single-process")
+	launchOpts.Set("disable-accelerated-2d-canvas")
+	launchOpts.Set("disable-javascript-harmony")
+	launchOpts.Set("disable-features", "site-per-process")
+	launchOpts.Set("ignore-certificate-errors")
+	launchOpts.Set("disable-web-security")
+
+	// 启动浏览器
+	browserURL, err := launchOpts.Launch()
+	if err != nil {
+		// 如果启动失败，标记原浏览器为健康并返回
+		oldBrowser.Healthy = true
+		oldBrowser.ErrorCount = 0
+		return
+	}
+
+	// 连接到浏览器
+	rodBrowser := rod.New().ControlURL(browserURL).MustConnect()
+
 	// 创建新浏览器
 	newBrowser := &Browser{
 		ID:         fmt.Sprintf("browser-%d", time.Now().UnixNano()),
@@ -827,6 +887,12 @@ func (e *Engine) replaceBrowser(index int, oldBrowser *Browser) {
 		Healthy:    true,
 		ErrorCount: 0,
 		CreatedAt:  time.Now(),
+		Instance:   rodBrowser,
+	}
+
+	// 关闭旧浏览器实例
+	if oldBrowser.Instance != nil {
+		oldBrowser.Instance.MustClose()
 	}
 
 	// 替换浏览器
@@ -870,7 +936,7 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 	e.taskMutex.Lock()
 	e.activeTasks++
 	e.taskMutex.Unlock()
-	
+
 	defer func() {
 		// 减少活跃任务数
 		e.taskMutex.Lock()
@@ -894,25 +960,93 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 	taskCtx, taskCancel := context.WithTimeout(e.ctx, timeout)
 	defer taskCancel()
 
-	// 这里应该实现真正的浏览器渲染逻辑
-	// 暂时返回模拟数据
+	// 结果变量
 	result := &RenderResult{
-		HTML:    fmt.Sprintf("<html><body><h1>Rendered: %s</h1></body></html>", task.URL),
-		Success: true,
+		Success: false,
 		Error:   "",
 	}
+
+	// 执行渲染
+	func() {
+		// 使用defer恢复panic
+		defer func() {
+			if r := recover(); r != nil {
+				result.Error = fmt.Sprintf("render panic: %v", r)
+				// 标记浏览器为不健康
+				e.mutex.Lock()
+				browser.Healthy = false
+				browser.ErrorCount++
+				e.mutex.Unlock()
+			}
+		}()
+
+		// 创建新页面
+		page := browser.Instance.MustPage()
+		defer page.MustClose()
+
+		// 导航到URL
+		page.MustNavigate(task.URL)
+
+		// 等待页面加载完成，使用默认的等待方式
+		// 等待DOM内容加载完成
+		page.MustWaitLoad()
+
+		// 等待额外时间，确保页面完全渲染
+		time.Sleep(500 * time.Millisecond)
+
+		// 获取完整的HTML内容
+		html, err := page.HTML()
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to get html: %v", err)
+			return
+		}
+
+		// 验证HTML内容
+		if html == "" || strings.Contains(strings.ToLower(html), "<body></body>") {
+			result.Error = "empty html content"
+			return
+		}
+
+		// 成功获取HTML
+		result.HTML = html
+		result.Success = true
+	}()
 
 	// 更新浏览器状态并返回结果
 	e.mutex.Lock()
 	browser.Status = "available"
-	browser.Healthy = true
+	// 如果浏览器不健康，不将其放回池中
+	if browser.ErrorCount > 5 {
+		browser.Healthy = false
+	} else {
+		browser.Healthy = true
+	}
 	e.mutex.Unlock()
 
-	// 将浏览器放回空闲通道
-	select {
-	case e.idleBrowsers <- browser:
-	default:
-		// 如果通道已满，忽略
+	// 将浏览器放回空闲通道（仅当健康时）
+	if browser.Healthy {
+		select {
+		case e.idleBrowsers <- browser:
+		default:
+			// 如果通道已满，忽略
+		}
+	} else {
+		// 如果浏览器不健康，关闭并替换它
+		if browser.Instance != nil {
+			browser.Instance.MustClose()
+		}
+		// 异步替换浏览器
+		go func() {
+			// 查找浏览器在池中位置
+			e.mutex.Lock()
+			defer e.mutex.Unlock()
+			for i, b := range e.browserPool {
+				if b.ID == browser.ID {
+					e.replaceBrowser(i, browser)
+					break
+				}
+			}
+		}()
 	}
 
 	// 发送结果
@@ -944,7 +1078,7 @@ func (e *Engine) startDynamicScaling() {
 func (e *Engine) adjustPoolSize() {
 	// 获取当前队列长度
 	queueLen := len(e.taskQueue)
-	
+
 	// 记录队列长度历史
 	e.queueMutex.Lock()
 	e.queueLengthHistory = append(e.queueLengthHistory, queueLen)
@@ -953,25 +1087,25 @@ func (e *Engine) adjustPoolSize() {
 		e.queueLengthHistory = e.queueLengthHistory[len(e.queueLengthHistory)-10:]
 	}
 	e.queueMutex.Unlock()
-	
+
 	// 获取当前浏览器池大小和活跃任务数
 	e.mutex.RLock()
 	currentSize := len(e.browserPool)
 	e.mutex.RUnlock()
-	
+
 	e.taskMutex.RLock()
 	activeTasks := e.activeTasks
 	e.taskMutex.RUnlock()
-	
+
 	// 计算空闲浏览器数
 	idleCount := currentSize - activeTasks
-	
+
 	// 扩容策略：如果队列中有任务且没有空闲浏览器，且当前大小小于最大限制，则扩容
 	needScaleUp := queueLen > 0 && idleCount == 0 && currentSize < e.config.MaxPoolSize
-	
+
 	// 缩容策略：如果空闲浏览器数超过当前大小的30%，且当前大小大于最小限制，则缩容
 	needScaleDown := float64(idleCount) > float64(currentSize)*0.3 && currentSize > e.config.MinPoolSize
-	
+
 	if needScaleUp {
 		// 计算需要增加的浏览器数
 		addCount := int(float64(currentSize) * e.config.ScalingFactor)
@@ -983,7 +1117,7 @@ func (e *Engine) adjustPoolSize() {
 		if newSize > e.config.MaxPoolSize {
 			addCount = e.config.MaxPoolSize - currentSize
 		}
-		
+
 		if addCount > 0 {
 			for i := 0; i < addCount; i++ {
 				e.addBrowser()
@@ -1000,7 +1134,7 @@ func (e *Engine) adjustPoolSize() {
 		if newSize < e.config.MinPoolSize {
 			removeCount = currentSize - e.config.MinPoolSize
 		}
-		
+
 		if removeCount > 0 {
 			for i := 0; i < removeCount; i++ {
 				e.removeIdleBrowser()
@@ -1011,9 +1145,32 @@ func (e *Engine) adjustPoolSize() {
 
 // addBrowser 添加一个浏览器到池
 func (e *Engine) addBrowser() {
+	// 启动一个新的浏览器实例
+	launchOpts := launcher.New()
+	launchOpts.Set("headless")
+	launchOpts.Set("no-sandbox")
+	launchOpts.Set("disable-dev-shm-usage")
+	launchOpts.Set("disable-gpu")
+	launchOpts.Set("disable-setuid-sandbox")
+	launchOpts.Set("single-process")
+	launchOpts.Set("disable-accelerated-2d-canvas")
+	launchOpts.Set("disable-javascript-harmony")
+	launchOpts.Set("disable-features", "site-per-process")
+	launchOpts.Set("ignore-certificate-errors")
+	launchOpts.Set("disable-web-security")
+
+	// 启动浏览器
+	browserURL, err := launchOpts.Launch()
+	if err != nil {
+		return // 如果启动失败，直接返回
+	}
+
+	// 连接到浏览器
+	rodBrowser := rod.New().ControlURL(browserURL).MustConnect()
+
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
-	
+
 	browser := &Browser{
 		ID:         fmt.Sprintf("browser-%d", time.Now().UnixNano()),
 		Status:     "available",
@@ -1021,8 +1178,9 @@ func (e *Engine) addBrowser() {
 		Healthy:    true,
 		ErrorCount: 0,
 		CreatedAt:  time.Now(),
+		Instance:   rodBrowser,
 	}
-	
+
 	e.browserPool = append(e.browserPool, browser)
 	// 添加到空闲浏览器通道
 	select {
@@ -1051,4 +1209,3 @@ func (e *Engine) removeIdleBrowser() {
 		// 如果没有空闲浏览器，忽略
 	}
 }
-

@@ -18,13 +18,15 @@ type FileIntegrityDetector struct {
 	mutex         sync.RWMutex
 	fileHashes    map[string]string // 文件名到哈希值的映射
 	checkInterval time.Duration     // 检查间隔
+	staticDir     string            // 静态文件目录
 }
 
 // NewFileIntegrityDetector 创建新的文件完整性检测器
-func NewFileIntegrityDetector() *FileIntegrityDetector {
+func NewFileIntegrityDetector(staticDir string) *FileIntegrityDetector {
 	d := &FileIntegrityDetector{
 		fileHashes:    make(map[string]string),
 		checkInterval: 300 * time.Second, // 默认5分钟检查一次
+		staticDir:     staticDir,
 	}
 
 	// 初始化文件哈希值
@@ -54,7 +56,7 @@ func (d *FileIntegrityDetector) initFileHashes() {
 	defer d.mutex.Unlock()
 
 	// 获取所有静态文件目录
-	staticDirs, err := filepath.Glob("./static/*")
+	staticDirs, err := filepath.Glob(filepath.Join(d.staticDir, "*"))
 	if err != nil {
 		return
 	}

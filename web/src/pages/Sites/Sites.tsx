@@ -679,9 +679,12 @@ const Sites: React.FC = () => {
   const customRequest: UploadProps['customRequest'] = (options) => {
     const { onSuccess, onError, file, onProgress } = options
     
-    // 确保selectedSite和selectedSite.name存在
-    if (!selectedSite || typeof selectedSite.name === 'undefined' || selectedSite.name === '') {
-      console.error('Selected site is not set, cannot upload file')
+    // 确定当前使用的站点：优先使用selectedSite（文件上传弹窗），如果没有则使用currentSite（静态资源管理弹窗）
+    const site = selectedSite || currentSite;
+    
+    // 确保站点和站点名称存在
+    if (!site || typeof site.name === 'undefined' || site.name === '') {
+      console.error('Site is not set, cannot upload file')
       message.error('站点信息无效，无法上传文件')
       onError(new Error('站点信息无效'))
       setUploading(false)
@@ -690,8 +693,8 @@ const Sites: React.FC = () => {
     
     setUploading(true)
     
-    // 发送实际的API请求
-    sitesApi.uploadFile(selectedSite.name, file, '/', (progressEvent) => {
+    // 发送实际的API请求，使用当前路径
+    sitesApi.uploadFile(site.name, file, currentPath, (progressEvent) => {
       if (progressEvent.total) {
         const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
         onProgress({ percent: percentCompleted });
@@ -1270,9 +1273,11 @@ const Sites: React.FC = () => {
               新建文件
             </Button>
             <Upload
-              beforeUpload={handleStaticResUpload}
+              beforeUpload={beforeUpload}
+              customRequest={customRequest}
               showUploadList={false}
               multiple // 支持多文件上传
+              accept=".zip,.rar,.html,.css,.js,.json,.txt"
             >
               <Button icon={<UploadOutlined />}>
                 上传文件

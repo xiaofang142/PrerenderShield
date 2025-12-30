@@ -67,3 +67,6 @@ data/
 
 # 证书文件
 /etc/prerender-shield/certs/
+
+#资源文件
+/static/

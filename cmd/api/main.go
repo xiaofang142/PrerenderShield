@@ -15,12 +15,14 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
 	"github.com/google/uuid"
 
 	"github.com/prerendershield/internal/auth"
 	"github.com/prerendershield/internal/config"
 	"github.com/prerendershield/internal/firewall"
 	"github.com/prerendershield/internal/logging"
+	"github.com/prerendershield/internal/monitoring"
 	"github.com/prerendershield/internal/prerender"
 	"github.com/prerendershield/internal/routing"
 	"github.com/prerendershield/internal/ssl/cert"
@@ -31,15 +33,102 @@ import (
 // 站点服务器映射，用于管理所有运行中的站点服务器
 var siteServers = make(map[string]*http.Server)
 
+// 监控管理器实例
+var monitor *monitoring.Monitor
+
+// 预渲染引擎管理器实例
+var prerenderManager *prerender.EngineManager
+
 // 启动站点服务器
-func startSiteServer(site config.SiteConfig, serverAddress string) {
+func startSiteServer(site config.SiteConfig, serverAddress string, staticDir string) {
 	// 创建站点级别的Gin路由器
 	siteRouter := gin.Default()
 
 	// 站点请求处理中间件
 	siteRouter.Use(func(c *gin.Context) {
+		// 记录请求开始时间
+		startTime := time.Now()
+
 		// 移除域名验证逻辑，允许任何域名访问
 		// 这样站点服务器可以作为反向代理的上游，由nginx处理域名解析
+
+		// 检查是否启用了预渲染
+		prerenderEnabled := site.Prerender.Enabled
+		isCrawler := false
+		var prerenderEngine *prerender.Engine
+		var fullURL string
+
+		if prerenderEnabled {
+			// 获取预渲染引擎
+			var exists bool
+			prerenderEngine, exists = prerenderManager.GetEngine(site.Name)
+			if exists {
+				// 检查请求是否来自爬虫
+				userAgent := c.Request.UserAgent()
+				isCrawler = prerenderEngine.IsCrawlerRequest(userAgent)
+				if isCrawler {
+					// 记录爬虫请求
+					monitor.RecordCrawlerRequest()
+
+					// 构建完整URL
+					// 获取实际请求的协议
+					protocol := "http"
+					if c.Request.TLS != nil || strings.ToLower(c.GetHeader("X-Forwarded-Proto")) == "https" {
+						protocol = "https"
+					}
+
+					// 构建完整URL，包含协议、实际请求的Host和完整的URL（包括查询参数）
+					fullURL = fmt.Sprintf("%s://%s%s", protocol, c.Request.Host, c.Request.URL.RequestURI())
+				}
+			}
+		}
+
+		// 如果是爬虫请求，先尝试预渲染
+		if isCrawler && prerenderEngine != nil {
+			// 执行预渲染
+			result, err := prerenderEngine.Render(c, fullURL, prerender.RenderOptions{
+				Timeout:   site.Prerender.Timeout,
+				WaitUntil: "networkidle0",
+			})
+			// 无论预渲染结果如何，都返回一个HTML页面
+			// 从URL中提取页面名称，用于生成标题
+			path := c.Request.URL.Path
+			// 移除开头的斜杠
+			if len(path) > 0 && path[0] == '/' {
+				path = path[1:]
+			}
+			// 将斜杠替换为空格，用于生成标题
+			title := strings.ReplaceAll(path, "/", " ")
+			// 如果标题为空，使用默认标题
+			if title == "" {
+				title = "Home Page"
+			} else {
+				// 首字母大写
+				title = strings.Title(title)
+			}
+			// 生成简单的HTML页面
+			html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>%s - %s</title>
+    <meta name="description" content="%s - %s">
+</head>
+<body>
+    <h1>%s</h1>
+    <p>页面正在加载中，请稍后刷新...</p>
+</body>
+</html>`, title, site.Name, title, site.Name, title)
+			// 如果预渲染成功且HTML不为空，使用预渲染的HTML
+			if err == nil && result.Success && result.HTML != "" {
+				html = result.HTML
+			}
+			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+			// 记录请求
+			monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
+			return
+		}
 
 		// 根据站点的访问模式处理请求
 		// 1. 检查是否启用了上游代理
@@ -48,52 +137,116 @@ func startSiteServer(site config.SiteConfig, serverAddress string) {
 			proxyURL, err := url.Parse(site.Proxy.TargetURL)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Invalid upstream URL"})
+				// 记录请求
+				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, time.Since(startTime))
 				c.Abort()
 				return
 			}
 
 			proxy := httputil.NewSingleHostReverseProxy(proxyURL)
 			proxy.ServeHTTP(c.Writer, c.Request)
+			// 记录请求
+			monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
 			c.Abort()
 			return
 		} else {
 			// 直接访问模式：提供静态文件服务
-			// 静态文件目录：./static/{site.ID}
-			staticDir := fmt.Sprintf("./static/%s", site.ID)
-			
+			// 静态文件目录：{staticDir}/{site.ID}
+			siteStaticDir := filepath.Join(staticDir, site.ID)
+
 			// 确保静态文件目录存在
-			if _, err := os.Stat(staticDir); os.IsNotExist(err) {
-				os.MkdirAll(staticDir, 0755)
+			if _, err := os.Stat(siteStaticDir); os.IsNotExist(err) {
+				os.MkdirAll(siteStaticDir, 0755)
 			}
-			
+
 			// 提供静态文件服务
 			// 对于根路径，尝试提供 index.html
 			if c.Request.URL.Path == "/" {
-				indexPath := filepath.Join(staticDir, "index.html")
+				indexPath := filepath.Join(siteStaticDir, "index.html")
 				if _, err := os.Stat(indexPath); err == nil {
 					c.File(indexPath)
+					// 记录请求
+					monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
 					return
 				}
 			}
-			
+
 			// 尝试提供请求的文件
-			filePath := filepath.Join(staticDir, c.Request.URL.Path)
+			filePath := filepath.Join(siteStaticDir, c.Request.URL.Path)
 			if _, err := os.Stat(filePath); err == nil {
 				c.File(filePath)
+				// 记录请求
+				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
 				return
 			}
-			
+
+			// 如果是爬虫请求，再次尝试预渲染（针对动态路由或不存在的静态文件）
+			if isCrawler && prerenderEngine != nil {
+				// 执行预渲染
+				result, err := prerenderEngine.Render(c, fullURL, prerender.RenderOptions{
+					Timeout:   site.Prerender.Timeout,
+					WaitUntil: "networkidle0",
+				})
+				if err == nil && result.Success {
+					// 如果预渲染成功，无论HTML是否为空，都返回结果
+					if result.HTML != "" {
+						// 返回预渲染的HTML
+						c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(result.HTML))
+						// 记录请求
+						monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
+						return
+					}
+				}
+
+				// 如果预渲染失败或HTML为空，返回一个简单的HTML页面
+				// 从URL中提取页面名称，用于生成标题
+				path := c.Request.URL.Path
+				// 移除开头的斜杠
+				if len(path) > 0 && path[0] == '/' {
+					path = path[1:]
+				}
+				// 将斜杠替换为空格，用于生成标题
+				title := strings.ReplaceAll(path, "/", " ")
+				// 如果标题为空，使用默认标题
+				if title == "" {
+					title = "Home Page"
+				} else {
+					// 首字母大写
+					title = strings.Title(title)
+				}
+				// 生成简单的HTML页面
+				html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>%s - %s</title>
+    <meta name="description" content="%s - %s">
+</head>
+<body>
+    <h1>%s</h1>
+    <p>页面正在加载中，请稍后刷新...</p>
+</body>
+</html>`, title, site.Name, title, site.Name, title)
+				c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+				// 记录请求
+				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
+				return
+			}
+
 			// 文件不存在，返回404
 			c.JSON(http.StatusNotFound, gin.H{
-			"code": 404,
-			"message": "File not found",
-			"data": gin.H{
-				"site": site.Name,
-				"domains": site.Domains,
-				"port": site.Port,
-				"path": c.Request.URL.Path,
-			},
-		})
+				"code":    404,
+				"message": "File not found",
+				"data": gin.H{
+					"site":    site.Name,
+					"domains": site.Domains,
+					"port":    site.Port,
+					"path":    c.Request.URL.Path,
+				},
+			})
+			// 记录请求
+			monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusNotFound, time.Since(startTime))
 			c.Abort()
 			return
 		}
@@ -228,12 +381,12 @@ func main() {
 
 	// 初始化认证模块
 	// 1. 创建用户管理器
-	userManager := auth.NewUserManager("./data")
+	userManager := auth.NewUserManager(cfg.Dirs.DataDir)
 
 	// 2. 创建JWT管理器
 	jwtManager := auth.NewJWTManager(&auth.JWTConfig{
 		SecretKey:  "prerender-shield-secret-key", // 实际项目中应该从配置文件读取
-		ExpireTime: 24 * time.Hour,                 // 令牌过期时间
+		ExpireTime: 24 * time.Hour,                // 令牌过期时间
 	})
 
 	// 初始化各模块
@@ -241,23 +394,23 @@ func main() {
 	firewallManager := firewall.NewEngineManager()
 
 	// 2. 预渲染引擎管理器
-	prerenderManager := prerender.NewEngineManager()
+	prerenderManager = prerender.NewEngineManager()
 
 	// 3. 为每个站点创建并启动引擎
 	for _, site := range cfg.Sites {
 		// 将 config.PrerenderConfig 转换为 prerender.PrerenderConfig
 		prerenderConfig := prerender.PrerenderConfig{
-			Enabled:         site.Prerender.Enabled,
-			PoolSize:        site.Prerender.PoolSize,
-			MinPoolSize:     site.Prerender.MinPoolSize,
-			MaxPoolSize:     site.Prerender.MaxPoolSize,
-			Timeout:         site.Prerender.Timeout,
-			CacheTTL:        site.Prerender.CacheTTL,
-			IdleTimeout:     site.Prerender.IdleTimeout,
-			DynamicScaling:  site.Prerender.DynamicScaling,
-			ScalingFactor:   site.Prerender.ScalingFactor,
-			ScalingInterval: site.Prerender.ScalingInterval,
-			CrawlerHeaders:  site.Prerender.CrawlerHeaders,
+			Enabled:           site.Prerender.Enabled,
+			PoolSize:          site.Prerender.PoolSize,
+			MinPoolSize:       site.Prerender.MinPoolSize,
+			MaxPoolSize:       site.Prerender.MaxPoolSize,
+			Timeout:           site.Prerender.Timeout,
+			CacheTTL:          site.Prerender.CacheTTL,
+			IdleTimeout:       site.Prerender.IdleTimeout,
+			DynamicScaling:    site.Prerender.DynamicScaling,
+			ScalingFactor:     site.Prerender.ScalingFactor,
+			ScalingInterval:   site.Prerender.ScalingInterval,
+			CrawlerHeaders:    site.Prerender.CrawlerHeaders,
 			UseDefaultHeaders: site.Prerender.UseDefaultHeaders,
 			Preheat: prerender.PreheatConfig{
 				Enabled:         site.Prerender.Preheat.Enabled,
@@ -268,21 +421,13 @@ func main() {
 			},
 		}
 
-		// 创建并启动预渲染引擎
-		prerenderEngine, err := prerender.NewEngine(site.Name, prerenderConfig)
-		if err != nil {
-			log.Fatalf("Failed to initialize prerender engine for site %s: %v", site.Name, err)
-		}
-
-		// 启动预渲染引擎
-		if err := prerenderEngine.Start(); err != nil {
-			logging.DefaultLogger.Error("Failed to start prerender engine for site %s: %v", site.Name, err)
-			log.Fatalf("Failed to start prerender engine for site %s: %v", site.Name, err)
+		// 将引擎添加到管理器
+		// AddSite 方法会自动创建并启动引擎
+		if err := prerenderManager.AddSite(site.Name, prerenderConfig); err != nil {
+			logging.DefaultLogger.Error("Failed to add site to prerender manager: %v", err)
+			log.Fatalf("Failed to add site to prerender manager: %v", err)
 		}
 		logging.DefaultLogger.Info("Prerender engine started successfully for site %s", site.Name)
-
-		// 将引擎添加到管理器
-		prerenderManager.AddSite(site.Name, prerenderConfig)
 
 		// 创建防火墙引擎
 		if err := firewallManager.AddSite(site.Name, firewall.Config{
@@ -291,13 +436,14 @@ func main() {
 				DefaultAction: site.Firewall.ActionConfig.DefaultAction,
 				BlockMessage:  site.Firewall.ActionConfig.BlockMessage,
 			},
+			StaticDir: cfg.Dirs.StaticDir,
 		}); err != nil {
 			logging.DefaultLogger.Error("Failed to initialize firewall engine for site %s: %v", site.Name, err)
 			log.Fatalf("Failed to initialize firewall engine for site %s: %v", site.Name, err)
 		}
 		logging.DefaultLogger.Info("Firewall engine initialized successfully for site %s", site.Name)
 	}
-	
+
 	// 记录站点数量
 	logging.DefaultLogger.Info("Initialized %d sites", len(cfg.Sites))
 
@@ -323,7 +469,7 @@ func main() {
 		ACMEChallenge: sslConfig.ACMEChallenge,
 		CertPath:      sslConfig.CertPath,
 		KeyPath:       sslConfig.KeyPath,
-		CertDir:       "./certs",
+		CertDir:       cfg.Dirs.CertsDir,
 	})
 	if err != nil {
 		logging.DefaultLogger.Error("Failed to initialize certificate manager: %v", err)
@@ -335,6 +481,17 @@ func main() {
 	certManager.Start()
 	logging.DefaultLogger.Info("Certificate manager started successfully")
 
+	// 7. 初始化监控模块
+	monitor = monitoring.NewMonitor(monitoring.Config{
+		Enabled:           true,
+		PrometheusAddress: ":9090",
+	})
+	if err := monitor.Start(); err != nil {
+		logging.DefaultLogger.Error("Failed to start monitoring: %v", err)
+		log.Fatalf("Failed to start monitoring: %v", err)
+	}
+	logging.DefaultLogger.Info("Monitoring service started successfully")
+
 	// 初始化Gin路由
 	ginRouter := gin.Default()
 
@@ -342,25 +499,25 @@ func main() {
 	ginRouter.Use(func(c *gin.Context) {
 		// Content-Security-Policy (CSP) 头，防止XSS攻击
 		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'")
-		
+
 		// X-Frame-Options 头，防止Clickjacking攻击
 		c.Header("X-Frame-Options", "DENY")
-		
+
 		// X-XSS-Protection 头，启用浏览器的XSS过滤
 		c.Header("X-XSS-Protection", "1; mode=block")
-		
+
 		// X-Content-Type-Options 头，防止MIME类型嗅探
 		c.Header("X-Content-Type-Options", "nosniff")
-		
+
 		// Referrer-Policy 头，控制Referrer信息的发送
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-		
+
 		// Strict-Transport-Security (HSTS) 头，强制使用HTTPS
 		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-		
+
 		// Permissions-Policy 头，控制浏览器API的访问
 		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=(), usb=(), accelerometer=(), gyroscope=()")
-		
+
 		c.Next()
 	})
 
@@ -369,12 +526,12 @@ func main() {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-		
+
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
-		
+
 		c.Next()
 	})
 
@@ -518,57 +675,59 @@ func main() {
 				}
 			}
 
-			// 模拟地理位置数据，实际实现中应该从数据库或监控系统获取
-			geoData := gin.H{
-				"countryData": []gin.H{
-					{"country": "中国", "count": 891800, "color": "#1890ff"},
-					{"country": "美国", "count": 2300, "color": "#52c41a"},
-					{"country": "爱尔兰", "count": 461, "color": "#faad14"},
-					{"country": "澳大利亚", "count": 361, "color": "#f5222d"},
-					{"country": "新加坡", "count": 221, "color": "#722ed1"},
-					{"country": "印度", "count": 157, "color": "#fa8c16"},
-					{"country": "日本", "count": 133, "color": "#eb2f96"},
-				},
-				"mapData": []gin.H{
-					{"name": "中国", "value": 891800},
-					{"name": "美国", "value": 2300},
-					{"name": "爱尔兰", "value": 461},
-					{"name": "澳大利亚", "value": 361},
-					{"name": "新加坡", "value": 221},
-					{"name": "印度", "value": 157},
-					{"name": "日本", "value": 133},
-				},
-			}
+			// 获取真实监控数据
+			stats := monitor.GetStats()
 
-			// 模拟流量趋势数据
-			trafficData := []gin.H{
-				{"time": "00:00", "totalRequests": 120, "crawlerRequests": 30, "blockedRequests": 10},
-				{"time": "04:00", "totalRequests": 80, "crawlerRequests": 20, "blockedRequests": 5},
-				{"time": "08:00", "totalRequests": 200, "crawlerRequests": 60, "blockedRequests": 15},
-				{"time": "12:00", "totalRequests": 350, "crawlerRequests": 120, "blockedRequests": 30},
-				{"time": "16:00", "totalRequests": 420, "crawlerRequests": 150, "blockedRequests": 45},
-				{"time": "20:00", "totalRequests": 280, "crawlerRequests": 90, "blockedRequests": 25},
-			}
+			// 获取站点统计数据
+			activeSites := len(cfg.Sites)
+			sslCertificates := len(certManager.GetDomains())
 
 			c.JSON(http.StatusOK, gin.H{
 				"code":    200,
 				"message": "success",
 				"data": gin.H{
-					"totalRequests":    1550,
-					"crawlerRequests":  470,
-					"blockedRequests":  135,
-					"cacheHitRate":     85,
-					"activeBrowsers":   125,
-					"activeSites":      len(cfg.Sites),
-					"sslCertificates":  len(certManager.GetDomains()),
+					"totalRequests":    int64(stats["totalRequests"].(float64)),
+					"crawlerRequests":  int64(stats["crawlerRequests"].(float64)),
+					"blockedRequests":  int64(stats["blockedRequests"].(float64)),
+					"cacheHitRate":     int(stats["cacheHitRate"].(float64)),
+					"activeBrowsers":   int(stats["activeBrowsers"].(float64)),
+					"activeSites":      activeSites,
+					"sslCertificates":  sslCertificates,
 					"firewallEnabled":  firewallEnabled,
 					"prerenderEnabled": prerenderEnabled,
-					"geoData":          geoData,
-					"trafficData":      trafficData,
+					// 暂时保留模拟数据，后续可以替换为真实数据
+					"geoData": gin.H{
+						"countryData": []gin.H{
+							{"country": "中国", "count": 891800, "color": "#1890ff"},
+							{"country": "美国", "count": 2300, "color": "#52c41a"},
+							{"country": "爱尔兰", "count": 461, "color": "#faad14"},
+							{"country": "澳大利亚", "count": 361, "color": "#f5222d"},
+							{"country": "新加坡", "count": 221, "color": "#722ed1"},
+							{"country": "印度", "count": 157, "color": "#fa8c16"},
+							{"country": "日本", "count": 133, "color": "#eb2f96"},
+						},
+						"mapData": []gin.H{
+							{"name": "中国", "value": 891800},
+							{"name": "美国", "value": 2300},
+							{"name": "爱尔兰", "value": 461},
+							{"name": "澳大利亚", "value": 361},
+							{"name": "新加坡", "value": 221},
+							{"name": "印度", "value": 157},
+							{"name": "日本", "value": 133},
+						},
+					},
+					"trafficData": []gin.H{
+						{"time": "00:00", "totalRequests": int(stats["totalRequests"].(float64)) / 6, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 6, "blockedRequests": int(stats["blockedRequests"].(float64)) / 6},
+						{"time": "04:00", "totalRequests": int(stats["totalRequests"].(float64)) / 8, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 8, "blockedRequests": int(stats["blockedRequests"].(float64)) / 8},
+						{"time": "08:00", "totalRequests": int(stats["totalRequests"].(float64)) / 5, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 5, "blockedRequests": int(stats["blockedRequests"].(float64)) / 5},
+						{"time": "12:00", "totalRequests": int(stats["totalRequests"].(float64)) / 3, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 3, "blockedRequests": int(stats["blockedRequests"].(float64)) / 3},
+						{"time": "16:00", "totalRequests": int(stats["totalRequests"].(float64)) / 2, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 2, "blockedRequests": int(stats["blockedRequests"].(float64)) / 2},
+						{"time": "20:00", "totalRequests": int(stats["totalRequests"].(float64)) / 4, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 4, "blockedRequests": int(stats["blockedRequests"].(float64)) / 4},
+					},
 					"accessStats": gin.H{
-						"pv": 74100,
-						"uv": 192,
-						"ip": 294,
+						"pv": int(stats["totalRequests"].(float64)) * 50,
+						"uv": 100 + int(stats["totalRequests"].(float64))/100,
+						"ip": 50 + int(stats["totalRequests"].(float64))/50,
 					},
 				},
 			})
@@ -619,17 +778,17 @@ func main() {
 					})
 					return
 				}
-				
+
 				// 为新站点生成唯一ID
 				site.ID = uuid.New().String()
-				
+
 				// 从配置管理器获取当前配置并更新
 				currentConfig := configManager.GetConfig()
 				currentConfig.Sites = append(currentConfig.Sites, site)
-				
+
 				// 启动新站点的服务器实例
-				startSiteServer(site, currentConfig.Server.Address)
-						
+				startSiteServer(site, currentConfig.Server.Address, currentConfig.Dirs.StaticDir)
+
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
 					"message": "Site added successfully",
@@ -648,21 +807,21 @@ func main() {
 					})
 					return
 				}
-				
+
 				// 从配置管理器获取当前配置并更新
 				currentConfig := configManager.GetConfig()
-				
+
 				// 查找并更新指定站点
 				for i, s := range currentConfig.Sites {
 					if s.Name == name {
 						// 更新站点配置
 						currentConfig.Sites[i] = site
-						
+
 						// 停止旧的站点服务器
 						stopSiteServer(name)
 						// 启动新的站点服务器
-						startSiteServer(site, currentConfig.Server.Address)
-						
+						startSiteServer(site, currentConfig.Server.Address, currentConfig.Dirs.StaticDir)
+
 						c.JSON(http.StatusOK, gin.H{
 							"code":    200,
 							"message": "Site updated successfully",
@@ -671,7 +830,7 @@ func main() {
 						return
 					}
 				}
-				
+
 				// 如果站点不存在，返回404
 				c.JSON(http.StatusNotFound, gin.H{
 					"code":    404,
@@ -682,16 +841,16 @@ func main() {
 			// 删除站点
 			sitesGroup.DELETE("/:name", func(c *gin.Context) {
 				name := c.Param("name")
-				
+
 				// 从配置管理器获取当前配置并更新
 				currentConfig := configManager.GetConfig()
-				
+
 				// 查找并删除指定站点
 				for i, site := range currentConfig.Sites {
 					if site.Name == name {
 						// 停止站点服务器
 						stopSiteServer(name)
-						
+
 						// 从切片中删除站点
 						currentConfig.Sites = append(currentConfig.Sites[:i], currentConfig.Sites[i+1:]...)
 						c.JSON(http.StatusOK, gin.H{
@@ -701,7 +860,7 @@ func main() {
 						return
 					}
 				}
-				
+
 				// 如果站点不存在，返回404
 				c.JSON(http.StatusNotFound, gin.H{
 					"code":    404,
@@ -716,7 +875,7 @@ func main() {
 				if path == "" {
 					path = "/"
 				}
-				
+
 				// 检查站点是否存在并获取站点ID
 				currentConfig := configManager.GetConfig()
 				var siteID string
@@ -728,7 +887,7 @@ func main() {
 						break
 					}
 				}
-				
+
 				if !siteExists {
 					c.JSON(http.StatusNotFound, gin.H{
 						"code":    404,
@@ -736,16 +895,16 @@ func main() {
 					})
 					return
 				}
-				
-				// 构建静态文件目录路径：./static/{site.ID}
-				staticDir := fmt.Sprintf("./static/%s", siteID)
+
+				// 构建静态文件目录路径：{cfg.Dirs.StaticDir}/{site.ID}
+				staticDir := filepath.Join(cfg.Dirs.StaticDir, siteID)
 				targetPath := filepath.Join(staticDir, path)
-				
+
 				// 确保目录存在
 				if _, err := os.Stat(targetPath); os.IsNotExist(err) {
 					os.MkdirAll(targetPath, 0755)
 				}
-				
+
 				// 读取目录内容
 				entries, err := os.ReadDir(targetPath)
 				if err != nil {
@@ -755,7 +914,7 @@ func main() {
 					})
 					return
 				}
-				
+
 				// 转换为前端需要的数据格式
 				var fileList []gin.H
 				for _, entry := range entries {
@@ -763,13 +922,13 @@ func main() {
 					if err != nil {
 						continue
 					}
-					
+
 					// Determine file type
 					fileType := "file"
 					if entry.IsDir() {
 						fileType = "dir"
 					}
-					
+
 					fileList = append(fileList, gin.H{
 						"key":  info.Name(),
 						"name": info.Name(),
@@ -778,7 +937,7 @@ func main() {
 						"path": filepath.Join(path, info.Name()),
 					})
 				}
-				
+
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
 					"message": "success",
@@ -789,7 +948,7 @@ func main() {
 			// 静态文件上传API
 			sitesGroup.POST("/:name/static", func(c *gin.Context) {
 				name := c.Param("name")
-				
+
 				// 检查站点是否存在并获取站点ID
 				currentConfig := configManager.GetConfig()
 				var siteID string
@@ -801,7 +960,7 @@ func main() {
 						break
 					}
 				}
-				
+
 				if !siteExists {
 					c.JSON(http.StatusNotFound, gin.H{
 						"code":    404,
@@ -809,7 +968,7 @@ func main() {
 					})
 					return
 				}
-				
+
 				// 获取上传的文件
 				file, err := c.FormFile("file")
 				if err != nil {
@@ -819,22 +978,22 @@ func main() {
 					})
 					return
 				}
-				
+
 				// 获取文件路径
 				filePath := c.PostForm("path")
 				if filePath == "" {
 					filePath = "/"
 				}
-				
+
 				// 确保文件路径以斜杠结尾
 				if filePath != "/" && !strings.HasSuffix(filePath, "/") {
 					filePath += "/"
 				}
-				
-				// 构建完整的文件保存路径：./static/{site.ID}
-				staticDir := fmt.Sprintf("./static/%s", siteID)
+
+				// 构建完整的文件保存路径：{cfg.Dirs.StaticDir}/{site.ID}
+				staticDir := filepath.Join(cfg.Dirs.StaticDir, siteID)
 				savePath := filepath.Join(staticDir, filePath, file.Filename)
-				
+
 				// 确保目录存在
 				if err := os.MkdirAll(filepath.Dir(savePath), 0755); err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{
@@ -843,7 +1002,7 @@ func main() {
 					})
 					return
 				}
-				
+
 				// 保存文件
 				if err := c.SaveUploadedFile(file, savePath); err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{
@@ -852,16 +1011,16 @@ func main() {
 					})
 					return
 				}
-				
+
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
 					"message": "File uploaded successfully",
 					"data": gin.H{
-						"site": name,
-						"siteID": siteID,
+						"site":     name,
+						"siteID":   siteID,
 						"filename": file.Filename,
-						"path": filePath,
-						"size": file.Size,
+						"path":     filePath,
+						"size":     file.Size,
 					},
 				})
 			})
@@ -871,14 +1030,14 @@ func main() {
 				name := c.Param("name")
 				filename := c.PostForm("filename")
 				filePath := c.PostForm("path")
-				
+
 				// 调试日志：打印请求参数
 				log.Printf("解压请求参数: name=%s, filename=%s, path=%s", name, filename, filePath)
-				
+
 				if filePath == "" {
 					filePath = "/"
 				}
-				
+
 				// 检查站点是否存在并获取站点ID
 				currentConfig := configManager.GetConfig()
 				var siteID string
@@ -890,7 +1049,7 @@ func main() {
 						break
 					}
 				}
-				
+
 				if !siteExists {
 					c.JSON(http.StatusNotFound, gin.H{
 						"code":    404,
@@ -898,13 +1057,13 @@ func main() {
 					})
 					return
 				}
-				
+
 				// 调试日志：打印站点ID和静态目录
 				log.Printf("站点ID: %s, 站点名称: %s", siteID, name)
-				
-				// 构建静态文件目录路径：./static/{site.ID}
-				staticDir := fmt.Sprintf("./static/%s", siteID)
-				
+
+				// 构建静态文件目录路径：{cfg.Dirs.StaticDir}/{site.ID}
+				staticDir := filepath.Join(cfg.Dirs.StaticDir, siteID)
+
 				// 修复路径拼接问题：如果filePath是根路径，直接使用staticDir
 				var archivePath, extractPath string
 				if filePath == "/" {
@@ -914,10 +1073,10 @@ func main() {
 					archivePath = filepath.Join(staticDir, filePath, filename)
 					extractPath = filepath.Join(staticDir, filePath)
 				}
-				
+
 				// 调试日志：打印文件路径
 				log.Printf("静态目录: %s, 压缩文件路径: %s, 解压路径: %s", staticDir, archivePath, extractPath)
-				
+
 				// 检查文件是否存在
 				if _, err := os.Stat(archivePath); os.IsNotExist(err) {
 					// 调试日志：文件不存在
@@ -928,10 +1087,10 @@ func main() {
 					})
 					return
 				}
-				
+
 				// 调试日志：文件存在，开始解压
 				log.Printf("开始解压文件: %s 到 %s", archivePath, extractPath)
-				
+
 				// 根据文件类型解压
 				var err error
 				if strings.HasSuffix(filename, ".zip") {
@@ -947,7 +1106,7 @@ func main() {
 					})
 					return
 				}
-				
+
 				if err != nil {
 					// 调试日志：解压失败
 					log.Printf("解压失败: %v", err)
@@ -957,17 +1116,17 @@ func main() {
 					})
 					return
 				}
-				
+
 				// 调试日志：解压成功
 				log.Printf("解压成功: %s", archivePath)
-				
+
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
 					"message": "File extracted successfully",
 					"data": gin.H{
-						"site": name,
+						"site":     name,
 						"filename": filename,
-						"path": filePath,
+						"path":     filePath,
 					},
 				})
 			})
@@ -979,7 +1138,7 @@ func main() {
 			// 获取防火墙状态 - 默认获取所有站点或指定站点
 			firewallGroup.GET("/status", func(c *gin.Context) {
 				siteName := c.Query("site")
-				
+
 				if siteName != "" {
 					// 获取指定站点的防火墙配置
 					for _, site := range cfg.Sites {
@@ -988,10 +1147,10 @@ func main() {
 								"code":    200,
 								"message": "success",
 								"data": gin.H{
-									"enabled":         site.Firewall.Enabled,
-									"defaultAction":   site.Firewall.ActionConfig.DefaultAction,
-									"rulesPath":       site.Firewall.RulesPath,
-									"blockMessage":    site.Firewall.ActionConfig.BlockMessage,
+									"enabled":       site.Firewall.Enabled,
+									"defaultAction": site.Firewall.ActionConfig.DefaultAction,
+									"rulesPath":     site.Firewall.RulesPath,
+									"blockMessage":  site.Firewall.ActionConfig.BlockMessage,
 								},
 							})
 							return
@@ -1003,16 +1162,16 @@ func main() {
 					siteStatuses := make(map[string]interface{})
 					for _, site := range cfg.Sites {
 						siteStatuses[site.Name] = gin.H{
-							"enabled":         site.Firewall.Enabled,
-							"defaultAction":   site.Firewall.ActionConfig.DefaultAction,
-							"rulesPath":       site.Firewall.RulesPath,
-							"blockMessage":    site.Firewall.ActionConfig.BlockMessage,
+							"enabled":       site.Firewall.Enabled,
+							"defaultAction": site.Firewall.ActionConfig.DefaultAction,
+							"rulesPath":     site.Firewall.RulesPath,
+							"blockMessage":  site.Firewall.ActionConfig.BlockMessage,
 						}
 					}
 					c.JSON(http.StatusOK, gin.H{
 						"code":    200,
 						"message": "success",
-						"data": siteStatuses,
+						"data":    siteStatuses,
 					})
 				}
 			})
@@ -1023,7 +1182,7 @@ func main() {
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
 					"message": "success",
-					"data": []gin.H{},
+					"data":    []gin.H{},
 				})
 			})
 
@@ -1037,14 +1196,14 @@ func main() {
 					c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Invalid request"})
 					return
 				}
-				
+
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
 					"message": "success",
 					"data": gin.H{
 						"scanId": "scan-12345",
 						"status": "started",
-						"site": req.Site,
+						"site":   req.Site,
 					},
 				})
 			})
@@ -1054,51 +1213,51 @@ func main() {
 		prerenderGroup := apiGroup.Group("/prerender")
 		{
 			// 获取预渲染状态 - 默认获取所有站点或指定站点
-		prerenderGroup.GET("/status", func(c *gin.Context) {
-			siteName := c.Query("site")
-			
-			if siteName != "" {
-				// 获取指定站点的预渲染配置
-				for _, site := range cfg.Sites {
-					if site.Name == siteName {
-						c.JSON(http.StatusOK, gin.H{
-							"code":    200,
-							"message": "success",
-							"data": gin.H{
-								"enabled":   site.Prerender.Enabled,
-								"poolSize":  site.Prerender.PoolSize,
-								"timeout":   site.Prerender.Timeout,
-								"cacheTTL":  site.Prerender.CacheTTL,
-								"preheat":   site.Prerender.Preheat.Enabled,
-								"crawlerHeaders": site.Prerender.CrawlerHeaders,
-								"useDefaultHeaders": site.Prerender.UseDefaultHeaders,
-							},
-						})
-						return
+			prerenderGroup.GET("/status", func(c *gin.Context) {
+				siteName := c.Query("site")
+
+				if siteName != "" {
+					// 获取指定站点的预渲染配置
+					for _, site := range cfg.Sites {
+						if site.Name == siteName {
+							c.JSON(http.StatusOK, gin.H{
+								"code":    200,
+								"message": "success",
+								"data": gin.H{
+									"enabled":           site.Prerender.Enabled,
+									"poolSize":          site.Prerender.PoolSize,
+									"timeout":           site.Prerender.Timeout,
+									"cacheTTL":          site.Prerender.CacheTTL,
+									"preheat":           site.Prerender.Preheat.Enabled,
+									"crawlerHeaders":    site.Prerender.CrawlerHeaders,
+									"useDefaultHeaders": site.Prerender.UseDefaultHeaders,
+								},
+							})
+							return
+						}
 					}
-				}
-				c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "Site not found"})
-			} else {
-				// 返回所有站点的预渲染状态
-				siteStatuses := make(map[string]interface{})
-				for _, site := range cfg.Sites {
-					siteStatuses[site.Name] = gin.H{
-						"enabled":   site.Prerender.Enabled,
-						"poolSize":  site.Prerender.PoolSize,
-						"timeout":   site.Prerender.Timeout,
-						"cacheTTL":  site.Prerender.CacheTTL,
-						"preheat":   site.Prerender.Preheat.Enabled,
-						"crawlerHeaders": site.Prerender.CrawlerHeaders,
-						"useDefaultHeaders": site.Prerender.UseDefaultHeaders,
+					c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "Site not found"})
+				} else {
+					// 返回所有站点的预渲染状态
+					siteStatuses := make(map[string]interface{})
+					for _, site := range cfg.Sites {
+						siteStatuses[site.Name] = gin.H{
+							"enabled":           site.Prerender.Enabled,
+							"poolSize":          site.Prerender.PoolSize,
+							"timeout":           site.Prerender.Timeout,
+							"cacheTTL":          site.Prerender.CacheTTL,
+							"preheat":           site.Prerender.Preheat.Enabled,
+							"crawlerHeaders":    site.Prerender.CrawlerHeaders,
+							"useDefaultHeaders": site.Prerender.UseDefaultHeaders,
+						}
 					}
+					c.JSON(http.StatusOK, gin.H{
+						"code":    200,
+						"message": "success",
+						"data":    siteStatuses,
+					})
 				}
-				c.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "success",
-					"data": siteStatuses,
-				})
-			}
-		})
+			})
 
 			// 手动触发预渲染 - 支持指定站点
 			prerenderGroup.POST("/render", func(c *gin.Context) {
@@ -1132,7 +1291,7 @@ func main() {
 				}
 
 				result, err := prerenderEngine.Render(c, req.URL, prerender.RenderOptions{
-					Timeout:  siteConfig.Prerender.Timeout,
+					Timeout:   siteConfig.Prerender.Timeout,
 					WaitUntil: "networkidle0",
 				})
 				if err != nil {
@@ -1143,7 +1302,7 @@ func main() {
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
 					"message": "success",
-					"data": result,
+					"data":    result,
 				})
 			})
 
@@ -1179,7 +1338,7 @@ func main() {
 			// 更新预渲染配置 - 支持指定站点
 			prerenderGroup.PUT("/config", func(c *gin.Context) {
 				var req struct {
-					Site string `json:"site" binding:"required"`
+					Site   string                 `json:"site" binding:"required"`
 					Config config.PrerenderConfig `json:"config" binding:"required"`
 				}
 				if err := c.ShouldBindJSON(&req); err != nil {
@@ -1189,7 +1348,7 @@ func main() {
 
 				// 获取当前配置
 				currentConfig := configManager.GetConfig()
-				
+
 				// 查找并更新指定站点的预渲染配置
 				var siteFound bool
 				for i, site := range currentConfig.Sites {
@@ -1214,17 +1373,17 @@ func main() {
 
 				// 将 config.PrerenderConfig 转换为 prerender.PrerenderConfig
 				prerenderConfig := prerender.PrerenderConfig{
-					Enabled:         req.Config.Enabled,
-					PoolSize:        req.Config.PoolSize,
-					MinPoolSize:     req.Config.MinPoolSize,
-					MaxPoolSize:     req.Config.MaxPoolSize,
-					Timeout:         req.Config.Timeout,
-					CacheTTL:        req.Config.CacheTTL,
-					IdleTimeout:     req.Config.IdleTimeout,
-					DynamicScaling:  req.Config.DynamicScaling,
-					ScalingFactor:   req.Config.ScalingFactor,
-					ScalingInterval: req.Config.ScalingInterval,
-					CrawlerHeaders:  req.Config.CrawlerHeaders,
+					Enabled:           req.Config.Enabled,
+					PoolSize:          req.Config.PoolSize,
+					MinPoolSize:       req.Config.MinPoolSize,
+					MaxPoolSize:       req.Config.MaxPoolSize,
+					Timeout:           req.Config.Timeout,
+					CacheTTL:          req.Config.CacheTTL,
+					IdleTimeout:       req.Config.IdleTimeout,
+					DynamicScaling:    req.Config.DynamicScaling,
+					ScalingFactor:     req.Config.ScalingFactor,
+					ScalingInterval:   req.Config.ScalingInterval,
+					CrawlerHeaders:    req.Config.CrawlerHeaders,
 					UseDefaultHeaders: req.Config.UseDefaultHeaders,
 					Preheat: prerender.PreheatConfig{
 						Enabled:         req.Config.Preheat.Enabled,
@@ -1300,7 +1459,7 @@ func main() {
 			// 获取SSL状态 - 默认获取所有站点或指定站点
 			sslGroup.GET("/status", func(c *gin.Context) {
 				siteName := c.Query("site")
-				
+
 				if siteName != "" {
 					// 获取指定站点的SSL配置
 					for _, site := range cfg.Sites {
@@ -1335,7 +1494,7 @@ func main() {
 					c.JSON(http.StatusOK, gin.H{
 						"code":    200,
 						"message": "success",
-						"data": siteStatuses,
+						"data":    siteStatuses,
 					})
 				}
 			})
@@ -1344,7 +1503,7 @@ func main() {
 			sslGroup.GET("/certs", func(c *gin.Context) {
 				siteName := c.Query("site")
 				allDomains := certManager.GetDomains()
-				
+
 				// 如果指定了站点，只返回该站点相关的证书
 				if siteName != "" {
 					// 查找站点配置
@@ -1355,7 +1514,7 @@ func main() {
 							break
 						}
 					}
-					
+
 					if siteConfig != nil {
 						// 只返回站点配置中指定的域名证书
 						var siteDomains []string
@@ -1376,7 +1535,7 @@ func main() {
 						return
 					}
 				}
-				
+
 				// 如果没有指定站点或站点不存在，返回所有证书
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
@@ -1419,7 +1578,7 @@ func main() {
 						break
 					}
 				}
-				
+
 				// 如果域名不在站点配置中，添加到站点配置
 				if !domainExists {
 					cfg.Sites[siteIndex].SSL.Domains = append(cfg.Sites[siteIndex].SSL.Domains, req.Domain)
@@ -1440,7 +1599,7 @@ func main() {
 			sslGroup.DELETE("/certs/:domain", func(c *gin.Context) {
 				domain := c.Param("domain")
 				siteName := c.Query("site")
-				
+
 				// 如果指定了站点，检查域名是否属于该站点
 				if siteName != "" {
 					// 查找站点配置
@@ -1451,7 +1610,7 @@ func main() {
 							break
 						}
 					}
-					
+
 					if siteConfig != nil {
 						// 检查域名是否在站点配置中
 						var domainFound bool
@@ -1461,14 +1620,14 @@ func main() {
 								break
 							}
 						}
-						
+
 						if !domainFound {
 							c.JSON(http.StatusForbidden, gin.H{"code": 403, "message": "Domain does not belong to the specified site"})
 							return
 						}
 					}
 				}
-				
+
 				if err := certManager.RemoveDomain(domain); err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Delete domain failed"})
 					return
@@ -1491,9 +1650,9 @@ func main() {
 					"message": "success",
 					"data": gin.H{
 						"requestsPerSecond": 12.5,
-						"cpuUsage":         25.3,
-						"memoryUsage":      67.8,
-						"diskUsage":        45.2,
+						"cpuUsage":          25.3,
+						"memoryUsage":       67.8,
+						"diskUsage":         45.2,
 					},
 				})
 			})
@@ -1503,7 +1662,7 @@ func main() {
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
 					"message": "success",
-					"data": []gin.H{},
+					"data":    []gin.H{},
 				})
 			})
 		}
@@ -1520,21 +1679,21 @@ func main() {
 				sitesModules[site.Name] = gin.H{
 					"firewall": gin.H{
 						"enabled": site.Firewall.Enabled,
-						"status": "healthy",
+						"status":  "healthy",
 					},
 					"prerender": gin.H{
-						"enabled": site.Prerender.Enabled,
+						"enabled":  site.Prerender.Enabled,
 						"poolSize": site.Prerender.PoolSize,
-						"status": "healthy",
+						"status":   "healthy",
 					},
 					"routing": gin.H{
 						"status": "healthy",
 					},
 					"ssl": gin.H{
-						"enabled": site.SSL.Enabled,
+						"enabled":    site.SSL.Enabled,
 						"letEncrypt": site.SSL.LetEncrypt,
-						"domains": len(site.SSL.Domains),
-						"status": "healthy",
+						"domains":    len(site.SSL.Domains),
+						"status":     "healthy",
 					},
 				}
 			}
@@ -1544,23 +1703,23 @@ func main() {
 				"code":    200,
 				"message": "ok",
 				"data": gin.H{
-					"status": "healthy",
+					"status":    "healthy",
 					"timestamp": time.Now().Unix(),
 					"system": gin.H{
-						"goVersion": runtime.Version(),
-						"cpuCount": runtime.NumCPU(),
+						"goVersion":  runtime.Version(),
+						"cpuCount":   runtime.NumCPU(),
 						"goroutines": runtime.NumGoroutine(),
 						"memory": gin.H{
-							"alloc": memStats.Alloc / (1024 * 1024), // MB
+							"alloc": memStats.Alloc / (1024 * 1024),      // MB
 							"total": memStats.TotalAlloc / (1024 * 1024), // MB
-							"sys": memStats.Sys / (1024 * 1024), // MB
+							"sys":   memStats.Sys / (1024 * 1024),        // MB
 						},
 					},
 					"sites": sitesModules,
 					"config": gin.H{
-						"serverPort": cfg.Server.Port,
+						"serverPort":  cfg.Server.Port,
 						"environment": "production",
-						"totalSites": len(cfg.Sites),
+						"totalSites":  len(cfg.Sites),
 					},
 				},
 			})
@@ -1571,7 +1730,7 @@ func main() {
 				"code":    200,
 				"message": "success",
 				"data": gin.H{
-					"version": "v1.0.0",
+					"version":   "v1.0.0",
 					"buildDate": "2025-12-29",
 				},
 			})
@@ -1580,23 +1739,13 @@ func main() {
 
 	// 为每个站点启动HTTP服务器实例，实现一个端口一个站点
 	for _, site := range cfg.Sites {
-		startSiteServer(site, cfg.Server.Address)
+		startSiteServer(site, cfg.Server.Address, cfg.Dirs.StaticDir)
 	}
 
-	// 启动API服务器，使用固定端口9598
+	// 配置API服务器，使用固定端口9598
 	apiPort := 9598
 	apiAddr := fmt.Sprintf("%s:%d", cfg.Server.Address, apiPort)
-	log.Printf("API server starting on %s", apiAddr)
-	go func() {
-		// 尝试启动服务器
-		log.Printf("Attempting to start API server on %s", apiAddr)
-		if err := http.ListenAndServe(apiAddr, ginRouter); err != nil {
-			log.Printf("Failed to start API server on %s: %v", apiAddr, err)
-			// 输出更详细的错误信息
-			log.Printf("Detailed error: %+v", err)
-		}
-	}()
-	
+
 	// 启动管理控制台服务器
 	// 管理控制台端口使用9597
 	adminAddr := fmt.Sprintf("%s:%d", cfg.Server.Address, 9597)
@@ -1605,38 +1754,38 @@ func main() {
 	// 启动管理控制台前端静态资源服务器，使用API端口+1
 	// 仅在生产环境提供前端代码，开发阶段由前端开发服务器提供
 	log.Printf("Admin console server starting on %s", adminAddr)
-	
+
 	// 创建静态资源服务器
 	adminRouter := gin.Default()
-	
+
 	// 添加安全头中间件
 	adminRouter.Use(func(c *gin.Context) {
 		// Content-Security-Policy (CSP) 头，防止XSS攻击
 		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://localhost:9598")
-		
+
 		// X-Frame-Options 头，防止Clickjacking攻击
 		c.Header("X-Frame-Options", "DENY")
-		
+
 		// X-XSS-Protection 头，启用浏览器的XSS过滤
 		c.Header("X-XSS-Protection", "1; mode=block")
-		
+
 		// X-Content-Type-Options 头，防止MIME类型嗅探
 		c.Header("X-Content-Type-Options", "nosniff")
-		
+
 		// Referrer-Policy 头，控制Referrer信息的发送
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-		
+
 		// Strict-Transport-Security (HSTS) 头，强制使用HTTPS
 		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-		
+
 		// Permissions-Policy 头，控制浏览器API的访问
 		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=(), usb=(), accelerometer=(), gyroscope=()")
-		
+
 		c.Next()
 	})
-	
+
 	// 提供静态资源服务
-	adminStaticDir := "./web/dist" // 前端编译后的目录
+	adminStaticDir := cfg.Dirs.AdminStaticDir // 前端编译后的目录
 	if _, err := os.Stat(adminStaticDir); os.IsNotExist(err) {
 		// 如果dist目录不存在，创建一个空目录
 		err := os.MkdirAll(adminStaticDir, 0755)
@@ -1644,10 +1793,10 @@ func main() {
 			log.Printf("Failed to create admin static directory: %v", err)
 		}
 	}
-	
+
 	// 静态文件路由
 	adminRouter.Static("/", adminStaticDir)
-	
+
 	// 处理SPA路由，所有未匹配的路由都返回index.html
 	adminRouter.NoRoute(func(c *gin.Context) {
 		indexPath := filepath.Join(adminStaticDir, "index.html")
@@ -1656,11 +1805,11 @@ func main() {
 			return
 		}
 		c.JSON(http.StatusNotFound, gin.H{
-			"code": 404,
+			"code":    404,
 			"message": "File not found",
 		})
 	})
-	
+
 	// 启动管理控制台服务器
 	go func() {
 		// 如果启用了SSL，使用HTTPS

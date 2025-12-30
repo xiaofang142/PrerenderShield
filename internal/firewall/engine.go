@@ -11,16 +11,16 @@ import (
 
 // Engine 防火墙引擎
 type Engine struct {
-	SiteName              string                 // 站点名称
-	mutex                 sync.RWMutex
-	owaspDetectors        map[string]OWASPDetector
-	coreDetectors         []CoreDetector
-	actionHandler         ActionHandler
-	ruleManager           *RuleManager
-	logger                Logger
-	requestCache          map[string]*CheckResult // 请求缓存，用于相同请求快速返回结果
-	cacheMutex            sync.RWMutex           // 请求缓存互斥锁
-	cacheTTL              time.Duration          // 请求缓存过期时间
+	SiteName       string // 站点名称
+	mutex          sync.RWMutex
+	owaspDetectors map[string]OWASPDetector
+	coreDetectors  []CoreDetector
+	actionHandler  ActionHandler
+	ruleManager    *RuleManager
+	logger         Logger
+	requestCache   map[string]*CheckResult // 请求缓存，用于相同请求快速返回结果
+	cacheMutex     sync.RWMutex            // 请求缓存互斥锁
+	cacheTTL       time.Duration           // 请求缓存过期时间
 }
 
 // OWASPDetector OWASP Top 10检测器接口
@@ -71,9 +71,10 @@ type Logger interface {
 
 // Config 防火墙配置
 type Config struct {
-	RulesPath string
+	RulesPath    string
 	ActionConfig ActionConfig
-	CacheTTL int // 请求缓存过期时间（秒）
+	CacheTTL     int    // 请求缓存过期时间（秒）
+	StaticDir    string // 静态文件目录
 }
 
 // ActionConfig 动作配置
@@ -84,9 +85,9 @@ type ActionConfig struct {
 
 // CheckResult 检查结果
 type CheckResult struct {
-	Threats     []types.Threat
-	CreatedAt   time.Time
-	Allow       bool
+	Threats   []types.Threat
+	CreatedAt time.Time
+	Allow     bool
 }
 
 // EngineManager 防火墙引擎管理器，用于管理多个站点的防火墙引擎
@@ -179,11 +180,11 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 	e.owaspDetectors["csrf"] = detectors.NewCSRFDetector(ruleManager)
 	e.owaspDetectors["deserialization"] = detectors.NewDeserializationDetector(ruleManager)
 	e.owaspDetectors["sensitive-data"] = detectors.NewSensitiveDataDetector(ruleManager)
-	
+
 	// 初始化核心检测器
 	e.coreDetectors = append(e.coreDetectors, detectors.NewGeoIPDetector())
 	e.coreDetectors = append(e.coreDetectors, detectors.NewRateLimitDetector())
-	e.coreDetectors = append(e.coreDetectors, detectors.NewFileIntegrityDetector())
+	e.coreDetectors = append(e.coreDetectors, detectors.NewFileIntegrityDetector(config.StaticDir))
 
 	// 启动缓存清理协程
 	go e.cleanCacheLoop()
@@ -293,7 +294,7 @@ func (e *Engine) HandleRequest(w http.ResponseWriter, req *http.Request) bool {
 		}
 		return true // 出错时默认允许请求通过
 	}
-	
+
 	// 如果检测到威胁，执行相应动作
 	if len(result.Threats) > 0 {
 		// 记录安全事件
@@ -303,7 +304,7 @@ func (e *Engine) HandleRequest(w http.ResponseWriter, req *http.Request) bool {
 		}
 		return false // 没有动作处理器，默认阻止
 	}
-	
+
 	return true // 允许请求通过
 }
 
@@ -366,7 +367,7 @@ func (e *Engine) cleanCacheLoop() {
 	ticker := time.NewTicker(5 * time.Minute)
 	for {
 		<-ticker.C
-			e.cleanExpiredCache()
+		e.cleanExpiredCache()
 	}
 }
 
