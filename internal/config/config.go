@@ -33,16 +33,37 @@ var (
 // SiteConfig 站点配置
 type SiteConfig struct {
 	// 站点基本信息
-	Name     string            `yaml:"name"`
-	Domain   string            `yaml:"domain"`
+	ID       string            `yaml:"id" json:"id"` // 站点唯一ID
+	Name     string            `yaml:"name" json:"name"`
+	Domains  []string          `yaml:"domains" json:"domains"` // 支持多个域名解析到同一个站点
+	// 站点端口配置，支持一个站点一个端口
+	Port     int               `yaml:"port" json:"port"`
+	// 代理配置
+	Proxy ProxyConfig          `yaml:"proxy" json:"proxy"`
 	// 防火墙配置
-	Firewall FirewallConfig    `yaml:"firewall"`
+	Firewall FirewallConfig    `yaml:"firewall" json:"firewall"`
 	// 预渲染配置
-	Prerender PrerenderConfig  `yaml:"prerender"`
+	Prerender PrerenderConfig  `yaml:"prerender" json:"prerender"`
 	// 路由配置
-	Routing RoutingConfig      `yaml:"routing"`
+	Routing RoutingConfig      `yaml:"routing" json:"routing"`
 	// SSL配置
-	SSL SSLConfig              `yaml:"ssl"`
+	SSL SSLConfig              `yaml:"ssl" json:"ssl"`
+	// 网页防篡改配置
+	FileIntegrityConfig FileIntegrityConfig `yaml:"file_integrity" json:"FileIntegrityConfig"`
+}
+
+// FileIntegrityConfig 网页防篡改配置
+type FileIntegrityConfig struct {
+	Enabled   bool   `yaml:"enabled" json:"Enabled"`
+	CheckInterval int `yaml:"check_interval" json:"CheckInterval"` // 检查间隔（秒）
+	HashAlgorithm string `yaml:"hash_algorithm" json:"HashAlgorithm"` // 哈希算法（md5, sha256等）
+}
+
+// ProxyConfig 代理配置
+type ProxyConfig struct {
+	Enabled  bool   `yaml:"enabled" json:"Enabled"`
+	TargetURL string `yaml:"target_url" json:"TargetURL"`
+	Type      string `yaml:"type" json:"Type"` // direct: 直接解析域名, proxy: 反向代理
 }
 
 // Config 应用全局配置
@@ -67,64 +88,83 @@ type ServerConfig struct {
 
 // FirewallConfig 防火墙配置
 type FirewallConfig struct {
-	Enabled       bool         `yaml:"enabled"`
-	RulesPath     string       `yaml:"rules_path"`
-	ActionConfig  ActionConfig `yaml:"action"`
+	Enabled       bool                   `yaml:"enabled" json:"Enabled"`
+	RulesPath     string                 `yaml:"rules_path" json:"RulesPath"`
+	ActionConfig  ActionConfig           `yaml:"action" json:"ActionConfig"`
+	GeoIPConfig   GeoIPConfig            `yaml:"geoip" json:"GeoIPConfig"`
+	RateLimitConfig RateLimitConfig      `yaml:"rate_limit" json:"RateLimitConfig"`
+}
+
+// GeoIPConfig 地理位置访问控制配置
+type GeoIPConfig struct {
+	Enabled   bool     `yaml:"enabled" json:"Enabled"`
+	AllowList []string `yaml:"allow_list" json:"AllowList"` // 允许的国家/地区代码列表
+	BlockList []string `yaml:"block_list" json:"BlockList"` // 阻止的国家/地区代码列表
+}
+
+// RateLimitConfig 频率限制配置
+type RateLimitConfig struct {
+	Enabled   bool   `yaml:"enabled" json:"Enabled"`
+	Requests  int    `yaml:"requests" json:"Requests"` // 时间窗口内允许的请求数
+	Window    int    `yaml:"window" json:"Window"`     // 时间窗口（秒）
+	BanTime   int    `yaml:"ban_time" json:"BanTime"` // 封禁时间（秒）
 }
 
 // ActionConfig 防火墙动作配置
 type ActionConfig struct {
-	DefaultAction string `yaml:"default_action"`
-	BlockMessage  string `yaml:"block_message"`
+	DefaultAction string `yaml:"default_action" json:"DefaultAction"`
+	BlockMessage  string `yaml:"block_message" json:"BlockMessage"`
 }
 
 // PrerenderConfig 预渲染配置
 type PrerenderConfig struct {
-	Enabled         bool           `yaml:"enabled"`
-	PoolSize        int            `yaml:"pool_size"`
-	MinPoolSize     int            `yaml:"min_pool_size"`
-	MaxPoolSize     int            `yaml:"max_pool_size"`
-	Timeout         int            `yaml:"timeout"`
-	CacheTTL        int            `yaml:"cache_ttl"`
-	IdleTimeout     int            `yaml:"idle_timeout"`
-	DynamicScaling  bool           `yaml:"dynamic_scaling"`
-	ScalingFactor   float64        `yaml:"scaling_factor"`
-	ScalingInterval int            `yaml:"scaling_interval"`
-	Preheat         PreheatConfig  `yaml:"preheat"`
+	Enabled         bool           `yaml:"enabled" json:"Enabled"`
+	PoolSize        int            `yaml:"pool_size" json:"PoolSize"`
+	MinPoolSize     int            `yaml:"min_pool_size" json:"MinPoolSize"`
+	MaxPoolSize     int            `yaml:"max_pool_size" json:"MaxPoolSize"`
+	Timeout         int            `yaml:"timeout" json:"Timeout"`
+	CacheTTL        int            `yaml:"cache_ttl" json:"CacheTTL"`
+	IdleTimeout     int            `yaml:"idle_timeout" json:"IdleTimeout"`
+	DynamicScaling  bool           `yaml:"dynamic_scaling" json:"DynamicScaling"`
+	ScalingFactor   float64        `yaml:"scaling_factor" json:"ScalingFactor"`
+	ScalingInterval int            `yaml:"scaling_interval" json:"ScalingInterval"`
+	Preheat         PreheatConfig  `yaml:"preheat" json:"Preheat"`
+	CrawlerHeaders  []string       `yaml:"crawler_headers" json:"CrawlerHeaders"` // 爬虫协议头列表
+	UseDefaultHeaders bool         `yaml:"use_default_headers" json:"UseDefaultHeaders"` // 是否使用默认爬虫协议头
 }
 
 // PreheatConfig 缓存预热配置
 type PreheatConfig struct {
-	Enabled         bool   `yaml:"enabled"`
-	SitemapURL      string `yaml:"sitemap_url"`
-	Schedule        string `yaml:"schedule"`
-	Concurrency     int    `yaml:"concurrency"`
-	DefaultPriority int    `yaml:"default_priority"`
+	Enabled         bool   `yaml:"enabled" json:"Enabled"`
+	SitemapURL      string `yaml:"sitemap_url" json:"SitemapURL"`
+	Schedule        string `yaml:"schedule" json:"Schedule"`
+	Concurrency     int    `yaml:"concurrency" json:"Concurrency"`
+	DefaultPriority int    `yaml:"default_priority" json:"DefaultPriority"`
 }
 
 // RoutingConfig 路由配置
 type RoutingConfig struct {
-	Rules []RouteRule `yaml:"rules"`
+	Rules []RouteRule `yaml:"rules" json:"Rules"`
 }
 
 // RouteRule 路由规则
 type RouteRule struct {
-	ID       string `yaml:"id"`
-	Pattern  string `yaml:"pattern"`
-	Action   string `yaml:"action"`
-	Priority int    `yaml:"priority"`
+	ID       string `yaml:"id" json:"ID"`
+	Pattern  string `yaml:"pattern" json:"Pattern"`
+	Action   string `yaml:"action" json:"Action"`
+	Priority int    `yaml:"priority" json:"Priority"`
 }
 
 // SSLConfig SSL配置
 type SSLConfig struct {
-	Enabled       bool     `yaml:"enabled"`
-	LetEncrypt    bool     `yaml:"let_encrypt"`
-	Domains       []string `yaml:"domains"`
-	ACMEEmail     string   `yaml:"acme_email"`
-	ACMEServer    string   `yaml:"acme_server"`
-	ACMEChallenge string   `yaml:"acme_challenge"`
-	CertPath      string   `yaml:"cert_path"`
-	KeyPath       string   `yaml:"key_path"`
+	Enabled       bool     `yaml:"enabled" json:"Enabled"`
+	LetEncrypt    bool     `yaml:"let_encrypt" json:"LetEncrypt"`
+	Domains       []string `yaml:"domains" json:"Domains"`
+	ACMEEmail     string   `yaml:"acme_email" json:"ACMEEmail"`
+	ACMEServer    string   `yaml:"acme_server" json:"ACMEServer"`
+	ACMEChallenge string   `yaml:"acme_challenge" json:"ACMEChallenge"`
+	CertPath      string   `yaml:"cert_path" json:"CertPath"`
+	KeyPath       string   `yaml:"key_path" json:"KeyPath"`
 }
 
 // CacheConfig 缓存配置
@@ -329,14 +369,27 @@ func (cm *ConfigManager) reloadConfig() {
 func defaultConfig() *Config {
 	// 默认站点配置
 	defaultSite := SiteConfig{
+		ID:     "default", // 默认站点ID
 		Name:   "默认站点",
-		Domain: "localhost",
+		Domains: []string{"localhost"}, // 支持多个域名
+		Port:   8081, // 默认端口
 		Firewall: FirewallConfig{
 			Enabled:   true,
 			RulesPath: "/etc/prerender-shield/rules",
 			ActionConfig: ActionConfig{
 				DefaultAction: "block",
 				BlockMessage:  "Request blocked by firewall",
+			},
+			GeoIPConfig: GeoIPConfig{
+				Enabled:   false,
+				AllowList: []string{},
+				BlockList: []string{},
+			},
+			RateLimitConfig: RateLimitConfig{
+				Enabled:   false,
+				Requests:  100,
+				Window:    60,
+				BanTime:   3600,
 			},
 		},
 		Prerender: PrerenderConfig{
@@ -350,6 +403,8 @@ func defaultConfig() *Config {
 			DynamicScaling:  true,
 			ScalingFactor:   0.5,
 			ScalingInterval: 60,
+			CrawlerHeaders:  []string{}, // 默认空列表
+			UseDefaultHeaders: true, // 默认使用默认爬虫协议头
 			Preheat: PreheatConfig{
 				Enabled:         false,
 				SitemapURL:      "",
@@ -370,6 +425,12 @@ func defaultConfig() *Config {
 			ACMEChallenge: "http01",
 			CertPath:      "/etc/prerender-shield/certs/cert.pem",
 			KeyPath:       "/etc/prerender-shield/certs/key.pem",
+		},
+		// 网页防篡改配置
+		FileIntegrityConfig: FileIntegrityConfig{
+			Enabled:        false,
+			CheckInterval:  300, // 5分钟检查一次
+			HashAlgorithm:  "sha256",
 		},
 	}
 

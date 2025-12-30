@@ -179,6 +179,11 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 	e.owaspDetectors["csrf"] = detectors.NewCSRFDetector(ruleManager)
 	e.owaspDetectors["deserialization"] = detectors.NewDeserializationDetector(ruleManager)
 	e.owaspDetectors["sensitive-data"] = detectors.NewSensitiveDataDetector(ruleManager)
+	
+	// 初始化核心检测器
+	e.coreDetectors = append(e.coreDetectors, detectors.NewGeoIPDetector())
+	e.coreDetectors = append(e.coreDetectors, detectors.NewRateLimitDetector())
+	e.coreDetectors = append(e.coreDetectors, detectors.NewFileIntegrityDetector())
 
 	// 启动缓存清理协程
 	go e.cleanCacheLoop()

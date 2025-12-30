@@ -10,53 +10,149 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation()
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider trigger={null} collapsible collapsed={collapsed}>
-        <div className="logo" style={{ height: 32, margin: 16, background: 'rgba(255, 255, 255, 0.2)', borderRadius: 6 }} />
-        <Menu theme="dark" mode="inline" selectedKeys={[location.pathname]}>
-          <Menu.Item key="/" icon={<DashboardOutlined />}>
-            <Link to="/">概览</Link>
-          </Menu.Item>
-          <Menu.Item key="/firewall" icon={<SecurityScanOutlined />}>
-            <Link to="/firewall">防火墙</Link>
-          </Menu.Item>
-          <Menu.Item key="/prerender" icon={<CodeOutlined />}>
-            <Link to="/prerender">预渲染</Link>
-          </Menu.Item>
-          <Menu.Item key="/ssl" icon={<LockOutlined />}>
-            <Link to="/ssl">SSL管理</Link>
-          </Menu.Item>
-          <Menu.Item key="/monitoring" icon={<BarChartOutlined />}>
-            <Link to="/monitoring">监控告警</Link>
-          </Menu.Item>
-          <Menu.Item key="/logs" icon={<FileTextOutlined />}>
-            <Link to="/logs">日志管理</Link>
-          </Menu.Item>
-          <Menu.Item key="/settings" icon={<SettingOutlined />}>
-            <Link to="/settings">系统设置</Link>
-          </Menu.Item>
-        </Menu>
+    <Layout style={{ minHeight: '100vh', background: '#ffffff' }}>
+      {/* 左侧导航栏 - 纯白主题 */}
+      <Sider 
+        trigger={null} 
+        collapsible 
+        collapsed={collapsed}
+        style={{
+          background: '#ffffff',
+          borderRight: '1px solid #e8e8e8',
+        }}
+      >
+        {/* Logo区域 - 雷池风格 */}
+        <div 
+          className="logo" 
+          style={{
+            height: 32, 
+            margin: 16, 
+            background: '#2f855a', // 中碧蓝
+            borderRadius: 6,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 16,
+            fontWeight: 'bold',
+            color: '#ffffff',
+            boxShadow: '0 2px 8px rgba(47, 133, 90, 0.3)'
+          }} 
+        >
+          {collapsed ? 'PS' : 'PrerenderShield'}
+        </div>
+        
+        {/* 菜单 - 纯白主题 */}
+        <Menu 
+          theme="light" 
+          mode="inline" 
+          selectedKeys={[location.pathname]}
+          style={{
+            background: '#ffffff',
+            borderRight: 'none'
+          }}
+          items={[
+            {
+              key: '/',
+              icon: <DashboardOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/" style={{ color: '#333333' }}>概览</Link>
+            },
+            {
+              key: '/sites',
+              icon: <FileTextOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/sites" style={{ color: '#333333' }}>站点管理</Link>
+            },
+            {
+              key: '/firewall',
+              icon: <SecurityScanOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/firewall" style={{ color: '#333333' }}>防火墙</Link>
+            },
+            {
+              key: '/prerender',
+              icon: <CodeOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/prerender" style={{ color: '#333333' }}>预渲染</Link>
+            },
+            {
+              key: '/ssl',
+              icon: <LockOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/ssl" style={{ color: '#333333' }}>SSL管理</Link>
+            },
+            {
+              key: '/monitoring',
+              icon: <BarChartOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/monitoring" style={{ color: '#333333' }}>监控告警</Link>
+            },
+            {
+              key: '/logs',
+              icon: <FileTextOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/logs" style={{ color: '#333333' }}>日志管理</Link>
+            },
+            {
+              key: '/settings',
+              icon: <SettingOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/settings" style={{ color: '#333333' }}>系统设置</Link>
+            }
+          ]}
+        />
       </Sider>
+      
+      {/* 主内容区域 */}
       <Layout className="site-layout">
-        <Header className="site-layout-background" style={{ padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {/* 顶部导航栏 - 纯白主题 */}
+        <Header 
+          className="site-layout-background" 
+          style={{
+            padding: 0, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            background: '#ffffff',
+            borderBottom: '1px solid #e8e8e8',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+          }}
+        >
+          {/* 左侧触发器和标题 */}
           <div style={{ display: 'flex', alignItems: 'center' }}>
             {React.createElement(collapsed ? MenuUnfoldOutlined : MenuFoldOutlined, {
               className: 'trigger',
               onClick: () => setCollapsed(!collapsed),
-              style: { marginLeft: 16, fontSize: 18, cursor: 'pointer' }
+              style: { marginLeft: 16, fontSize: 18, cursor: 'pointer', color: '#333333' }
             })}
-            <h1 style={{ margin: 0, marginLeft: 16, fontSize: 18, color: '#fff' }}>PrerenderShield</h1>
+            <h1 style={{ margin: 0, marginLeft: 16, fontSize: 18, color: '#333333' }}>PrerenderShield</h1>
           </div>
-          <div style={{ marginRight: 16, color: '#fff' }}>
-            管理员
+          
+          {/* 右侧用户信息 */}
+          <div style={{ marginRight: 16, color: '#333333', display: 'flex', alignItems: 'center' }}>
+            <span style={{ marginRight: 8 }}>管理员</span>
+            <div 
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: '#2f855a', // 中碧蓝
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 14,
+                fontWeight: 'bold',
+                color: '#ffffff'
+              }}
+            >
+              A
+            </div>
           </div>
         </Header>
+        
+        {/* 内容区域 */}
         <Content
           className="site-layout-background"
           style={{
             margin: '24px 16px',
             padding: 24,
             minHeight: 280,
+            background: '#ffffff',
+            borderRadius: 8,
+            border: '1px solid #e8e8e8',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
           }}
         >
           {children}

@@ -11,10 +11,6 @@ const SSL: React.FC = () => {
   const [selectedSite, setSelectedSite] = useState<string>('')
   const [status, setStatus] = useState({
     enabled: false,
-    letEncrypt: false,
-    acmeEmail: '',
-    acmeServer: '',
-    acmeChallenge: 'http01',
   })
   const [certs, setCerts] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -218,40 +214,6 @@ const SSL: React.FC = () => {
               value={status.enabled ? '已启用' : '已禁用'}
               prefix={<LockOutlined />}
               valueStyle={{ color: status.enabled ? '#52c41a' : '#faad14' }}
-            />
-          </Col>
-          <Col span={6}>
-            <Statistic
-              title="Let's Encrypt"
-              value={status.letEncrypt ? '已启用' : '已禁用'}
-              valueStyle={{ color: status.letEncrypt ? '#1890ff' : '#faad14' }}
-            />
-          </Col>
-          <Col span={12}>
-            <Statistic
-              title="ACME挑战类型"
-              value={status.acmeChallenge}
-              valueStyle={{ color: '#1890ff' }}
-            />
-          </Col>
-        </Row>
-      </Card>
-
-      {/* ACME配置 */}
-      <Card className="card" title="ACME配置">
-        <Row gutter={[16, 16]}>
-          <Col span={12}>
-            <Statistic
-              title="ACME邮箱"
-              value={status.acmeEmail || '未配置'}
-              valueStyle={{ color: status.acmeEmail ? '#1890ff' : '#faad14' }}
-            />
-          </Col>
-          <Col span={12}>
-            <Statistic
-              title="ACME服务器"
-              value={status.acmeServer || '未配置'}
-              valueStyle={{ color: status.acmeServer ? '#1890ff' : '#faad14' }}
             />
           </Col>
         </Row>

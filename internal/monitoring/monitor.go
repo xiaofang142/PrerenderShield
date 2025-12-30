@@ -2,7 +2,6 @@ package monitoring
 
 import (
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 

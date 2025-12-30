@@ -1,74 +1,27 @@
 version: '3.8'
 
 services:
-  # 主应用服务
   prerender-shield:
     build: .
     container_name: prerender-shield
-    restart: always
+    restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "9597:9597"  # 管理控制台前端
+      - "9598:9598"  # API服务
     volumes:
-      - ./configs/config.yml:/etc/prerender-shield/config.yml:ro
-      - ./data/rules:/etc/prerender-shield/rules:rw
-      - ./data/certs:/etc/prerender-shield/certs:rw
+      - ./data:/app/data
+      - ./configs:/app/configs
+      - ./web/dist:/app/web/dist
+      - ./certs:/app/certs
     environment:
-      - CONFIG_PATH=/etc/prerender-shield/config.yml
+      - CONFIG_PATH=/app/configs/config.yml
     networks:
       - prerender-shield-network
 
-  # Redis缓存服务（可选，用于高性能缓存）
-  redis:
-    image: redis:7-alpine
-    container_name: prerender-shield-redis
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - ./data/redis:/data
-    networks:
-      - prerender-shield-network
-
-  # Prometheus监控服务（可选，用于监控）
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prerender-shield-prometheus
-    restart: always
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-    networks:
-      - prerender-shield-network
-
-  # Grafana可视化服务（可选，用于监控数据可视化）
-  grafana:
-    image: grafana/grafana:latest
-    container_name: prerender-shield-grafana
-    restart: always
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./data/grafana:/var/lib/grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
-    depends_on:
-      - prometheus
-    networks:
-      - prerender-shield-network
-
-# 网络配置
 networks:
   prerender-shield-network:
     driver: bridge
     ipam:
+      driver: default
       config:
         - subnet: 172.20.0.0/16
-
-# 卷配置
-volumes:
-  redis-data:
-  grafana-data:

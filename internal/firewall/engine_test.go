@@ -16,7 +16,7 @@ func TestEngine_NewEngine(t *testing.T) {
 		},
 	}
 
-	engine, err := NewEngine(config)
+	engine, err := NewEngine("test-site", config)
 	assert.NoError(t, err)
 	assert.NotNil(t, engine)
 }
@@ -27,7 +27,7 @@ func TestEngine_UpdateRules(t *testing.T) {
 		RulesPath: "/tmp/rules",
 	}
 
-	engine, err := NewEngine(config)
+	engine, err := NewEngine("test-site", config)
 	assert.NoError(t, err)
 	assert.NotNil(t, engine)
 

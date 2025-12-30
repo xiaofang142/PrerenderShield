@@ -45,6 +45,8 @@ type Engine struct {
 	activeTasks       int             // 当前活跃任务数
 	taskMutex         sync.RWMutex    // 活跃任务数互斥锁
 	renderCache      *LRUCache        // 渲染缓存，使用LRU机制
+	// 默认爬虫协议头列表
+	defaultCrawlerHeaders []string
 }
 
 // EngineManager 预渲染引擎管理器，管理多个站点的预渲染引擎
@@ -107,6 +109,8 @@ type PrerenderConfig struct {
 	DynamicScaling   bool          // 是否启用动态扩容/缩容
 	ScalingFactor    float64       // 扩容因子，如0.5表示每次增加50%
 	ScalingInterval  int           // 扩容检查间隔（秒）
+	CrawlerHeaders   []string      // 爬虫协议头列表
+	UseDefaultHeaders bool         // 是否使用默认爬虫协议头
 }
 
 // PreheatConfig 缓存预热配置
@@ -268,6 +272,32 @@ func NewEngine(siteName string, config PrerenderConfig) (*Engine, error) {
 		}
 	}
 
+	// 默认爬虫协议头列表
+	defaultCrawlerHeaders := []string{
+		"Googlebot",
+		"Bingbot",
+		"Slurp",
+		"DuckDuckBot",
+		"Baiduspider",
+		"Sogou spider",
+		"YandexBot",
+		"Exabot",
+		"FacebookBot",
+		"Twitterbot",
+		"LinkedInBot",
+		"WhatsAppBot",
+		"TelegramBot",
+		"DiscordBot",
+		"PinterestBot",
+		"InstagramBot",
+		"Google-InspectionTool",
+		"Google-Site-Verification",
+		"AhrefsBot",
+		"SEMrushBot",
+		"Majestic",
+		"Yahoo! Slurp",
+	}
+
 	engine := &Engine{
 		SiteName:            siteName,
 		config:              config,
@@ -279,6 +309,7 @@ func NewEngine(siteName string, config PrerenderConfig) (*Engine, error) {
 		queueLengthHistory:  make([]int, 0, 10), // 保存最近10次的队列长度
 		activeTasks:         0,
 		renderCache:         NewLRUCache(1000), // 渲染缓存初始化，容量1000
+		defaultCrawlerHeaders: defaultCrawlerHeaders,
 	}
 	
 	return engine, nil
@@ -643,6 +674,53 @@ func (e *Engine) TriggerPreheat() error {
 		return nil
 	}
 	return e.preheatManager.TriggerPreheat()
+}
+
+// GetCrawlerHeaders 获取完整的爬虫协议头列表（包括默认和自定义的）
+func (e *Engine) GetCrawlerHeaders() []string {
+	// 合并默认和自定义爬虫协议头
+	allHeaders := make([]string, 0)
+	
+	// 如果启用了默认爬虫协议头，添加默认列表
+	if e.config.UseDefaultHeaders {
+		allHeaders = append(allHeaders, e.defaultCrawlerHeaders...)
+	}
+	
+	// 添加自定义爬虫协议头
+	if len(e.config.CrawlerHeaders) > 0 {
+		allHeaders = append(allHeaders, e.config.CrawlerHeaders...)
+	}
+	
+	// 去重
+	uniqueHeaders := make([]string, 0, len(allHeaders))
+	seen := make(map[string]bool)
+	for _, header := range allHeaders {
+		if !seen[header] {
+			seen[header] = true
+			uniqueHeaders = append(uniqueHeaders, header)
+		}
+	}
+	
+	return uniqueHeaders
+}
+
+// IsCrawlerRequest 检查请求是否来自爬虫
+func (e *Engine) IsCrawlerRequest(userAgent string) bool {
+	crawlerHeaders := e.GetCrawlerHeaders()
+	
+	// 如果没有配置爬虫协议头，默认返回false
+	if len(crawlerHeaders) == 0 {
+		return false
+	}
+	
+	// 检查User-Agent是否包含任何爬虫协议头
+	for _, header := range crawlerHeaders {
+		if strings.Contains(strings.ToLower(userAgent), strings.ToLower(header)) {
+			return true
+		}
+	}
+	
+	return false
 }
 
 // initBrowserPool 初始化浏览器池

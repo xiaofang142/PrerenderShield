@@ -32,7 +32,7 @@ COPY configs/config.example.yml ./configs/config.example.yml
 RUN mkdir -p /etc/prerender-shield/rules /etc/prerender-shield/certs
 
 # 暴露端口
-EXPOSE 8080
+EXPOSE 9597 9598
 
 # 设置环境变量
 ENV CONFIG_PATH=/etc/prerender-shield/config.yml

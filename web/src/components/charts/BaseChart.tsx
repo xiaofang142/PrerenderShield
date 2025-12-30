@@ -18,12 +18,16 @@ const BaseChart: React.FC<BaseChartProps> = ({ option, style, onChartReady }) =>
     const chart = echarts.init(chartRef.current)
     chartInstanceRef.current = chart
 
-    // 设置图表选项
-    chart.setOption(option)
+    // 设置图表选项，添加错误处理
+    try {
+      chart.setOption(option)
 
-    // 注册图表就绪回调
-    if (onChartReady) {
-      onChartReady(chart)
+      // 注册图表就绪回调
+      if (onChartReady) {
+        onChartReady(chart)
+      }
+    } catch (error) {
+      console.error('Failed to initialize chart:', error)
     }
 
     // 响应窗口大小变化
@@ -40,10 +44,14 @@ const BaseChart: React.FC<BaseChartProps> = ({ option, style, onChartReady }) =>
     }
   }, [option, onChartReady])
 
-  // 更新图表选项
+  // 更新图表选项，添加错误处理
   useEffect(() => {
     if (chartInstanceRef.current) {
-      chartInstanceRef.current.setOption(option, true)
+      try {
+        chartInstanceRef.current.setOption(option, true)
+      } catch (error) {
+        console.error('Failed to update chart option:', error)
+      }
     }
   }, [option])
 

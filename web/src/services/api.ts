@@ -45,6 +45,7 @@ export const prerenderApi = {
   getStatus: (site?: string) => api.get('/prerender/status', { params: site ? { site } : {} }),
   render: (data: { site: string; url: string }) => api.post('/prerender/render', data),
   preheat: (data: { site: string }) => api.post('/prerender/preheat', data),
+  updateConfig: (site: string, config: any) => api.put('/prerender/config', { site, config }),
 }
 
 // 路由API
@@ -59,7 +60,7 @@ export const sslApi = {
   getStatus: (site?: string) => api.get('/ssl/status', { params: site ? { site } : {} }),
   getCerts: (site?: string) => api.get('/ssl/certs', { params: site ? { site } : {} }),
   addCert: (data: { site?: string; domain: string }) => api.post('/ssl/certs', data),
-  deleteCert: (site?: string, domain: string) => {
+  deleteCert: (domain: string, site?: string) => {
     const params = site ? { site } : {};
     return api.delete(`/ssl/certs/${domain}`, { params });
   },
@@ -73,11 +74,25 @@ export const monitoringApi = {
 
 // 站点管理API
 export const sitesApi = {
-  getSites: () => api.get('/sites'),
-  getSite: (name: string) => api.get(`/sites/${name}`),
-  addSite: (site: any) => api.post('/sites', site),
-  updateSite: (name: string, site: any) => api.put(`/sites/${name}`, site),
-  deleteSite: (name: string) => api.delete(`/sites/${name}`),
+  getSites: () => api.get('/sites/'),
+  getSite: (name: string) => api.get(`/sites/${name}/`),
+  addSite: (site: any) => api.post('/sites/', site),
+  updateSite: (name: string, site: any) => api.put(`/sites/${name}/`, site),
+  deleteSite: (name: string) => api.delete(`/sites/${name}/`),
+  // 静态资源管理API
+  getFileList: (siteName: string, path: string) => api.get(`/sites/${siteName}/static`, { params: { path } }),
+  uploadFile: (siteName: string, file: any, path: string, onUploadProgress?: (progressEvent: any) => void) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('path', path)
+    return api.post(`/sites/${siteName}/static`, formData, { onUploadProgress })
+  },
+  extractFile: (siteName: string, filename: string, path: string) => {
+    const formData = new FormData()
+    formData.append('filename', filename)
+    formData.append('path', path)
+    return api.post(`/sites/${siteName}/static/extract`, formData)
+  },
 }
 
 // 系统API
