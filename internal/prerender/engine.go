@@ -987,11 +987,31 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 		// 导航到URL
 		page.MustNavigate(task.URL)
 
-		// 等待页面加载完成，使用默认的等待方式
-		// 等待DOM内容加载完成
+		// 等待页面加载完成
 		page.MustWaitLoad()
 
-		// 等待额外时间，确保页面完全渲染
+		// 根据WaitUntil选项决定等待策略
+		switch task.Options.WaitUntil {
+		case "networkidle0":
+			// 等待网络空闲（0个网络连接）- 使用简单的等待方式
+			time.Sleep(3 * time.Second)
+		case "networkidle2":
+			// 等待网络空闲（最多2个网络连接）- 使用简单的等待方式
+			time.Sleep(2 * time.Second)
+		case "domcontentloaded":
+			// 已经通过page.MustWaitLoad()等待了DOM内容加载
+			// 额外等待1秒确保JavaScript执行
+			time.Sleep(1 * time.Second)
+		case "load":
+			// 已经通过page.MustWaitLoad()等待了页面加载
+			// 额外等待2秒确保JavaScript执行和页面渲染
+			time.Sleep(2 * time.Second)
+		default:
+			// 默认等待策略：等待3秒确保JavaScript执行和页面渲染
+			time.Sleep(3 * time.Second)
+		}
+
+		// 最后再等待一小段时间，确保所有异步操作完成
 		time.Sleep(500 * time.Millisecond)
 
 		// 获取完整的HTML内容
@@ -1002,8 +1022,30 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 		}
 
 		// 验证HTML内容
-		if html == "" || strings.Contains(strings.ToLower(html), "<body></body>") {
+		if html == "" {
 			result.Error = "empty html content"
+			return
+		}
+
+		// 检查是否包含基本的HTML结构
+		lowerHTML := strings.ToLower(html)
+		if !strings.Contains(lowerHTML, "<html") || !strings.Contains(lowerHTML, "<body") {
+			result.Error = "incomplete html structure"
+			return
+		}
+
+		// 检查body是否为空
+		bodyStart := strings.Index(lowerHTML, "<body")
+		bodyEnd := strings.LastIndex(lowerHTML, "</body>")
+		if bodyStart == -1 || bodyEnd == -1 || bodyEnd <= bodyStart {
+			result.Error = "empty body content"
+			return
+		}
+
+		// 检查body内容是否只有空白字符
+		bodyContent := strings.TrimSpace(html[bodyStart:bodyEnd])
+		if bodyContent == "" || bodyContent == "<body>" || bodyContent == "<body></body>" || bodyContent == "<body />" {
+			result.Error = "empty body content"
 			return
 		}
 

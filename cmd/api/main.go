@@ -2,7 +2,6 @@ package main
 
 import (
 	"archive/zip"
-	"crypto/tls"
 	"flag"
 	"fmt"
 	"io"
@@ -44,93 +43,87 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 	// 创建站点级别的Gin路由器
 	siteRouter := gin.Default()
 
-	// 站点请求处理中间件
+	// 爬虫检测中间件 - 第一个执行，确保爬虫请求得到正确处理
 	siteRouter.Use(func(c *gin.Context) {
-		// 记录请求开始时间
-		startTime := time.Now()
+		// 获取请求的User-Agent
+		userAgent := c.Request.UserAgent()
+		log.Printf("Request received: Path=%s, User-Agent=%s, Host=%s", c.Request.URL.Path, userAgent, c.Request.Host)
 
-		// 移除域名验证逻辑，允许任何域名访问
-		// 这样站点服务器可以作为反向代理的上游，由nginx处理域名解析
+		// 检测爬虫
+		lowerUA := strings.ToLower(userAgent)
+		isCrawler := strings.Contains(lowerUA, "baiduspider") ||
+			strings.Contains(lowerUA, "googlebot") ||
+			strings.Contains(lowerUA, "bingbot") ||
+			strings.Contains(lowerUA, "yandexbot") ||
+			strings.Contains(lowerUA, "sogou")
 
-		// 检查是否启用了预渲染
-		prerenderEnabled := site.Prerender.Enabled
-		isCrawler := false
-		var prerenderEngine *prerender.Engine
-		var fullURL string
+		log.Printf("Crawler detection: User-Agent=%s, isCrawler=%t", userAgent, isCrawler)
 
-		if prerenderEnabled {
-			// 获取预渲染引擎
-			var exists bool
-			prerenderEngine, exists = prerenderManager.GetEngine(site.Name)
-			if exists {
-				// 检查请求是否来自爬虫
-				userAgent := c.Request.UserAgent()
-				isCrawler = prerenderEngine.IsCrawlerRequest(userAgent)
-				if isCrawler {
-					// 记录爬虫请求
-					monitor.RecordCrawlerRequest()
+		if isCrawler {
+			// 记录爬虫请求
+			monitor.RecordCrawlerRequest()
 
-					// 构建完整URL
-					// 获取实际请求的协议
-					protocol := "http"
-					if c.Request.TLS != nil || strings.ToLower(c.GetHeader("X-Forwarded-Proto")) == "https" {
-						protocol = "https"
-					}
-
-					// 构建完整URL，包含协议、实际请求的Host和完整的URL（包括查询参数）
-					fullURL = fmt.Sprintf("%s://%s%s", protocol, c.Request.Host, c.Request.URL.RequestURI())
-				}
+			// 构建完整的URL
+			var scheme string
+			if c.Request.TLS != nil {
+				scheme = "https"
+			} else {
+				scheme = "http"
 			}
-		}
+			fullURL := fmt.Sprintf("%s://%s%s", scheme, c.Request.Host, c.Request.URL.Path)
+			if c.Request.URL.RawQuery != "" {
+				fullURL += "?" + c.Request.URL.RawQuery
+			}
+			log.Printf("Prerendering URL: %s for site: %s", fullURL, site.Name)
 
-		// 如果是爬虫请求，先尝试预渲染
-		if isCrawler && prerenderEngine != nil {
-			// 执行预渲染
+			// 获取当前站点的预渲染引擎实例
+			prerenderEngine, exists := prerenderManager.GetEngine(site.Name)
+			if !exists {
+				log.Printf("Prerender engine not found for site: %s", site.Name)
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Prerender engine not found"})
+				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, 0)
+				c.Abort()
+				return
+			}
+
+			// 使用预渲染引擎渲染页面
 			result, err := prerenderEngine.Render(c, fullURL, prerender.RenderOptions{
 				Timeout:   site.Prerender.Timeout,
 				WaitUntil: "networkidle0",
 			})
-			// 无论预渲染结果如何，都返回一个HTML页面
-			// 从URL中提取页面名称，用于生成标题
-			path := c.Request.URL.Path
-			// 移除开头的斜杠
-			if len(path) > 0 && path[0] == '/' {
-				path = path[1:]
+			if err != nil {
+				log.Printf("Prerender failed for URL: %s, error: %v", fullURL, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Prerender failed"})
+				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, 0)
+				c.Abort()
+				return
 			}
-			// 将斜杠替换为空格，用于生成标题
-			title := strings.ReplaceAll(path, "/", " ")
-			// 如果标题为空，使用默认标题
-			if title == "" {
-				title = "Home Page"
-			} else {
-				// 首字母大写
-				title = strings.Title(title)
+
+			if !result.Success {
+				log.Printf("Prerender result failed for URL: %s, error: %s", fullURL, result.Error)
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Prerender result failed"})
+				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, 0)
+				c.Abort()
+				return
 			}
-			// 生成简单的HTML页面
-			html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>%s - %s</title>
-    <meta name="description" content="%s - %s">
-</head>
-<body>
-    <h1>%s</h1>
-    <p>页面正在加载中，请稍后刷新...</p>
-</body>
-</html>`, title, site.Name, title, site.Name, title)
-			// 如果预渲染成功且HTML不为空，使用预渲染的HTML
-			if err == nil && result.Success && result.HTML != "" {
-				html = result.HTML
-			}
-			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+
+			// 返回渲染后的HTML响应
+			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(result.HTML))
 			// 记录请求
-			monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
+			monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, 0)
+			// 终止请求处理，避免后续处理器覆盖我们的响应
+			c.Abort()
 			return
 		}
 
-		// 根据站点的访问模式处理请求
+		// 非爬虫请求，继续处理
+		c.Next()
+	})
+
+	// 非爬虫请求处理中间件
+	siteRouter.Use(func(c *gin.Context) {
+		startTime := time.Now()
+
 		// 1. 检查是否启用了上游代理
 		if site.Proxy.Enabled {
 			// 上游代理模式：将请求转发到上游服务
@@ -159,76 +152,40 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 				os.MkdirAll(siteStaticDir, 0755)
 			}
 
-			// 提供静态文件服务
-			// 对于根路径，尝试提供 index.html
-			if c.Request.URL.Path == "/" {
-				indexPath := filepath.Join(siteStaticDir, "index.html")
-				if _, err := os.Stat(indexPath); err == nil {
-					c.File(indexPath)
+			// 检查请求的路径是否为静态资源
+			isStaticResource := func(path string) bool {
+				staticExtensions := []string{
+					".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
+					".css", ".less", ".sass", ".scss",
+					".js", ".jsx", ".ts", ".tsx",
+					".woff", ".woff2", ".ttf", ".eot",
+					".ico", ".txt", ".json", ".xml", ".pdf", ".zip", ".rar",
+					".mp4", ".mp3", ".avi", ".mov", ".wmv",
+					".csv", ".xls", ".xlsx", ".doc", ".docx",
+				}
+				for _, ext := range staticExtensions {
+					if len(path) >= len(ext) && path[len(path)-len(ext):] == ext {
+						return true
+					}
+				}
+				return false
+			}
+
+			// 对于静态资源，尝试直接提供文件
+			if isStaticResource(c.Request.URL.Path) {
+				filePath := filepath.Join(siteStaticDir, c.Request.URL.Path)
+				if _, err := os.Stat(filePath); err == nil {
+					c.File(filePath)
 					// 记录请求
 					monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
 					return
 				}
 			}
 
-			// 尝试提供请求的文件
-			filePath := filepath.Join(siteStaticDir, c.Request.URL.Path)
-			if _, err := os.Stat(filePath); err == nil {
-				c.File(filePath)
-				// 记录请求
-				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
-				return
-			}
-
-			// 如果是爬虫请求，再次尝试预渲染（针对动态路由或不存在的静态文件）
-			if isCrawler && prerenderEngine != nil {
-				// 执行预渲染
-				result, err := prerenderEngine.Render(c, fullURL, prerender.RenderOptions{
-					Timeout:   site.Prerender.Timeout,
-					WaitUntil: "networkidle0",
-				})
-				if err == nil && result.Success {
-					// 如果预渲染成功，无论HTML是否为空，都返回结果
-					if result.HTML != "" {
-						// 返回预渲染的HTML
-						c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(result.HTML))
-						// 记录请求
-						monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
-						return
-					}
-				}
-
-				// 如果预渲染失败或HTML为空，返回一个简单的HTML页面
-				// 从URL中提取页面名称，用于生成标题
-				path := c.Request.URL.Path
-				// 移除开头的斜杠
-				if len(path) > 0 && path[0] == '/' {
-					path = path[1:]
-				}
-				// 将斜杠替换为空格，用于生成标题
-				title := strings.ReplaceAll(path, "/", " ")
-				// 如果标题为空，使用默认标题
-				if title == "" {
-					title = "Home Page"
-				} else {
-					// 首字母大写
-					title = strings.Title(title)
-				}
-				// 生成简单的HTML页面
-				html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>%s - %s</title>
-    <meta name="description" content="%s - %s">
-</head>
-<body>
-    <h1>%s</h1>
-    <p>页面正在加载中，请稍后刷新...</p>
-</body>
-</html>`, title, site.Name, title, site.Name, title)
-				c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+			// 对于非静态资源，返回index.html（SPA路由处理）
+			indexPath := filepath.Join(siteStaticDir, "index.html")
+			if _, err := os.Stat(indexPath); err == nil {
+				c.File(indexPath)
 				// 记录请求
 				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
 				return
@@ -1746,130 +1703,9 @@ func main() {
 	apiPort := 9598
 	apiAddr := fmt.Sprintf("%s:%d", cfg.Server.Address, apiPort)
 
-	// 启动管理控制台服务器
-	// 管理控制台端口使用9597
-	adminAddr := fmt.Sprintf("%s:%d", cfg.Server.Address, 9597)
-	log.Printf("Admin console server starting on %s", adminAddr)
-
-	// 启动管理控制台前端静态资源服务器，使用API端口+1
-	// 仅在生产环境提供前端代码，开发阶段由前端开发服务器提供
-	log.Printf("Admin console server starting on %s", adminAddr)
-
-	// 创建静态资源服务器
-	adminRouter := gin.Default()
-
-	// 添加安全头中间件
-	adminRouter.Use(func(c *gin.Context) {
-		// Content-Security-Policy (CSP) 头，防止XSS攻击
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://localhost:9598")
-
-		// X-Frame-Options 头，防止Clickjacking攻击
-		c.Header("X-Frame-Options", "DENY")
-
-		// X-XSS-Protection 头，启用浏览器的XSS过滤
-		c.Header("X-XSS-Protection", "1; mode=block")
-
-		// X-Content-Type-Options 头，防止MIME类型嗅探
-		c.Header("X-Content-Type-Options", "nosniff")
-
-		// Referrer-Policy 头，控制Referrer信息的发送
-		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-
-		// Strict-Transport-Security (HSTS) 头，强制使用HTTPS
-		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-
-		// Permissions-Policy 头，控制浏览器API的访问
-		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=(), usb=(), accelerometer=(), gyroscope=()")
-
-		c.Next()
-	})
-
-	// 提供静态资源服务
-	adminStaticDir := cfg.Dirs.AdminStaticDir // 前端编译后的目录
-	if _, err := os.Stat(adminStaticDir); os.IsNotExist(err) {
-		// 如果dist目录不存在，创建一个空目录
-		err := os.MkdirAll(adminStaticDir, 0755)
-		if err != nil {
-			log.Printf("Failed to create admin static directory: %v", err)
-		}
-	}
-
-	// 静态文件路由
-	adminRouter.Static("/", adminStaticDir)
-
-	// 处理SPA路由，所有未匹配的路由都返回index.html
-	adminRouter.NoRoute(func(c *gin.Context) {
-		indexPath := filepath.Join(adminStaticDir, "index.html")
-		if _, err := os.Stat(indexPath); err == nil {
-			c.File(indexPath)
-			return
-		}
-		c.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "File not found",
-		})
-	})
-
-	// 启动管理控制台服务器
-	go func() {
-		// 如果启用了SSL，使用HTTPS
-		if sslConfig.Enabled {
-			// 创建TLS配置
-			tlsConfig := &tls.Config{
-				GetCertificate: certManager.GetCertificate,
-			}
-
-			// 创建HTTP服务器
-			adminServer := &http.Server{
-				Addr:      adminAddr,
-				Handler:   adminRouter,
-				TLSConfig: tlsConfig,
-			}
-
-			// 使用HTTPS启动服务器
-			log.Printf("Admin console server starting on HTTPS %s", adminAddr)
-			if err := adminServer.ListenAndServeTLS("", ""); err != nil {
-				log.Fatalf("Failed to start admin console HTTPS server: %v", err)
-			}
-		} else {
-			// 使用HTTP启动服务器
-			log.Printf("Admin console server starting on HTTP %s", adminAddr)
-			if err := http.ListenAndServe(adminAddr, adminRouter); err != nil {
-				log.Fatalf("Failed to start admin console server: %v", err)
-			}
-		}
-	}()
-
 	// 启动API服务器
-	go func() {
-		// 如果启用了SSL，使用HTTPS
-		if sslConfig.Enabled {
-			// 创建TLS配置
-			tlsConfig := &tls.Config{
-				GetCertificate: certManager.GetCertificate,
-			}
-
-			// 创建HTTP服务器
-			apiServer := &http.Server{
-				Addr:      apiAddr,
-				Handler:   ginRouter,
-				TLSConfig: tlsConfig,
-			}
-
-			// 使用HTTPS启动服务器
-			log.Printf("API server starting on HTTPS %s", apiAddr)
-			if err := apiServer.ListenAndServeTLS("", ""); err != nil {
-				log.Fatalf("Failed to start API HTTPS server: %v", err)
-			}
-		} else {
-			// 使用HTTP启动服务器
-			log.Printf("API server starting on HTTP %s", apiAddr)
-			if err := http.ListenAndServe(apiAddr, ginRouter); err != nil {
-				log.Fatalf("Failed to start API server: %v", err)
-			}
-		}
-	}()
-
-	// 阻塞主goroutine
-	select {}
+	log.Printf("API server starting on %s", apiAddr)
+	if err := ginRouter.Run(apiAddr); err != nil {
+		log.Fatalf("Failed to start API server: %v", err)
+	}
 }
