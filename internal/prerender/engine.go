@@ -990,25 +990,50 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 		// 等待页面加载完成
 		page.MustWaitLoad()
 
-		// 根据WaitUntil选项决定等待策略
+		// 检查URL是否包含hash
+		isHashURL := strings.Contains(task.URL, "#")
+
+		// 根据WaitUntil选项和是否为hash URL决定等待策略
 		switch task.Options.WaitUntil {
 		case "networkidle0":
 			// 等待网络空闲（0个网络连接）- 使用简单的等待方式
-			time.Sleep(3 * time.Second)
+			if isHashURL {
+				// hash路由需要额外等待，因为hash处理是在客户端JavaScript中完成的
+				time.Sleep(4 * time.Second)
+			} else {
+				time.Sleep(3 * time.Second)
+			}
 		case "networkidle2":
 			// 等待网络空闲（最多2个网络连接）- 使用简单的等待方式
-			time.Sleep(2 * time.Second)
+			if isHashURL {
+				// hash路由需要额外等待
+				time.Sleep(3 * time.Second)
+			} else {
+				time.Sleep(2 * time.Second)
+			}
 		case "domcontentloaded":
 			// 已经通过page.MustWaitLoad()等待了DOM内容加载
 			// 额外等待1秒确保JavaScript执行
 			time.Sleep(1 * time.Second)
+			// 对于hash URL，再额外等待1秒确保hash路由处理完成
+			if isHashURL {
+				time.Sleep(1 * time.Second)
+			}
 		case "load":
 			// 已经通过page.MustWaitLoad()等待了页面加载
 			// 额外等待2秒确保JavaScript执行和页面渲染
 			time.Sleep(2 * time.Second)
+			// 对于hash URL，再额外等待1秒确保hash路由处理完成
+			if isHashURL {
+				time.Sleep(1 * time.Second)
+			}
 		default:
 			// 默认等待策略：等待3秒确保JavaScript执行和页面渲染
 			time.Sleep(3 * time.Second)
+			// 对于hash URL，再额外等待1秒确保hash路由处理完成
+			if isHashURL {
+				time.Sleep(1 * time.Second)
+			}
 		}
 
 		// 最后再等待一小段时间，确保所有异步操作完成

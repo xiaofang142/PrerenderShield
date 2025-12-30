@@ -50,12 +50,20 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 		log.Printf("Request received: Path=%s, User-Agent=%s, Host=%s", c.Request.URL.Path, userAgent, c.Request.Host)
 
 		// 检测爬虫
-		lowerUA := strings.ToLower(userAgent)
-		isCrawler := strings.Contains(lowerUA, "baiduspider") ||
-			strings.Contains(lowerUA, "googlebot") ||
-			strings.Contains(lowerUA, "bingbot") ||
-			strings.Contains(lowerUA, "yandexbot") ||
-			strings.Contains(lowerUA, "sogou")
+		// 使用预渲染引擎的IsCrawlerRequest方法，该方法会从站点配置中读取爬虫UA列表
+		prerenderEngine, _ := prerenderManager.GetEngine(site.Name)
+		isCrawler := false
+		if prerenderEngine != nil {
+			isCrawler = prerenderEngine.IsCrawlerRequest(userAgent)
+		} else {
+			// 降级方案：使用默认的爬虫UA检测
+			lowerUA := strings.ToLower(userAgent)
+			isCrawler = strings.Contains(lowerUA, "baiduspider") ||
+				strings.Contains(lowerUA, "googlebot") ||
+				strings.Contains(lowerUA, "bingbot") ||
+				strings.Contains(lowerUA, "yandexbot") ||
+				strings.Contains(lowerUA, "sogou")
+		}
 
 		log.Printf("Crawler detection: User-Agent=%s, isCrawler=%t", userAgent, isCrawler)
 
@@ -152,6 +160,18 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 				os.MkdirAll(siteStaticDir, 0755)
 			}
 
+			// 处理URL，移除hash部分并获取实际路径
+			getActualPath := func(urlPath string) string {
+				// 移除URL中的hash部分，因为hash不会发送到服务器
+				if hashIndex := strings.Index(urlPath, "#"); hashIndex != -1 {
+					return urlPath[:hashIndex]
+				}
+				return urlPath
+			}
+
+			// 获取实际路径（移除hash部分）
+			actualPath := getActualPath(c.Request.URL.Path)
+
 			// 检查请求的路径是否为静态资源
 			isStaticResource := func(path string) bool {
 				staticExtensions := []string{
@@ -172,8 +192,8 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 			}
 
 			// 对于静态资源，尝试直接提供文件
-			if isStaticResource(c.Request.URL.Path) {
-				filePath := filepath.Join(siteStaticDir, c.Request.URL.Path)
+			if isStaticResource(actualPath) {
+				filePath := filepath.Join(siteStaticDir, actualPath)
 				if _, err := os.Stat(filePath); err == nil {
 					c.File(filePath)
 					// 记录请求
