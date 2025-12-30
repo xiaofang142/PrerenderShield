@@ -161,71 +161,75 @@ const Sites: React.FC = () => {
         // 转换API响应中的大写键为小写键，以便Table组件正确显示数据
         const normalizedSites = res.data.map((site: any) => {
           // 直接从API响应中获取开关状态，确保数据一致性
-          const firewallEnabled = site.Firewall && site.Firewall.Enabled === true;
-          const prerenderEnabled = site.Prerender && site.Prerender.Enabled === true;
-          const sslEnabled = site.SSL && site.SSL.Enabled === true;
+          const firewallEnabled = site.firewall && site.firewall.Enabled === true;
+          const prerenderEnabled = site.prerender && site.prerender.Enabled === true;
+          const sslEnabled = site.ssl && site.ssl.Enabled === true;
           
           // 为了调试，打印每个站点的开关状态
-          console.log(`站点: ${site.Name}`);
-          console.log(`  API返回的防火墙状态: ${site.Firewall?.Enabled}`);
+          console.log(`站点: ${site.name}`);
+          console.log(`  API返回的防火墙状态: ${site.firewall?.Enabled}`);
           console.log(`  转换后的防火墙状态: ${firewallEnabled}`);
-          console.log(`  API返回的预渲染状态: ${site.Prerender?.Enabled}`);
+          console.log(`  API返回的预渲染状态: ${site.prerender?.Enabled}`);
           console.log(`  转换后的预渲染状态: ${prerenderEnabled}`);
-          console.log(`  API返回的SSL状态: ${site.SSL?.Enabled}`);
+          console.log(`  API返回的SSL状态: ${site.ssl?.Enabled}`);
           console.log(`  转换后的SSL状态: ${sslEnabled}`);
           
+          // 获取第一个域名作为站点的主要域名
+          const primaryDomain = (site.domains && Array.isArray(site.domains) && site.domains.length > 0) ? site.domains[0] : '';
+          
           const transformedSite = {
-            name: site.Name || '',
-            domain: site.Domain || '',
-            port: site.Port || 80,
+            name: site.name || '',
+            domain: primaryDomain || '',
+            domains: site.domains || [],
+            port: site.port || 80,
             proxy: {
-              enabled: site.PROXY?.Enabled || false,
-              targetURL: site.PROXY?.TargetURL || '',
-              type: site.PROXY?.Type || 'direct'
+              enabled: site.proxy?.Enabled || false,
+              targetURL: site.proxy?.TargetURL || '',
+              type: site.proxy?.Type || 'direct'
             },
             firewallEnabled: firewallEnabled,
             prerenderEnabled: prerenderEnabled,
             sslEnabled: sslEnabled,
             firewall: {
               enabled: firewallEnabled,
-              rulesPath: site.Firewall?.RulesPath || '/etc/prerender-shield/rules',
+              rulesPath: site.firewall?.RulesPath || '/etc/prerender-shield/rules',
               action: {
-                defaultAction: site.Firewall?.ActionConfig?.DefaultAction || 'block',
-                blockMessage: site.Firewall?.ActionConfig?.BlockMessage || 'Request blocked by firewall'
+                defaultAction: site.firewall?.ActionConfig?.DefaultAction || 'block',
+                blockMessage: site.firewall?.ActionConfig?.BlockMessage || 'Request blocked by firewall'
               }
             },
             prerender: {
               enabled: prerenderEnabled,
-              poolSize: site.Prerender?.PoolSize || 5,
-              minPoolSize: site.Prerender?.MinPoolSize || 2,
-              maxPoolSize: site.Prerender?.MaxPoolSize || 20,
-              timeout: site.Prerender?.Timeout || 30,
-              cacheTTL: site.Prerender?.CacheTTL || 3600,
-              idleTimeout: site.Prerender?.IdleTimeout || 300,
-              dynamicScaling: site.Prerender?.DynamicScaling || true,
-              scalingFactor: site.Prerender?.ScalingFactor || 0.5,
-              scalingInterval: site.Prerender?.ScalingInterval || 60,
+              poolSize: site.prerender?.PoolSize || 5,
+              minPoolSize: site.prerender?.MinPoolSize || 2,
+              maxPoolSize: site.prerender?.MaxPoolSize || 20,
+              timeout: site.prerender?.Timeout || 30,
+              cacheTTL: site.prerender?.CacheTTL || 3600,
+              idleTimeout: site.prerender?.IdleTimeout || 300,
+              dynamicScaling: site.prerender?.DynamicScaling || true,
+              scalingFactor: site.prerender?.ScalingFactor || 0.5,
+              scalingInterval: site.prerender?.ScalingInterval || 60,
               preheat: {
-                enabled: site.Prerender?.Preheat?.Enabled || false,
-                sitemapURL: site.Prerender?.Preheat?.SitemapURL || '',
-                schedule: site.Prerender?.Preheat?.Schedule || '0 0 * * *',
-                concurrency: site.Prerender?.Preheat?.Concurrency || 5,
-                defaultPriority: site.Prerender?.Preheat?.DefaultPriority || 0
+                enabled: site.prerender?.Preheat?.Enabled || false,
+                sitemapURL: site.prerender?.Preheat?.SitemapURL || '',
+                schedule: site.prerender?.Preheat?.Schedule || '0 0 * * *',
+                concurrency: site.prerender?.Preheat?.Concurrency || 5,
+                defaultPriority: site.prerender?.Preheat?.DefaultPriority || 0
               }
             },
             routing: {
-              rules: site.Routing?.Rules || []
+              rules: site.routing?.Rules || []
             },
             ssl: {
               enabled: sslEnabled,
-              letEncrypt: site.SSL?.LetEncrypt || false,
-              domains: site.SSL?.Domains || [],
-              acmeEmail: site.SSL?.ACMEEmail || '',
-              acmeServer: site.SSL?.ACMEServer || 'https://acme-v02.api.letsencrypt.org/directory',
-              acmeChallenge: site.SSL?.ACMEChallenge || 'http01',
-              certPath: site.SSL?.CertPath || '/etc/prerender-shield/certs/cert.pem',
-              keyPath: site.SSL?.KeyPath || '/etc/prerender-shield/certs/key.pem',
-              sslCertificate: site.SSL?.SSLCertificate || ''
+              letEncrypt: site.ssl?.LetEncrypt || false,
+              domains: site.ssl?.Domains || [],
+              acmeEmail: site.ssl?.ACMEEmail || '',
+              acmeServer: site.ssl?.ACMEServer || 'https://acme-v02.api.letsencrypt.org/directory',
+              acmeChallenge: site.ssl?.ACMEChallenge || 'http01',
+              certPath: site.ssl?.CertPath || '/etc/prerender-shield/certs/cert.pem',
+              keyPath: site.ssl?.KeyPath || '/etc/prerender-shield/certs/key.pem',
+              sslCertificate: site.ssl?.SSLCertificate || ''
             }
           };
           
@@ -675,9 +679,9 @@ const Sites: React.FC = () => {
   const customRequest: UploadProps['customRequest'] = (options) => {
     const { onSuccess, onError, file, onProgress } = options
     
-    // 确保currentSite和currentSite.name存在
-    if (!currentSite || typeof currentSite.name === 'undefined' || currentSite.name === '') {
-      console.error('Current site is not set, cannot upload file')
+    // 确保selectedSite和selectedSite.name存在
+    if (!selectedSite || typeof selectedSite.name === 'undefined' || selectedSite.name === '') {
+      console.error('Selected site is not set, cannot upload file')
       message.error('站点信息无效，无法上传文件')
       onError(new Error('站点信息无效'))
       setUploading(false)
@@ -687,7 +691,7 @@ const Sites: React.FC = () => {
     setUploading(true)
     
     // 发送实际的API请求
-    sitesApi.uploadFile(currentSite.name, file, currentPath, (progressEvent) => {
+    sitesApi.uploadFile(selectedSite.name, file, '/', (progressEvent) => {
       if (progressEvent.total) {
         const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
         onProgress({ percent: percentCompleted });

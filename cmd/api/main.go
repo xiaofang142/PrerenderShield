@@ -1583,18 +1583,23 @@ func main() {
 		startSiteServer(site, cfg.Server.Address)
 	}
 
-	// 启动API服务器，使用固定端口9602
-	apiAddr := fmt.Sprintf("%s:%d", cfg.Server.Address, 9602)
+	// 启动API服务器，使用固定端口9598
+	apiPort := 9598
+	apiAddr := fmt.Sprintf("%s:%d", cfg.Server.Address, apiPort)
 	log.Printf("API server starting on %s", apiAddr)
 	go func() {
+		// 尝试启动服务器
+		log.Printf("Attempting to start API server on %s", apiAddr)
 		if err := http.ListenAndServe(apiAddr, ginRouter); err != nil {
-			log.Fatalf("Failed to start API server: %v", err)
+			log.Printf("Failed to start API server on %s: %v", apiAddr, err)
+			// 输出更详细的错误信息
+			log.Printf("Detailed error: %+v", err)
 		}
 	}()
 	
 	// 启动管理控制台服务器
-	// 管理控制台端口使用9603
-	adminAddr := fmt.Sprintf("%s:%d", cfg.Server.Address, 9603)
+	// 管理控制台端口使用9597
+	adminAddr := fmt.Sprintf("%s:%d", cfg.Server.Address, 9597)
 	log.Printf("Admin console server starting on %s", adminAddr)
 
 	// 启动管理控制台前端静态资源服务器，使用API端口+1
