@@ -28,6 +28,11 @@ const Sites: React.FC = () => {
   const [newFolderName, setNewFolderName] = useState<string>('')
   const [showNewFileModal, setShowNewFileModal] = useState(false)
   const [newFileName, setNewFileName] = useState<string>('')
+  
+  // 预渲染配置模态框状态
+  const [prerenderConfigModalVisible, setPrerenderConfigModalVisible] = useState(false)
+  const [editingPrerenderSite, setEditingPrerenderSite] = useState<any>(null)
+  const [prerenderConfigForm] = Form.useForm()
 
 
   // 表格列配置
@@ -685,9 +690,21 @@ const Sites: React.FC = () => {
   }
   
   // 跳转到渲染预热配置页面
-  const handlePrerenderConfig = (_site: any) => {
-    // 跳转到预渲染预热页面
-    window.location.href = `/prerender/preheat`
+  const handlePrerenderConfig = (site: any) => {
+    // 打开预渲染配置模态框
+    setEditingPrerenderSite(site)
+    // 设置表单初始值
+    prerenderConfigForm.setFieldsValue({
+      ...site.prerender,
+      preheat: site.prerender.preheat || {
+        enabled: false,
+        sitemapURL: '',
+        schedule: '0 0 * * *',
+        concurrency: 5,
+        defaultPriority: 0
+      }
+    })
+    setPrerenderConfigModalVisible(true)
   }
 
   // 处理表单提交
@@ -815,6 +832,119 @@ const Sites: React.FC = () => {
         message.error('表单提交失败：' + (error.message || '未知错误'));
       }
       console.error('Form submission error:', error)
+    }
+  }
+
+  // 处理预渲染配置表单提交
+  const handlePrerenderConfigSubmit = async () => {
+    try {
+      const values = await prerenderConfigForm.validateFields()
+      
+      // 转换表单数据格式，确保与后端API期望的结构匹配
+      const siteData = {
+        Name: editingPrerenderSite.name,
+        Domain: editingPrerenderSite.domain,
+        Domains: editingPrerenderSite.domains || [editingPrerenderSite.domain],
+        Port: editingPrerenderSite.port || 80,
+        Mode: editingPrerenderSite.mode || 'proxy',
+        // 保留原有的其他配置
+        Proxy: {
+          Enabled: editingPrerenderSite.proxy?.enabled || false,
+          TargetURL: editingPrerenderSite.proxy?.targetURL || "",
+          Type: "direct"
+        },
+        Redirect: {
+          Enabled: editingPrerenderSite.redirect?.enabled || false,
+          Code: editingPrerenderSite.redirect?.code || 302,
+          URL: editingPrerenderSite.redirect?.url || ""
+        },
+        Firewall: {
+          Enabled: editingPrerenderSite.firewall?.enabled || false,
+          RulesPath: editingPrerenderSite.firewall?.rulesPath || '/etc/prerender-shield/rules',
+          ActionConfig: {
+            DefaultAction: editingPrerenderSite.firewall?.action?.defaultAction || 'block',
+            BlockMessage: editingPrerenderSite.firewall?.action?.blockMessage || 'Request blocked by firewall'
+          },
+          GeoIPConfig: {
+            Enabled: editingPrerenderSite.firewall?.geoip?.enabled || false,
+            AllowList: editingPrerenderSite.firewall?.geoip?.allowList || [],
+            BlockList: editingPrerenderSite.firewall?.geoip?.blockList || []
+          },
+          RateLimitConfig: {
+            Enabled: editingPrerenderSite.firewall?.rateLimit?.enabled || false,
+            Requests: editingPrerenderSite.firewall?.rateLimit?.requests || 100,
+            Window: editingPrerenderSite.firewall?.rateLimit?.window || 60,
+            BanTime: editingPrerenderSite.firewall?.rateLimit?.banTime || 3600
+          }
+        },
+        // 网页防篡改配置
+        FileIntegrityConfig: {
+          Enabled: editingPrerenderSite.fileIntegrity?.enabled || false,
+          CheckInterval: editingPrerenderSite.fileIntegrity?.checkInterval || 300,
+          HashAlgorithm: editingPrerenderSite.fileIntegrity?.hashAlgorithm || 'sha256'
+        },
+        Prerender: {
+          Enabled: values.enabled || false,
+          PoolSize: values.poolSize || 5,
+          MinPoolSize: values.minPoolSize || 2,
+          MaxPoolSize: values.maxPoolSize || 20,
+          Timeout: values.timeout || 30,
+          CacheTTL: values.cacheTTL || 3600,
+          IdleTimeout: values.idleTimeout || 300,
+          DynamicScaling: values.dynamicScaling || true,
+          ScalingFactor: values.scalingFactor || 0.5,
+          ScalingInterval: values.scalingInterval || 60,
+          UseDefaultHeaders: values.useDefaultHeaders || false,
+          CrawlerHeaders: values.crawlerHeaders || [],
+          Preheat: {
+            Enabled: values.preheat?.enabled || false,
+            SitemapURL: values.preheat?.sitemapURL || '',
+            Schedule: values.preheat?.schedule || '0 0 * * *',
+            Concurrency: values.preheat?.concurrency || 5,
+            DefaultPriority: values.preheat?.defaultPriority || 0
+          }
+        },
+        Routing: {
+          Rules: editingPrerenderSite.routing?.rules || []
+        }
+      }
+      
+      // 显示加载状态
+      Modal.confirm({
+        title: '正在保存预渲染配置',
+        content: '请稍候...',
+        okButtonProps: { disabled: true },
+        cancelButtonProps: { disabled: true },
+        closable: false,
+        keyboard: false,
+        centered: true,
+      });
+      
+      // 更新站点配置
+      const res = await sitesApi.updateSite(editingPrerenderSite.name, siteData)
+      
+      // 关闭加载状态
+      Modal.destroyAll();
+      
+      if (res.code === 200) {
+        message.success('更新渲染预热配置成功')
+        setPrerenderConfigModalVisible(false)
+        fetchSites() // 刷新站点列表
+      } else {
+        message.error(res.message || '更新渲染预热配置失败')
+      }
+    } catch (error: any) {
+      // 关闭加载状态
+      Modal.destroyAll();
+      
+      // 处理表单验证错误
+      if (error.errorFields) {
+        message.error('表单验证失败，请检查输入');
+      } else {
+        // 处理网络错误或其他错误
+        message.error('表单提交失败：' + (error.message || '未知错误'));
+      }
+      console.error('Prerender config submission error:', error)
     }
   }
 
@@ -1062,16 +1192,34 @@ const Sites: React.FC = () => {
                     <Switch />
                   </Form.Item>
 
-                  <Form.Item name={['prerender', 'poolSize']} label="浏览器池大小">
-                    <Input type="number" placeholder="请输入浏览器池大小" />
-                  </Form.Item>
+                  {/* 依赖于启用渲染预热的配置 */}
+                  <Form.Item dependencies={[['prerender', 'enabled']]} noStyle>
+                    {({ getFieldValue }) => {
+                      const prerenderEnabled = getFieldValue(['prerender', 'enabled']);
+                      if (!prerenderEnabled) {
+                        return null;
+                      }
+                      return (
+                        <>
+                          <Form.Item name={['prerender', 'poolSize']} label="浏览器池大小" rules={[{ required: true, message: '请输入浏览器池大小' }]}>
+                            <Input type="number" min={1} max={100} placeholder="请输入浏览器池大小" />
+                          </Form.Item>
 
-                  <Form.Item name={['prerender', 'timeout']} label="渲染超时(秒)">
-                    <Input type="number" placeholder="请输入渲染超时时间" />
-                  </Form.Item>
-
-                  <Form.Item name={['prerender', 'cacheTTL']} label="缓存TTL(秒)">
-                    <Input type="number" placeholder="请输入缓存TTL" />
+                          <Row gutter={16}>
+                            <Col span={12}>
+                              <Form.Item name={['prerender', 'timeout']} label="渲染超时(秒)" rules={[{ required: true, message: '请输入渲染超时时间' }]}>
+                                <Input type="number" min={5} max={300} placeholder="请输入渲染超时时间" />
+                              </Form.Item>
+                            </Col>
+                            <Col span={12}>
+                              <Form.Item name={['prerender', 'cacheTTL']} label="缓存TTL(秒)" rules={[{ required: true, message: '请输入缓存TTL' }]}>
+                                <Input type="number" min={60} max={86400} placeholder="请输入缓存TTL" />
+                              </Form.Item>
+                            </Col>
+                          </Row>
+                        </>
+                      );
+                    }}
                   </Form.Item>
                 </Card>
               );
@@ -1454,6 +1602,213 @@ const Sites: React.FC = () => {
         </p>
       </Modal>
 
+      {/* 预渲染配置弹窗 */}
+      <Modal
+        title="渲染预热配置"
+        open={prerenderConfigModalVisible}
+        onOk={handlePrerenderConfigSubmit}
+        onCancel={() => setPrerenderConfigModalVisible(false)}
+        width={800}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form
+          form={prerenderConfigForm}
+          layout="vertical"
+        >
+          {/* 基础配置 */}
+          <Card title="基础配置" size="small" style={{ marginBottom: 16 }}>
+            <Form.Item
+              name="enabled"
+              label="启用渲染预热"
+              valuePropName="checked"
+            >
+              <Switch />
+            </Form.Item>
+
+            {/* 依赖于启用渲染预热的配置 */}
+            <Form.Item dependencies={['enabled']} noStyle>
+              {({ getFieldValue }) => {
+                const enabled = getFieldValue('enabled');
+                if (!enabled) {
+                  return null;
+                }
+                return (
+                  <Row gutter={16}>
+                    <Col span={8}>
+                      <Form.Item
+                        name="poolSize"
+                        label="初始浏览器池大小"
+                        rules={[{ required: true, message: '请输入初始浏览器池大小' }]}
+                      >
+                        <Input type="number" min={1} max={100} placeholder="请输入初始浏览器池大小" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name="minPoolSize"
+                        label="最小浏览器池大小"
+                        rules={[{ required: true, message: '请输入最小浏览器池大小' }]}
+                      >
+                        <Input type="number" min={1} max={100} placeholder="请输入最小浏览器池大小" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name="maxPoolSize"
+                        label="最大浏览器池大小"
+                        rules={[{ required: true, message: '请输入最大浏览器池大小' }]}
+                      >
+                        <Input type="number" min={1} max={100} placeholder="请输入最大浏览器池大小" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name="timeout"
+                        label="渲染超时时间（秒）"
+                        rules={[{ required: true, message: '请输入渲染超时时间' }]}
+                      >
+                        <Input type="number" min={5} max={300} placeholder="请输入渲染超时时间" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name="cacheTTL"
+                        label="缓存过期时间（秒）"
+                        rules={[{ required: true, message: '请输入缓存过期时间' }]}
+                      >
+                        <Input type="number" min={60} max={86400} placeholder="请输入缓存过期时间" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                );
+              }}
+            </Form.Item>
+          </Card>
+
+          {/* 高级配置 */}
+          <Form.Item dependencies={['enabled']} noStyle>
+            {({ getFieldValue }) => {
+              const enabled = getFieldValue('enabled');
+              if (!enabled) {
+                return null;
+              }
+              return (
+                <Card title="高级配置" size="small" style={{ marginBottom: 16 }}>
+                  <Row gutter={16}>
+                    <Col span={8}>
+                      <Form.Item
+                        name="idleTimeout"
+                        label="浏览器空闲超时（秒）"
+                      >
+                        <Input type="number" min={60} max={3600} placeholder="请输入浏览器空闲超时时间" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name="dynamicScaling"
+                        label="启用动态扩容"
+                        valuePropName="checked"
+                      >
+                        <Switch />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name="scalingFactor"
+                        label="扩容因子"
+                      >
+                        <Input type="number" min={0.1} max={2} step={0.1} placeholder="请输入扩容因子" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name="scalingInterval"
+                        label="扩容检查间隔（秒）"
+                      >
+                        <Input type="number" min={10} max={300} placeholder="请输入扩容检查间隔" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name="useDefaultHeaders"
+                        label="使用默认爬虫头"
+                        valuePropName="checked"
+                      >
+                        <Switch />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Form.Item
+                    name="crawlerHeaders"
+                    label="自定义爬虫协议头"
+                    description="每行一个，支持多个"
+                  >
+                    <Input.TextArea rows={4} placeholder="请输入自定义爬虫协议头，每行一个" />
+                  </Form.Item>
+                </Card>
+              );
+            }}
+          </Form.Item>
+
+          {/* 预热配置 */}
+          <Form.Item dependencies={['enabled']} noStyle>
+            {({ getFieldValue }) => {
+              const enabled = getFieldValue('enabled');
+              if (!enabled) {
+                return null;
+              }
+              return (
+                <Card title="预热配置" size="small">
+                  <Row gutter={16}>
+                    <Col span={8}>
+                      <Form.Item
+                        name={["preheat", "enabled"]}
+                        label="启用自动预热"
+                        valuePropName="checked"
+                      >
+                        <Switch />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name={["preheat", "sitemapURL"]}
+                        label="Sitemap URL"
+                      >
+                        <Input placeholder="请输入Sitemap URL" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name={["preheat", "schedule"]}
+                        label="预热调度规则"
+                      >
+                        <Input placeholder="Cron表达式，如：0 0 * * *" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name={["preheat", "concurrency"]}
+                        label="预热并发数"
+                      >
+                        <Input type="number" min={1} max={50} placeholder="请输入预热并发数" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name={["preheat", "defaultPriority"]}
+                        label="默认优先级"
+                      >
+                        <Input type="number" min={0} max={100} placeholder="请输入默认优先级" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </Card>
+              );
+            }}
+          </Form.Item>
+        </Form>
+      </Modal>
 
     </div>
   )
