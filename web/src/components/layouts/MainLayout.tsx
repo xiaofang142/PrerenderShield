@@ -1,6 +1,6 @@
 import React from 'react'
 import { Layout, Menu, ConfigProvider } from 'antd'
-import { MenuUnfoldOutlined, MenuFoldOutlined, DashboardOutlined, SecurityScanOutlined, CodeOutlined, LockOutlined, BarChartOutlined, FileTextOutlined, SettingOutlined } from '@ant-design/icons'
+import { MenuUnfoldOutlined, MenuFoldOutlined, DashboardOutlined, SecurityScanOutlined, CodeOutlined, BarChartOutlined, FileTextOutlined, BugOutlined } from '@ant-design/icons'
 import { Link, useLocation } from 'react-router-dom'
 
 const { Header, Sider, Content } = Layout
@@ -71,26 +71,18 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               icon: <CodeOutlined style={{ color: '#2f855a' }} />,
               label: <Link to="/prerender" style={{ color: '#333333' }}>预渲染</Link>
             },
-            {
-              key: '/ssl',
-              icon: <LockOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/ssl" style={{ color: '#333333' }}>SSL管理</Link>
-            },
+
             {
               key: '/monitoring',
               icon: <BarChartOutlined style={{ color: '#2f855a' }} />,
               label: <Link to="/monitoring" style={{ color: '#333333' }}>监控告警</Link>
             },
             {
-              key: '/logs',
-              icon: <FileTextOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/logs" style={{ color: '#333333' }}>日志管理</Link>
+              key: '/crawler',
+              icon: <BugOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/crawler" style={{ color: '#333333' }}>爬虫访问</Link>
             },
-            {
-              key: '/settings',
-              icon: <SettingOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/settings" style={{ color: '#333333' }}>系统设置</Link>
-            }
+
           ]}
         />
       </Sider>

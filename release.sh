@@ -1,123 +1,163 @@
 #!/bin/bash
 
 # PrerenderShield 一键发布脚本
+# 用于构建多平台Go二进制文件和编译前端代码
 
-echo "========================================"
-echo "PrerenderShield 一键发布脚本"
-echo "========================================"
+APP_NAME="prerender-shield"
+RELEASE_DIR="./release"
+WEB_DIR="./web"
+API_DIR="./cmd/api"
 
-# 检查是否为root用户
-if [ "$EUID" -eq 0 ]; then
-  echo "警告: 正在以root用户运行，这可能不是最佳实践"
-fi
-
-# 检查Go是否安装
-if ! command -v go &> /dev/null; then
-    echo "错误: 未安装Go，无法构建应用程序"
-    exit 1
-fi
-
-# 检查Node.js是否安装
-if ! command -v node &> /dev/null; then
-    echo "错误: 未安装Node.js，无法编译前端代码"
-    exit 1
-fi
-
-# 检查npm是否安装
-if ! command -v npm &> /dev/null; then
-    echo "错误: 未安装npm，无法编译前端代码"
-    exit 1
-fi
-
-# 定义构建输出目录
-BUILD_DIR="./build"
-
-# 清理旧的构建文件
-echo "清理旧的构建文件..."
-rm -rf "$BUILD_DIR"
-mkdir -p "$BUILD_DIR"/backend "$BUILD_DIR"/frontend
-
-# 构建多端Go代码
-echo "========================================"
-echo "构建多端Go代码..."
-echo "========================================"
-
-# 定义要构建的平台和架构
+# 支持的平台列表
 PLATFORMS=("linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows/amd64")
 
-for PLATFORM in "${PLATFORMS[@]}"; do
-    # 分割平台和架构
-    IFS="/" read -r OS ARCH <<< "$PLATFORM"
+usage() {
+    echo "========================================"
+    echo "PrerenderShield 一键发布脚本"
+    echo "========================================"
+    echo "用法: $0 {build|clean}"
+    echo ""
+    echo "选项:"
+    echo "  build    构建所有平台的二进制文件和前端代码"
+    echo "  clean    清理发布目录"
+    echo ""
+    exit 1
+}
+
+check_dependencies() {
+    echo "检查依赖..."
     
-    # 构建输出文件名
-    OUTPUT_NAME="prerender-shield"
-    if [ "$OS" = "windows" ]; then
-        OUTPUT_NAME="$OUTPUT_NAME.exe"
-    fi
-    
-    # 构建输出路径
-    OUTPUT_PATH="$BUILD_DIR/backend/$OS-$ARCH/$OUTPUT_NAME"
-    
-    echo "构建 $OS/$ARCH..."
-    
-    # 设置Go环境变量
-    export GOOS="$OS"
-    export GOARCH="$ARCH"
-    export CGO_ENABLED=0
-    
-    # 创建输出目录
-    mkdir -p "$(dirname "$OUTPUT_PATH")"
-    
-    # 构建应用程序
-    go build -o "$OUTPUT_PATH" ./cmd/api
-    
-    if [ $? -ne 0 ]; then
-        echo "错误: 构建 $OS/$ARCH 失败"
+    # 检查Go
+    if ! command -v go &> /dev/null; then
+        echo "错误: 未安装Go，无法构建应用程序"
         exit 1
     fi
     
-    echo "构建 $OS/$ARCH 成功: $OUTPUT_PATH"
-done
+    # 检查Node.js和npm
+    if ! command -v node &> /dev/null || ! command -v npm &> /dev/null; then
+        echo "错误: 未安装Node.js或npm，无法构建前端代码"
+        exit 1
+    fi
+    
+    echo "依赖检查完成！"
+}
 
-# 编译前端代码
-echo "========================================"
-echo "编译前端代码..."
-echo "========================================"
+clean_release() {
+    echo "清理发布目录..."
+    rm -rf "$RELEASE_DIR"
+    mkdir -p "$RELEASE_DIR"
+    echo "发布目录清理完成！"
+}
 
-# 进入前端目录
-cd ./web || exit 1
+build_frontend() {
+    echo "编译前端代码..."
+    
+    cd "$WEB_DIR" || exit 1
+    
+    # 安装依赖
+    npm install
+    if [ $? -ne 0 ]; then
+        echo "错误: 前端依赖安装失败"
+        exit 1
+    fi
+    
+    # 构建前端代码
+    npm run build
+    if [ $? -ne 0 ]; then
+        echo "错误: 前端代码编译失败"
+        exit 1
+    fi
+    
+    cd - || exit 1
+    echo "前端代码编译完成！"
+}
 
-# 安装前端依赖
-echo "安装前端依赖..."
-npm install
+build_backend() {
+    echo "构建后端二进制文件..."
+    
+    # 清理旧的二进制文件
+    rm -f "./$APP_NAME"
+    
+    # 安装Go依赖
+    go mod tidy
+    if [ $? -ne 0 ]; then
+        echo "错误: Go依赖安装失败"
+        exit 1
+    fi
+    
+    # 构建当前平台的二进制文件
+    echo "构建当前平台二进制文件..."
+    go build -o "./$APP_NAME" "$API_DIR"
+    if [ $? -ne 0 ]; then
+        echo "错误: 当前平台二进制文件构建失败"
+        exit 1
+    fi
+    
+    # 构建多平台二进制文件
+    for PLATFORM in "${PLATFORMS[@]}"; do
+        IFS="/" read -r OS ARCH <<< "$PLATFORM"
+        echo "构建 $OS/$ARCH 二进制文件..."
+        
+        # 设置输出文件名
+        OUTPUT_NAME="$APP_NAME"
+        if [ "$OS" = "windows" ]; then
+            OUTPUT_NAME="$OUTPUT_NAME.exe"
+        fi
+        
+        # 设置Go环境变量
+        GOOS="$OS" GOARCH="$ARCH" go build -o "$RELEASE_DIR/$OUTPUT_NAME" "$API_DIR"
+        if [ $? -ne 0 ]; then
+            echo "错误: $OS/$ARCH 二进制文件构建失败"
+            exit 1
+        fi
+    done
+    
+    echo "后端二进制文件构建完成！"
+}
 
-if [ $? -ne 0 ]; then
-    echo "错误: 安装前端依赖失败"
-    exit 1
+package_release() {
+    echo "打包发布文件..."
+    
+    # 创建发布目录
+    mkdir -p "$RELEASE_DIR"
+    
+    # 复制配置文件模板
+    cp -r ./configs "$RELEASE_DIR/"
+    
+    # 复制启动脚本
+    cp ./start.sh "$RELEASE_DIR/"
+    chmod +x "$RELEASE_DIR/start.sh"
+    
+    # 复制前端构建文件
+    cp -r "$WEB_DIR/dist" "$RELEASE_DIR/web/"
+    
+    echo "发布文件打包完成！"
+}
+
+# 主程序
+if [ $# -eq 0 ]; then
+    usage
 fi
 
-# 编译前端代码
-echo "编译前端代码..."
-npm run build
-
-if [ $? -ne 0 ]; then
-    echo "错误: 编译前端代码失败"
-    exit 1
-fi
-
-# 复制编译后的前端代码到构建目录
-cd ..
-echo "复制前端构建文件到 $BUILD_DIR/frontend..."
-cp -r ./web/dist "$BUILD_DIR/frontend"
-
-echo "========================================"
-echo "一键发布脚本执行成功！"
-echo "========================================"
-echo "构建结果："
-echo "  后端多端构建文件: $BUILD_DIR/backend/"
-echo "  前端构建文件: $BUILD_DIR/frontend/"
-echo ""
-echo "你可以使用以下命令启动应用："
-echo "  ./start.sh start    # 启动应用"
-echo "  docker-compose up   # 使用Docker启动应用"
-echo "========================================"
+case "$1" in
+    build)
+        check_dependencies
+        clean_release
+        build_frontend
+        build_backend
+        package_release
+        echo "========================================"
+        echo "发布构建完成！"
+        echo "发布文件位于: $RELEASE_DIR"
+        echo "========================================"
+        ;;
+    clean)
+        clean_release
+        echo "========================================"
+        echo "发布目录清理完成！"
+        echo "========================================"
+        ;;
+    *)
+        usage
+        ;;
+esac

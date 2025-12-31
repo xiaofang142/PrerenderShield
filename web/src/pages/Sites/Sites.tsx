@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Table, Button, Modal, Form, Input, Switch, message, Select, Row, Col, Statistic, Upload, Typography, Space, Menu, Popconfirm } from 'antd'
+import { Card, Table, Button, Modal, Form, Input, Switch, message, Select, Row, Col, Statistic, Upload, Typography, Space } from 'antd'
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, UploadOutlined, 
   UnorderedListOutlined, CloudUploadOutlined, FolderOpenOutlined, 
   FolderOutlined, FileOutlined, FolderOutlined as NewFolderOutlined, FileAddOutlined, UpOutlined, 
-  DownloadOutlined, UnorderedListOutlined as MoveOutlined, UnorderedListOutlined as ExtractOutlined
+  DownloadOutlined, UnorderedListOutlined as ExtractOutlined
 } from '@ant-design/icons'
 import { sitesApi, prerenderApi } from '../../services/api'
 import type { UploadProps } from 'antd'
@@ -17,18 +17,13 @@ const Sites: React.FC = () => {
   const [visible, setVisible] = useState(false)
   const [uploadModalVisible, setUploadModalVisible] = useState(false)
   const [editingSite, setEditingSite] = useState<any>(null)
-  const [selectedSite, setSelectedSite] = useState<any>(null)
   const [form] = Form.useForm()
-  const [uploading, setUploading] = useState(false)
-  const [certs, setCerts] = useState<string[]>([])
-  const [sslLoading, setSslLoading] = useState(false)
   
   // 静态资源管理状态
   const [staticResModalVisible, setStaticResModalVisible] = useState(false)
   const [currentSite, setCurrentSite] = useState<any>(null)
   const [currentPath, setCurrentPath] = useState<string>('/')
   const [fileList, setFileList] = useState<any[]>([])
-  const [selectedFile, setSelectedFile] = useState<any>(null)
   const [showNewFolderModal, setShowNewFolderModal] = useState(false)
   const [newFolderName, setNewFolderName] = useState<string>('')
   const [showNewFileModal, setShowNewFileModal] = useState(false)
@@ -77,11 +72,31 @@ const Sites: React.FC = () => {
       key: 'domain',
     },
     {
+      title: '端口',
+      dataIndex: 'port',
+      key: 'port',
+    },
+    {
+      title: '站点模式',
+      dataIndex: 'mode',
+      key: 'mode',
+      render: (mode: string) => {
+        const modeMap: { [key: string]: string } = {
+          'proxy': '代理已有应用',
+          'static': '静态资源站',
+          'redirect': '重定向'
+        };
+        return modeMap[mode] || mode;
+      }
+    },
+    {
       title: '预渲染状态',
       dataIndex: 'prerenderEnabled',
       key: 'prerenderEnabled',
       render: (enabled: boolean, record: any) => (
-        <Switch checked={enabled} onChange={(checked) => handleSwitchChange(record, 'prerender', checked)} />
+        record.mode === 'static' ? (
+          <Switch checked={enabled} onChange={(checked) => handleSwitchChange(record, 'prerender', checked)} />
+        ) : null
       ),
     },
     {
@@ -93,17 +108,9 @@ const Sites: React.FC = () => {
       ),
     },
     {
-      title: 'SSL状态',
-      dataIndex: 'sslEnabled',
-      key: 'sslEnabled',
-      render: (enabled: boolean, record: any) => (
-        <Switch checked={enabled} onChange={(checked) => handleSwitchChange(record, 'ssl', checked)} />
-      ),
-    },
-    {
       title: '操作',
       key: 'action',
-      render: (_, record: any) => (
+      render: (_: any, record: any) => (
         <div>
           <Button
             type="link"
@@ -121,22 +128,26 @@ const Sites: React.FC = () => {
           >
             编辑
           </Button>
-          <Button
-            type="link"
-            icon={<FolderOpenOutlined />}
-            onClick={() => handleStaticResources(record)}
-            style={{ marginRight: 8 }}
-          >
-            静态资源
-          </Button>
-          <Button
-            type="link"
-            icon={<UnorderedListOutlined />}
-            onClick={() => handlePrerenderConfig(record)}
-            style={{ marginRight: 8 }}
-          >
-            预渲染配置
-          </Button>
+          {record.mode === 'static' && (
+            <>
+              <Button
+                type="link"
+                icon={<FolderOpenOutlined />}
+                onClick={() => handleStaticResources(record)}
+                style={{ marginRight: 8 }}
+              >
+                静态资源
+              </Button>
+              <Button
+                type="link"
+                icon={<UnorderedListOutlined />}
+                onClick={() => handlePrerenderConfig(record)}
+                style={{ marginRight: 8 }}
+              >
+                预渲染配置
+              </Button>
+            </>
+          )}
           <Button
             type="link"
             icon={<DeleteOutlined />}
@@ -156,89 +167,121 @@ const Sites: React.FC = () => {
       setLoading(true)
       const res = await sitesApi.getSites()
       console.log('Raw API response:', res);
+      // 直接使用res，因为API响应拦截器已经返回了response.data
       if (res.code === 200) {
         console.log('Sites data from API:', res.data);
-        // 转换API响应中的大写键为小写键，以便Table组件正确显示数据
+        // 转换API响应中的数据，适配新的站点模式
         const normalizedSites = res.data.map((site: any) => {
-          // 直接从API响应中获取开关状态，确保数据一致性
-          const firewallEnabled = site.firewall && site.firewall.Enabled === true;
-          const prerenderEnabled = site.prerender && site.prerender.Enabled === true;
-          const sslEnabled = site.ssl && site.ssl.Enabled === true;
-          
-          // 为了调试，打印每个站点的开关状态
-          console.log(`站点: ${site.name}`);
-          console.log(`  API返回的防火墙状态: ${site.firewall?.Enabled}`);
-          console.log(`  转换后的防火墙状态: ${firewallEnabled}`);
-          console.log(`  API返回的预渲染状态: ${site.prerender?.Enabled}`);
-          console.log(`  转换后的预渲染状态: ${prerenderEnabled}`);
-          console.log(`  API返回的SSL状态: ${site.ssl?.Enabled}`);
-          console.log(`  转换后的SSL状态: ${sslEnabled}`);
-          
-          // 获取第一个域名作为站点的主要域名
-          const primaryDomain = (site.domains && Array.isArray(site.domains) && site.domains.length > 0) ? site.domains[0] : '';
-          
-          const transformedSite = {
-            name: site.name || '',
-            domain: primaryDomain || '',
-            domains: site.domains || [],
-            port: site.port || 80,
-            proxy: {
-              enabled: site.proxy?.Enabled || false,
-              targetURL: site.proxy?.TargetURL || '',
-              type: site.proxy?.Type || 'direct'
-            },
-            firewallEnabled: firewallEnabled,
-            prerenderEnabled: prerenderEnabled,
-            sslEnabled: sslEnabled,
-            firewall: {
-              enabled: firewallEnabled,
-              rulesPath: site.firewall?.RulesPath || '/etc/prerender-shield/rules',
-              action: {
-                defaultAction: site.firewall?.ActionConfig?.DefaultAction || 'block',
-                blockMessage: site.firewall?.ActionConfig?.BlockMessage || 'Request blocked by firewall'
-              }
-            },
-            prerender: {
-              enabled: prerenderEnabled,
-              poolSize: site.prerender?.PoolSize || 5,
-              minPoolSize: site.prerender?.MinPoolSize || 2,
-              maxPoolSize: site.prerender?.MaxPoolSize || 20,
-              timeout: site.prerender?.Timeout || 30,
-              cacheTTL: site.prerender?.CacheTTL || 3600,
-              idleTimeout: site.prerender?.IdleTimeout || 300,
-              dynamicScaling: site.prerender?.DynamicScaling || true,
-              scalingFactor: site.prerender?.ScalingFactor || 0.5,
-              scalingInterval: site.prerender?.ScalingInterval || 60,
-              preheat: {
-                enabled: site.prerender?.Preheat?.Enabled || false,
-                sitemapURL: site.prerender?.Preheat?.SitemapURL || '',
-                schedule: site.prerender?.Preheat?.Schedule || '0 0 * * *',
-                concurrency: site.prerender?.Preheat?.Concurrency || 5,
-                defaultPriority: site.prerender?.Preheat?.DefaultPriority || 0
-              }
-            },
-            routing: {
-              rules: site.routing?.Rules || []
-            },
-            ssl: {
-              enabled: sslEnabled,
-              letEncrypt: site.ssl?.LetEncrypt || false,
-              domains: site.ssl?.Domains || [],
-              acmeEmail: site.ssl?.ACMEEmail || '',
-              acmeServer: site.ssl?.ACMEServer || 'https://acme-v02.api.letsencrypt.org/directory',
-              acmeChallenge: site.ssl?.ACMEChallenge || 'http01',
-              certPath: site.ssl?.CertPath || '/etc/prerender-shield/certs/cert.pem',
-              keyPath: site.ssl?.KeyPath || '/etc/prerender-shield/certs/key.pem',
-              sslCertificate: site.ssl?.SSLCertificate || ''
+            // 确保site对象是有效的
+            if (!site || typeof site !== 'object') {
+              console.error('Invalid site object:', site);
+              return null;
             }
-          };
+            
+            // 直接从API响应中获取开关状态，确保数据一致性（注意：API返回的是小写字段名）
+            const firewallEnabled = site.firewall && typeof site.firewall === 'object' && site.firewall.Enabled === true;
+            const prerenderEnabled = site.prerender && typeof site.prerender === 'object' && site.prerender.Enabled === true;
+            
+            // 获取站点模式
+            const mode = site.mode || 'proxy'; // 默认使用proxy模式
+            
+            // 为了调试，打印每个站点的信息
+            console.log(`站点: ${site.name || '未知'}`);
+            console.log(`  完整站点数据:`, site);
+            console.log(`  模式: ${mode}`);
+            console.log(`  API返回的防火墙状态: ${site.firewall?.Enabled}`);
+            console.log(`  转换后的防火墙状态: ${firewallEnabled}`);
+            console.log(`  API返回的预渲染状态: ${site.prerender?.Enabled}`);
+            console.log(`  转换后的预渲染状态: ${prerenderEnabled}`);
+            
+            // 获取域名信息
+            let primaryDomain = '';
+            if (site.domains && Array.isArray(site.domains) && site.domains.length > 0) {
+              primaryDomain = site.domains[0];
+            } else if (site.domain) {
+              primaryDomain = site.domain;
+            }
+            
+            const transformedSite = {
+              name: site.name || '',
+              domain: primaryDomain || '',
+              domains: site.domains || [],
+              port: site.port || 80,
+              mode: mode,
+              proxy: {
+                enabled: site.proxy?.Enabled || false,
+                targetURL: site.proxy?.TargetURL || '',
+                type: site.proxy?.Type || 'direct'
+              },
+              firewallEnabled: firewallEnabled,
+              prerenderEnabled: prerenderEnabled,
+              firewall: {
+                enabled: firewallEnabled,
+                rulesPath: site.firewall?.RulesPath || '/etc/prerender-shield/rules',
+                action: {
+                  defaultAction: site.firewall?.ActionConfig?.DefaultAction || 'block',
+                  blockMessage: site.firewall?.ActionConfig?.BlockMessage || 'Request blocked by firewall'
+                },
+                // 地理位置访问控制配置
+                geoip: {
+                  enabled: site.firewall?.GeoIPConfig?.Enabled || false,
+                  allowList: site.firewall?.GeoIPConfig?.AllowList || [],
+                  blockList: site.firewall?.GeoIPConfig?.BlockList || []
+                },
+                // 频率限制配置
+                rate_limit: {
+                  enabled: site.firewall?.RateLimitConfig?.Enabled || false,
+                  requests: site.firewall?.RateLimitConfig?.Requests || 100,
+                  window: site.firewall?.RateLimitConfig?.Window || 60,
+                  ban_time: site.firewall?.RateLimitConfig?.BanTime || 3600
+                }
+              },
+              // 网页防篡改配置
+              file_integrity: {
+                enabled: site.FileIntegrityConfig?.Enabled || false,
+                check_interval: site.FileIntegrityConfig?.CheckInterval || 300,
+                hash_algorithm: site.FileIntegrityConfig?.HashAlgorithm || 'sha256'
+              },
+              prerender: {
+                enabled: prerenderEnabled,
+                poolSize: site.prerender?.PoolSize || 5,
+                minPoolSize: site.prerender?.MinPoolSize || 2,
+                maxPoolSize: site.prerender?.MaxPoolSize || 20,
+                timeout: site.prerender?.Timeout || 30,
+                cacheTTL: site.prerender?.CacheTTL || 3600,
+                idleTimeout: site.prerender?.IdleTimeout || 300,
+                dynamicScaling: site.prerender?.DynamicScaling || true,
+                scalingFactor: site.prerender?.ScalingFactor || 0.5,
+                scalingInterval: site.prerender?.ScalingInterval || 60,
+                useDefaultHeaders: site.prerender?.UseDefaultHeaders || false,
+                crawlerHeaders: site.prerender?.CrawlerHeaders || [],
+                preheat: {
+                  enabled: site.prerender?.Preheat?.Enabled || false,
+                  sitemapURL: site.prerender?.Preheat?.SitemapURL || '',
+                  schedule: site.prerender?.Preheat?.Schedule || '0 0 * * *',
+                  concurrency: site.prerender?.Preheat?.Concurrency || 5,
+                  defaultPriority: site.prerender?.Preheat?.DefaultPriority || 0
+                }
+              },
+              routing: {
+                rules: site.routing?.Rules || []
+              },
+              redirect: {
+                enabled: mode === 'redirect',
+                code: site.redirect?.StatusCode || 302,
+                url: site.redirect?.TargetURL || ''
+              }
+            };
           
           return transformedSite;
         });
         
+        // 过滤掉null值，确保只有有效的站点对象被添加到列表中
+        const validSites = normalizedSites.filter((site): site is any => site !== null);
+        
         // 调试：打印转换后的站点列表
-        console.log('转换后的站点列表:', normalizedSites);
-        setSites(normalizedSites)
+        console.log('转换后的站点列表:', validSites);
+        setSites(validSites)
       } else {
         message.error('获取站点列表失败')
       }
@@ -250,26 +293,11 @@ const Sites: React.FC = () => {
     }
   }
   
-  // 获取所有证书列表
-  const fetchCerts = async () => {
-    try {
-      setSslLoading(true)
-      // 这里应该获取所有可用证书列表
-      // 暂时模拟数据
-      const mockCerts = ['example.com', 'test.com', 'demo.com']
-      setCerts(mockCerts)
-    } catch (error) {
-      console.error('Failed to fetch certs:', error)
-      message.error('获取证书列表失败')
-    } finally {
-      setSslLoading(false)
-    }
-  }
+
 
   // 初始化数据
   useEffect(() => {
     fetchSites()
-    fetchCerts()
   }, [])
 
   // 打开添加/编辑弹窗
@@ -294,10 +322,16 @@ const Sites: React.FC = () => {
   }
 
   // 处理开关变化
-  const handleSwitchChange = async (record: any, type: 'prerender' | 'firewall' | 'ssl', enabled: boolean) => {
+  const handleSwitchChange = async (record: any, type: 'prerender' | 'firewall', enabled: boolean) => {
     try {
-      // 确保record有name属性
-      if (!record || !record.name) {
+      // 确保record对象有效
+      if (!record || typeof record !== 'object') {
+        throw new Error('无效的站点对象')
+      }
+      
+      // 确保站点名称存在且不为空
+      const siteName = record.name || record.Name || '';
+      if (!siteName.trim()) {
         throw new Error('站点名称不存在')
       }
       
@@ -312,53 +346,72 @@ const Sites: React.FC = () => {
       
       // 转换为后端API期望的格式（大写键）
       const apiSiteData = {
-        Name: updatedSite.name,
+        Name: siteName,
         Domain: updatedSite.domain,
+        Domains: updatedSite.domains || [updatedSite.domain], // 支持多个域名
         Port: updatedSite.port || 80, // 保留端口信息，默认为80
+        Mode: updatedSite.mode || 'proxy', // 添加站点模式
         Proxy: {
-          Enabled: true, // 默认启用代理
-          TargetURL: '',
-          Type: 'direct'
+          Enabled: updatedSite.proxy?.enabled || false,
+          TargetURL: updatedSite.proxy?.targetURL || '',
+          Type: updatedSite.proxy?.type || 'direct'
+        },
+        // 重定向配置
+        Redirect: {
+          Enabled: updatedSite.mode === 'redirect',
+          Code: updatedSite.redirect?.code || 302,
+          URL: updatedSite.redirect?.url || ''
         },
         Firewall: {
           Enabled: updatedSite.firewall.enabled,
-          RulesPath: updatedSite.firewall.rulesPath,
+          RulesPath: updatedSite.firewall.rulesPath || '/etc/prerender-shield/rules',
           ActionConfig: {
-            DefaultAction: updatedSite.firewall.action.defaultAction,
-            BlockMessage: updatedSite.firewall.action.blockMessage
+            DefaultAction: updatedSite.firewall.action?.defaultAction || 'block',
+            BlockMessage: updatedSite.firewall.action?.blockMessage || 'Request blocked by firewall'
+          },
+          // 地理位置访问控制配置
+          GeoIPConfig: {
+            Enabled: updatedSite.firewall.geoip?.enabled || false,
+            AllowList: updatedSite.firewall.geoip?.allowList || [],
+            BlockList: updatedSite.firewall.geoip?.blockList || []
+          },
+          // 频率限制配置
+          RateLimitConfig: {
+            Enabled: updatedSite.firewall.rate_limit?.enabled || false,
+            Requests: updatedSite.firewall.rate_limit?.requests || 100,
+            Window: updatedSite.firewall.rate_limit?.window || 60,
+            BanTime: updatedSite.firewall.rate_limit?.ban_time || 3600
           }
+        },
+        // 网页防篡改配置
+        FileIntegrityConfig: {
+          Enabled: updatedSite.file_integrity?.enabled || false,
+          CheckInterval: updatedSite.file_integrity?.check_interval || 300,
+          HashAlgorithm: updatedSite.file_integrity?.hash_algorithm || 'sha256'
         },
         Prerender: {
           Enabled: updatedSite.prerender.enabled,
-          PoolSize: updatedSite.prerender.poolSize,
-          MinPoolSize: updatedSite.prerender.minPoolSize,
-          MaxPoolSize: updatedSite.prerender.maxPoolSize,
-          Timeout: updatedSite.prerender.timeout,
-          CacheTTL: updatedSite.prerender.cacheTTL,
-          IdleTimeout: updatedSite.prerender.idleTimeout,
-          DynamicScaling: updatedSite.prerender.dynamicScaling,
-          ScalingFactor: updatedSite.prerender.scalingFactor,
-          ScalingInterval: updatedSite.prerender.scalingInterval,
+          PoolSize: updatedSite.prerender.poolSize || 5,
+          MinPoolSize: updatedSite.prerender.minPoolSize || 2,
+          MaxPoolSize: updatedSite.prerender.maxPoolSize || 20,
+          Timeout: updatedSite.prerender.timeout || 30,
+          CacheTTL: updatedSite.prerender.cacheTTL || 3600,
+          IdleTimeout: updatedSite.prerender.idleTimeout || 300,
+          DynamicScaling: updatedSite.prerender.dynamicScaling || true,
+          ScalingFactor: updatedSite.prerender.scalingFactor || 0.5,
+          ScalingInterval: updatedSite.prerender.scalingInterval || 60,
+          UseDefaultHeaders: updatedSite.prerender.useDefaultHeaders || false,
+          CrawlerHeaders: updatedSite.prerender.crawlerHeaders || [],
           Preheat: {
-            Enabled: updatedSite.prerender.preheat.enabled,
-            SitemapURL: updatedSite.prerender.preheat.sitemapURL,
-            Schedule: updatedSite.prerender.preheat.schedule,
-            Concurrency: updatedSite.prerender.preheat.concurrency,
-            DefaultPriority: updatedSite.prerender.preheat.defaultPriority
+            Enabled: updatedSite.prerender.preheat?.enabled || false,
+            SitemapURL: updatedSite.prerender.preheat?.sitemapURL || '',
+            Schedule: updatedSite.prerender.preheat?.schedule || '0 0 * * *',
+            Concurrency: updatedSite.prerender.preheat?.concurrency || 5,
+            DefaultPriority: updatedSite.prerender.preheat?.defaultPriority || 0
           }
         },
         Routing: {
-          Rules: updatedSite.routing.rules
-        },
-        SSL: {
-          Enabled: updatedSite.ssl.enabled,
-          LetEncrypt: updatedSite.ssl.letEncrypt,
-          Domains: updatedSite.ssl.domains,
-          ACMEEmail: updatedSite.ssl.acmeEmail,
-          ACMEServer: updatedSite.ssl.acmeServer,
-          ACMEChallenge: updatedSite.ssl.acmeChallenge,
-          CertPath: updatedSite.ssl.certPath,
-          KeyPath: updatedSite.ssl.keyPath
+          Rules: updatedSite.routing?.rules || []
         }
       }
 
@@ -405,18 +458,25 @@ const Sites: React.FC = () => {
   // 打开静态资源管理弹窗
   const handleStaticResources = (site: any) => {
     // 确保site和site.name存在
-    if (!site || typeof site.name === 'undefined' || site.name === '') {
+    if (!site || typeof site !== 'object') {
       console.error('Invalid site provided, cannot open static resources')
       message.error('站点信息无效，无法打开静态资源管理')
       return
     }
     
+    // 确保站点名称存在且不为空
+    const siteName = site.name || site.Name || '';
+    if (!siteName.trim()) {
+      console.error('Site name is empty, cannot open static resources')
+      message.error('站点名称不存在，无法打开静态资源管理')
+      return
+    }
+    
     setCurrentSite(site)
     setCurrentPath('/')
-    setSelectedFile(null)
     setStaticResModalVisible(true)
     // 直接传递site.name给loadFileList，避免依赖currentSite的异步更新
-    loadFileList('/', site.name)
+    loadFileList('/', siteName)
   }
 
   // 加载当前路径下的文件列表
@@ -514,20 +574,7 @@ const Sites: React.FC = () => {
     message.success('文件创建成功')
   }
 
-  // 处理文件上传
-  const handleStaticResUpload = (file: any) => {
-    // 模拟文件上传
-    message.success(`${file.name} 上传成功`)
-    const newFile = {
-      key: Date.now().toString() + Math.random().toString(36).substr(2, 5),
-      name: file.name,
-      type: 'file',
-      size: file.size,
-      path: `${currentPath === '/' ? '' : currentPath}/${file.name}`
-    }
-    setFileList(prev => [...prev, newFile])
-    return false // 阻止默认上传
-  }
+
 
   // 下载文件
   const handleDownload = (file: any) => {
@@ -562,7 +609,7 @@ const Sites: React.FC = () => {
         // 重新加载文件列表
         loadFileList(currentPath)
       } else {
-        message.error(`${file.name} 解压失败: ${response.message}`)
+        message.error(`${file.name} 解压失败: ${response.message || '未知错误'}`)
       }
     } catch (error) {
       console.error('解压失败:', error)
@@ -570,11 +617,7 @@ const Sites: React.FC = () => {
     }
   }
 
-  // 移动文件
-  const handleMove = (file: any) => {
-    message.info(`正在移动 ${file.name}`)
-    // 这里可以添加实际的移动逻辑
-  }
+
 
   // 删除文件/目录
   const handleFileDelete = (file: any) => {
@@ -582,73 +625,10 @@ const Sites: React.FC = () => {
     setFileList(prev => prev.filter(f => f.key !== file.key))
   }
 
-  // 文件右键菜单
-  const getFileMenu = (file: any) => {
-    const menu = [
-      {
-        key: 'download',
-        label: (
-          <a onClick={() => handleDownload(file)}>
-            <DownloadOutlined /> 下载
-          </a>
-        ),
-      },
-    ]
 
-    if (file.type === 'file' && (file.name.endsWith('.zip') || file.name.endsWith('.rar'))) {
-      menu.push({
-        key: 'extract',
-        label: (
-          <a onClick={() => handleExtract(file)}>
-            <ExtractOutlined /> 解压
-          </a>
-        ),
-      })
-    }
-
-    menu.push(
-      {
-        key: 'move',
-        label: (
-          <a onClick={() => handleMove(file)}>
-            <MoveOutlined /> 移动
-          </a>
-        ),
-      },
-      {
-                key: 'delete',
-                label: (
-                  <Popconfirm
-                    title="确定要删除吗？"
-                    onConfirm={() => handleFileDelete(file)}
-                    okText="确定"
-                    cancelText="取消"
-                  >
-                    <a style={{ color: '#ff4d4f' }}>
-                      <DeleteOutlined /> 删除
-                    </a>
-                  </Popconfirm>
-                ),
-              }
-    )
-
-    return (
-      <Menu items={menu} />
-    )
-  }
-
-  // 处理文件上传
-  const handleFileUpload = (site: any) => {
-    setSelectedSite(site)
-    setUploadModalVisible(true)
-  }
 
   // 文件上传前的处理
   const beforeUpload: UploadProps['beforeUpload'] = (file) => {
-    // 检查文件类型
-    const isCompressed = file.type === 'application/zip' || file.name.endsWith('.rar') || file.name.endsWith('.zip')
-    const isSingleFile = !isCompressed
-    
     // 调整rar/zip上传大小限制为不超过100m
     const isLt100M = file.size / 1024 / 1024 < 100
     if (!isLt100M) {
@@ -659,84 +639,67 @@ const Sites: React.FC = () => {
     return true
   }
 
-  // 文件上传进度处理
-  const handleUploadProgress = (percentage: number) => {
-    console.log('Upload progress:', percentage)
-  }
-
-  // 文件上传成功处理
-  const handleUploadSuccess = (response: any, file: any) => {
-    message.success(`${file.name} 上传成功`)
-    // 这里可以添加文件上传后的处理逻辑，例如刷新文件列表
-  }
-
-  // 文件上传失败处理
-  const handleUploadError = (error: any, file: any) => {
-    message.error(`${file.name} 上传失败: ${error.message}`)
-  }
-
   // 自定义上传逻辑
   const customRequest: UploadProps['customRequest'] = (options) => {
     const { onSuccess, onError, file, onProgress } = options
     
-    // 确定当前使用的站点：优先使用selectedSite（文件上传弹窗），如果没有则使用currentSite（静态资源管理弹窗）
-    const site = selectedSite || currentSite;
-    
     // 确保站点和站点名称存在
-    if (!site || typeof site.name === 'undefined' || site.name === '') {
+    if (!currentSite || typeof currentSite.name === 'undefined' || currentSite.name === '') {
       console.error('Site is not set, cannot upload file')
       message.error('站点信息无效，无法上传文件')
-      onError(new Error('站点信息无效'))
-      setUploading(false)
+      if (onError) onError(new Error('站点信息无效'))
       return
     }
     
-    setUploading(true)
-    
     // 发送实际的API请求，使用当前路径
-    sitesApi.uploadFile(site.name, file, currentPath, (progressEvent) => {
-      if (progressEvent.total) {
+    sitesApi.uploadFile(currentSite.name, file, currentPath, (progressEvent) => {
+      if (progressEvent.total && onProgress) {
         const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
         onProgress({ percent: percentCompleted });
       }
     })
     .then((response) => {
       if (response.code === 200) {
-        message.success(`${file.name} 上传成功`)
+        message.success(`${typeof file === 'string' ? file : (file as any).name} 上传成功`)
         // 重新加载文件列表
         loadFileList(currentPath)
-        onSuccess({ status: 'ok', message: '上传成功' })
+        if (onSuccess) onSuccess({ status: 'ok', message: '上传成功' })
       } else {
         throw new Error(response.message || '上传失败')
       }
     })
     .catch((error) => {
-      message.error(`${file.name} 上传失败: ${error.message}`)
-      onError(error)
-    })
-    .finally(() => {
-      setUploading(false)
+      message.error(`${typeof file === 'string' ? file : (file as any).name} 上传失败: ${error.message}`)
+      if (onError) onError(error)
     })
   }
 
   // 处理删除站点
   const handleDelete = async (site: any) => {
     try {
-      // 确保site有name属性
-      if (!site || !site.name) {
+      // 确保site对象有效且有name属性
+      if (!site || typeof site !== 'object') {
+        throw new Error('无效的站点对象')
+      }
+      
+      // 确保站点名称存在且不为空
+      const siteName = site.name || site.Name || '';
+      if (!siteName.trim()) {
         throw new Error('站点名称不存在')
       }
       
-      const res = await sitesApi.deleteSite(site.name)
+      console.log('Deleting site with name:', siteName);
+      const res = await sitesApi.deleteSite(siteName)
+      // 直接使用res.code，因为API响应拦截器已经返回了response.data
       if (res.code === 200) {
         message.success('删除站点成功')
         fetchSites()
       } else {
-        message.error('删除站点失败')
+        message.error('删除站点失败：' + res.message)
       }
     } catch (error) {
       console.error('Failed to delete site:', error)
-      message.error('删除站点失败')
+      message.error('删除站点失败：' + (error as any).message)
     }
   }
   
@@ -778,12 +741,20 @@ const Sites: React.FC = () => {
       const siteData = {
         Name: values.name,
         Domain: values.domain,
+        Domains: [values.domain], // 支持多个域名，先添加主域名
         Port: parseInt(values.port, 10) || 80, // 转换为整数类型，默认为80
-        // 添加Proxy字段，与后端SiteConfig结构体匹配
+        Mode: values.mode, // 添加站点模式
+        // 代理配置 - 根据模式决定是否启用
         Proxy: {
-          Enabled: values.proxy?.enabled || false,
-          TargetURL: values.proxy?.targetURL || "",
-          Type: values.proxy?.type || "direct"
+          Enabled: values.mode === 'proxy',
+          TargetURL: values.mode === 'proxy' ? (values.proxy?.targetURL || "") : "",
+          Type: "direct" // 简化为固定值
+        },
+        // 重定向配置 - 根据模式决定是否启用
+        Redirect: {
+          Enabled: values.mode === 'redirect',
+          Code: values.mode === 'redirect' ? (values.redirect?.code || 302) : 302,
+          URL: values.mode === 'redirect' ? (values.redirect?.url || "") : ""
         },
         Firewall: {
           Enabled: values.firewall.enabled || false,
@@ -791,7 +762,26 @@ const Sites: React.FC = () => {
           ActionConfig: {
             DefaultAction: values.firewall.action?.defaultAction || 'block',
             BlockMessage: values.firewall.action?.blockMessage || 'Request blocked by firewall'
+          },
+          // 地理位置访问控制配置
+          GeoIPConfig: {
+            Enabled: values.firewall.geoip?.enabled || false,
+            AllowList: values.firewall.geoip?.allowList ? values.firewall.geoip.allowList.split(',').map((s: string) => s.trim()) : [],
+            BlockList: values.firewall.geoip?.blockList ? values.firewall.geoip.blockList.split(',').map((s: string) => s.trim()) : []
+          },
+          // 频率限制配置
+          RateLimitConfig: {
+            Enabled: values.firewall.rate_limit?.enabled || false,
+            Requests: values.firewall.rate_limit?.requests || 100,
+            Window: values.firewall.rate_limit?.window || 60,
+            BanTime: values.firewall.rate_limit?.ban_time || 3600
           }
+        },
+        // 网页防篡改配置
+        FileIntegrityConfig: {
+          Enabled: values.file_integrity?.enabled || false,
+          CheckInterval: values.file_integrity?.check_interval || 300,
+          HashAlgorithm: values.file_integrity?.hash_algorithm || 'sha256'
         },
         Prerender: {
           Enabled: values.prerender.enabled || false,
@@ -816,17 +806,6 @@ const Sites: React.FC = () => {
         },
         Routing: {
           Rules: values.routing?.rules || []
-        },
-        SSL: {
-          Enabled: values.ssl?.enabled || false,
-          LetEncrypt: values.ssl?.letEncrypt || false,
-          Domains: values.ssl?.domains || [],
-          ACMEEmail: values.ssl?.acmeEmail || '',
-          ACMEServer: values.ssl?.acmeServer || 'https://acme-v02.api.letsencrypt.org/directory',
-          ACMEChallenge: values.ssl?.acmeChallenge || 'http01',
-          CertPath: values.ssl?.certPath || '/etc/prerender-shield/certs/cert.pem',
-          KeyPath: values.ssl?.keyPath || '/etc/prerender-shield/certs/key.pem',
-          SSLCertificate: values.ssl?.sslCertificate || ''
         }
       }
       
@@ -848,18 +827,23 @@ const Sites: React.FC = () => {
         res = await sitesApi.updateSite(editingSite.name, siteData)
       } else {
         // 添加站点
+        console.log('Adding site with data:', siteData);
         res = await sitesApi.addSite(siteData)
+        console.log('Add site response:', res);
       }
 
       // 关闭加载状态
       Modal.destroyAll();
 
+      // 直接使用res，因为API响应拦截器已经返回了response.data
       if (res.code === 200) {
         message.success(editingSite ? '更新站点成功' : '添加站点成功')
         setVisible(false)
+        // 立即刷新站点列表
+        console.log('Refreshing sites list...');
         fetchSites()
       } else {
-        message.error(editingSite ? '更新站点失败：' + res.message : '添加站点失败：' + res.message)
+        message.error(editingSite ? '更新站点失败：' + (res.message || '未知错误') : '添加站点失败：' + (res.message || '未知错误'))
       }
     } catch (error: any) {
       // 关闭加载状态
@@ -926,7 +910,7 @@ const Sites: React.FC = () => {
         setPrerenderConfigModalVisible(false)
         fetchSites() // 刷新站点列表
       } else {
-        message.error('更新预渲染配置失败：' + res.message)
+        message.error('更新预渲染配置失败：' + (res.message || '未知错误'))
       }
     } catch (error: any) {
       // 关闭加载状态
@@ -1045,7 +1029,7 @@ const Sites: React.FC = () => {
                   rules={[
                     { required: true, message: '请输入站点名称' },
                     { min: 2, max: 50, message: '站点名称长度必须在2到50个字符之间' },
-                    { pattern: /^[\w\s\u4e00-\u9fa5\p{L}]+$/, message: '站点名称只能包含字母、数字、下划线、空格、中文和其他语言字符' }
+                    { pattern: /^[\w\s\u4e00-\u9fa5a-zA-Z]+$/, message: '站点名称只能包含字母、数字、下划线、空格、中文和其他语言字符' }
                   ]}
                 >
                   <Input placeholder="请输入站点名称，例如：example" />
@@ -1057,10 +1041,10 @@ const Sites: React.FC = () => {
                   label="域名"
                   rules={[
                     { required: true, message: '请输入域名' },
-                    { pattern: /^(https?:\/\/)?(localhost|([\da-z.-]+)\.([a-z.]{2,6})([\/\w .-]*)*\/?$|^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$)/, message: '请输入有效的域名或IP地址' }
+                    { pattern: /^(localhost|127\.0\.0\.1)$/, message: '只允许输入 localhost 或 127.0.0.1' }
                   ]}
                 >
-                  <Input placeholder="请输入域名，例如：example.com 或 127.0.0.1" />
+                  <Input placeholder="请输入域名，仅允许 localhost 或 127.0.0.1" />
                 </Form.Item>
               </Col>
             </Row>
@@ -1077,63 +1061,122 @@ const Sites: React.FC = () => {
                   <Input type="number" placeholder="请输入站点端口，例如：8081" min={1} max={65535} />
                 </Form.Item>
               </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="mode"
+                  label="站点模式"
+                  rules={[{ required: true, message: '请选择站点模式' }]}
+                >
+                  <Select placeholder="请选择站点模式">
+                    <Option value="proxy">代理已有应用</Option>
+                    <Option value="static">静态资源站</Option>
+                    <Option value="redirect">重定向</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
             </Row>
           </Card>
 
-
-          {/* 站点访问配置 */}
-          <Card title="站点访问配置" size="small" style={{ marginBottom: 16 }}>
-            <Form.Item name={['proxy', 'type']} label="访问模式">
-              <Select>
-                <Option value="direct">直接对外访问</Option>
-                <Option value="upstream">作为反向代理上游</Option>
-              </Select>
-            </Form.Item>
-
-            <Form.Item name={['proxy', 'enabled']} label="启用上游代理" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-
+          {/* 站点模式配置 */}
+          <Card title="站点模式配置" size="small" style={{ marginBottom: 16 }}>
             <Form.Item 
-              dependencies={[['proxy', 'enabled']]} 
+              dependencies={['mode']} 
               noStyle
             >
               {({ getFieldValue }) => {
-                const proxyEnabled = getFieldValue(['proxy', 'enabled']);
-                if (!proxyEnabled) {
-                  return null;
+                const mode = getFieldValue('mode');
+                
+                // 代理模式配置
+                if (mode === 'proxy') {
+                  return (
+                    <Form.Item
+                      name="proxy.targetURL"
+                      label="上游服务器地址"
+                      rules={[{ required: true, message: '请输入上游服务器地址' }, { type: 'url', message: '请输入完整域名，例如：http://example.com' }]}
+                      extra="提示：输入完整域名，不支持路径"
+                    >
+                      <Input placeholder="请输入上游服务器地址，例如：http://127.0.0.1:8080" />
+                    </Form.Item>
+                  );
                 }
-                return (
-                  <Form.Item
-                    name={['proxy', 'targetURL']}
-                    label="上游服务URL"
-                    rules={[{ required: true, message: '请输入上游服务URL' }]}
-                  >
-                    <Input placeholder="请输入上游服务URL，例如：http://127.0.0.1:8080" />
-                  </Form.Item>
-                );
+                
+                // 静态资源站配置
+                if (mode === 'static') {
+                  return (
+                    <div>
+                      <p style={{ color: '#8c8c8c', marginBottom: 16 }}>提示：在静态资源管理中上传资源</p>
+                      <p style={{ color: '#8c8c8c' }}>说明：站点列表中仅静态资源站允许上传资源</p>
+                    </div>
+                  );
+                }
+                
+                // 重定向配置
+                if (mode === 'redirect') {
+                  return (
+                    <>
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            name="redirect.code"
+                            label="重定向类型"
+                            rules={[{ required: true, message: '请选择重定向类型' }]}
+                          >
+                            <Select>
+                              <Option value={301}>301 Moved Permanently</Option>
+                              <Option value={302}>302 Found</Option>
+                              <Option value={307}>307 Temporary Redirect</Option>
+                              <Option value={308}>308 Permanent Redirect</Option>
+                            </Select>
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item
+                            name="redirect.url"
+                            label="重定向地址"
+                            rules={[{ required: true, message: '请输入重定向地址' }, { type: 'url', message: '请输入完整域名，例如：http://example.com' }]}
+                            extra="提示：输入完整域名，不支持路径"
+                          >
+                            <Input placeholder="请输入重定向地址，例如：http://example.com" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    </>
+                  );
+                }
+                
+                return null;
               }}
             </Form.Item>
           </Card>
 
           {/* 预渲染配置 */}
-          <Card title="预渲染配置" size="small" style={{ marginBottom: 16 }}>
-            <Form.Item name={['prerender', 'enabled']} label="启用预渲染" valuePropName="checked">
-              <Switch />
-            </Form.Item>
+          <Form.Item dependencies={['mode']} noStyle>
+            {({ getFieldValue }) => {
+              const mode = getFieldValue('mode');
+              if (mode !== 'static') {
+                return null;
+              }
+              return (
+                <Card title="预渲染配置" size="small" style={{ marginBottom: 16 }}>
+                  <Form.Item name={['prerender', 'enabled']} label="启用预渲染" valuePropName="checked">
+                    <Switch />
+                  </Form.Item>
 
-            <Form.Item name={['prerender', 'poolSize']} label="浏览器池大小">
-              <Input type="number" placeholder="请输入浏览器池大小" />
-            </Form.Item>
+                  <Form.Item name={['prerender', 'poolSize']} label="浏览器池大小">
+                    <Input type="number" placeholder="请输入浏览器池大小" />
+                  </Form.Item>
 
-            <Form.Item name={['prerender', 'timeout']} label="渲染超时(秒)">
-              <Input type="number" placeholder="请输入渲染超时时间" />
-            </Form.Item>
+                  <Form.Item name={['prerender', 'timeout']} label="渲染超时(秒)">
+                    <Input type="number" placeholder="请输入渲染超时时间" />
+                  </Form.Item>
 
-            <Form.Item name={['prerender', 'cacheTTL']} label="缓存TTL(秒)">
-              <Input type="number" placeholder="请输入缓存TTL" />
-            </Form.Item>
-          </Card>
+                  <Form.Item name={['prerender', 'cacheTTL']} label="缓存TTL(秒)">
+                    <Input type="number" placeholder="请输入缓存TTL" />
+                  </Form.Item>
+                </Card>
+              );
+            }}
+          </Form.Item>
 
           {/* 防火墙配置 */}
           <Card title="防火墙配置" size="small" style={{ marginBottom: 16 }}>
@@ -1147,48 +1190,148 @@ const Sites: React.FC = () => {
                 <Option value="block">阻止</Option>
               </Select>
             </Form.Item>
+
+            {/* 地理位置访问控制 */}
+            <Form.Item label="地理位置访问控制" extra="配置允许或阻止的国家/地区列表">
+              <Form.Item name={['firewall', 'geoip', 'enabled']} label="启用地理位置访问控制" valuePropName="checked" noStyle>
+                <Switch />
+              </Form.Item>
+              
+              <Form.Item 
+                dependencies={[['firewall', 'geoip', 'enabled']]} 
+                noStyle
+              >
+                {({ getFieldValue }) => {
+                  const geoipEnabled = getFieldValue(['firewall', 'geoip', 'enabled']);
+                  if (!geoipEnabled) {
+                    return null;
+                  }
+                  return (
+                    <>
+                      <Form.Item
+                        name={['firewall', 'geoip', 'allowList']}
+                        label="允许的国家/地区代码"
+                        extra="例如：CN,US,JP，多个代码用逗号分隔"
+                      >
+                        <Input placeholder="请输入允许的国家/地区代码，用逗号分隔" />
+                      </Form.Item>
+                      
+                      <Form.Item
+                        name={['firewall', 'geoip', 'blockList']}
+                        label="阻止的国家/地区代码"
+                        extra="例如：CN,US,JP，多个代码用逗号分隔"
+                      >
+                        <Input placeholder="请输入阻止的国家/地区代码，用逗号分隔" />
+                      </Form.Item>
+                    </>
+                  );
+                }}
+              </Form.Item>
+            </Form.Item>
+
+            {/* 频率限制 / CC 攻击防护 */}
+            <Form.Item label="频率限制 / CC 攻击防护" extra="配置请求频率限制，防止CC攻击">
+              <Form.Item name={['firewall', 'rate_limit', 'enabled']} label="启用频率限制" valuePropName="checked" noStyle>
+                <Switch />
+              </Form.Item>
+              
+              <Form.Item 
+                dependencies={[['firewall', 'rate_limit', 'enabled']]} 
+                noStyle
+              >
+                {({ getFieldValue }) => {
+                  const rateLimitEnabled = getFieldValue(['firewall', 'rate_limit', 'enabled']);
+                  if (!rateLimitEnabled) {
+                    return null;
+                  }
+                  return (
+                    <>
+                      <Row gutter={16}>
+                        <Col span={8}>
+                          <Form.Item
+                            name={['firewall', 'rate_limit', 'requests']}
+                            label="时间窗口内允许的请求数"
+                          >
+                            <Input type="number" placeholder="例如：100" min={1} />
+                          </Form.Item>
+                        </Col>
+                        <Col span={8}>
+                          <Form.Item
+                            name={['firewall', 'rate_limit', 'window']}
+                            label="时间窗口（秒）"
+                          >
+                            <Input type="number" placeholder="例如：60" min={1} />
+                          </Form.Item>
+                        </Col>
+                        <Col span={8}>
+                          <Form.Item
+                            name={['firewall', 'rate_limit', 'ban_time']}
+                            label="封禁时间（秒）"
+                          >
+                            <Input type="number" placeholder="例如：3600" min={1} />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    </>
+                  );
+                }}
+              </Form.Item>
+            </Form.Item>
+
+            {/* 网页防篡改配置 */}
+            <Form.Item label="网页防篡改" extra="定期检查文件完整性，防止文件被篡改">
+              <Form.Item name={['file_integrity', 'enabled']} label="启用网页防篡改" valuePropName="checked" noStyle>
+                <Switch />
+              </Form.Item>
+              
+              <Form.Item 
+                dependencies={[['file_integrity', 'enabled']]} 
+                noStyle
+              >
+                {({ getFieldValue }) => {
+                  const fileIntegrityEnabled = getFieldValue(['file_integrity', 'enabled']);
+                  if (!fileIntegrityEnabled) {
+                    return null;
+                  }
+                  return (
+                    <>
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            name={['file_integrity', 'check_interval']}
+                            label="检查间隔（秒）"
+                          >
+                            <Input type="number" placeholder="例如：300" min={10} />
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item
+                            name={['file_integrity', 'hash_algorithm']}
+                            label="哈希算法"
+                          >
+                            <Select>
+                              <Option value="md5">MD5</Option>
+                              <Option value="sha1">SHA-1</Option>
+                              <Option value="sha256">SHA-256</Option>
+                              <Option value="sha512">SHA-512</Option>
+                            </Select>
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    </>
+                  );
+                }}
+              </Form.Item>
+            </Form.Item>
           </Card>
 
-          {/* SSL配置 */}
-          <Card title="SSL配置" size="small">
-            <Form.Item name={['ssl', 'enabled']} label="启用SSL" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-            
-            {/* 证书选择，仅当启用SSL时显示 */}
-            <Form.Item 
-              dependencies={[['ssl', 'enabled']]} 
-              noStyle
-            >
-              {({ getFieldValue }) => {
-                const sslEnabled = getFieldValue(['ssl', 'enabled']);
-                if (!sslEnabled) {
-                  return null;
-                }
-                return (
-                  <Form.Item
-                    name={['ssl', 'sslCertificate']}
-                    label="选择证书"
-                    rules={[{ required: true, message: '请选择证书' }]}
-                  >
-                    <Select loading={sslLoading} placeholder="请选择证书">
-                      {certs.map(cert => (
-                        <Option key={cert} value={cert}>
-                          {cert}
-                        </Option>
-                      ))}
-                    </Select>
-                  </Form.Item>
-                );
-              }}
-            </Form.Item>
-          </Card>
+
         </Form>
       </Modal>
 
       {/* 文件上传弹窗 */}
       <Modal
-        title={`站点 "${selectedSite?.name}" 文件管理`}
+        title={`站点 "${currentSite?.name}" 文件管理`}
         open={uploadModalVisible}
         onCancel={() => setUploadModalVisible(false)}
         width={800}
@@ -1208,8 +1351,6 @@ const Sites: React.FC = () => {
           name="file"
           beforeUpload={beforeUpload}
           customRequest={customRequest}
-          onSuccess={handleUploadSuccess}
-          onError={handleUploadError}
           accept=".zip,.rar,.html,.css,.js,.json,.txt"
           multiple
           showUploadList={false} // 隐藏文件上传列表
@@ -1367,12 +1508,6 @@ const Sites: React.FC = () => {
             dataSource={fileList}
             rowKey="key"
             pagination={false}
-            onRow={(record) => ({
-              onContextMenu: (e) => {
-                e.preventDefault()
-                setSelectedFile(record)
-              }
-            })}
           />
         </div>
       </Modal>

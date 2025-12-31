@@ -1,7 +1,14 @@
-import axios from 'axios'
+import axios, { AxiosInstance } from 'axios'
+
+// 定义API响应类型
+export interface ApiResponse<T = any> {
+  code: number
+  message: string
+  data: T
+}
 
 // 创建axios实例
-const api = axios.create({
+const api: AxiosInstance = axios.create({
   baseURL: '/api/v1',
   timeout: 10000,
 })
@@ -27,6 +34,16 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// 重新定义axios方法的类型
+declare module 'axios' {
+  interface AxiosInstance {
+    get<T = any>(url: string, config?: any): Promise<ApiResponse<T>>
+    post<T = any>(url: string, data?: any, config?: any): Promise<ApiResponse<T>>
+    put<T = any>(url: string, data?: any, config?: any): Promise<ApiResponse<T>>
+    delete<T = any>(url: string, config?: any): Promise<ApiResponse<T>>
+  }
+}
 
 // 概览API
 export const overviewApi = {
@@ -55,17 +72,6 @@ export const routingApi = {
   deleteRule: (id: string) => api.delete(`/routing/rules/${id}`),
 }
 
-// SSL API
-export const sslApi = {
-  getStatus: (site?: string) => api.get('/ssl/status', { params: site ? { site } : {} }),
-  getCerts: (site?: string) => api.get('/ssl/certs', { params: site ? { site } : {} }),
-  addCert: (data: { site?: string; domain: string }) => api.post('/ssl/certs', data),
-  deleteCert: (domain: string, site?: string) => {
-    const params = site ? { site } : {};
-    return api.delete(`/ssl/certs/${domain}`, { params });
-  },
-}
-
 // 监控API
 export const monitoringApi = {
   getStats: () => api.get('/monitoring/stats'),
@@ -74,11 +80,11 @@ export const monitoringApi = {
 
 // 站点管理API
 export const sitesApi = {
-  getSites: () => api.get('/sites/'),
-  getSite: (name: string) => api.get(`/sites/${name}/`),
-  addSite: (site: any) => api.post('/sites/', site),
-  updateSite: (name: string, site: any) => api.put(`/sites/${name}/`, site),
-  deleteSite: (name: string) => api.delete(`/sites/${name}/`),
+  getSites: () => api.get('/sites'),
+  getSite: (name: string) => api.get(`/sites/${name}`),
+  addSite: (site: any) => api.post('/sites', site),
+  updateSite: (name: string, site: any) => api.put(`/sites/${name}`, site),
+  deleteSite: (name: string) => api.delete(`/sites/${name}`),
   // 静态资源管理API
   getFileList: (siteName: string, path: string) => api.get(`/sites/${siteName}/static`, { params: { path } }),
   uploadFile: (siteName: string, file: any, path: string, onUploadProgress?: (progressEvent: any) => void) => {
@@ -93,6 +99,12 @@ export const sitesApi = {
     formData.append('path', path)
     return api.post(`/sites/${siteName}/static/extract`, formData)
   },
+}
+
+// 爬虫日志API
+export const crawlerApi = {
+  getLogs: (params: { site?: string; startTime: string; endTime: string; page: number; pageSize: number }) => api.get('/crawler/logs', { params }),
+  getStats: (params: { site?: string; startTime: string; endTime: string; granularity: string }) => api.get('/crawler/stats', { params }),
 }
 
 // 系统API

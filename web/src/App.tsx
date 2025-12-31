@@ -7,11 +7,10 @@ import zhCN from 'antd/locale/zh_CN'
 import Overview from './pages/Overview/Overview'
 import Firewall from './pages/Firewall/Firewall'
 import Prerender from './pages/Prerender/Prerender'
-import SSL from './pages/SSL/SSL'
 import Monitoring from './pages/Monitoring/Monitoring'
 import Logs from './pages/Logs/Logs'
-import Settings from './pages/Settings/Settings'
 import Sites from './pages/Sites/Sites'
+import Crawler from './pages/Crawler/Crawler'
 
 // Import layout
 import MainLayout from './components/layouts/MainLayout'
@@ -61,10 +60,9 @@ function App() {
             <Route path="/sites" element={<Sites />} />
             <Route path="/firewall" element={<Firewall />} />
             <Route path="/prerender" element={<Prerender />} />
-            <Route path="/ssl" element={<SSL />} />
             <Route path="/monitoring" element={<Monitoring />} />
             <Route path="/logs" element={<Logs />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/crawler" element={<Crawler />} />
           </Routes>
         </MainLayout>
       </Router>

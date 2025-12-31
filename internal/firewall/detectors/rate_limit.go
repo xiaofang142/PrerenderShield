@@ -5,13 +5,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prerendershield/internal/config"
 	"github.com/prerendershield/internal/firewall/types"
 )
 
 // RateLimitDetector 频率限制检测器
 type RateLimitDetector struct {
-	mutex      sync.RWMutex
-	ipCounters map[string]*IPCounter
+	mutex           sync.RWMutex
+	ipCounters      map[string]*IPCounter
+	rateLimitConfig *config.RateLimitConfig
 }
 
 // IPCounter IP请求计数器
@@ -21,9 +23,10 @@ type IPCounter struct {
 }
 
 // NewRateLimitDetector 创建新的频率限制检测器
-func NewRateLimitDetector() *RateLimitDetector {
+func NewRateLimitDetector(rateLimitConfig *config.RateLimitConfig) *RateLimitDetector {
 	d := &RateLimitDetector{
-		ipCounters: make(map[string]*IPCounter),
+		ipCounters:      make(map[string]*IPCounter),
+		rateLimitConfig: rateLimitConfig,
 	}
 
 	// 启动清理过期请求的协程
@@ -35,6 +38,11 @@ func NewRateLimitDetector() *RateLimitDetector {
 // Detect 检测请求是否超过频率限制
 func (d *RateLimitDetector) Detect(req *http.Request) ([]types.Threat, error) {
 	threats := make([]types.Threat, 0)
+
+	// 如果频率限制未启用，直接返回
+	if d.rateLimitConfig == nil || !d.rateLimitConfig.Enabled {
+		return threats, nil
+	}
 
 	// 获取请求IP地址
 	ip := getClientIP(req)
@@ -57,12 +65,10 @@ func (d *RateLimitDetector) Detect(req *http.Request) ([]types.Threat, error) {
 		return threats, nil
 	}
 
-	// 检查是否超过频率限制
-	// 注意：实际实现中，应该从配置中获取requests和window
-	// 这里只是一个示例：100次请求/60秒
-	maxRequests := 100
-	window := 60 * time.Second
-	banTime := 3600 * time.Second
+	// 从配置中获取频率限制参数
+	maxRequests := d.rateLimitConfig.Requests
+	window := time.Duration(d.rateLimitConfig.Window) * time.Second
+	banTime := time.Duration(d.rateLimitConfig.BanTime) * time.Second
 
 	if d.exceedsRateLimit(ip, maxRequests, window) {
 		// 封禁IP

@@ -571,85 +571,10 @@ const Overview: React.FC = () => {
           </Row>
         </Card>
         
-        {/* Statistics Cards */}
-        <Row gutter={[16, 16]}>
-          <Col span={6}>
-            <Card className="stat-card">
-              <Statistic
-                title="总请求数"
-                value={stats.totalRequests}
-                prefix={<ArrowUpOutlined />}
-                valueStyle={{ color: '#3f8600' }}
-                suffix="今日"
-              />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card className="stat-card">
-              <Statistic
-                title="爬虫请求数"
-                value={stats.crawlerRequests}
-                prefix={<ArrowUpOutlined />}
-                valueStyle={{ color: '#3f8600' }}
-                suffix="今日"
-              />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card className="stat-card">
-              <Statistic
-                title="攻击拦截数"
-                value={stats.blockedRequests}
-                prefix={<ArrowDownOutlined />}
-                valueStyle={{ color: '#cf1322' }}
-                suffix="今日"
-              />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card className="stat-card">
-              <Statistic
-                title="缓存命中率"
-                value={stats.cacheHitRate}
-                prefix={<ArrowUpOutlined />}
-                valueStyle={{ color: '#1890ff' }}
-                suffix="%"
-              />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card className="stat-card">
-              <Statistic
-                title="活跃浏览器数"
-                value={stats.activeBrowsers}
-                valueStyle={{ color: '#faad14' }}
-              />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card className="stat-card">
-              <Statistic
-                title="活跃站点数"
-                value={stats.activeSites}
-                valueStyle={{ color: '#52c41a' }}
-              />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card className="stat-card">
-              <Statistic
-                title="SSL证书数"
-                value={stats.sslCertificates}
-                valueStyle={{ color: '#1890ff' }}
-              />
-            </Card>
-          </Col>
-        </Row>
-        
-        {/* 访问统计 */}
+        {/* 访问统计 - 首屏第一个元素 */}
         <Card className="card" style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0 }}>访问统计</h3>
+            <h3 style={{ margin: 0 }}>网站访问量地域分布</h3>
             <div>
               <span style={{ marginRight: 8 }}>地图类型：</span>
               <Select
@@ -745,6 +670,81 @@ const Overview: React.FC = () => {
             ]}
           />
         </Card>
+        
+        {/* Statistics Cards */}
+        <Row gutter={[16, 16]}>
+          <Col span={6}>
+            <Card className="stat-card">
+              <Statistic
+                title="总请求数"
+                value={stats.totalRequests}
+                prefix={<ArrowUpOutlined />}
+                valueStyle={{ color: '#3f8600' }}
+                suffix="今日"
+              />
+            </Card>
+          </Col>
+          <Col span={6}>
+            <Card className="stat-card">
+              <Statistic
+                title="爬虫请求数"
+                value={stats.crawlerRequests}
+                prefix={<ArrowUpOutlined />}
+                valueStyle={{ color: '#3f8600' }}
+                suffix="今日"
+              />
+            </Card>
+          </Col>
+          <Col span={6}>
+            <Card className="stat-card">
+              <Statistic
+                title="攻击拦截数"
+                value={stats.blockedRequests}
+                prefix={<ArrowDownOutlined />}
+                valueStyle={{ color: '#cf1322' }}
+                suffix="今日"
+              />
+            </Card>
+          </Col>
+          <Col span={6}>
+            <Card className="stat-card">
+              <Statistic
+                title="缓存命中率"
+                value={stats.cacheHitRate}
+                prefix={<ArrowUpOutlined />}
+                valueStyle={{ color: '#1890ff' }}
+                suffix="%"
+              />
+            </Card>
+          </Col>
+          <Col span={6}>
+            <Card className="stat-card">
+              <Statistic
+                title="活跃浏览器数"
+                value={stats.activeBrowsers}
+                valueStyle={{ color: '#faad14' }}
+              />
+            </Card>
+          </Col>
+          <Col span={6}>
+            <Card className="stat-card">
+              <Statistic
+                title="活跃站点数"
+                value={stats.activeSites}
+                valueStyle={{ color: '#52c41a' }}
+              />
+            </Card>
+          </Col>
+          <Col span={6}>
+            <Card className="stat-card">
+              <Statistic
+                title="SSL证书数"
+                value={stats.sslCertificates}
+                valueStyle={{ color: '#1890ff' }}
+              />
+            </Card>
+          </Col>
+        </Row>
         
         {/* Traffic Trend Chart */}
         <Card className="card">

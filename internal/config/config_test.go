@@ -14,7 +14,8 @@ func TestLoadConfig(t *testing.T) {
 	configPath := filepath.Join(tempDir, "config.yml")
 
 	configContent := `server:
-  port: 8080
+  api_port: 9598
+  console_port: 9597
   address: "0.0.0.0"
 sites:
   - id: "test-site"
@@ -39,7 +40,8 @@ sites:
 	assert.NotNil(t, config)
 
 	// 验证配置值
-	assert.Equal(t, 8080, config.Server.Port)
+	assert.Equal(t, 9598, config.Server.APIPort)
+	assert.Equal(t, 9597, config.Server.ConsolePort)
 	assert.Equal(t, "0.0.0.0", config.Server.Address)
 	assert.True(t, config.Sites[0].Firewall.Enabled)
 	assert.Equal(t, "/tmp/rules", config.Sites[0].Firewall.RulesPath)
@@ -53,7 +55,8 @@ func TestLoadConfigWithEnvVars(t *testing.T) {
 	configPath := filepath.Join(tempDir, "config.yml")
 
 	configContent := `server:
-  port: 8080
+  api_port: 9598
+  console_port: 9597
   address: "0.0.0.0"
 `
 
@@ -62,9 +65,13 @@ func TestLoadConfigWithEnvVars(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 设置环境变量覆盖
-	err = os.Setenv("SERVER_PORT", "9090")
+	err = os.Setenv("SERVER_API_PORT", "9090")
 	assert.NoError(t, err)
-	defer os.Unsetenv("SERVER_PORT")
+	defer os.Unsetenv("SERVER_API_PORT")
+
+	err = os.Setenv("SERVER_CONSOLE_PORT", "9091")
+	assert.NoError(t, err)
+	defer os.Unsetenv("SERVER_CONSOLE_PORT")
 
 	// 测试加载配置
 	config, err := LoadConfig(configPath)
@@ -72,7 +79,8 @@ func TestLoadConfigWithEnvVars(t *testing.T) {
 	assert.NotNil(t, config)
 
 	// 验证环境变量覆盖了配置文件的值
-	assert.Equal(t, 9090, config.Server.Port)
+	assert.Equal(t, 9090, config.Server.APIPort)
+	assert.Equal(t, 9091, config.Server.ConsolePort)
 	assert.Equal(t, "0.0.0.0", config.Server.Address) // 未被覆盖，使用配置文件值
 }
 
@@ -84,7 +92,8 @@ func TestDefaultConfig(t *testing.T) {
 	assert.NotNil(t, config)
 
 	// 验证默认值
-	assert.Equal(t, 8080, config.Server.Port)
+	assert.Equal(t, 9598, config.Server.APIPort)
+	assert.Equal(t, 9597, config.Server.ConsolePort)
 	assert.Equal(t, "0.0.0.0", config.Server.Address)
 	assert.True(t, config.Sites[0].Firewall.Enabled)
 	assert.Equal(t, "/etc/prerender-shield/rules", config.Sites[0].Firewall.RulesPath)

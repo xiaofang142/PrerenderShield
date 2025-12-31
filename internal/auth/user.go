@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -127,14 +128,49 @@ func (m *UserManager) loadUsers() {
 	}
 	defer file.Close()
 
+	// 获取文件大小
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return
+	}
+	fileSize := fileInfo.Size()
+	if fileSize == 0 {
+		return
+	}
+
+	// 读取文件内容
+	content := make([]byte, fileSize)
+	_, err = file.Read(content)
+	if err != nil {
+		return
+	}
+
 	// 解析JSON
-	// 这里简化处理，实际项目中应该使用json.Unmarshal
-	// 暂时返回空map
+	var users []*User
+	if err := json.Unmarshal(content, &users); err != nil {
+		return
+	}
+
+	// 将用户添加到map
+	for _, user := range users {
+		m.users[user.ID] = user
+	}
 }
 
 // saveUsers 保存用户数据
 func (m *UserManager) saveUsers() error {
-	// 这里简化处理，实际项目中应该使用json.Marshal
-	// 暂时返回nil
-	return nil
+	// 将map转换为切片
+	var users []*User
+	for _, user := range m.users {
+		users = append(users, user)
+	}
+
+	// 序列化JSON
+	content, err := json.MarshalIndent(users, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	// 写入文件
+	return os.WriteFile(m.dataPath, content, 0644)
 }

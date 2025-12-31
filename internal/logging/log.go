@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -26,36 +27,39 @@ const (
 
 // Logger 日志记录器
 type Logger struct {
-	debugLogger *log.Logger
-	infoLogger  *log.Logger
-	warnLogger  *log.Logger
-	errorLogger *log.Logger
-	fatalLogger *log.Logger
-	auditLogger *log.Logger
-	level       LogLevel
+	debugLogger  *log.Logger
+	infoLogger   *log.Logger
+	warnLogger   *log.Logger
+	errorLogger  *log.Logger
+	fatalLogger  *log.Logger
+	auditLogger  *log.Logger
+	auditLogs    []AuditLogEntry
+	level        LogLevel
 	auditEnabled bool
+	maxAuditLogs int
+	mutex        sync.Mutex
 }
 
 // Config 日志配置
 type Config struct {
-	Level       string
-	Output      string
+	Level        string
+	Output       string
 	AuditEnabled bool
 	AuditOutput  string
 }
 
 // AuditLogEntry 审计日志条目
 type AuditLogEntry struct {
-	Timestamp    time.Time              `json:"timestamp"`
-	Level        string                `json:"level"`
-	EventType    string                `json:"event_type"`
-	User         string                `json:"user,omitempty"`
-	IP           string                `json:"ip,omitempty"`
-	Action       string                `json:"action"`
-	Resource     string                `json:"resource,omitempty"`
-	Details      map[string]interface{} `json:"details,omitempty"`
-	Result       string                `json:"result"`
-	Message      string                `json:"message"`
+	Timestamp time.Time              `json:"timestamp"`
+	Level     string                 `json:"level"`
+	EventType string                 `json:"event_type"`
+	User      string                 `json:"user,omitempty"`
+	IP        string                 `json:"ip,omitempty"`
+	Action    string                 `json:"action"`
+	Resource  string                 `json:"resource,omitempty"`
+	Details   map[string]interface{} `json:"details,omitempty"`
+	Result    string                 `json:"result"`
+	Message   string                 `json:"message"`
 }
 
 // NewLogger 创建新的日志记录器
@@ -91,13 +95,15 @@ func NewLogger(config Config) *Logger {
 	// 创建基本日志记录器
 	flags := log.Ldate | log.Ltime | log.Lmicroseconds
 	logger := &Logger{
-		debugLogger: log.New(output, "[DEBUG] ", flags),
-		infoLogger:  log.New(output, "[INFO]  ", flags),
-		warnLogger:  log.New(output, "[WARN]  ", flags),
-		errorLogger: log.New(output, "[ERROR] ", flags),
-		fatalLogger: log.New(output, "[FATAL] ", flags),
-		level:       level,
+		debugLogger:  log.New(output, "[DEBUG] ", flags),
+		infoLogger:   log.New(output, "[INFO]  ", flags),
+		warnLogger:   log.New(output, "[WARN]  ", flags),
+		errorLogger:  log.New(output, "[ERROR] ", flags),
+		fatalLogger:  log.New(output, "[FATAL] ", flags),
+		auditLogs:    make([]AuditLogEntry, 0, 1000),
+		level:        level,
 		auditEnabled: config.AuditEnabled,
+		maxAuditLogs: 10000, // 最多保存10000条审计日志
 	}
 
 	// 初始化审计日志记录器
@@ -166,6 +172,18 @@ func (l *Logger) Audit(entry AuditLogEntry) {
 		entry.Timestamp = time.Now()
 	}
 
+	// 将日志添加到内存缓存
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	// 添加新日志到开头
+	l.auditLogs = append([]AuditLogEntry{entry}, l.auditLogs...)
+
+	// 如果超过最大日志数量，删除最旧的日志
+	if len(l.auditLogs) > l.maxAuditLogs {
+		l.auditLogs = l.auditLogs[:l.maxAuditLogs]
+	}
+
 	// 转换为JSON格式
 	jsonData, err := json.Marshal(entry)
 	if err != nil {
@@ -219,6 +237,43 @@ func (l *Logger) LogThreatDetection(ip string, threatType string, details map[st
 	l.Info("Threat detected: %s from %s, result: %s", threatType, ip, result)
 }
 
+// GetAuditLogs 获取审计日志，支持分页
+func (l *Logger) GetAuditLogs(page, pageSize int) ([]AuditLogEntry, int) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	// 计算总页数
+	total := len(l.auditLogs)
+
+	// 验证参数
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	// 计算起始和结束索引
+	start := (page - 1) * pageSize
+	end := start + pageSize
+
+	// 如果结束索引超过总日志数，调整结束索引
+	if end > total {
+		end = total
+	}
+
+	// 如果起始索引超过总日志数，返回空列表
+	if start >= total {
+		return []AuditLogEntry{}, total
+	}
+
+	// 返回分页日志
+	return l.auditLogs[start:end], total
+}
+
 // LogEntry 日志条目
 type LogEntry struct {
 	Time    time.Time
@@ -238,6 +293,7 @@ type LoggerInterface interface {
 	LogSecurityEvent(eventType string, ip string, details map[string]interface{}, result string, message string)
 	LogAdminAction(user string, ip string, action string, resource string, details map[string]interface{}, result string, message string)
 	LogThreatDetection(ip string, threatType string, details map[string]interface{}, result string, message string)
+	GetAuditLogs(page, pageSize int) ([]AuditLogEntry, int)
 }
 
 // DefaultLogger 默认日志记录器
@@ -245,8 +301,8 @@ var DefaultLogger *Logger
 
 func init() {
 	DefaultLogger = NewLogger(Config{
-		Level:       "info",
-		Output:      "stdout",
+		Level:        "info",
+		Output:       "stdout",
 		AuditEnabled: true,
 		AuditOutput:  "stdout",
 	})

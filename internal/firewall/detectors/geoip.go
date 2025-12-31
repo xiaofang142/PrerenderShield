@@ -5,23 +5,32 @@ import (
 	"strings"
 
 	"github.com/oschwald/geoip2-golang"
+	"github.com/prerendershield/internal/config"
 	"github.com/prerendershield/internal/firewall/types"
 )
 
 // GeoIPDetector 地理位置访问控制检测器
 type GeoIPDetector struct {
-	reader *geoip2.Reader
+	reader      *geoip2.Reader
+	geoIPConfig *config.GeoIPConfig
 }
 
 // NewGeoIPDetector 创建新的地理位置访问控制检测器
-func NewGeoIPDetector() *GeoIPDetector {
+func NewGeoIPDetector(geoIPConfig *config.GeoIPConfig) *GeoIPDetector {
 	// 这里应该加载GeoIP数据库，暂时返回一个空实例
-	return &GeoIPDetector{}
+	return &GeoIPDetector{
+		geoIPConfig: geoIPConfig,
+	}
 }
 
 // Detect 检测请求的地理位置是否在允许列表中
 func (d *GeoIPDetector) Detect(req *http.Request) ([]types.Threat, error) {
 	threats := make([]types.Threat, 0)
+
+	// 如果地理位置访问控制未启用，直接返回
+	if d.geoIPConfig == nil || !d.geoIPConfig.Enabled {
+		return threats, nil
+	}
 
 	// 获取请求IP地址
 	ip := getClientIP(req)
@@ -34,22 +43,45 @@ func (d *GeoIPDetector) Detect(req *http.Request) ([]types.Threat, error) {
 	countryCode := "CN"
 
 	// 检查是否在阻止列表中
-	// 注意：实际实现中，应该从配置中获取allow_list和block_list
-	// 这里只是一个示例
-	blockList := []string{"US", "JP"} // 模拟阻止美国和日本的请求
-	for _, blockCode := range blockList {
-		if countryCode == blockCode {
+	if len(d.geoIPConfig.BlockList) > 0 {
+		for _, blockCode := range d.geoIPConfig.BlockList {
+			if countryCode == blockCode {
+				threats = append(threats, types.Threat{
+					Type:     "geoip",
+					SubType:  "country_block",
+					Severity: "high",
+					Message:  "Request from blocked country",
+					SourceIP: ip,
+					Details: map[string]interface{}{
+						"country": countryCode,
+					},
+				})
+				return threats, nil
+			}
+		}
+	}
+
+	// 检查是否在允许列表中（如果允许列表不为空）
+	if len(d.geoIPConfig.AllowList) > 0 {
+		allowFound := false
+		for _, allowCode := range d.geoIPConfig.AllowList {
+			if countryCode == allowCode {
+				allowFound = true
+				break
+			}
+		}
+		if !allowFound {
 			threats = append(threats, types.Threat{
 				Type:     "geoip",
-				SubType:  "country_block",
+				SubType:  "country_allow",
 				Severity: "high",
-				Message:  "Request from blocked country",
+				Message:  "Request from country not in allow list",
 				SourceIP: ip,
 				Details: map[string]interface{}{
 					"country": countryCode,
 				},
 			})
-			break
+			return threats, nil
 		}
 	}
 

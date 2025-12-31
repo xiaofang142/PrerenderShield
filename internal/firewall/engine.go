@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prerendershield/internal/config"
 	"github.com/prerendershield/internal/firewall/detectors"
 	"github.com/prerendershield/internal/firewall/types"
 )
@@ -71,10 +72,13 @@ type Logger interface {
 
 // Config 防火墙配置
 type Config struct {
-	RulesPath    string
-	ActionConfig ActionConfig
-	CacheTTL     int    // 请求缓存过期时间（秒）
-	StaticDir    string // 静态文件目录
+	RulesPath           string
+	ActionConfig        ActionConfig
+	CacheTTL            int                         // 请求缓存过期时间（秒）
+	StaticDir           string                      // 静态文件目录
+	GeoIPConfig         *config.GeoIPConfig         // 地理位置访问控制配置
+	RateLimitConfig     *config.RateLimitConfig     // 频率限制配置
+	FileIntegrityConfig *config.FileIntegrityConfig // 网页防篡改配置
 }
 
 // ActionConfig 动作配置
@@ -182,9 +186,9 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 	e.owaspDetectors["sensitive-data"] = detectors.NewSensitiveDataDetector(ruleManager)
 
 	// 初始化核心检测器
-	e.coreDetectors = append(e.coreDetectors, detectors.NewGeoIPDetector())
-	e.coreDetectors = append(e.coreDetectors, detectors.NewRateLimitDetector())
-	e.coreDetectors = append(e.coreDetectors, detectors.NewFileIntegrityDetector(config.StaticDir))
+	e.coreDetectors = append(e.coreDetectors, detectors.NewGeoIPDetector(config.GeoIPConfig))
+	e.coreDetectors = append(e.coreDetectors, detectors.NewRateLimitDetector(config.RateLimitConfig))
+	e.coreDetectors = append(e.coreDetectors, detectors.NewFileIntegrityDetector(config.StaticDir, config.FileIntegrityConfig))
 
 	// 启动缓存清理协程
 	go e.cleanCacheLoop()

@@ -3,7 +3,8 @@
 # 服务器配置
 server:
   address: "0.0.0.0"
-  port: 8080
+  api_port: 9598
+  console_port: 9597
 
 # 防火墙配置
 firewall:

@@ -46,16 +46,18 @@ type SiteConfig struct {
 	Domains []string `yaml:"domains" json:"domains"` // 支持多个域名解析到同一个站点
 	// 站点端口配置，支持一个站点一个端口
 	Port int `yaml:"port" json:"port"`
+	// 站点模式：proxy(代理已有应用), static(静态资源站), redirect(重定向)
+	Mode string `yaml:"mode" json:"mode"`
 	// 代理配置
 	Proxy ProxyConfig `yaml:"proxy" json:"proxy"`
+	// 重定向配置
+	Redirect RedirectConfig `yaml:"redirect" json:"redirect"`
 	// 防火墙配置
 	Firewall FirewallConfig `yaml:"firewall" json:"firewall"`
 	// 预渲染配置
 	Prerender PrerenderConfig `yaml:"prerender" json:"prerender"`
 	// 路由配置
 	Routing RoutingConfig `yaml:"routing" json:"routing"`
-	// SSL配置
-	SSL SSLConfig `yaml:"ssl" json:"ssl"`
 	// 网页防篡改配置
 	FileIntegrityConfig FileIntegrityConfig `yaml:"file_integrity" json:"FileIntegrityConfig"`
 }
@@ -67,11 +69,15 @@ type FileIntegrityConfig struct {
 	HashAlgorithm string `yaml:"hash_algorithm" json:"HashAlgorithm"` // 哈希算法（md5, sha256等）
 }
 
+// RedirectConfig 重定向配置
+type RedirectConfig struct {
+	StatusCode int    `yaml:"status_code" json:"StatusCode"`
+	TargetURL  string `yaml:"target_url" json:"TargetURL"`
+}
+
 // ProxyConfig 代理配置
 type ProxyConfig struct {
-	Enabled   bool   `yaml:"enabled" json:"Enabled"`
 	TargetURL string `yaml:"target_url" json:"TargetURL"`
-	Type      string `yaml:"type" json:"Type"` // direct: 直接解析域名, proxy: 反向代理
 }
 
 // Config 应用全局配置
@@ -92,8 +98,9 @@ type Config struct {
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
-	Address string `yaml:"address"`
-	Port    int    `yaml:"port"`
+	Address     string `yaml:"address"`
+	APIPort     int    `yaml:"api_port"`
+	ConsolePort int    `yaml:"console_port"`
 }
 
 // FirewallConfig 防火墙配置
@@ -163,18 +170,6 @@ type RouteRule struct {
 	Pattern  string `yaml:"pattern" json:"Pattern"`
 	Action   string `yaml:"action" json:"Action"`
 	Priority int    `yaml:"priority" json:"Priority"`
-}
-
-// SSLConfig SSL配置
-type SSLConfig struct {
-	Enabled       bool     `yaml:"enabled" json:"Enabled"`
-	LetEncrypt    bool     `yaml:"let_encrypt" json:"LetEncrypt"`
-	Domains       []string `yaml:"domains" json:"Domains"`
-	ACMEEmail     string   `yaml:"acme_email" json:"ACMEEmail"`
-	ACMEServer    string   `yaml:"acme_server" json:"ACMEServer"`
-	ACMEChallenge string   `yaml:"acme_challenge" json:"ACMEChallenge"`
-	CertPath      string   `yaml:"cert_path" json:"CertPath"`
-	KeyPath       string   `yaml:"key_path" json:"KeyPath"`
 }
 
 // CacheConfig 缓存配置
@@ -383,6 +378,16 @@ func defaultConfig() *Config {
 		Name:    "默认站点",
 		Domains: []string{"localhost"}, // 支持多个域名
 		Port:    8081,                  // 默认端口
+		Mode:    "static",              // 默认模式：静态资源站
+		// 代理配置
+		Proxy: ProxyConfig{
+			TargetURL: "",
+		},
+		// 重定向配置
+		Redirect: RedirectConfig{
+			StatusCode: 301,
+			TargetURL:  "",
+		},
 		Firewall: FirewallConfig{
 			Enabled:   true,
 			RulesPath: "/etc/prerender-shield/rules",
@@ -426,16 +431,6 @@ func defaultConfig() *Config {
 		Routing: RoutingConfig{
 			Rules: []RouteRule{},
 		},
-		SSL: SSLConfig{
-			Enabled:       false,
-			LetEncrypt:    false,
-			Domains:       []string{},
-			ACMEEmail:     "",
-			ACMEServer:    "https://acme-v02.api.letsencrypt.org/directory",
-			ACMEChallenge: "http01",
-			CertPath:      "/etc/prerender-shield/certs/cert.pem",
-			KeyPath:       "/etc/prerender-shield/certs/key.pem",
-		},
 		// 网页防篡改配置
 		FileIntegrityConfig: FileIntegrityConfig{
 			Enabled:       false,
@@ -446,8 +441,9 @@ func defaultConfig() *Config {
 
 	return &Config{
 		Server: ServerConfig{
-			Address: "0.0.0.0",
-			Port:    8080,
+			Address:     "0.0.0.0",
+			APIPort:     9598,
+			ConsolePort: 9597,
 		},
 		Dirs: DirsConfig{
 			DataDir:        "./data",     // 数据目录
@@ -476,7 +472,8 @@ func defaultConfig() *Config {
 func loadFromEnv(cfg *Config) {
 	// 服务器配置
 	cfg.Server.Address = getEnv("SERVER_ADDRESS", cfg.Server.Address)
-	cfg.Server.Port = getEnvAsInt("SERVER_PORT", cfg.Server.Port)
+	cfg.Server.APIPort = getEnvAsInt("SERVER_API_PORT", cfg.Server.APIPort)
+	cfg.Server.ConsolePort = getEnvAsInt("SERVER_CONSOLE_PORT", cfg.Server.ConsolePort)
 
 	// 目录配置
 	cfg.Dirs.DataDir = getEnv("DIRS_DATA_DIR", cfg.Dirs.DataDir)
@@ -536,4 +533,33 @@ func getEnvAsFloat(key string, defaultValue float64) float64 {
 		}
 	}
 	return defaultValue
+}
+
+// SaveConfig 保存当前配置到文件
+func (cm *ConfigManager) SaveConfig() error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	if cm.configPath == "" {
+		return nil // 没有配置文件路径，无法保存
+	}
+
+	// 将配置序列化为YAML格式
+	data, err := yaml.Marshal(cm.config)
+	if err != nil {
+		return err
+	}
+
+	// 写入配置文件
+	if err := ioutil.WriteFile(cm.configPath, data, 0644); err != nil {
+		return err
+	}
+
+	// 更新配置文件修改时间
+	info, err := os.Stat(cm.configPath)
+	if err == nil {
+		cm.lastModified = info.ModTime()
+	}
+
+	return nil
 }
