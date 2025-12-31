@@ -254,6 +254,11 @@ var statsStore = struct {
 	activeBrowsers:  0,
 }
 
+// formatFloat 格式化浮点数，保留两位小数
+func formatFloat(f float64) float64 {
+	return float64(int(f*100)) / 100
+}
+
 // GetStats 获取统计数据
 func (m *Monitor) GetStats() map[string]interface{} {
 	statsStore.mu.Lock()
@@ -263,6 +268,7 @@ func (m *Monitor) GetStats() map[string]interface{} {
 	var cacheHitRate float64 = 0
 	if statsStore.cacheHits+statsStore.cacheMisses > 0 {
 		cacheHitRate = (float64(statsStore.cacheHits) / float64(statsStore.cacheHits+statsStore.cacheMisses)) * 100
+		cacheHitRate = formatFloat(cacheHitRate)
 	}
 
 	return map[string]interface{}{

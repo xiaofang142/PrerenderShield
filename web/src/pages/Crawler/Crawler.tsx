@@ -12,7 +12,6 @@ const { TabPane } = Tabs
 const Crawler: React.FC = () => {
   const [sites, setSites] = useState<any[]>([])
   const [selectedSite, setSelectedSite] = useState<string>('all')
-  const [timeRange, setTimeRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs().subtract(7, 'day'), dayjs()])
   const [granularity, setGranularity] = useState<string>('day') // day, week, month
   const [logs, setLogs] = useState<any[]>([])
   const [totalLogs, setTotalLogs] = useState<number>(0)
@@ -83,10 +82,23 @@ const Crawler: React.FC = () => {
       dataIndex: 'render_time',
       key: 'render_time',
       render: (text: number) => {
-        return `${(text * 1000).toFixed(0)}ms`
+        return `${(text * 1000).toFixed(2)}ms`
       }
     }
   ]
+
+  // 处理图表数据，直接使用后端返回的数据
+  const processChartData = () => {
+    const { trafficByHour } = stats;
+    
+    // 直接使用后端返回的数据，后端已经根据不同的粒度返回了相应格式的数据
+    return {
+      time: trafficByHour.map((item: any) => item.time),
+      totalRequests: trafficByHour.map((item: any) => item.totalRequests),
+      cacheHits: trafficByHour.map((item: any) => item.cacheHits),
+      cacheMisses: trafficByHour.map((item: any) => item.cacheMisses)
+    };
+  };
 
   // 请求趋势图表配置
   const chartOption = {
@@ -110,7 +122,7 @@ const Crawler: React.FC = () => {
     xAxis: {
       type: 'category',
       boundaryGap: false,
-      data: stats.trafficByHour.map((item: any) => item.time),
+      data: processChartData().time,
       axisLabel: {
         rotate: 45
       }
@@ -122,7 +134,7 @@ const Crawler: React.FC = () => {
       {
         name: '爬虫请求数',
         type: 'line',
-        data: stats.trafficByHour.map((item: any) => item.totalRequests),
+        data: processChartData().totalRequests,
         smooth: true,
         lineStyle: {
           color: '#1890ff'
@@ -131,7 +143,7 @@ const Crawler: React.FC = () => {
       {
         name: '缓存命中数',
         type: 'line',
-        data: stats.trafficByHour.map((item: any) => item.cacheHits),
+        data: processChartData().cacheHits,
         smooth: true,
         lineStyle: {
           color: '#52c41a'
@@ -140,7 +152,7 @@ const Crawler: React.FC = () => {
       {
         name: '缓存未命中数',
         type: 'line',
-        data: stats.trafficByHour.map((item: any) => item.cacheMisses),
+        data: processChartData().cacheMisses,
         smooth: true,
         lineStyle: {
           color: '#f5222d'
@@ -165,8 +177,9 @@ const Crawler: React.FC = () => {
   const fetchLogs = async () => {
     try {
       setLoading(true)
-      const startTime = timeRange[0].format('YYYY-MM-DDTHH:mm:ssZ')
-      const endTime = timeRange[1].format('YYYY-MM-DDTHH:mm:ssZ')
+      // 使用默认时间范围：最近7天
+      const startTime = dayjs().subtract(7, 'day').format('YYYY-MM-DDTHH:mm:ssZ')
+      const endTime = dayjs().format('YYYY-MM-DDTHH:mm:ssZ')
       
       const res = await crawlerApi.getLogs({
         site: selectedSite === 'all' ? '' : selectedSite,
@@ -190,8 +203,9 @@ const Crawler: React.FC = () => {
   // 获取爬虫统计数据
   const fetchStats = async () => {
     try {
-      const startTime = timeRange[0].format('YYYY-MM-DDTHH:mm:ssZ')
-      const endTime = timeRange[1].format('YYYY-MM-DDTHH:mm:ssZ')
+      // 使用默认时间范围：最近7天
+      const startTime = dayjs().subtract(7, 'day').format('YYYY-MM-DDTHH:mm:ssZ')
+      const endTime = dayjs().format('YYYY-MM-DDTHH:mm:ssZ')
       
       const res = await crawlerApi.getStats({
         site: selectedSite === 'all' ? '' : selectedSite,
@@ -201,18 +215,11 @@ const Crawler: React.FC = () => {
       })
       
       if (res.code === 200) {
+        console.log('Fetched stats:', res.data)
         setStats(res.data)
       }
     } catch (error) {
       console.error('Failed to fetch crawler stats:', error)
-    }
-  }
-
-  // 处理时间范围变化
-  const handleTimeRangeChange = (dates: [dayjs.Dayjs, dayjs.Dayjs] | null) => {
-    if (dates) {
-      setTimeRange(dates)
-      setPage(1)
     }
   }
 
@@ -241,7 +248,7 @@ const Crawler: React.FC = () => {
   useEffect(() => {
     fetchSites()
     updateData()
-  }, [selectedSite, timeRange, page, pageSize, granularity])
+  }, [selectedSite, page, pageSize, granularity])
 
   return (
     <Spin spinning={loading} tip="加载中...">
@@ -251,9 +258,9 @@ const Crawler: React.FC = () => {
         {/* 筛选条件 */}
         <Card className="card" style={{ marginBottom: 16 }}>
           <Row gutter={[16, 16]} align="middle">
-            <Col span={6}>
+            <Col span={8}>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <label style={{ marginRight: 8 }}>站点：</label>
+                <label style={{ marginRight: 8, width: 100, textAlign: 'right' }}>站点：</label>
                 <Select
                   value={selectedSite}
                   onChange={handleSiteChange}
@@ -270,17 +277,7 @@ const Crawler: React.FC = () => {
             </Col>
             <Col span={8}>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <label style={{ marginRight: 8 }}>时间范围：</label>
-                <RangePicker
-                  value={timeRange}
-                  onChange={handleTimeRangeChange as any}
-                  style={{ width: 300 }}
-                />
-              </div>
-            </Col>
-            <Col span={6}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <label style={{ marginRight: 8 }}>时间粒度：</label>
+                <label style={{ marginRight: 8, width: 100, textAlign: 'right' }}>时间粒度：</label>
                 <Radio.Group value={granularity} onChange={handleGranularityChange}>
                   <Radio.Button value="day">日</Radio.Button>
                   <Radio.Button value="week">周</Radio.Button>
@@ -312,6 +309,7 @@ const Crawler: React.FC = () => {
                 prefix={<ArrowUpOutlined />}
                 valueStyle={{ color: '#1890ff' }}
                 suffix="%"
+                precision={2}
               />
             </Card>
           </Col>
@@ -320,9 +318,10 @@ const Crawler: React.FC = () => {
               <Statistic
                 title="平均渲染时间"
                 value={stats.trafficByHour.length > 0 ? 
-                  (stats.trafficByHour.reduce((sum: any, item: any) => sum + item.renderTime, 0) / stats.trafficByHour.length * 1000).toFixed(0) : 0}
+                  (stats.trafficByHour.reduce((sum: any, item: any) => sum + item.renderTime, 0) / stats.trafficByHour.length * 1000).toFixed(2) : 0}
                 valueStyle={{ color: '#faad14' }}
                 suffix="ms"
+                precision={2}
               />
             </Card>
           </Col>

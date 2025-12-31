@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, Button, Table, Modal, Input, message, Switch } from 'antd'
-import { BarChartOutlined, BellOutlined, ReloadOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Card, Row, Col, Statistic, message } from 'antd'
 import { monitoringApi } from '../../services/api'
 import BaseChart from '../../components/charts/BaseChart'
-
-const { Search } = Input
 
 const Monitoring: React.FC = () => {
   const [stats, setStats] = useState({
@@ -13,13 +10,11 @@ const Monitoring: React.FC = () => {
     memoryUsage: 67.8,
     diskUsage: 45.2,
   })
-  const [loading, setLoading] = useState(true)
-  const [logs, setLogs] = useState<any[]>([])
 
   // 图表配置
   const cpuChartOption = {
     tooltip: {
-      trigger: 'axis',
+      trigger: 'item' as const,
     },
     series: [
       {
@@ -42,7 +37,7 @@ const Monitoring: React.FC = () => {
 
   const memoryChartOption = {
     tooltip: {
-      trigger: 'axis',
+      trigger: 'item' as const,
     },
     series: [
       {
@@ -65,7 +60,7 @@ const Monitoring: React.FC = () => {
 
   const diskChartOption = {
     tooltip: {
-      trigger: 'axis',
+      trigger: 'item' as const,
     },
     series: [
       {
@@ -86,58 +81,18 @@ const Monitoring: React.FC = () => {
     ],
   }
 
-  // 表格列配置
-  const logColumns = [
-    {
-      title: '时间',
-      dataIndex: 'time',
-      key: 'time',
-    },
-    {
-      title: '类型',
-      dataIndex: 'type',
-      key: 'type',
-      render: (text: string) => {
-        const color = text === 'error' ? '#f5222d' : text === 'warning' ? '#faad14' : '#1890ff'
-        return <span style={{ color }}>{text}</span>
-      },
-    },
-    {
-      title: '消息',
-      dataIndex: 'message',
-      key: 'message',
-      ellipsis: true,
-    },
-    {
-      title: '详情',
-      dataIndex: 'detail',
-      key: 'detail',
-      ellipsis: true,
-    },
-  ]
-
   // 获取监控数据
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setLoading(true)
-        const [statsRes, logsRes] = await Promise.all([
-          monitoringApi.getStats(),
-          monitoringApi.getLogs(),
-        ])
+        const statsRes = await monitoringApi.getStats()
         
         if (statsRes.code === 200) {
           setStats(statsRes.data)
         }
-        
-        if (logsRes.code === 200) {
-          setLogs(logsRes.data)
-        }
       } catch (error) {
         console.error('Failed to fetch monitoring data:', error)
         message.error('获取监控数据失败')
-      } finally {
-        setLoading(false)
       }
     }
 
@@ -216,18 +171,7 @@ const Monitoring: React.FC = () => {
         </Row>
       </Card>
 
-      {/* 日志列表 */}
-      <Card className="card" title="系统日志">
-        <Table
-          columns={logColumns}
-          dataSource={logs}
-          rowKey="time"
-          loading={loading}
-          pagination={{ pageSize: 10 }}
-          scroll={{ x: 800 }}
-          emptyText="暂无日志"
-        />
-      </Card>
+
     </div>
   )
 }

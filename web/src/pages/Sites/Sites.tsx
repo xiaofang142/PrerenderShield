@@ -4,7 +4,7 @@ import {
   PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, UploadOutlined, 
   UnorderedListOutlined, CloudUploadOutlined, FolderOpenOutlined, 
   FolderOutlined, FileOutlined, FolderOutlined as NewFolderOutlined, FileAddOutlined, UpOutlined, 
-  DownloadOutlined, UnorderedListOutlined as ExtractOutlined
+  DownloadOutlined, UnorderedListOutlined as ExtractOutlined, ReloadOutlined
 } from '@ant-design/icons'
 import { sitesApi, prerenderApi } from '../../services/api'
 import type { UploadProps } from 'antd'
@@ -165,131 +165,68 @@ const Sites: React.FC = () => {
   const fetchSites = async () => {
     try {
       setLoading(true)
-      const res = await sitesApi.getSites()
-      console.log('Raw API response:', res);
-      // 直接使用res，因为API响应拦截器已经返回了response.data
-      if (res.code === 200) {
-        console.log('Sites data from API:', res.data);
-        // 转换API响应中的数据，适配新的站点模式
-        const normalizedSites = res.data.map((site: any) => {
-            // 确保site对象是有效的
-            if (!site || typeof site !== 'object') {
-              console.error('Invalid site object:', site);
-              return null;
-            }
-            
-            // 直接从API响应中获取开关状态，确保数据一致性（注意：API返回的是小写字段名）
-            const firewallEnabled = site.firewall && typeof site.firewall === 'object' && site.firewall.Enabled === true;
-            const prerenderEnabled = site.prerender && typeof site.prerender === 'object' && site.prerender.Enabled === true;
-            
-            // 获取站点模式
-            const mode = site.mode || 'proxy'; // 默认使用proxy模式
-            
-            // 为了调试，打印每个站点的信息
-            console.log(`站点: ${site.name || '未知'}`);
-            console.log(`  完整站点数据:`, site);
-            console.log(`  模式: ${mode}`);
-            console.log(`  API返回的防火墙状态: ${site.firewall?.Enabled}`);
-            console.log(`  转换后的防火墙状态: ${firewallEnabled}`);
-            console.log(`  API返回的预渲染状态: ${site.prerender?.Enabled}`);
-            console.log(`  转换后的预渲染状态: ${prerenderEnabled}`);
-            
-            // 获取域名信息
-            let primaryDomain = '';
-            if (site.domains && Array.isArray(site.domains) && site.domains.length > 0) {
-              primaryDomain = site.domains[0];
-            } else if (site.domain) {
-              primaryDomain = site.domain;
-            }
-            
-            const transformedSite = {
-              name: site.name || '',
-              domain: primaryDomain || '',
-              domains: site.domains || [],
-              port: site.port || 80,
-              mode: mode,
-              proxy: {
-                enabled: site.proxy?.Enabled || false,
-                targetURL: site.proxy?.TargetURL || '',
-                type: site.proxy?.Type || 'direct'
-              },
-              firewallEnabled: firewallEnabled,
-              prerenderEnabled: prerenderEnabled,
-              firewall: {
-                enabled: firewallEnabled,
-                rulesPath: site.firewall?.RulesPath || '/etc/prerender-shield/rules',
-                action: {
-                  defaultAction: site.firewall?.ActionConfig?.DefaultAction || 'block',
-                  blockMessage: site.firewall?.ActionConfig?.BlockMessage || 'Request blocked by firewall'
-                },
-                // 地理位置访问控制配置
-                geoip: {
-                  enabled: site.firewall?.GeoIPConfig?.Enabled || false,
-                  allowList: site.firewall?.GeoIPConfig?.AllowList || [],
-                  blockList: site.firewall?.GeoIPConfig?.BlockList || []
-                },
-                // 频率限制配置
-                rate_limit: {
-                  enabled: site.firewall?.RateLimitConfig?.Enabled || false,
-                  requests: site.firewall?.RateLimitConfig?.Requests || 100,
-                  window: site.firewall?.RateLimitConfig?.Window || 60,
-                  ban_time: site.firewall?.RateLimitConfig?.BanTime || 3600
-                }
-              },
-              // 网页防篡改配置
-              file_integrity: {
-                enabled: site.FileIntegrityConfig?.Enabled || false,
-                check_interval: site.FileIntegrityConfig?.CheckInterval || 300,
-                hash_algorithm: site.FileIntegrityConfig?.HashAlgorithm || 'sha256'
-              },
-              prerender: {
-                enabled: prerenderEnabled,
-                poolSize: site.prerender?.PoolSize || 5,
-                minPoolSize: site.prerender?.MinPoolSize || 2,
-                maxPoolSize: site.prerender?.MaxPoolSize || 20,
-                timeout: site.prerender?.Timeout || 30,
-                cacheTTL: site.prerender?.CacheTTL || 3600,
-                idleTimeout: site.prerender?.IdleTimeout || 300,
-                dynamicScaling: site.prerender?.DynamicScaling || true,
-                scalingFactor: site.prerender?.ScalingFactor || 0.5,
-                scalingInterval: site.prerender?.ScalingInterval || 60,
-                useDefaultHeaders: site.prerender?.UseDefaultHeaders || false,
-                crawlerHeaders: site.prerender?.CrawlerHeaders || [],
-                preheat: {
-                  enabled: site.prerender?.Preheat?.Enabled || false,
-                  sitemapURL: site.prerender?.Preheat?.SitemapURL || '',
-                  schedule: site.prerender?.Preheat?.Schedule || '0 0 * * *',
-                  concurrency: site.prerender?.Preheat?.Concurrency || 5,
-                  defaultPriority: site.prerender?.Preheat?.DefaultPriority || 0
-                }
-              },
-              routing: {
-                rules: site.routing?.Rules || []
-              },
-              redirect: {
-                enabled: mode === 'redirect',
-                code: site.redirect?.StatusCode || 302,
-                url: site.redirect?.TargetURL || ''
-              }
-            };
+      console.log('=== Starting to fetch sites ===');
+      
+      // 尝试不同的URL格式
+      const urls = ['/api/v1/sites', 'http://localhost:5173/api/v1/sites', 'http://localhost:9598/api/v1/sites'];
+      
+      for (const url of urls) {
+        try {
+          console.log(`Trying URL: ${url}`);
           
-          return transformedSite;
-        });
-        
-        // 过滤掉null值，确保只有有效的站点对象被添加到列表中
-        const validSites = normalizedSites.filter((site): site is any => site !== null);
-        
-        // 调试：打印转换后的站点列表
-        console.log('转换后的站点列表:', validSites);
-        setSites(validSites)
-      } else {
-        message.error('获取站点列表失败')
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            // 允许跨域请求
+            credentials: 'same-origin',
+          });
+          
+          console.log(`Response status for ${url}:`, response.status);
+          
+          const text = await response.text();
+          console.log(`Raw response text for ${url}:`, text);
+          
+          if (response.ok) {
+            const res = JSON.parse(text);
+            console.log(`Parsed response for ${url}:`, res);
+            
+            if (res && res.code === 200 && Array.isArray(res.data)) {
+              console.log('Found valid sites data!');
+              console.log('Sites count:', res.data.length);
+              
+              // 直接使用原始数据，不做复杂转换
+              const mappedSites = res.data.map((site: any) => ({
+                name: site.name || site.Name || '未知站点',
+                domain: site.domains?.[0] || site.domain || '127.0.0.1',
+                domains: site.domains || [],
+                port: site.port || 80,
+                mode: site.mode || 'proxy',
+                firewallEnabled: Boolean(site.firewall?.Enabled),
+                prerenderEnabled: Boolean(site.prerender?.Enabled),
+              }));
+              
+              console.log('Mapped sites:', mappedSites);
+              setSites(mappedSites);
+              message.success('获取站点列表成功');
+              return; // 成功后退出循环
+            }
+          }
+        } catch (error) {
+          console.error(`Error with ${url}:`, error);
+        }
       }
+      
+      // 如果所有URL都失败
+      console.error('All URLs failed to return valid sites data');
+      message.error('获取站点列表失败');
+      
     } catch (error) {
-      console.error('Failed to fetch sites:', error)
-      message.error('获取站点列表失败')
+      console.error('Unexpected error in fetchSites:', error);
+      message.error('获取站点列表失败');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
   
@@ -297,8 +234,15 @@ const Sites: React.FC = () => {
 
   // 初始化数据
   useEffect(() => {
+    console.log('useEffect triggered, calling fetchSites...');
     fetchSites()
   }, [])
+
+  // 手动触发获取站点列表（用于调试）
+  const handleManualFetch = () => {
+    console.log('Manual fetch button clicked');
+    fetchSites();
+  }
 
   // 打开添加/编辑弹窗
   const showModal = (site: any = null) => {
@@ -944,14 +888,14 @@ const Sites: React.FC = () => {
           <Col span={8}>
             <Statistic
               title="启用预渲染的站点"
-              value={sites.filter(site => site.prerender.enabled).length}
+              value={sites.filter(site => site.prerender && site.prerender.enabled).length}
               valueStyle={{ color: '#52c41a' }}
             />
           </Col>
           <Col span={8}>
             <Statistic
               title="启用防火墙的站点"
-              value={sites.filter(site => site.firewall.enabled).length}
+              value={sites.filter(site => site.firewall && site.firewall.enabled).length}
               valueStyle={{ color: '#faad14' }}
             />
           </Col>
@@ -960,9 +904,14 @@ const Sites: React.FC = () => {
 
       {/* 站点列表 */}
       <Card className="card" title="站点列表" extra={
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-          添加站点
-        </Button>
+        <Space>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+            添加站点
+          </Button>
+          <Button icon={<ReloadOutlined />} onClick={handleManualFetch}>
+            重新加载
+          </Button>
+        </Space>
       }>
         <Table
           columns={columns}

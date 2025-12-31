@@ -16,6 +16,8 @@ const api: AxiosInstance = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
+    console.log('Request URL:', config.url);
+    console.log('Full Request Config:', config);
     // 可以在这里添加认证信息
     return config
   },
@@ -27,10 +29,15 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
+    console.log('Full Response:', response);
+    console.log('Response Status:', response.status);
+    console.log('Response Data:', response.data);
     return response.data
   },
   (error) => {
-    console.error('API Error:', error)
+    console.error('API Error:', error);
+    console.error('Error Config:', error.config);
+    console.error('Error Response:', error.response);
     return Promise.reject(error)
   }
 )

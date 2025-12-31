@@ -177,7 +177,7 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 			}
 
 			// 使用预渲染引擎渲染页面
-			result, err := prerenderEngine.Render(c, fullURL, prerender.RenderOptions{
+			resultWithCache, err := prerenderEngine.Render(c, fullURL, prerender.RenderOptions{
 				Timeout:   site.Prerender.Timeout,
 				WaitUntil: "networkidle0",
 			})
@@ -189,6 +189,7 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 				return
 			}
 
+			result := resultWithCache.Result
 			if !result.Success {
 				log.Printf("Prerender result failed for URL: %s, error: %s", fullURL, result.Error)
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Prerender result failed"})
@@ -205,13 +206,13 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 				Site:       site.Name,
 				IP:         logging.GetClientIP(c.Request),
 				Time:       time.Now(),
-				HitCache:   false, // FromCache field not available in RenderResult
+				HitCache:   resultWithCache.HitCache, // 使用实际的缓存命中状态
 				Route:      c.Request.URL.Path,
 				UA:         userAgent,
 				Status:     http.StatusOK,
 				Method:     c.Request.Method,
 				CacheTTL:   site.Prerender.CacheTTL,
-				RenderTime: renderTime,
+				RenderTime: float64(int(renderTime*100)) / 100, // 保留两位小数
 			}
 			crawlerLogManager.RecordCrawlerLog(crawlerLog)
 
@@ -549,8 +550,8 @@ func main() {
 
 	// 添加安全头中间件
 	ginRouter.Use(func(c *gin.Context) {
-		// Content-Security-Policy (CSP) 头，防止XSS攻击
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'")
+		// Content-Security-Policy (CSP) 头，防止XSS攻击，允许跨域请求
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://localhost:5173 http://localhost:9598")
 
 		// X-Frame-Options 头，防止Clickjacking攻击
 		c.Header("X-Frame-Options", "DENY")
@@ -741,7 +742,7 @@ func main() {
 					"totalRequests":    int64(stats["totalRequests"].(float64)),
 					"crawlerRequests":  int64(stats["crawlerRequests"].(float64)),
 					"blockedRequests":  int64(stats["blockedRequests"].(float64)),
-					"cacheHitRate":     int(stats["cacheHitRate"].(float64)),
+					"cacheHitRate":     float64(int(stats["cacheHitRate"].(float64)*100)) / 100, // 保留两位小数
 					"activeBrowsers":   int(stats["activeBrowsers"].(float64)),
 					"activeSites":      activeSites,
 					"sslCertificates":  sslCertificates,
@@ -1560,7 +1561,7 @@ func main() {
 					return
 				}
 
-				result, err := prerenderEngine.Render(c, req.URL, prerender.RenderOptions{
+				resultWithCache, err := prerenderEngine.Render(c, req.URL, prerender.RenderOptions{
 					Timeout:   siteConfig.Prerender.Timeout,
 					WaitUntil: "networkidle0",
 				})
@@ -1572,7 +1573,7 @@ func main() {
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
 					"message": "success",
-					"data":    result,
+					"data":    resultWithCache.Result,
 				})
 			})
 
@@ -1849,7 +1850,7 @@ func main() {
 				site := c.Query("site")
 				startTimeStr := c.DefaultQuery("startTime", "")
 				endTimeStr := c.DefaultQuery("endTime", "")
-				_ = c.DefaultQuery("granularity", "day") // day, week, month - unused for now
+				granularity := c.DefaultQuery("granularity", "day") // day, week, month
 
 				// 解析时间范围
 				var startTime, endTime time.Time
@@ -1875,7 +1876,7 @@ func main() {
 				}
 
 				// 获取统计数据
-				stats, err := crawlerLogManager.GetCrawlerStats(site, startTime, endTime)
+				stats, err := crawlerLogManager.GetCrawlerStats(site, startTime, endTime, granularity)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to get crawler stats"})
 					return

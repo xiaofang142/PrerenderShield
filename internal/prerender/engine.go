@@ -571,15 +571,24 @@ func (e *Engine) isPaymentReturn(url string) bool {
 	return false
 }
 
+// RenderResultWithCache 包含缓存命中信息的渲染结果
+type RenderResultWithCache struct {
+	Result   *RenderResult
+	HitCache bool
+}
+
 // Render 执行渲染任务
-func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) (*RenderResult, error) {
+func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) (*RenderResultWithCache, error) {
 	// 检查是否为静态资源或支付返回页面，如果是则跳过预渲染
 	if e.isStaticResource(url) || e.isPaymentReturn(url) {
 		// 直接返回空结果或跳过预渲染，这里返回一个特殊的成功结果表示不需要预渲染
-		return &RenderResult{
-			HTML:    "",
-			Success: true,
-			Error:   "",
+		return &RenderResultWithCache{
+			Result: &RenderResult{
+				HTML:    "",
+				Success: true,
+				Error:   "",
+			},
+			HitCache: false,
 		}, nil
 	}
 
@@ -587,7 +596,10 @@ func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) 
 	if e.config.CacheTTL > 0 {
 		cachedResult, exists := e.getFromCache(url)
 		if exists {
-			return cachedResult, nil
+			return &RenderResultWithCache{
+				Result:   cachedResult,
+				HitCache: true,
+			}, nil
 		}
 	}
 
@@ -609,16 +621,31 @@ func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) 
 			if e.config.CacheTTL > 0 && result.Success {
 				e.addToCache(url, result)
 			}
-			return result, nil
+			return &RenderResultWithCache{
+				Result:   result,
+				HitCache: false,
+			}, nil
 		case <-ctx.Done():
-			return &RenderResult{Success: false, Error: "context canceled"}, ctx.Err()
+			return &RenderResultWithCache{
+				Result:   &RenderResult{Success: false, Error: "context canceled"},
+				HitCache: false,
+			}, ctx.Err()
 		case <-e.ctx.Done():
-			return &RenderResult{Success: false, Error: "engine stopped"}, nil
+			return &RenderResultWithCache{
+				Result:   &RenderResult{Success: false, Error: "engine stopped"},
+				HitCache: false,
+			}, nil
 		}
 	case <-ctx.Done():
-		return &RenderResult{Success: false, Error: "context canceled"}, ctx.Err()
+		return &RenderResultWithCache{
+			Result:   &RenderResult{Success: false, Error: "context canceled"},
+			HitCache: false,
+		}, ctx.Err()
 	case <-e.ctx.Done():
-		return &RenderResult{Success: false, Error: "engine stopped"}, nil
+		return &RenderResultWithCache{
+			Result:   &RenderResult{Success: false, Error: "engine stopped"},
+			HitCache: false,
+		}, nil
 	}
 }
 

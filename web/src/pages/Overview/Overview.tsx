@@ -714,6 +714,7 @@ const Overview: React.FC = () => {
                 prefix={<ArrowUpOutlined />}
                 valueStyle={{ color: '#1890ff' }}
                 suffix="%"
+                precision={2}
               />
             </Card>
           </Col>
@@ -773,16 +774,16 @@ const Overview: React.FC = () => {
               <h3 style={{ marginBottom: 16 }}>系统状态</h3>
               <Row gutter={[16, 16]}>
                 <Col span={12}>
-                  <Statistic title="CPU使用率" value={systemStats.cpuUsage} suffix="%" />
+                  <Statistic title="CPU使用率" value={systemStats.cpuUsage} suffix="%" precision={2} />
                 </Col>
                 <Col span={12}>
-                  <Statistic title="内存使用率" value={systemStats.memoryUsage} suffix="%" />
+                  <Statistic title="内存使用率" value={systemStats.memoryUsage} suffix="%" precision={2} />
                 </Col>
                 <Col span={12}>
-                  <Statistic title="磁盘使用率" value={systemStats.diskUsage} suffix="%" />
+                  <Statistic title="磁盘使用率" value={systemStats.diskUsage} suffix="%" precision={2} />
                 </Col>
                 <Col span={12}>
-                  <Statistic title="请求/秒" value={systemStats.requestsPerSecond} />
+                  <Statistic title="请求/秒" value={systemStats.requestsPerSecond} precision={2} />
                 </Col>
               </Row>
             </Card>
