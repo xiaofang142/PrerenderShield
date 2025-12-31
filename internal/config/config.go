@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strconv"
@@ -10,11 +11,26 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ConfigChangeHandler 配置变化处理函数
+// ConfigChangeHandler 配置变化处理函数类型
+// 当配置发生变化时，会调用所有注册的处理函数
+// 参数:
+//   *Config: 变化后的新配置
 
 type ConfigChangeHandler func(*Config)
 
 // ConfigManager 配置管理器，用于管理配置和热重载
+// 实现了配置的加载、验证、保存、热重载等功能
+// 使用单例模式确保全局只有一个配置管理器实例
+//
+// 字段:
+//   mutex: 读写锁，用于保证并发安全
+//   config: 当前配置对象
+//   configPath: 配置文件路径
+//   handlers: 配置变化处理函数列表
+//   lastModified: 配置文件最后修改时间
+//   watcherRunning: 配置文件监控是否运行
+//   closeChan: 关闭监控的通道
+
 type ConfigManager struct {
 	mutex          sync.RWMutex
 	config         *Config
@@ -30,7 +46,15 @@ var (
 	once     sync.Once
 )
 
-// DirsConfig 目录配置
+// DirsConfig 目录配置结构体
+// 定义应用程序所需的各种目录路径
+//
+// 字段:
+//   DataDir: 数据目录，用于存储应用程序数据
+//   StaticDir: 静态文件目录，用于存储静态资源
+//   CertsDir: 证书目录，用于存储SSL证书
+//   AdminStaticDir: 管理控制台静态文件目录，用于存储管理界面的静态资源
+
 type DirsConfig struct {
 	DataDir        string `yaml:"data_dir" json:"data_dir"`                 // 数据目录
 	StaticDir      string `yaml:"static_dir" json:"static_dir"`             // 静态文件目录
@@ -38,7 +62,22 @@ type DirsConfig struct {
 	AdminStaticDir string `yaml:"admin_static_dir" json:"admin_static_dir"` // 管理控制台静态文件目录
 }
 
-// SiteConfig 站点配置
+// SiteConfig 站点配置结构体
+// 定义单个站点的完整配置信息
+//
+// 字段:
+//   ID: 站点唯一ID，用于标识站点
+//   Name: 站点名称，用于显示
+//   Domains: 站点绑定的域名列表，支持多个域名
+//   Port: 站点监听的端口号
+//   Mode: 站点运行模式，可选值：proxy(代理模式), static(静态资源模式), redirect(重定向模式)
+//   Proxy: 代理配置，当Mode为proxy时使用
+//   Redirect: 重定向配置，当Mode为redirect时使用
+//   Firewall: 防火墙配置，站点级别的安全防护设置
+//   Prerender: 渲染预热配置，用于SEO优化
+//   Routing: 路由配置，用于自定义请求路由
+//   FileIntegrityConfig: 网页防篡改配置，用于保护静态资源完整性
+
 type SiteConfig struct {
 	// 站点基本信息
 	ID      string   `yaml:"id" json:"id"` // 站点唯一ID
@@ -62,25 +101,53 @@ type SiteConfig struct {
 	FileIntegrityConfig FileIntegrityConfig `yaml:"file_integrity" json:"FileIntegrityConfig"`
 }
 
-// FileIntegrityConfig 网页防篡改配置
+// FileIntegrityConfig 网页防篡改配置结构体
+// 用于配置网页文件完整性检查
+//
+// 字段:
+//   Enabled: 是否启用网页防篡改检查
+//   CheckInterval: 检查间隔，单位为秒
+//   HashAlgorithm: 哈希算法，可选值：md5, sha256等
+
 type FileIntegrityConfig struct {
 	Enabled       bool   `yaml:"enabled" json:"Enabled"`
 	CheckInterval int    `yaml:"check_interval" json:"CheckInterval"` // 检查间隔（秒）
 	HashAlgorithm string `yaml:"hash_algorithm" json:"HashAlgorithm"` // 哈希算法（md5, sha256等）
 }
 
-// RedirectConfig 重定向配置
+// RedirectConfig 重定向配置结构体
+// 用于配置站点重定向规则
+//
+// 字段:
+//   StatusCode: 重定向状态码，如301(永久重定向), 302(临时重定向)
+//   TargetURL: 重定向目标URL
+
 type RedirectConfig struct {
 	StatusCode int    `yaml:"status_code" json:"StatusCode"`
 	TargetURL  string `yaml:"target_url" json:"TargetURL"`
 }
 
-// ProxyConfig 代理配置
+// ProxyConfig 代理配置结构体
+// 用于配置站点代理规则
+//
+// 字段:
+//   TargetURL: 代理目标URL，即真实后端服务地址
+
 type ProxyConfig struct {
 	TargetURL string `yaml:"target_url" json:"TargetURL"`
 }
 
-// Config 应用全局配置
+// Config 应用全局配置结构体
+// 定义整个应用程序的全局配置
+//
+// 字段:
+//   Server: 服务器配置，如监听地址、端口等
+//   Dirs: 目录配置，定义应用程序使用的各种目录
+//   Cache: 缓存配置，定义缓存类型和相关参数
+//   Storage: 存储配置，定义数据存储类型和相关参数
+//   Monitoring: 监控配置，定义监控相关参数
+//   Sites: 站点列表，包含所有配置的站点
+
 type Config struct {
 	// 服务器配置
 	Server ServerConfig `yaml:"server"`
@@ -255,6 +322,107 @@ func (cm *ConfigManager) GetConfig() *Config {
 	return cm.config
 }
 
+// ValidateConfig 验证配置的合法性
+func (cm *ConfigManager) ValidateConfig(config *Config) error {
+	// 验证服务器配置
+	if config.Server.Address == "" {
+		config.Server.Address = "0.0.0.0" // 使用默认地址
+	}
+
+	// 验证站点配置
+	for i, site := range config.Sites {
+		// 验证站点ID
+		if site.ID == "" {
+			return fmt.Errorf("site at index %d has no ID", i)
+		}
+
+		// 验证站点名称
+		if site.Name == "" {
+			return fmt.Errorf("site %s has no name", site.ID)
+		}
+
+		// 验证站点域名
+		if len(site.Domains) == 0 {
+			return fmt.Errorf("site %s has no domains", site.ID)
+		}
+
+		// 验证站点模式
+		validModes := map[string]bool{"proxy": true, "static": true, "redirect": true}
+		if !validModes[site.Mode] {
+			return fmt.Errorf("site %s has invalid mode: %s", site.ID, site.Mode)
+		}
+
+		// 根据站点模式验证特定配置
+		switch site.Mode {
+		case "proxy":
+			if site.Proxy.TargetURL == "" {
+				return fmt.Errorf("site %s is in proxy mode but has no target URL", site.ID)
+			}
+		case "redirect":
+			if site.Redirect.TargetURL == "" {
+				return fmt.Errorf("site %s is in redirect mode but has no target URL", site.ID)
+			}
+		}
+
+		// 验证渲染预热配置
+		if site.Prerender.Enabled {
+			if site.Prerender.PoolSize < 1 {
+				site.Prerender.PoolSize = 1 // 使用默认值
+			}
+		}
+	}
+
+	return nil
+}
+
+// SaveConfig 保存配置到文件
+func (cm *ConfigManager) SaveConfig() error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	if cm.configPath == "" {
+		return nil // 没有配置文件路径，无法保存
+	}
+
+	// 验证配置
+	if err := cm.ValidateConfig(cm.config); err != nil {
+		return err
+	}
+
+	// 序列化配置为YAML
+	content, err := yaml.Marshal(cm.config)
+	if err != nil {
+		return err
+	}
+
+	// 写入配置文件
+	if err := os.WriteFile(cm.configPath, content, 0644); err != nil {
+		return err
+	}
+
+	// 更新配置文件修改时间
+	info, err := os.Stat(cm.configPath)
+	if err == nil {
+		cm.lastModified = info.ModTime()
+	}
+
+	return nil
+}
+
+// UpdateConfig 更新配置
+func (cm *ConfigManager) UpdateConfig(newConfig *Config) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	// 更新配置
+	cm.config = newConfig
+
+	// 通知所有配置变化处理函数
+	for _, handler := range cm.handlers {
+		go handler(newConfig) // 异步调用，避免阻塞
+	}
+}
+
 // AddConfigChangeHandler 添加配置变化处理函数
 func (cm *ConfigManager) AddConfigChangeHandler(handler ConfigChangeHandler) {
 	cm.mutex.Lock()
@@ -355,6 +523,12 @@ func (cm *ConfigManager) reloadConfig() {
 
 	// 从环境变量加载配置，覆盖文件配置
 	loadFromEnv(cfg)
+
+	// 验证配置
+	if err := cm.ValidateConfig(cfg); err != nil {
+		fmt.Printf("Config validation failed: %v\n", err)
+		return
+	}
 
 	// 保存修改时间
 	info, _ := os.Stat(cm.configPath)
@@ -535,33 +709,4 @@ func getEnvAsFloat(key string, defaultValue float64) float64 {
 		}
 	}
 	return defaultValue
-}
-
-// SaveConfig 保存当前配置到文件
-func (cm *ConfigManager) SaveConfig() error {
-	cm.mutex.Lock()
-	defer cm.mutex.Unlock()
-
-	if cm.configPath == "" {
-		return nil // 没有配置文件路径，无法保存
-	}
-
-	// 将配置序列化为YAML格式
-	data, err := yaml.Marshal(cm.config)
-	if err != nil {
-		return err
-	}
-
-	// 写入配置文件
-	if err := ioutil.WriteFile(cm.configPath, data, 0644); err != nil {
-		return err
-	}
-
-	// 更新配置文件修改时间
-	info, err := os.Stat(cm.configPath)
-	if err == nil {
-		cm.lastModified = info.ModTime()
-	}
-
-	return nil
 }

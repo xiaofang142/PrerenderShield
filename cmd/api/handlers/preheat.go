@@ -4,10 +4,11 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"prerender-shield/internal/prerender"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/scheduler"
+
+	"github.com/gin-gonic/gin"
 )
 
 // PreheatHandler 预热API处理器
@@ -55,10 +56,15 @@ func (h *PreheatHandler) RegisterRoutes(router *gin.RouterGroup) {
 
 // GetStaticSites 获取静态网站列表
 func (h *PreheatHandler) GetStaticSites(c *gin.Context) {
-	engines := h.engineManager.GetEngines()
+	siteNames := h.engineManager.ListSites()
 
 	var sites []gin.H
-	for siteName, engine := range engines {
+	for _, siteName := range siteNames {
+		engine, exists := h.engineManager.GetEngine(siteName)
+		if !exists {
+			continue
+		}
+
 		// 只返回静态模式的站点
 		if engine.GetConfig().Mode != "static" {
 			continue
@@ -85,9 +91,14 @@ func (h *PreheatHandler) GetPreheatStats(c *gin.Context) {
 	if siteName == "" {
 		// 获取所有站点的统计数据
 		var allStats []gin.H
-		engines := h.engineManager.GetEngines()
+		siteNames := h.engineManager.ListSites()
 
-		for name, engine := range engines {
+		for _, name := range siteNames {
+			engine, exists := h.engineManager.GetEngine(name)
+			if !exists {
+				continue
+			}
+
 			if engine.GetConfig().Mode != "static" {
 				continue
 			}
@@ -115,8 +126,8 @@ func (h *PreheatHandler) GetPreheatStats(c *gin.Context) {
 	}
 
 	// 获取指定站点的统计数据
-	engine := h.engineManager.GetEngine(siteName)
-	if engine == nil {
+	engine, exists := h.engineManager.GetEngine(siteName)
+	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code":    http.StatusNotFound,
 			"message": "Site not found",
@@ -171,8 +182,8 @@ func (h *PreheatHandler) TriggerPreheat(c *gin.Context) {
 	}
 
 	// 检查站点是否存在
-	engine := h.engineManager.GetEngine(req.SiteName)
-	if engine == nil {
+	engine, exists := h.engineManager.GetEngine(req.SiteName)
+	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code":    http.StatusNotFound,
 			"message": "Site not found",
@@ -210,8 +221,8 @@ func (h *PreheatHandler) PreheatURL(c *gin.Context) {
 	}
 
 	// 检查站点是否存在
-	engine := h.engineManager.GetEngine(req.SiteName)
-	if engine == nil {
+	engine, exists := h.engineManager.GetEngine(req.SiteName)
+	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code":    http.StatusNotFound,
 			"message": "Site not found",

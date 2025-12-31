@@ -11,12 +11,32 @@ import (
 )
 
 // Client Redis客户端结构体
+// 封装了Redis客户端的核心功能，提供了与应用相关的Redis操作方法
+//
+// 字段:
+//   client: 底层的Redis客户端实例
+//   ctx: 上下文，用于管理Redis操作的生命周期
+
 type Client struct {
 	client *redis.Client
 	ctx    context.Context
 }
 
 // NewClient 创建新的Redis客户端
+// 支持两种格式的Redis URL:
+// 1. 简单格式: localhost:6379
+// 2. URL格式: redis://[password@]host:port/db
+//
+// 参数:
+//   redisURL: Redis连接URL
+//
+// 返回值:
+//   *Client: 创建的Redis客户端实例
+//   error: 如果创建失败，返回错误信息
+//
+// 示例:
+//   client, err := redis.NewClient("localhost:6379")
+//   client, err := redis.NewClient("redis://password@localhost:6379/0")
 func NewClient(redisURL string) (*Client, error) {
 	// 直接创建Redis客户端选项，不使用ParseURL
 	opt := &redis.Options{}
@@ -64,6 +84,11 @@ func NewClient(redisURL string) (*Client, error) {
 		client: client,
 		ctx:    ctx,
 	}, nil
+}
+
+// GetRawClient 获取原始Redis客户端实例
+func (c *Client) GetRawClient() *redis.Client {
+	return c.client
 }
 
 // Close 关闭Redis连接
@@ -166,4 +191,46 @@ func (c *Client) IsPreheatRunning(siteName string) (bool, error) {
 		return false, err
 	}
 	return val == "true", nil
+}
+
+// GetUser 获取用户信息
+func (c *Client) GetUser(userID string) (map[string]string, error) {
+	key := "user:" + userID
+	return c.client.HGetAll(c.ctx, key).Result()
+}
+
+// GetUserByUsername 通过用户名获取用户ID
+func (c *Client) GetUserByUsername(username string) (string, error) {
+	key := "username:" + username
+	return c.client.Get(c.ctx, key).Result()
+}
+
+// GetAllUsers 获取所有用户ID
+func (c *Client) GetAllUsers() ([]string, error) {
+	keys, err := c.client.Keys(c.ctx, "user:*").Result()
+	if err != nil {
+		return nil, err
+	}
+	// 提取用户ID
+	userIDs := make([]string, len(keys))
+	for i, key := range keys {
+		userIDs[i] = key[5:] // 去掉 "user:" 前缀
+	}
+	return userIDs, nil
+}
+
+// SaveUser 保存用户信息到Redis
+func (c *Client) SaveUser(userID, username, password string) error {
+	// 将用户信息保存到Redis，使用hash结构
+	userKey := "user:" + userID
+	if err := c.client.HSet(c.ctx, userKey, map[string]interface{}{
+		"id":       userID,
+		"username": username,
+		"password": password,
+	}).Err(); err != nil {
+		return err
+	}
+
+	// 创建用户名到用户ID的映射
+	return c.client.Set(c.ctx, "username:"+username, userID, 0).Err()
 }

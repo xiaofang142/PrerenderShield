@@ -1,6 +1,7 @@
 package monitoring
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -75,6 +76,7 @@ var (
 // Monitor 监控管理器
 type Monitor struct {
 	isRunning bool
+	config    Config
 	wg        sync.WaitGroup
 	stopCh    chan struct{}
 }
@@ -89,6 +91,7 @@ type Config struct {
 func NewMonitor(config Config) *Monitor {
 	return &Monitor{
 		isRunning: false,
+		config:    config,
 		stopCh:    make(chan struct{}),
 	}
 }
@@ -117,7 +120,12 @@ func (m *Monitor) Start() error {
 		defer m.wg.Done()
 
 		http.Handle("/metrics", promhttp.Handler())
-		http.ListenAndServe(":9090", nil)
+		// 使用配置中的地址，默认使用:9090
+		addr := m.config.PrometheusAddress
+		if addr == "" {
+			addr = ":9090"
+		}
+		http.ListenAndServe(addr, nil)
 	}()
 
 	m.isRunning = true
@@ -166,8 +174,9 @@ func (m *Monitor) RecordRequest(method, path string, status int, duration time.D
 		return
 	}
 
-	// 更新Prometheus指标
-	requestsTotal.WithLabelValues(method, path, string(rune(status))).Inc()
+	// 更新Prometheus指标，使用正确的字符串转换
+	statusStr := fmt.Sprintf("%d", status)
+	requestsTotal.WithLabelValues(method, path, statusStr).Inc()
 	responseTime.WithLabelValues(method, path).Observe(duration.Seconds())
 
 	// 更新实时统计数据

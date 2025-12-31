@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"prerender-shield/internal/redis"
+
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -26,15 +28,17 @@ type User struct {
 
 // UserManager 用户管理器
 type UserManager struct {
-	users    map[string]*User
-	dataPath string
+	users       map[string]*User
+	dataPath    string
+	redisClient *redis.Client
 }
 
 // NewUserManager 创建用户管理器
-func NewUserManager(dataPath string) *UserManager {
+func NewUserManager(dataPath string, redisClient *redis.Client) *UserManager {
 	manager := &UserManager{
-		users:    make(map[string]*User),
-		dataPath: filepath.Join(dataPath, "users.json"),
+		users:       make(map[string]*User),
+		dataPath:    filepath.Join(dataPath, "users.json"),
+		redisClient: redisClient,
 	}
 
 	// 加载用户数据
@@ -68,8 +72,10 @@ func (m *UserManager) CreateUser(username, password string) (*User, error) {
 		Password: string(hashedPassword),
 	}
 
-	// 保存用户
+	// 保存用户到内存
 	m.users[userID] = user
+
+	// 保存用户到文件和Redis
 	if err := m.saveUsers(); err != nil {
 		return nil, err
 	}
@@ -110,6 +116,26 @@ func (m *UserManager) IsFirstRun() bool {
 
 // loadUsers 加载用户数据
 func (m *UserManager) loadUsers() {
+	// 优先从Redis加载用户数据（如果Redis客户端可用）
+	if m.redisClient != nil {
+		userIDs, err := m.redisClient.GetAllUsers()
+		if err == nil && len(userIDs) > 0 {
+			for _, userID := range userIDs {
+				userData, err := m.redisClient.GetUser(userID)
+				if err == nil && len(userData) > 0 {
+					user := &User{
+						ID:       userData["id"],
+						Username: userData["username"],
+						Password: userData["password"],
+					}
+					m.users[user.ID] = user
+				}
+			}
+			return
+		}
+	}
+
+	// Redis加载失败或没有用户，从文件加载
 	// 检查文件是否存在
 	if _, err := os.Stat(m.dataPath); os.IsNotExist(err) {
 		// 文件不存在，创建空文件
@@ -172,5 +198,18 @@ func (m *UserManager) saveUsers() error {
 	}
 
 	// 写入文件
-	return os.WriteFile(m.dataPath, content, 0644)
+	if err := os.WriteFile(m.dataPath, content, 0644); err != nil {
+		return err
+	}
+
+	// 保存到Redis（如果Redis客户端可用）
+	if m.redisClient != nil {
+		for _, user := range users {
+			if err := m.redisClient.SaveUser(user.ID, user.Username, user.Password); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
