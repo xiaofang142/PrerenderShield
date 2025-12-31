@@ -49,11 +49,9 @@ func NewUserManager(dataPath string, redisClient *redis.Client) *UserManager {
 
 // CreateUser 创建用户
 func (m *UserManager) CreateUser(username, password string) (*User, error) {
-	// 检查用户是否已存在
-	for _, user := range m.users {
-		if user.Username == username {
-			return nil, ErrUserExists
-		}
+	// 检查是否已经有用户存在（只允许创建一个用户）
+	if len(m.users) > 0 {
+		return nil, errors.New("system already initialized, only one user is allowed")
 	}
 
 	// 生成用户ID

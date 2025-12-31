@@ -196,77 +196,62 @@ const Sites: React.FC = () => {
       setLoading(true)
       console.log('=== Starting to fetch sites ===');
       
-      // 使用单一API URL，通过vite代理访问后端
-      const url = '/api/v1/sites';
+      // 使用配置好的sitesApi，自动携带Authorization头
+      const response = await sitesApi.getSites();
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // 允许跨域请求
-        credentials: 'same-origin',
-      });
+      console.log('sitesApi.getSites() response:', response);
       
-      const text = await response.text();
-      console.log(`Raw response text for ${url}:`, text);
-      
-      if (response.ok) {
-        const res = JSON.parse(text);
-        console.log(`Parsed response for ${url}:`, res);
+      if (response && response.code === 200 && Array.isArray(response.data)) {
+        console.log('Found valid sites data!');
+        console.log('Sites count:', response.data.length);
         
-        if (res && res.code === 200 && Array.isArray(res.data)) {
-          console.log('Found valid sites data!');
-          console.log('Sites count:', res.data.length);
-          
-          // 直接使用原始数据，映射完整的渲染预热配置
-          const mappedSites = res.data.map((site: any) => ({
-            name: site.name || site.Name || '未知站点',
-            domain: site.domains?.[0] || site.domain || '127.0.0.1',
-            domains: site.domains || [],
-            port: site.port || 80,
-            mode: site.mode || 'proxy',
-            firewallEnabled: Boolean(site.firewall?.Enabled),
-            prerenderEnabled: Boolean(site.prerender?.Enabled),
-            // 映射完整的渲染预热配置对象
-            prerender: {
-              enabled: site.prerender?.Enabled || false,
-              poolSize: site.prerender?.PoolSize || 5,
-              minPoolSize: site.prerender?.MinPoolSize || 2,
-              maxPoolSize: site.prerender?.MaxPoolSize || 20,
-              timeout: site.prerender?.Timeout || 30,
-              cacheTTL: site.prerender?.CacheTTL || 3600,
-              idleTimeout: site.prerender?.IdleTimeout || 300,
-              dynamicScaling: site.prerender?.DynamicScaling !== false,
-              scalingFactor: site.prerender?.ScalingFactor || 0.5,
-              scalingInterval: site.prerender?.ScalingInterval || 60,
-              useDefaultHeaders: site.prerender?.UseDefaultHeaders || false,
-              crawlerHeaders: site.prerender?.CrawlerHeaders || [],
-              preheat: {
-                enabled: site.prerender?.Preheat?.Enabled || false,
-                sitemapURL: site.prerender?.Preheat?.SitemapURL || '',
-                schedule: site.prerender?.Preheat?.Schedule || '0 0 * * *',
-                concurrency: site.prerender?.Preheat?.Concurrency || 5,
-                defaultPriority: site.prerender?.Preheat?.DefaultPriority || 0
-              }
+        // 直接使用原始数据，映射完整的渲染预热配置
+        const mappedSites = response.data.map((site: any) => ({
+          name: site.name || site.Name || '未知站点',
+          domain: site.domains?.[0] || site.domain || '127.0.0.1',
+          domains: site.domains || [],
+          port: site.port || 80,
+          mode: site.mode || 'proxy',
+          firewallEnabled: Boolean(site.firewall?.Enabled),
+          prerenderEnabled: Boolean(site.prerender?.Enabled),
+          // 映射完整的渲染预热配置对象
+          prerender: {
+            enabled: site.prerender?.Enabled || false,
+            poolSize: site.prerender?.PoolSize || 5,
+            minPoolSize: site.prerender?.MinPoolSize || 2,
+            maxPoolSize: site.prerender?.MaxPoolSize || 20,
+            timeout: site.prerender?.Timeout || 30,
+            cacheTTL: site.prerender?.CacheTTL || 3600,
+            idleTimeout: site.prerender?.IdleTimeout || 300,
+            dynamicScaling: site.prerender?.DynamicScaling !== false,
+            scalingFactor: site.prerender?.ScalingFactor || 0.5,
+            scalingInterval: site.prerender?.ScalingInterval || 60,
+            useDefaultHeaders: site.prerender?.UseDefaultHeaders || false,
+            crawlerHeaders: site.prerender?.CrawlerHeaders || [],
+            preheat: {
+              enabled: site.prerender?.Preheat?.Enabled || false,
+              sitemapURL: site.prerender?.Preheat?.SitemapURL || '',
+              schedule: site.prerender?.Preheat?.Schedule || '0 0 * * *',
+              concurrency: site.prerender?.Preheat?.Concurrency || 5,
+              defaultPriority: site.prerender?.Preheat?.DefaultPriority || 0
             }
-          }));
+          }
+        }));
 
-          
-          console.log('Mapped sites:', mappedSites);
-          setSites(mappedSites);
-          message.success('获取站点列表成功');
-          return;
-        }
+        
+        console.log('Mapped sites:', mappedSites);
+        setSites(mappedSites);
+        message.success('获取站点列表成功');
+      } else {
+        // 请求失败
+        console.error('Failed to return valid sites data');
+        message.error('获取站点列表失败');
       }
       
-      // 请求失败
-      console.error('Failed to return valid sites data');
-      message.error('获取站点列表失败');
-      
-    } catch (error) {
+    } catch (error: any) {
       console.error('Unexpected error in fetchSites:', error);
-      message.error('获取站点列表失败');
+      console.error('Error response:', error.response?.data);
+      message.error('获取站点列表失败: ' + (error.message || '未知错误'));
     } finally {
       setLoading(false);
     }

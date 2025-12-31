@@ -16,12 +16,50 @@ const api: AxiosInstance = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
-    console.log('Request URL:', config.url);
-    console.log('Full Request Config:', config);
-    // 可以在这里添加认证信息
+    // 获取当前请求URL
+    const url = config.url || ''
+    
+    // 从localStorage获取token
+    const token = localStorage.getItem('token')
+    
+    // 检查是否是登录相关API（不需要携带token）
+    // 登录相关API包括：/auth/开头的所有API，/auth/first-run, /auth/login
+    // 注意：url可能是相对路径，比如"/sites"而不是"/api/v1/sites"
+    const isAuthApi = 
+      url.startsWith('/auth/') || 
+      url === '/auth/first-run' || 
+      url === '/auth/login' ||
+      // 处理相对路径情况
+      url === '/first-run' ||
+      url === '/login'
+    
+    // 非登录API需要携带token
+    if (token) {
+      // 为所有非登录API添加Authorization头
+      if (!isAuthApi) {
+        // 使用axios的headers.set方法确保Authorization头被正确设置
+        if (config.headers.set) {
+          config.headers.set('Authorization', `Bearer ${token}`)
+        } else {
+          // 兼容不同的headers对象类型
+          config.headers.Authorization = `Bearer ${token}`
+        }
+      }
+    }
+    
+    console.log('=== API Request Debug ===');
+    console.log('Request URL:', url);
+    console.log('Full URL with baseURL:', config.baseURL + url);
+    console.log('Token found in localStorage:', !!token);
+    console.log('Token value:', token ? '***' + token.slice(-8) : 'null'); // 只显示token的最后8位
+    console.log('Is Auth API:', isAuthApi);
+    console.log('Authorization Header:', config.headers.Authorization || config.headers.get?.('Authorization'));
+    
     return config
   },
   (error) => {
+    console.error('=== API Request Error ===');
+    console.error('Error:', error);
     return Promise.reject(error)
   }
 )
@@ -29,15 +67,39 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
-    console.log('Full Response:', response);
+    console.log('=== API Response Debug ===');
+    console.log('Response URL:', response.config.url);
     console.log('Response Status:', response.status);
     console.log('Response Data:', response.data);
     return response.data
   },
   (error) => {
-    console.error('API Error:', error);
-    console.error('Error Config:', error.config);
-    console.error('Error Response:', error.response);
+    console.error('=== API Response Error Debug ===');
+    console.error('Error URL:', error.config?.url);
+    console.error('Error Status:', error.response?.status);
+    console.error('Error Headers:', error.response?.headers);
+    console.error('Error Data:', error.response?.data);
+    console.error('Error Message:', error.message);
+    console.error('Request Config:', error.config);
+    
+    // 处理401未授权错误
+    if (error.response && error.response.status === 401) {
+      console.error('=== 401 Unauthorized Error ===');
+      console.error('Token in localStorage:', localStorage.getItem('token') ? '***' + localStorage.getItem('token')?.slice(-8) : 'null');
+      console.error('Request had Authorization header:', error.config?.headers?.Authorization ? 'Yes' : 'No');
+      
+      // 清除本地存储的token
+      localStorage.removeItem('token')
+      localStorage.removeItem('username')
+      
+      // 检查当前是否已经在登录页面，如果不在则跳转到登录页面
+      // 避免登录失败时页面刷新
+      if (!window.location.pathname.includes('/login')) {
+        console.log('Redirecting to login page...');
+        window.location.href = '/login'
+      }
+    }
+    
     return Promise.reject(error)
   }
 )

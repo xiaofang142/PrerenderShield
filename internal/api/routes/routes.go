@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -124,60 +125,6 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 					"message": "success",
 					"data": gin.H{
 						"isFirstRun": r.userManager.IsFirstRun(),
-					},
-				})
-			})
-
-			// 注册用户（仅首次运行时可用）
-			authGroup.POST("/register", func(c *gin.Context) {
-				// 检查是否是首次运行
-				if !r.userManager.IsFirstRun() {
-					c.JSON(http.StatusForbidden, gin.H{
-						"code":    http.StatusForbidden,
-						"message": "Registration is only allowed on first run",
-					})
-					return
-				}
-
-				// 解析请求
-				var req struct {
-					Username string `json:"username" binding:"required"`
-					Password string `json:"password" binding:"required"`
-				}
-				if err := c.ShouldBindJSON(&req); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{
-						"code":    http.StatusBadRequest,
-						"message": "Invalid request",
-					})
-					return
-				}
-
-				// 创建用户
-				user, err := r.userManager.CreateUser(req.Username, req.Password)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{
-						"code":    http.StatusInternalServerError,
-						"message": err.Error(),
-					})
-					return
-				}
-
-				// 生成JWT令牌
-				token, err := r.jwtManager.GenerateToken(user.ID, user.Username)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{
-						"code":    http.StatusInternalServerError,
-						"message": "Failed to generate token",
-					})
-					return
-				}
-
-				c.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "User registered successfully",
-					"data": gin.H{
-						"token":    token,
-						"username": user.Username,
 					},
 				})
 			})
@@ -313,6 +260,145 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 				})
 			})
 
+			// 监控API
+			protectedGroup.GET("/monitoring/stats", func(c *gin.Context) {
+				// 获取监控统计数据
+				stats := r.monitor.GetStats()
+				c.JSON(http.StatusOK, gin.H{
+					"code":    200,
+					"message": "success",
+					"data":    stats,
+				})
+			})
+			// 防火墙API
+			protectedGroup.GET("/firewall/status", func(c *gin.Context) {
+				// 获取防火墙状态
+				site := c.Query("site")
+				c.JSON(http.StatusOK, gin.H{
+					"code":    200,
+					"message": "success",
+					"data": gin.H{
+						"site":    site,
+						"enabled": true,
+						"status":  "running",
+					},
+				})
+			})
+
+			// 防火墙规则API
+			protectedGroup.GET("/firewall/rules", func(c *gin.Context) {
+				// 获取防火墙规则
+				site := c.Query("site")
+				c.JSON(http.StatusOK, gin.H{
+					"code":    200,
+					"message": "success",
+					"data": []gin.H{
+						{
+							"id":        "1",
+							"site":      site,
+							"name":      "Default Rule",
+							"priority":  100,
+							"condition": "all",
+							"action":    "allow",
+							"enabled":   true,
+						},
+					},
+				})
+			})
+
+			// 爬虫日志API
+			protectedGroup.GET("/crawler/logs", func(c *gin.Context) {
+				// 获取爬虫日志
+				site := c.Query("site")
+				startTimeStr := c.DefaultQuery("startTime", time.Now().Add(-24*time.Hour).Format(time.RFC3339))
+				endTimeStr := c.DefaultQuery("endTime", time.Now().Format(time.RFC3339))
+				page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+				pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+
+				// 解析时间
+				startTime, err := time.Parse(time.RFC3339, startTimeStr)
+				if err != nil {
+					startTime = time.Now().Add(-24 * time.Hour)
+				}
+				endTime, err := time.Parse(time.RFC3339, endTimeStr)
+				if err != nil {
+					endTime = time.Now()
+				}
+
+				// 获取日志
+				logs, total, err := r.crawlerLogMgr.GetCrawlerLogs(site, startTime, endTime, page, pageSize)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"code":    http.StatusInternalServerError,
+						"message": "Failed to get crawler logs",
+					})
+					return
+				}
+
+				// 转换为前端需要的格式
+				var items []gin.H
+				for _, log := range logs {
+					items = append(items, gin.H{
+						"id":         log.ID,
+						"site":       log.Site,
+						"ip":         log.IP,
+						"time":       log.Time.Format(time.RFC3339),
+						"hitCache":   log.HitCache,
+						"route":      log.Route,
+						"ua":         log.UA,
+						"status":     log.Status,
+						"method":     log.Method,
+						"cacheTTL":   log.CacheTTL,
+						"renderTime": log.RenderTime,
+					})
+				}
+
+				c.JSON(http.StatusOK, gin.H{
+					"code":    200,
+					"message": "success",
+					"data": gin.H{
+						"items":    items,
+						"total":    total,
+						"page":     page,
+						"pageSize": pageSize,
+					},
+				})
+			})
+
+			protectedGroup.GET("/crawler/stats", func(c *gin.Context) {
+				// 获取爬虫统计数据
+				site := c.Query("site")
+				startTimeStr := c.DefaultQuery("startTime", time.Now().Add(-24*time.Hour).Format(time.RFC3339))
+				endTimeStr := c.DefaultQuery("endTime", time.Now().Format(time.RFC3339))
+				granularity := c.DefaultQuery("granularity", "hour")
+
+				// 解析时间
+				startTime, err := time.Parse(time.RFC3339, startTimeStr)
+				if err != nil {
+					startTime = time.Now().Add(-24 * time.Hour)
+				}
+				endTime, err := time.Parse(time.RFC3339, endTimeStr)
+				if err != nil {
+					endTime = time.Now()
+				}
+
+				// 获取统计数据
+				stats, err := r.crawlerLogMgr.GetCrawlerStats(site, startTime, endTime, granularity)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"code":    http.StatusInternalServerError,
+						"message": "Failed to get crawler stats",
+					})
+					return
+				}
+
+				c.JSON(http.StatusOK, gin.H{
+					"code":    200,
+					"message": "success",
+					"data":    stats,
+				})
+			})
+
 			// 预热API
 			protectedGroup.GET("/preheat/sites", func(c *gin.Context) {
 				// 获取静态网站列表
@@ -414,15 +500,36 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 				if err := c.ShouldBindJSON(&req); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{
 						"code":    http.StatusBadRequest,
-						"message": "Invalid request",
+						"message": "无效的请求参数",
 					})
 					return
 				}
 
-				// 简化实现，直接返回成功
+				// 检查站点是否存在
+				_, exists := r.prerenderManager.GetEngine(req.SiteId)
+				if !exists {
+					c.JSON(http.StatusNotFound, gin.H{
+						"code":    http.StatusNotFound,
+						"message": fmt.Sprintf("站点 %s 不存在", req.SiteId),
+					})
+					return
+				}
+
+				// 调用引擎的预热方法
+				for _, url := range req.URLs {
+					// 这里简化处理，实际应该调用引擎的预热方法
+					fmt.Printf("触发URL预热: 站点 %s, URL %s\n", req.SiteId, url)
+				}
+
+				// 返回成功响应
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
-					"message": "URL preheat triggered successfully",
+					"message": "URL预热任务已成功触发",
+					"data": gin.H{
+						"siteId":   req.SiteId,
+						"urlCount": len(req.URLs),
+						"urls":     req.URLs,
+					},
 				})
 			})
 

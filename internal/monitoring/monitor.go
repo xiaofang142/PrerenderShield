@@ -8,6 +8,10 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/disk"
+	"github.com/shirou/gopsutil/v4/mem"
+	"github.com/shirou/gopsutil/v4/net"
 )
 
 // Metrics 监控指标
@@ -254,6 +258,11 @@ var statsStore = struct {
 	cacheHits       int64
 	cacheMisses     int64
 	activeBrowsers  int
+	// 系统指标
+	cpuUsage          float64
+	memoryUsage       float64
+	diskUsage         float64
+	requestsPerSecond float64
 }{
 	totalRequests:   0,
 	crawlerRequests: 0,
@@ -261,6 +270,11 @@ var statsStore = struct {
 	cacheHits:       0,
 	cacheMisses:     0,
 	activeBrowsers:  0,
+	// 系统指标初始化
+	cpuUsage:          0,
+	memoryUsage:       0,
+	diskUsage:         0,
+	requestsPerSecond: 0,
 }
 
 // formatFloat 格式化浮点数，保留两位小数
@@ -280,6 +294,15 @@ func (m *Monitor) GetStats() map[string]interface{} {
 		cacheHitRate = formatFloat(cacheHitRate)
 	}
 
+	// 获取真实系统指标数据
+	cpuUsage, _ := getCPUUsage()
+	memoryInfo, _ := getMemoryInfo()
+	diskInfo, _ := getDiskInfo()
+	netInfo, _ := getNetworkInfo()
+
+	// 计算请求每秒
+	requestsPerSecond := formatFloat(float64(statsStore.totalRequests) / 1000)
+
 	return map[string]interface{}{
 		"totalRequests":   float64(statsStore.totalRequests),
 		"crawlerRequests": float64(statsStore.crawlerRequests),
@@ -288,5 +311,106 @@ func (m *Monitor) GetStats() map[string]interface{} {
 		"cacheMisses":     float64(statsStore.cacheMisses),
 		"cacheHitRate":    cacheHitRate,
 		"activeBrowsers":  float64(statsStore.activeBrowsers),
+		// 添加系统指标
+		"cpuUsage":           cpuUsage,
+		"memoryUsage":        memoryInfo.UsagePercent,
+		"memoryTotal":        memoryInfo.Total,
+		"memoryUsed":         memoryInfo.Used,
+		"memoryFree":         memoryInfo.Free,
+		"diskUsage":          diskInfo.UsagePercent,
+		"diskTotal":          diskInfo.Total,
+		"diskUsed":           diskInfo.Used,
+		"diskFree":           diskInfo.Free,
+		"requestsPerSecond":  requestsPerSecond,
+		"networkSent":        netInfo.BytesSent,
+		"networkRecv":        netInfo.BytesRecv,
+		"networkPacketsSent": netInfo.PacketsSent,
+		"networkPacketsRecv": netInfo.PacketsRecv,
 	}
+}
+
+// getCPUUsage 获取CPU使用率
+func getCPUUsage() (float64, error) {
+	percent, err := cpu.Percent(time.Second, false)
+	if err != nil {
+		return 0, err
+	}
+	if len(percent) > 0 {
+		return formatFloat(percent[0]), nil
+	}
+	return 0, nil
+}
+
+// MemoryInfo 内存信息
+
+type MemoryInfo struct {
+	Total        uint64  `json:"total"`
+	Used         uint64  `json:"used"`
+	Free         uint64  `json:"free"`
+	UsagePercent float64 `json:"usagePercent"`
+}
+
+// getMemoryInfo 获取内存信息
+func getMemoryInfo() (*MemoryInfo, error) {
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		return nil, err
+	}
+	return &MemoryInfo{
+		Total:        v.Total,
+		Used:         v.Used,
+		Free:         v.Free,
+		UsagePercent: formatFloat(v.UsedPercent),
+	}, nil
+}
+
+// DiskInfo 磁盘信息
+
+type DiskInfo struct {
+	Total        uint64  `json:"total"`
+	Used         uint64  `json:"used"`
+	Free         uint64  `json:"free"`
+	UsagePercent float64 `json:"usagePercent"`
+}
+
+// getDiskInfo 获取磁盘信息
+func getDiskInfo() (*DiskInfo, error) {
+	// 获取根目录磁盘信息
+	d, err := disk.Usage("/")
+	if err != nil {
+		return nil, err
+	}
+	return &DiskInfo{
+		Total:        d.Total,
+		Used:         d.Used,
+		Free:         d.Free,
+		UsagePercent: formatFloat(d.UsedPercent),
+	}, nil
+}
+
+// NetworkInfo 网络信息
+
+type NetworkInfo struct {
+	BytesSent   uint64 `json:"bytesSent"`
+	BytesRecv   uint64 `json:"bytesRecv"`
+	PacketsSent uint64 `json:"packetsSent"`
+	PacketsRecv uint64 `json:"packetsRecv"`
+}
+
+// getNetworkInfo 获取网络信息
+func getNetworkInfo() (*NetworkInfo, error) {
+	// 获取所有网络接口的IO统计
+	ioCounters, err := net.IOCounters(false)
+	if err != nil {
+		return nil, err
+	}
+	if len(ioCounters) > 0 {
+		return &NetworkInfo{
+			BytesSent:   ioCounters[0].BytesSent,
+			BytesRecv:   ioCounters[0].BytesRecv,
+			PacketsSent: ioCounters[0].PacketsSent,
+			PacketsRecv: ioCounters[0].PacketsRecv,
+		}, nil
+	}
+	return &NetworkInfo{}, nil
 }

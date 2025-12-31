@@ -269,6 +269,11 @@ const Preheat: React.FC = () => {
 
   // 单个URL预热
   const handleSinglePreheat = async (url: string) => {
+    if (!selectedSiteId) {
+      message.warning('请先选择站点')
+      return
+    }
+    
     try {
       setIsPreheating(true)
       const res = await prerenderApi.preheatUrls(selectedSiteId, [url])

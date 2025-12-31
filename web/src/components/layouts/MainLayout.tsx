@@ -1,13 +1,23 @@
 import React from 'react'
-import { Layout, Menu, ConfigProvider } from 'antd'
-import { MenuUnfoldOutlined, MenuFoldOutlined, DashboardOutlined, SecurityScanOutlined, CodeOutlined, BarChartOutlined, FileTextOutlined, BugOutlined } from '@ant-design/icons'
-import { Link, useLocation } from 'react-router-dom'
+import { Layout, Menu, ConfigProvider, Button, message } from 'antd'
+import { MenuUnfoldOutlined, MenuFoldOutlined, DashboardOutlined, SecurityScanOutlined, CodeOutlined, BarChartOutlined, FileTextOutlined, BugOutlined, LogoutOutlined } from '@ant-design/icons'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 
 const { Header, Sider, Content } = Layout
 
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [collapsed, setCollapsed] = React.useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
+  const { logout, username } = useAuth()
+
+  // 退出登录处理函数
+  const handleLogout = () => {
+    logout()
+    message.success('退出登录成功')
+    navigate('/login')
+  }
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#ffffff' }}>
@@ -75,7 +85,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             {
               key: '/monitoring',
               icon: <BarChartOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/monitoring" style={{ color: '#333333' }}>监控告警</Link>
+              label: <Link to="/monitoring" style={{ color: '#333333' }}>监控警告</Link>
             },
             {
               key: '/crawler',
@@ -114,7 +124,15 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           
           {/* 右侧用户信息 */}
           <div style={{ marginRight: 16, color: '#333333', display: 'flex', alignItems: 'center' }}>
-            <span style={{ marginRight: 8 }}>管理员</span>
+            <span style={{ marginRight: 16 }}>{username || '管理员'}</span>
+            <Button 
+              type="text" 
+              icon={<LogoutOutlined />} 
+              onClick={handleLogout}
+              style={{ marginRight: 8 }}
+            >
+              退出登录
+            </Button>
             <div 
               style={{
                 width: 32,
@@ -129,7 +147,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 color: '#ffffff'
               }}
             >
-              A
+              {username ? username.charAt(0).toUpperCase() : 'A'}
             </div>
           </div>
         </Header>

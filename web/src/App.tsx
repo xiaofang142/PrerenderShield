@@ -3,7 +3,14 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 
+// Import Auth Context
+import { AuthProvider } from './context/AuthContext'
+
+// Import Private Route
+import PrivateRoute from './components/PrivateRoute/PrivateRoute'
+
 // Import pages
+import Login from './pages/Login/Login'
 import Overview from './pages/Overview/Overview'
 import Firewall from './pages/Firewall/Firewall'
 import Prerender from './pages/Prerender/Prerender'
@@ -54,20 +61,96 @@ function App() {
 
   return (
     <ConfigProvider locale={zhCN} theme={theme}>
-      <Router>
-        <MainLayout>
+      <AuthProvider>
+        <Router>
           <Routes>
-            <Route path="/" element={<Overview />} />
-            <Route path="/sites" element={<Sites />} />
-            <Route path="/firewall" element={<Firewall />} />
-            <Route path="/prerender" element={<Prerender />} />
-            <Route path="/prerender/preheat" element={<Preheat />} />
-            <Route path="/monitoring" element={<Monitoring />} />
-            <Route path="/logs" element={<Logs />} />
-            <Route path="/crawler" element={<Crawler />} />
+            {/* 登录路由 - 不需要认证 */}
+            <Route path="/login" element={<Login />} />
+            
+            {/* 需要认证的路由 */}
+            <Route 
+              path="/" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Overview />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/sites" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Sites />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/firewall" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Firewall />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/prerender" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Prerender />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/prerender/preheat" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Preheat />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/monitoring" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Monitoring />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/logs" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Logs />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/crawler" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Crawler />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
           </Routes>
-        </MainLayout>
-      </Router>
+        </Router>
+      </AuthProvider>
     </ConfigProvider>
   )
 }

@@ -69,8 +69,8 @@ const Crawler: React.FC = () => {
     },
     {
       title: '缓存命中',
-      dataIndex: 'hit_cache',
-      key: 'hit_cache',
+      dataIndex: 'hitCache',
+      key: 'hitCache',
       render: (text: boolean) => {
         const color = text ? '#52c41a' : '#faad14'
         const label = text ? '是' : '否'
@@ -79,8 +79,8 @@ const Crawler: React.FC = () => {
     },
     {
       title: '渲染时间',
-      dataIndex: 'render_time',
-      key: 'render_time',
+      dataIndex: 'renderTime',
+      key: 'renderTime',
       render: (text: number) => {
         return `${(text * 1000).toFixed(2)}ms`
       }
@@ -89,7 +89,7 @@ const Crawler: React.FC = () => {
 
   // 处理图表数据，直接使用后端返回的数据
   const processChartData = () => {
-    const { trafficByHour } = stats;
+    const { trafficByHour = [] } = stats;
     
     // 直接使用后端返回的数据，后端已经根据不同的粒度返回了相应格式的数据
     return {
@@ -100,66 +100,69 @@ const Crawler: React.FC = () => {
     };
   };
 
-  // 请求趋势图表配置
-  const chartOption = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'cross'
-      }
-    },
-    legend: {
-      data: ['爬虫请求数', '缓存命中数', '缓存未命中数'],
-      bottom: 0
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '15%',
-      top: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: processChartData().time,
-      axisLabel: {
-        rotate: 45
-      }
-    },
-    yAxis: {
-      type: 'value'
-    },
-    series: [
-      {
-        name: '爬虫请求数',
-        type: 'line',
-        data: processChartData().totalRequests,
-        smooth: true,
-        lineStyle: {
-          color: '#1890ff'
+  // 使用useMemo缓存图表配置，当stats变化时重新计算
+  const chartOption = React.useMemo(() => {
+    const chartData = processChartData();
+    return {
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'cross'
         }
       },
-      {
-        name: '缓存命中数',
-        type: 'line',
-        data: processChartData().cacheHits,
-        smooth: true,
-        lineStyle: {
-          color: '#52c41a'
+      legend: {
+        data: ['爬虫请求数', '缓存命中数', '缓存未命中数'],
+        bottom: 0
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '15%',
+        top: '3%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: chartData.time,
+        axisLabel: {
+          rotate: 45
         }
       },
-      {
-        name: '缓存未命中数',
-        type: 'line',
-        data: processChartData().cacheMisses,
-        smooth: true,
-        lineStyle: {
-          color: '#f5222d'
+      yAxis: {
+        type: 'value'
+      },
+      series: [
+        {
+          name: '爬虫请求数',
+          type: 'line',
+          data: chartData.totalRequests,
+          smooth: true,
+          lineStyle: {
+            color: '#1890ff'
+          }
+        },
+        {
+          name: '缓存命中数',
+          type: 'line',
+          data: chartData.cacheHits,
+          smooth: true,
+          lineStyle: {
+            color: '#52c41a'
+          }
+        },
+        {
+          name: '缓存未命中数',
+          type: 'line',
+          data: chartData.cacheMisses,
+          smooth: true,
+          lineStyle: {
+            color: '#f5222d'
+          }
         }
-      }
-    ]
-  }
+      ]
+    };
+  }, [stats]); // 当stats变化时重新计算图表配置
 
   // 获取站点列表
   const fetchSites = async () => {
@@ -190,7 +193,7 @@ const Crawler: React.FC = () => {
       })
       
       if (res.code === 200) {
-        setLogs(res.data.logs)
+        setLogs(res.data.items)
         setTotalLogs(res.data.total)
       }
     } catch (error) {
@@ -294,7 +297,7 @@ const Crawler: React.FC = () => {
             <Card className="stat-card">
               <Statistic
                 title="总请求数"
-                value={stats.totalRequests}
+                value={stats.totalRequests || 0}
                 prefix={<ArrowUpOutlined />}
                 valueStyle={{ color: '#3f8600' }}
                 suffix="条"
@@ -305,7 +308,7 @@ const Crawler: React.FC = () => {
             <Card className="stat-card">
               <Statistic
                 title="缓存命中率"
-                value={stats.cacheHitRate}
+                value={stats.cacheHitRate || 0}
                 prefix={<ArrowUpOutlined />}
                 valueStyle={{ color: '#1890ff' }}
                 suffix="%"
@@ -317,8 +320,8 @@ const Crawler: React.FC = () => {
             <Card className="stat-card">
               <Statistic
                 title="平均渲染时间"
-                value={stats.trafficByHour.length > 0 ? 
-                  (stats.trafficByHour.reduce((sum: any, item: any) => sum + item.renderTime, 0) / stats.trafficByHour.length * 1000).toFixed(2) : 0}
+                value={(stats.trafficByHour || []).length > 0 ? 
+                  ((stats.trafficByHour || []).reduce((sum: any, item: any) => sum + (item.renderTime || 0), 0) / (stats.trafficByHour || []).length * 1000).toFixed(2) : 0}
                 valueStyle={{ color: '#faad14' }}
                 suffix="ms"
                 precision={2}
@@ -329,7 +332,7 @@ const Crawler: React.FC = () => {
             <Card className="stat-card">
               <Statistic
                 title="活跃爬虫UA数"
-                value={stats.topUAs.length}
+                value={(stats.topUAs || []).length}
                 valueStyle={{ color: '#722ed1' }}
                 suffix="种"
               />

@@ -22,8 +22,8 @@ import (
 	"prerender-shield/internal/prerender"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/scheduler"
-	"prerender-shield/internal/site-handler"
-	"prerender-shield/internal/site-server"
+	sitehandler "prerender-shield/internal/site-handler"
+	siteserver "prerender-shield/internal/site-server"
 )
 
 func main() {
@@ -171,10 +171,19 @@ func main() {
 	// 10. 初始化站点处理器
 	siteHandler := sitehandler.NewHandler(prerenderManager)
 
-	// 11. 初始化Gin路由
+	// 11. 为每个站点启动服务器
+	for _, site := range cfg.Sites {
+		// 创建站点处理器
+		siteHTTPHandler := siteHandler.CreateSiteHandler(site, crawlerLogManager, monitor, cfg.Dirs.StaticDir)
+		// 启动站点服务器
+		siteServerManager.StartSiteServer(site, cfg.Server.Address, cfg.Dirs.StaticDir, crawlerLogManager, siteHTTPHandler)
+		log.Printf("站点服务器启动成功: %s (%s:%d)", site.Name, cfg.Server.Address, site.Port)
+	}
+
+	// 12. 初始化Gin路由
 	ginRouter := gin.Default()
 
-	// 12. 初始化API路由器
+	// 13. 初始化API路由器
 	apiRouter := routes.NewRouter(
 		userManager,
 		jwtManager,
@@ -189,16 +198,16 @@ func main() {
 		cfg,
 	)
 
-	// 13. 注册API路由
+	// 14. 注册API路由
 	apiRouter.RegisterRoutes(ginRouter)
 
-	// 14. 启动主API服务器
+	// 15. 启动主API服务器
 	apiServer := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", cfg.Server.Address, cfg.Server.APIPort),
 		Handler: ginRouter,
 	}
 
-	// 15. 启动API服务器
+	// 16. 启动API服务器
 	go func() {
 		log.Printf("API server starting on %s:%d", cfg.Server.Address, cfg.Server.APIPort)
 		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
