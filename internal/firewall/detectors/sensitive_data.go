@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/prerendershield/internal/firewall/types"
+	"prerender-shield/internal/firewall/types"
 )
 
 // SensitiveDataDetector 敏感数据泄露检测器

@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/prerendershield/internal/config"
-	"github.com/prerendershield/internal/firewall/types"
+	"prerender-shield/internal/config"
+	"prerender-shield/internal/firewall/types"
 )
 
 // RateLimitDetector 频率限制检测器

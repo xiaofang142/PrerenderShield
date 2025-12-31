@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/prerendershield/internal/firewall/types"
+	"prerender-shield/internal/firewall/types"
 )
 
 // InjectionDetector 注入攻击检测器

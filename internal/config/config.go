@@ -157,6 +157,7 @@ type PreheatConfig struct {
 	Schedule        string `yaml:"schedule" json:"Schedule"`
 	Concurrency     int    `yaml:"concurrency" json:"Concurrency"`
 	DefaultPriority int    `yaml:"default_priority" json:"DefaultPriority"`
+	MaxDepth        int    `yaml:"max_depth" json:"MaxDepth"` // 爬取深度
 }
 
 // RoutingConfig 路由配置
@@ -426,6 +427,7 @@ func defaultConfig() *Config {
 				Schedule:        "0 0 * * *",
 				Concurrency:     5,
 				DefaultPriority: 0,
+				MaxDepth:        3, // 默认爬取深度为3
 			},
 		},
 		Routing: RoutingConfig{

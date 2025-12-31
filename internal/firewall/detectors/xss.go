@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/prerendershield/internal/firewall/types"
+	"prerender-shield/internal/firewall/types"
 )
 
 // XSSDetector 跨站脚本攻击检测器

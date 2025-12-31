@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/prerendershield/internal/firewall/types"
+	"prerender-shield/internal/firewall/types"
 )
 
 // MockRuleManager 用于测试的规则管理器模拟

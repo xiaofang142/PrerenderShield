@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/oschwald/geoip2-golang"
-	"github.com/prerendershield/internal/config"
-	"github.com/prerendershield/internal/firewall/types"
+	"prerender-shield/internal/config"
+	"prerender-shield/internal/firewall/types"
 )
 
 // GeoIPDetector 地理位置访问控制检测器

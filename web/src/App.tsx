@@ -7,6 +7,7 @@ import zhCN from 'antd/locale/zh_CN'
 import Overview from './pages/Overview/Overview'
 import Firewall from './pages/Firewall/Firewall'
 import Prerender from './pages/Prerender/Prerender'
+import Preheat from './pages/Prerender/Preheat'
 import Monitoring from './pages/Monitoring/Monitoring'
 import Logs from './pages/Logs/Logs'
 import Sites from './pages/Sites/Sites'
@@ -60,6 +61,7 @@ function App() {
             <Route path="/sites" element={<Sites />} />
             <Route path="/firewall" element={<Firewall />} />
             <Route path="/prerender" element={<Prerender />} />
+            <Route path="/prerender/preheat" element={<Preheat />} />
             <Route path="/monitoring" element={<Monitoring />} />
             <Route path="/logs" element={<Logs />} />
             <Route path="/crawler" element={<Crawler />} />

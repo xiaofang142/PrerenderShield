@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/prerendershield/internal/firewall/types"
+	"prerender-shield/internal/firewall/types"
 )
 
 // DeserializationDetector 不安全的反序列化检测器

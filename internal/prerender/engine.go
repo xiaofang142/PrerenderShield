@@ -10,6 +10,7 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/google/uuid"
+	"prerender-shield/internal/redis"
 )
 
 // LRUCacheNode LRU缓存节点
@@ -123,19 +124,170 @@ type PreheatConfig struct {
 	Schedule        string
 	Concurrency     int
 	DefaultPriority int
+	MaxDepth        int
 }
 
 // PreheatManager 缓存预热管理器
 type PreheatManager struct {
-	config PrerenderConfig
-	engine *Engine
+	config        PrerenderConfig
+	engine        *Engine
+	redisClient   *redis.Client
+	crawler       *Crawler
+	preheatWorker *PreheatWorker
+	isRunning     bool
+	mutex         sync.Mutex
+}
+
+// NewPreheatManager 创建新的预热管理器
+func NewPreheatManager(engine *Engine, redisClient *redis.Client) *PreheatManager {
+	return &PreheatManager{
+		config:      engine.config,
+		engine:      engine,
+		redisClient: redisClient,
+		isRunning:   false,
+	}
 }
 
 // TriggerPreheat 触发缓存预热
 func (pm *PreheatManager) TriggerPreheat() error {
-	// 实现缓存预热逻辑
-	fmt.Println("Triggering preheat...")
+	pm.mutex.Lock()
+	if pm.isRunning {
+		pm.mutex.Unlock()
+		return fmt.Errorf("preheat is already running")
+	}
+	pm.isRunning = true
+	pm.mutex.Unlock()
+
+	defer func() {
+		pm.mutex.Lock()
+		pm.isRunning = false
+		pm.mutex.Unlock()
+	}()
+
+	// 1. 首先爬取站点的所有链接
+	fmt.Printf("Starting URL crawler for site: %s\n", pm.engine.SiteName)
+
+	// 初始化baseURL，使用站点名称作为默认域名
+	baseURL := fmt.Sprintf("http://%s", pm.engine.SiteName)
+
+	// 创建爬虫配置
+	crawlerConfig := CrawlerConfig{
+		SiteName:    pm.engine.SiteName,
+		Domain:      pm.engine.SiteName,
+		BaseURL:     baseURL,
+		MaxDepth:    pm.config.Preheat.MaxDepth,
+		Concurrency: pm.config.Preheat.Concurrency,
+		RedisClient: pm.redisClient,
+	}
+
+	// 创建爬虫实例
+	crawler := NewCrawler(crawlerConfig)
+
+	// 开始爬取
+	if err := crawler.Start(); err != nil {
+		return fmt.Errorf("failed to crawl URLs: %v", err)
+	}
+
+	// 2. 然后执行预热
+	fmt.Printf("Starting preheat for site: %s\n", pm.engine.SiteName)
+
+	// 创建预热执行器配置
+	preheatConfig := PreheatWorkerConfig{
+		SiteName:       pm.engine.SiteName,
+		RedisClient:    pm.redisClient,
+		Concurrency:    pm.config.Preheat.Concurrency,
+		CrawlerHeaders: pm.config.CrawlerHeaders,
+	}
+
+	// 创建预热执行器实例
+	preheatWorker := NewPreheatWorker(preheatConfig)
+
+	// 开始预热
+	if err := preheatWorker.Start(); err != nil {
+		return fmt.Errorf("failed to preheat URLs: %v", err)
+	}
+
+	// 3. 更新统计数据
+	pm.updateStats()
+
+	fmt.Printf("Preheat completed for site: %s\n", pm.engine.SiteName)
 	return nil
+}
+
+// updateStats 更新站点统计数据
+func (pm *PreheatManager) updateStats() error {
+	// 获取URL数量
+	urlCount, err := pm.redisClient.GetURLCount(pm.engine.SiteName)
+	if err != nil {
+		return err
+	}
+
+	// 获取缓存数量
+	cacheCount, err := pm.redisClient.GetCacheCount(pm.engine.SiteName)
+	if err != nil {
+		return err
+	}
+
+	// 计算总缓存大小（简化实现，实际可能需要遍历所有URL的缓存大小）
+	// 这里使用缓存数量 * 平均缓存大小来估算
+	totalCacheSize := cacheCount * 1024 * 1024 // 假设平均每个缓存1MB
+
+	// 更新统计数据
+	stats := map[string]interface{}{
+		"url_count":         urlCount,
+		"cache_count":       cacheCount,
+		"total_cache_size":  totalCacheSize,
+		"last_preheat_time": time.Now().Unix(),
+	}
+
+	return pm.redisClient.SetSiteStats(pm.engine.SiteName, stats)
+}
+
+// TriggerPreheatForURL 触发单个URL的预热
+func (pm *PreheatManager) TriggerPreheatForURL(url string) error {
+	// 创建预热执行器配置
+	preheatConfig := PreheatWorkerConfig{
+		SiteName:       pm.engine.SiteName,
+		RedisClient:    pm.redisClient,
+		Concurrency:    1,
+		CrawlerHeaders: pm.config.CrawlerHeaders,
+	}
+
+	// 创建预热执行器实例
+	preheatWorker := NewPreheatWorker(preheatConfig)
+
+	// 预热单个URL
+	return preheatWorker.PreheatURLWithHeaders(url, map[string]string{
+		"User-Agent": pm.config.CrawlerHeaders[0], // 使用第一个爬虫协议头
+	})
+}
+
+// GetStats 获取站点预热统计数据
+func (pm *PreheatManager) GetStats() (map[string]string, error) {
+	return pm.redisClient.GetSiteStats(pm.engine.SiteName)
+}
+
+// IsRunning 检查预热是否正在运行
+func (pm *PreheatManager) IsRunning() bool {
+	pm.mutex.Lock()
+	defer pm.mutex.Unlock()
+	return pm.isRunning
+}
+
+// Stop 停止预热
+func (pm *PreheatManager) Stop() {
+	pm.mutex.Lock()
+	defer pm.mutex.Unlock()
+
+	if pm.crawler != nil {
+		pm.crawler.Stop()
+	}
+
+	if pm.preheatWorker != nil {
+		pm.preheatWorker.Stop()
+	}
+
+	pm.isRunning = false
 }
 
 // NewLRUCache 创建新的LRU缓存

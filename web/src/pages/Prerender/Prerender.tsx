@@ -298,9 +298,8 @@ const Prerender: React.FC = () => {
         <Table
           columns={columns}
           dataSource={renderHistory}
-          rowKey={(record, index) => index.toString()}
+          rowKey={(_record, index) => (index || 0).toString()}
           pagination={{ pageSize: 10 }}
-          emptyText="暂无渲染历史"
         />
       </Card>
 

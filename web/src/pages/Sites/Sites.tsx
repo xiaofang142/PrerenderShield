@@ -6,7 +6,7 @@ import {
   FolderOutlined, FileOutlined, FolderOutlined as NewFolderOutlined, FileAddOutlined, UpOutlined, 
   DownloadOutlined, UnorderedListOutlined as ExtractOutlined, ReloadOutlined
 } from '@ant-design/icons'
-import { sitesApi, prerenderApi } from '../../services/api'
+import { sitesApi } from '../../services/api'
 import type { UploadProps } from 'antd'
 
 const { Option } = Select
@@ -28,36 +28,7 @@ const Sites: React.FC = () => {
   const [newFolderName, setNewFolderName] = useState<string>('')
   const [showNewFileModal, setShowNewFileModal] = useState(false)
   const [newFileName, setNewFileName] = useState<string>('')
-  
-  // 渲染预热配置弹窗状态
-  const [prerenderConfigModalVisible, setPrerenderConfigModalVisible] = useState(false)
-  const [currentPrerenderSite, setCurrentPrerenderSite] = useState<any>(null)
-  const [prerenderConfigForm] = Form.useForm()
-  // 默认爬虫协议头列表
-  const defaultCrawlerHeaders = [
-    'Googlebot',
-    'Bingbot',
-    'Slurp',
-    'DuckDuckBot',
-    'Baiduspider',
-    'Sogou spider',
-    'YandexBot',
-    'Exabot',
-    'FacebookBot',
-    'Twitterbot',
-    'LinkedInBot',
-    'WhatsAppBot',
-    'TelegramBot',
-    'DiscordBot',
-    'PinterestBot',
-    'InstagramBot',
-    'Google-InspectionTool',
-    'Google-Site-Verification',
-    'AhrefsBot',
-    'SEMrushBot',
-    'Majestic',
-    'Yahoo! Slurp'
-  ]
+
 
   // 表格列配置
   const columns = [
@@ -65,21 +36,47 @@ const Sites: React.FC = () => {
       title: '站点名称',
       dataIndex: 'name',
       key: 'name',
+      width: 150,
+      ellipsis: true,
+      onCell: () => ({
+        style: {
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }
+      }),
     },
     {
       title: '域名',
       dataIndex: 'domain',
       key: 'domain',
+      width: 150,
+      ellipsis: true,
+      onCell: () => ({
+        style: {
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }
+      }),
     },
     {
       title: '端口',
       dataIndex: 'port',
       key: 'port',
+      width: 80,
+      align: 'center',
+      onCell: () => ({
+        style: {
+          whiteSpace: 'nowrap',
+        }
+      }),
     },
     {
       title: '站点模式',
       dataIndex: 'mode',
       key: 'mode',
+      width: 120,
       render: (mode: string) => {
         const modeMap: { [key: string]: string } = {
           'proxy': '代理已有应用',
@@ -87,36 +84,57 @@ const Sites: React.FC = () => {
           'redirect': '重定向'
         };
         return modeMap[mode] || mode;
-      }
+      },
+      onCell: () => ({
+        style: {
+          whiteSpace: 'nowrap',
+        }
+      }),
     },
     {
       title: '渲染预热状态',
       dataIndex: 'prerenderEnabled',
       key: 'prerenderEnabled',
+      width: 120,
+      align: 'center',
       render: (enabled: boolean, record: any) => (
         record.mode === 'static' ? (
           <Switch checked={enabled} onChange={(checked) => handleSwitchChange(record, 'prerender', checked)} />
         ) : null
       ),
+      onCell: () => ({
+        style: {
+          whiteSpace: 'nowrap',
+        }
+      }),
     },
     {
       title: '防火墙状态',
       dataIndex: 'firewallEnabled',
       key: 'firewallEnabled',
+      width: 120,
+      align: 'center',
       render: (enabled: boolean, record: any) => (
         <Switch checked={enabled} onChange={(checked) => handleSwitchChange(record, 'firewall', checked)} />
       ),
+      onCell: () => ({
+        style: {
+          whiteSpace: 'nowrap',
+        }
+      }),
     },
     {
       title: '操作',
       key: 'action',
+      width: 400,
+      fixed: 'right',
       render: (_: any, record: any) => (
-        <div>
+        <div style={{ display: 'flex', flexWrap: 'nowrap' }}>
           <Button
             type="link"
             icon={<EyeOutlined />}
             onClick={() => handleView(record)}
-            style={{ marginRight: 8 }}
+            style={{ marginRight: 8, whiteSpace: 'nowrap' }}
           >
             查看
           </Button>
@@ -124,7 +142,7 @@ const Sites: React.FC = () => {
             type="link"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
-            style={{ marginRight: 8 }}
+            style={{ marginRight: 8, whiteSpace: 'nowrap' }}
           >
             编辑
           </Button>
@@ -134,7 +152,7 @@ const Sites: React.FC = () => {
                 type="link"
                 icon={<FolderOpenOutlined />}
                 onClick={() => handleStaticResources(record)}
-                style={{ marginRight: 8 }}
+                style={{ marginRight: 8, whiteSpace: 'nowrap' }}
               >
                 静态资源
               </Button>
@@ -142,7 +160,7 @@ const Sites: React.FC = () => {
                 type="link"
                 icon={<UnorderedListOutlined />}
                 onClick={() => handlePrerenderConfig(record)}
-                style={{ marginRight: 8 }}
+                style={{ marginRight: 8, whiteSpace: 'nowrap' }}
               >
                 渲染预热配置
               </Button>
@@ -153,11 +171,17 @@ const Sites: React.FC = () => {
             icon={<DeleteOutlined />}
             danger
             onClick={() => handleDelete(record)}
+            style={{ whiteSpace: 'nowrap' }}
           >
             删除
           </Button>
         </div>
       ),
+      onCell: () => ({
+        style: {
+          whiteSpace: 'nowrap',
+        }
+      }),
     },
   ]
 
@@ -167,82 +191,72 @@ const Sites: React.FC = () => {
       setLoading(true)
       console.log('=== Starting to fetch sites ===');
       
-      // 尝试不同的URL格式
-      const urls = ['/api/v1/sites', 'http://localhost:5173/api/v1/sites', 'http://localhost:9598/api/v1/sites'];
+      // 使用单一API URL，通过vite代理访问后端
+      const url = '/api/v1/sites';
       
-      for (const url of urls) {
-        try {
-          console.log(`Trying URL: ${url}`);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // 允许跨域请求
+        credentials: 'same-origin',
+      });
+      
+      const text = await response.text();
+      console.log(`Raw response text for ${url}:`, text);
+      
+      if (response.ok) {
+        const res = JSON.parse(text);
+        console.log(`Parsed response for ${url}:`, res);
+        
+        if (res && res.code === 200 && Array.isArray(res.data)) {
+          console.log('Found valid sites data!');
+          console.log('Sites count:', res.data.length);
           
-          const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            // 允许跨域请求
-            credentials: 'same-origin',
-          });
-          
-          console.log(`Response status for ${url}:`, response.status);
-          
-          const text = await response.text();
-          console.log(`Raw response text for ${url}:`, text);
-          
-          if (response.ok) {
-            const res = JSON.parse(text);
-            console.log(`Parsed response for ${url}:`, res);
-            
-            if (res && res.code === 200 && Array.isArray(res.data)) {
-              console.log('Found valid sites data!');
-              console.log('Sites count:', res.data.length);
-              
-              // 直接使用原始数据，映射完整的渲染预热配置
-              const mappedSites = res.data.map((site: any) => ({
-                name: site.name || site.Name || '未知站点',
-                domain: site.domains?.[0] || site.domain || '127.0.0.1',
-                domains: site.domains || [],
-                port: site.port || 80,
-                mode: site.mode || 'proxy',
-                firewallEnabled: Boolean(site.firewall?.Enabled),
-                prerenderEnabled: Boolean(site.prerender?.Enabled),
-                // 映射完整的渲染预热配置对象
-                prerender: {
-                  enabled: site.prerender?.Enabled || false,
-                  poolSize: site.prerender?.PoolSize || 5,
-                  minPoolSize: site.prerender?.MinPoolSize || 2,
-                  maxPoolSize: site.prerender?.MaxPoolSize || 20,
-                  timeout: site.prerender?.Timeout || 30,
-                  cacheTTL: site.prerender?.CacheTTL || 3600,
-                  idleTimeout: site.prerender?.IdleTimeout || 300,
-                  dynamicScaling: site.prerender?.DynamicScaling !== false,
-                  scalingFactor: site.prerender?.ScalingFactor || 0.5,
-                  scalingInterval: site.prerender?.ScalingInterval || 60,
-                  useDefaultHeaders: site.prerender?.UseDefaultHeaders || false,
-                  crawlerHeaders: site.prerender?.CrawlerHeaders || [],
-                  preheat: {
-                    enabled: site.prerender?.Preheat?.Enabled || false,
-                    sitemapURL: site.prerender?.Preheat?.SitemapURL || '',
-                    schedule: site.prerender?.Preheat?.Schedule || '0 0 * * *',
-                    concurrency: site.prerender?.Preheat?.Concurrency || 5,
-                    defaultPriority: site.prerender?.Preheat?.DefaultPriority || 0
-                  }
-                }
-              }));
-
-              
-              console.log('Mapped sites:', mappedSites);
-              setSites(mappedSites);
-              message.success('获取站点列表成功');
-              return; // 成功后退出循环
+          // 直接使用原始数据，映射完整的渲染预热配置
+          const mappedSites = res.data.map((site: any) => ({
+            name: site.name || site.Name || '未知站点',
+            domain: site.domains?.[0] || site.domain || '127.0.0.1',
+            domains: site.domains || [],
+            port: site.port || 80,
+            mode: site.mode || 'proxy',
+            firewallEnabled: Boolean(site.firewall?.Enabled),
+            prerenderEnabled: Boolean(site.prerender?.Enabled),
+            // 映射完整的渲染预热配置对象
+            prerender: {
+              enabled: site.prerender?.Enabled || false,
+              poolSize: site.prerender?.PoolSize || 5,
+              minPoolSize: site.prerender?.MinPoolSize || 2,
+              maxPoolSize: site.prerender?.MaxPoolSize || 20,
+              timeout: site.prerender?.Timeout || 30,
+              cacheTTL: site.prerender?.CacheTTL || 3600,
+              idleTimeout: site.prerender?.IdleTimeout || 300,
+              dynamicScaling: site.prerender?.DynamicScaling !== false,
+              scalingFactor: site.prerender?.ScalingFactor || 0.5,
+              scalingInterval: site.prerender?.ScalingInterval || 60,
+              useDefaultHeaders: site.prerender?.UseDefaultHeaders || false,
+              crawlerHeaders: site.prerender?.CrawlerHeaders || [],
+              preheat: {
+                enabled: site.prerender?.Preheat?.Enabled || false,
+                sitemapURL: site.prerender?.Preheat?.SitemapURL || '',
+                schedule: site.prerender?.Preheat?.Schedule || '0 0 * * *',
+                concurrency: site.prerender?.Preheat?.Concurrency || 5,
+                defaultPriority: site.prerender?.Preheat?.DefaultPriority || 0
+              }
             }
-          }
-        } catch (error) {
-          console.error(`Error with ${url}:`, error);
+          }));
+
+          
+          console.log('Mapped sites:', mappedSites);
+          setSites(mappedSites);
+          message.success('获取站点列表成功');
+          return;
         }
       }
       
-      // 如果所有URL都失败
-      console.error('All URLs failed to return valid sites data');
+      // 请求失败
+      console.error('Failed to return valid sites data');
       message.error('获取站点列表失败');
       
     } catch (error) {
@@ -670,33 +684,10 @@ const Sites: React.FC = () => {
     }
   }
   
-  // 打开渲染预热配置弹窗
-  const handlePrerenderConfig = (site: any) => {
-    setCurrentPrerenderSite(site)
-    // 初始化表单值，添加安全检查，处理site.prerender为undefined的情况
-    const initialValues = {
-      enabled: site.prerender?.enabled || site.prerenderEnabled || false,
-      poolSize: site.prerender?.poolSize || 5,
-      minPoolSize: site.prerender?.minPoolSize || 2,
-      maxPoolSize: site.prerender?.maxPoolSize || 20,
-      timeout: site.prerender?.timeout || 30,
-      cacheTTL: site.prerender?.cacheTTL || 3600,
-      idleTimeout: site.prerender?.idleTimeout || 300,
-      dynamicScaling: site.prerender?.dynamicScaling !== false,
-      scalingFactor: site.prerender?.scalingFactor || 0.5,
-      scalingInterval: site.prerender?.scalingInterval || 60,
-      useDefaultHeaders: site.prerender?.useDefaultHeaders || false,
-      crawlerHeaders: site.prerender?.crawlerHeaders || [],
-      preheat: {
-        enabled: site.prerender?.preheat?.enabled || false,
-        sitemapURL: site.prerender?.preheat?.sitemapURL || '',
-        schedule: site.prerender?.preheat?.schedule || '0 0 * * *',
-        concurrency: site.prerender?.preheat?.concurrency || 5,
-        defaultPriority: site.prerender?.preheat?.defaultPriority || 0
-      }
-    }
-    prerenderConfigForm.setFieldsValue(initialValues)
-    setPrerenderConfigModalVisible(true)
+  // 跳转到渲染预热配置页面
+  const handlePrerenderConfig = (_site: any) => {
+    // 跳转到预渲染预热页面
+    window.location.href = `/prerender/preheat`
   }
 
   // 处理表单提交
@@ -827,72 +818,7 @@ const Sites: React.FC = () => {
     }
   }
 
-  // 处理渲染预热配置表单提交
-  const handlePrerenderConfigSubmit = async () => {
-    try {
-      const values = await prerenderConfigForm.validateFields()
-      
-      // 转换表单数据格式，确保与后端API期望的结构匹配
-      const prerenderConfigData = {
-        Enabled: values.enabled || false,
-        PoolSize: values.poolSize || 5,
-        MinPoolSize: values.minPoolSize || 2,
-        MaxPoolSize: values.maxPoolSize || 20,
-        Timeout: values.timeout || 30,
-        CacheTTL: values.cacheTTL || 3600,
-        IdleTimeout: values.idleTimeout || 300,
-        DynamicScaling: values.dynamicScaling || true,
-        ScalingFactor: values.scalingFactor || 0.5,
-        ScalingInterval: values.scalingInterval || 60,
-        UseDefaultHeaders: values.useDefaultHeaders || false,
-        CrawlerHeaders: values.crawlerHeaders || [],
-        Preheat: {
-          Enabled: values.preheat?.enabled || false,
-          SitemapURL: values.preheat?.sitemapURL || '',
-          Schedule: values.preheat?.schedule || '0 0 * * *',
-          Concurrency: values.preheat?.concurrency || 5,
-          DefaultPriority: values.preheat?.defaultPriority || 0
-        }
-      }
-      
-      // 显示加载状态
-      Modal.confirm({
-        title: '正在保存渲染预热配置',
-        content: '请稍候...',
-        okButtonProps: { disabled: true },
-        cancelButtonProps: { disabled: true },
-        closable: false,
-        keyboard: false,
-        centered: true,
-      });
 
-      // 调用API更新渲染预热配置
-      const res = await prerenderApi.updateConfig(currentPrerenderSite.name, prerenderConfigData)
-
-      // 关闭加载状态
-      Modal.destroyAll();
-
-      if (res.code === 200) {
-        message.success('更新渲染预热配置成功')
-        setPrerenderConfigModalVisible(false)
-        fetchSites() // 刷新站点列表
-      } else {
-        message.error('更新渲染预热配置失败：' + (res.message || '未知错误'))
-      }
-    } catch (error: any) {
-      // 关闭加载状态
-      Modal.destroyAll();
-      
-      // 处理表单验证错误
-      if (error.errorFields) {
-        message.error('表单验证失败，请检查输入');
-      } else {
-        // 处理网络错误或其他错误
-        message.error('表单提交失败：' + (error.message || '未知错误'));
-      }
-      console.error('Prerender config submission error:', error)
-    }
-  }
 
   return (
     <div>
@@ -942,6 +868,8 @@ const Sites: React.FC = () => {
           rowKey="name"
           loading={loading}
           pagination={{ pageSize: 10 }}
+          scroll={{ x: 1200 }}
+          style={{ tableLayout: 'fixed' }}
         />
       </Card>
 
@@ -1526,201 +1454,7 @@ const Sites: React.FC = () => {
         </p>
       </Modal>
 
-      {/* 渲染预热配置弹窗 */}
-      <Modal
-        title={`站点 "${currentPrerenderSite?.name}" 渲染预热配置`}
-        open={prerenderConfigModalVisible}
-        onOk={handlePrerenderConfigSubmit}
-        onCancel={() => setPrerenderConfigModalVisible(false)}
-        width={800}
-        okText="保存"
-        cancelText="取消"
-      >
-        <Form
-          form={prerenderConfigForm}
-          layout="vertical"
-          initialValues={{
-            enabled: true,
-            poolSize: 5,
-            minPoolSize: 2,
-            maxPoolSize: 20,
-            timeout: 30,
-            cacheTTL: 3600,
-            idleTimeout: 300,
-            dynamicScaling: true,
-            scalingFactor: 0.5,
-            scalingInterval: 60,
-            useDefaultHeaders: true,
-            crawlerHeaders: [],
-            preheat: {
-              enabled: false
-            }
-          }}
-        >
-          {/* 基本配置 */}
-          <Card title="基本配置" size="small" style={{ marginBottom: 16 }}>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="enabled" label="启用渲染预热" valuePropName="checked">
-                  <Switch />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item name="poolSize" label="浏览器池大小">
-                  <Input type="number" placeholder="请输入浏览器池大小" min={1} />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="timeout" label="渲染超时(秒)">
-                  <Input type="number" placeholder="请输入渲染超时时间" min={1} />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item name="cacheTTL" label="缓存TTL(秒)">
-                  <Input type="number" placeholder="请输入缓存TTL" min={0} />
-                </Form.Item>
-              </Col>
-            </Row>
-          </Card>
 
-          {/* 浏览器池配置 */}
-          <Card title="浏览器池配置" size="small" style={{ marginBottom: 16 }}>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="minPoolSize" label="最小浏览器数">
-                  <Input type="number" placeholder="请输入最小浏览器数" min={1} />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item name="maxPoolSize" label="最大浏览器数">
-                  <Input type="number" placeholder="请输入最大浏览器数" min={1} />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="idleTimeout" label="空闲超时(秒)">
-                  <Input type="number" placeholder="请输入空闲超时时间" min={1} />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item name="dynamicScaling" label="启用动态扩容" valuePropName="checked">
-                  <Switch />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Form.Item
-              dependencies={['dynamicScaling']}
-              noStyle
-            >
-              {({ getFieldValue }) => {
-                const dynamicScalingEnabled = getFieldValue('dynamicScaling');
-                if (!dynamicScalingEnabled) {
-                  return null;
-                }
-                return (
-                  <Row gutter={16}>
-                    <Col span={12}>
-                      <Form.Item name="scalingFactor" label="扩容因子">
-                        <Input type="number" placeholder="请输入扩容因子，如0.5表示每次增加50%" min={0.1} max={2} step={0.1} />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item name="scalingInterval" label="扩容检查间隔(秒)">
-                        <Input type="number" placeholder="请输入扩容检查间隔" min={10} />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                );
-              }}
-            </Form.Item>
-          </Card>
-
-          {/* 爬虫协议头配置 */}
-          <Card title="爬虫协议头配置" size="small" style={{ marginBottom: 16 }}>
-            <Form.Item name="useDefaultHeaders" label="使用默认爬虫协议头" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-            <Form.Item label="默认爬虫协议头列表">
-              <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid #e8e8e8', borderRadius: 4, padding: 12, backgroundColor: '#fafafa' }}>
-                {defaultCrawlerHeaders.map((header, index) => (
-                  <div key={index} style={{ marginBottom: 4, fontSize: 12, color: '#666' }}>
-                    {header}
-                  </div>
-                ))}
-              </div>
-            </Form.Item>
-            <Form.Item name="crawlerHeaders" label="自定义爬虫协议头">
-              <Input.TextArea 
-                placeholder="请输入自定义爬虫协议头，每行一个" 
-                rows={6} 
-                style={{ fontFamily: 'monospace' }}
-              />
-            </Form.Item>
-            <Form.Item>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                提示：如果同时启用了默认爬虫协议头和自定义爬虫协议头，系统会合并使用两者。
-              </Typography.Text>
-            </Form.Item>
-          </Card>
-
-          {/* 缓存预热配置 */}
-          <Card title="缓存预热配置" size="small">
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name={['preheat', 'enabled']} label="启用缓存预热" valuePropName="checked">
-                  <Switch />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item 
-                  dependencies={[['preheat', 'enabled']]} 
-                  noStyle
-                >
-                  {({ getFieldValue }) => {
-                    const preheatEnabled = getFieldValue(['preheat', 'enabled']);
-                    if (!preheatEnabled) {
-                      return null;
-                    }
-                    return (
-                      <Form.Item name={['preheat', 'concurrency']} label="并发数">
-                        <Input type="number" placeholder="请输入并发数" min={1} />
-                      </Form.Item>
-                    );
-                  }}
-                </Form.Item>
-              </Col>
-            </Row>
-            <Form.Item 
-              dependencies={[['preheat', 'enabled']]} 
-              noStyle
-            >
-              {({ getFieldValue }) => {
-                const preheatEnabled = getFieldValue(['preheat', 'enabled']);
-                if (!preheatEnabled) {
-                  return null;
-                }
-                return (
-                  <Row gutter={16}>
-                    <Col span={24}>
-                      <Form.Item name={['preheat', 'sitemapURL']} label="Sitemap URL">
-                        <Input placeholder="请输入Sitemap URL" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={24}>
-                      <Form.Item name={['preheat', 'schedule']} label="预热计划">
-                        <Input placeholder="请输入cron表达式，如0 0 * * *表示每天0点执行" />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                );
-              }}
-            </Form.Item>
-          </Card>
-        </Form>
-      </Modal>
     </div>
   )
 }

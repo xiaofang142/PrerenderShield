@@ -70,6 +70,12 @@ export const prerenderApi = {
   render: (data: { site: string; url: string }) => api.post('/prerender/render', data),
   preheat: (data: { site: string }) => api.post('/prerender/preheat', data),
   updateConfig: (site: string, config: any) => api.put('/prerender/config', { site, config }),
+  // 渲染预热扩展API
+  getPreheatStats: (site?: string) => api.get('/preheat/stats', { params: site ? { siteName: site } : {} }),
+  triggerPreheat: (site: string) => api.post('/preheat/trigger', { siteName: site }),
+  preheatUrls: (site: string, urls: string[]) => api.post('/preheat/url', { siteName: site, urls }),
+  getUrls: (site?: string, page: number = 1, pageSize: number = 20) => api.get('/preheat/urls', { params: { siteName: site, page, pageSize } }),
+  getCrawlerHeaders: () => api.get('/preheat/crawler-headers'),
 }
 
 // 路由API

@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/prerendershield/internal/config"
-	"github.com/prerendershield/internal/firewall/types"
+	"prerender-shield/internal/config"
+	"prerender-shield/internal/firewall/types"
 )
 
 // FileIntegrityDetector 文件完整性检测器

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/prerendershield/internal/firewall/types"
+	"prerender-shield/internal/firewall/types"
 )
 
 // CSRFDetector 跨站请求伪造检测器

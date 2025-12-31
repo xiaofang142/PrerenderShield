@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/prerendershield/internal/config"
-	"github.com/prerendershield/internal/firewall/detectors"
-	"github.com/prerendershield/internal/firewall/types"
+	"prerender-shield/internal/config"
+	"prerender-shield/internal/firewall/detectors"
+	"prerender-shield/internal/firewall/types"
 )
 
 // Engine 防火墙引擎
