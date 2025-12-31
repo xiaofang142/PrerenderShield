@@ -112,6 +112,7 @@ export const sitesApi = {
     formData.append('path', path)
     return api.post(`/sites/${siteName}/static/extract`, formData)
   },
+  deleteStaticResources: (siteName: string, path: string) => api.delete(`/sites/${siteName}/static`, { params: { path } }),
 }
 
 // 爬虫日志API

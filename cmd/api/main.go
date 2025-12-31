@@ -1462,6 +1462,69 @@ func main() {
 				})
 			})
 
+			// 删除静态资源API
+			sitesGroup.DELETE("/:name/static", func(c *gin.Context) {
+				name := c.Param("name")
+				path := c.Query("path")
+				if path == "" {
+					path = "/"
+				}
+
+				// 检查站点是否存在并获取站点ID
+				currentConfig := configManager.GetConfig()
+				var siteID string
+				siteExists := false
+				for _, site := range currentConfig.Sites {
+					if site.Name == name {
+						siteID = site.ID
+						siteExists = true
+						break
+					}
+				}
+
+				if !siteExists {
+					c.JSON(http.StatusNotFound, gin.H{
+						"code":    404,
+						"message": "Site not found",
+					})
+					return
+				}
+
+				// 构建静态文件目录路径：{cfg.Dirs.StaticDir}/{site.ID}
+				staticDir := filepath.Join(cfg.Dirs.StaticDir, siteID)
+
+				// 修复路径拼接问题：如果filePath是根路径，直接使用staticDir
+				var targetPath string
+				if path == "/" {
+					targetPath = staticDir
+				} else {
+					targetPath = filepath.Join(staticDir, path)
+				}
+
+				// 检查目录是否存在
+				if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+					c.JSON(http.StatusNotFound, gin.H{
+						"code":    404,
+						"message": "Path not found",
+					})
+					return
+				}
+
+				// 执行删除操作
+				if err := os.RemoveAll(targetPath); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"code":    500,
+						"message": fmt.Sprintf("Failed to delete: %v", err),
+					})
+					return
+				}
+
+				c.JSON(http.StatusOK, gin.H{
+					"code":    200,
+					"message": "Delete successfully",
+				})
+			})
+
 			// 静态文件上传API
 			sitesGroup.POST("/:name/static", func(c *gin.Context) {
 				name := c.Param("name")

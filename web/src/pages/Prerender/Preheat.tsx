@@ -392,25 +392,13 @@ const Preheat: React.FC = () => {
             />
           </Col>
           <Col span={6}>
-            <Statistic
-              title="浏览器池大小"
-              value={stats.browserPoolSize}
-              prefix={<PlayCircleOutlined />}
-              valueStyle={{ color: '#722ed1' }}
-              suffix={
-                <Button 
-                  type="link" 
-                  size="small"
-                  onClick={() => {
-                    // 这里可以添加设置浏览器池大小的逻辑
-                    message.info('浏览器池大小设置功能将在后续版本中实现');
-                  }}
-                >
-                  设置
-                </Button>
-              }
-            />
-          </Col>
+              <Statistic
+                title="浏览器池大小"
+                value={stats.browserPoolSize}
+                prefix={<PlayCircleOutlined />}
+                valueStyle={{ color: '#722ed1' }}
+              />
+            </Col>
         </Row>
       </Card>
       

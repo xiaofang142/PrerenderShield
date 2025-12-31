@@ -1200,24 +1200,10 @@ const Sites: React.FC = () => {
                         return null;
                       }
                       return (
-                        <>
-                          <Form.Item name={['prerender', 'poolSize']} label="浏览器池大小" rules={[{ required: true, message: '请输入浏览器池大小' }]}>
-                            <Input type="number" min={1} max={100} placeholder="请输入浏览器池大小" />
-                          </Form.Item>
-
-                          <Row gutter={16}>
-                            <Col span={12}>
-                              <Form.Item name={['prerender', 'timeout']} label="渲染超时(秒)" rules={[{ required: true, message: '请输入渲染超时时间' }]}>
-                                <Input type="number" min={5} max={300} placeholder="请输入渲染超时时间" />
-                              </Form.Item>
-                            </Col>
-                            <Col span={12}>
-                              <Form.Item name={['prerender', 'cacheTTL']} label="缓存TTL(秒)" rules={[{ required: true, message: '请输入缓存TTL' }]}>
-                                <Input type="number" min={60} max={86400} placeholder="请输入缓存TTL" />
-                              </Form.Item>
-                            </Col>
-                          </Row>
-                        </>
+                        <div style={{ marginBottom: 16, padding: 10, backgroundColor: '#f0f9ff', borderRadius: 4, border: '1px solid #91d5ff' }}>
+                          <p style={{ margin: 0, color: '#1890ff', fontWeight: 'bold' }}>提示：</p>
+                          <p style={{ margin: '8px 0 0 0', color: '#40a9ff' }}>浏览器池大小和缓存TTL（秒）等高级配置，请在站点列表页面点击「渲染预热配置」按钮进行设置。</p>
+                        </div>
                       );
                     }}
                   </Form.Item>
@@ -1447,6 +1433,44 @@ const Sites: React.FC = () => {
           <span style={{ fontWeight: 'bold' }}>当前路径：{currentPath}</span>
           <div style={{ flex: 1 }}></div>
           <Space>
+            <Button
+              type="primary"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => {
+                Modal.confirm({
+                  title: '确认删除',
+                  content: `确定要删除当前路径下的所有文件吗？此操作不可恢复。`,
+                  okText: '删除',
+                  okType: 'danger',
+                  cancelText: '取消',
+                  onOk: async () => {
+                    try {
+                      // 确保站点名称存在
+                      const siteName = currentSite && currentSite.name;
+                      if (!siteName) {
+                        throw new Error('站点名称不存在');
+                      }
+                      
+                      // 调用API删除当前路径下的所有静态资源
+                      const response = await sitesApi.deleteStaticResources(siteName, currentPath);
+                      if (response.code === 200) {
+                        message.success('删除成功');
+                        // 重新加载文件列表
+                        loadFileList(currentPath, siteName);
+                      } else {
+                        message.error(`删除失败: ${response.message}`);
+                      }
+                    } catch (error) {
+                      console.error('删除静态资源失败:', error);
+                      message.error('删除静态资源失败: ' + (error as any).message);
+                    }
+                  },
+                });
+              }}
+            >
+              一键删除全部
+            </Button>
             <Button
               type="primary"
               icon={<NewFolderOutlined />}
