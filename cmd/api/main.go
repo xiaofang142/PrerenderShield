@@ -817,9 +817,9 @@ func main() {
 
 		apiGroup.GET("/preheat/stats", func(c *gin.Context) {
 			// 获取预热统计数据
-			siteName := c.Query("site")
+			siteId := c.Query("siteId")
 
-			if siteName == "" {
+			if siteId == "" {
 				// 获取所有站点的统计数据
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
@@ -835,6 +835,7 @@ func main() {
 				"code":    200,
 				"message": "success",
 				"data": gin.H{
+					"siteId":          siteId,
 					"urlCount":        0,
 					"cacheCount":      0,
 					"totalCacheSize":  0,
@@ -846,7 +847,7 @@ func main() {
 		apiGroup.POST("/preheat/trigger", func(c *gin.Context) {
 			// 触发站点预热
 			var req struct {
-				SiteName string `json:"siteName" binding:"required"`
+				SiteId string `json:"siteId" binding:"required"`
 			}
 
 			if err := c.ShouldBindJSON(&req); err != nil {
@@ -858,21 +859,34 @@ func main() {
 			}
 
 			// 获取站点的预渲染引擎
-			engine, exists := prerenderManager.GetEngine(req.SiteName)
+			engine, exists := prerenderManager.GetEngine(req.SiteId)
 			if !exists {
 				c.JSON(http.StatusNotFound, gin.H{
 					"code":    http.StatusNotFound,
-					"message": "Site not found",
+					"message": fmt.Sprintf("Site with ID '%s' not found", req.SiteId),
 				})
 				return
 			}
 
 			// 调用引擎的触发预热方法
 			if err := engine.TriggerPreheat(); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"code":    http.StatusInternalServerError,
-					"message": fmt.Sprintf("Failed to trigger preheat: %v", err),
-				})
+				// 检查错误类型，返回更友好的错误信息
+				if strings.Contains(err.Error(), "preheat is already running") {
+					c.JSON(http.StatusConflict, gin.H{
+						"code":    http.StatusConflict,
+						"message": "预热任务已在运行中，请稍后再试",
+					})
+				} else if strings.Contains(err.Error(), "redis client is not available") {
+					c.JSON(http.StatusServiceUnavailable, gin.H{
+						"code":    http.StatusServiceUnavailable,
+						"message": "Redis服务不可用，无法触发预热",
+					})
+				} else {
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"code":    http.StatusInternalServerError,
+						"message": fmt.Sprintf("触发预热失败: %v", err),
+					})
+				}
 				return
 			}
 
@@ -885,8 +899,8 @@ func main() {
 		apiGroup.POST("/preheat/url", func(c *gin.Context) {
 			// 手动预热指定URL
 			var req struct {
-				SiteName string   `json:"siteName" binding:"required"`
-				URLs     []string `json:"urls" binding:"required"`
+				SiteId string   `json:"siteId" binding:"required"`
+				URLs   []string `json:"urls" binding:"required"`
 			}
 
 			if err := c.ShouldBindJSON(&req); err != nil {
@@ -906,7 +920,7 @@ func main() {
 
 		apiGroup.GET("/preheat/urls", func(c *gin.Context) {
 			// 获取URL列表
-			siteName := c.Query("siteName")
+			siteId := c.Query("siteId")
 			page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 			pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 
@@ -923,7 +937,7 @@ func main() {
 			// 检查Redis客户端是否可用
 			if redisClient != nil {
 				// 从Redis获取URL列表
-				allUrls, err := redisClient.GetURLs(siteName)
+				allUrls, err := redisClient.GetURLs(siteId)
 				if err == nil {
 					urls = allUrls
 					total = int64(len(allUrls))
@@ -962,9 +976,9 @@ func main() {
 
 		apiGroup.GET("/preheat/task/status", func(c *gin.Context) {
 			// 获取任务状态
-			siteName := c.Query("site")
+			siteId := c.Query("siteId")
 
-			if siteName == "" {
+			if siteId == "" {
 				// 获取所有站点的任务状态
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
@@ -974,11 +988,25 @@ func main() {
 				return
 			}
 
+			// 获取站点的预渲染引擎
+			engine, exists := prerenderManager.GetEngine(siteId)
+			if !exists {
+				c.JSON(http.StatusNotFound, gin.H{
+					"code":    http.StatusNotFound,
+					"message": fmt.Sprintf("Site with ID '%s' not found", siteId),
+				})
+				return
+			}
+
+			// 获取预热状态
+			status := engine.GetPreheatStatus()
+
 			c.JSON(http.StatusOK, gin.H{
 				"code":    200,
 				"message": "success",
 				"data": gin.H{
-					"siteName":  siteName,
+					"siteId":    siteId,
+					"isRunning": status["isRunning"],
 					"scheduled": false,
 					"nextRun":   "",
 				},

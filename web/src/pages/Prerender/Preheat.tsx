@@ -8,7 +8,8 @@ const { TextArea } = Input
 
 const Preheat: React.FC = () => {
   const [sites, setSites] = useState<any[]>([])
-  const [selectedSite, setSelectedSite] = useState<string>('')
+  const [selectedSiteId, setSelectedSiteId] = useState<string>('')
+  const [selectedSiteName, setSelectedSiteName] = useState<string>('')
   const [stats, setStats] = useState({
     urlCount: 0,
     cacheCount: 0,
@@ -114,8 +115,9 @@ const Preheat: React.FC = () => {
         // 只保留静态模式的站点
         const staticSites = res.data.filter((site: any) => site.mode === 'static')
         setSites(staticSites)
-        if (staticSites.length > 0 && !selectedSite) {
-          setSelectedSite(staticSites[0].name)
+        if (staticSites.length > 0 && !selectedSiteId) {
+          setSelectedSiteId(staticSites[0].id)
+          setSelectedSiteName(staticSites[0].name || staticSites[0].Name || '')
         }
       }
     } catch (error) {
@@ -127,10 +129,10 @@ const Preheat: React.FC = () => {
   }
 
   // 获取预热统计数据
-  const fetchStats = async () => {
+   const fetchStats = async () => {
     try {
       setLoading(true)
-      const res = await prerenderApi.getPreheatStats(selectedSite)
+      const res = await prerenderApi.getPreheatStats(selectedSiteId)
       if (res.code === 200) {
         setStats({
           urlCount: res.data.urlCount || 0,
@@ -151,7 +153,7 @@ const Preheat: React.FC = () => {
   const fetchUrls = async (page: number = 1, size: number = 20) => {
     try {
       setUrlLoading(true)
-      const res = await prerenderApi.getUrls(selectedSite, page, size)
+      const res = await prerenderApi.getUrls(selectedSiteId, page, size)
       if (res.code === 200) {
         setUrlList(res.data.list || [])
         setTotal(res.data.total || 0)
@@ -175,11 +177,11 @@ const Preheat: React.FC = () => {
 
   // 当选中站点变化时，重新获取统计数据和URL列表
   useEffect(() => {
-    if (selectedSite) {
+    if (selectedSiteId) {
       fetchStats()
       fetchUrls()
     }
-  }, [selectedSite])
+  }, [selectedSiteId])
 
   // 刷新统计数据
   const handleRefreshStats = () => {
@@ -190,14 +192,14 @@ const Preheat: React.FC = () => {
 
   // 触发站点预热
   const handleTriggerPreheat = async () => {
-    if (!selectedSite) {
+    if (!selectedSiteId) {
       message.warning('请先选择站点')
       return
     }
 
     try {
       setIsPreheating(true)
-      const res = await prerenderApi.triggerPreheat(selectedSite)
+      const res = await prerenderApi.triggerPreheat(selectedSiteId)
       if (res.code === 200) {
         message.success('预热任务已触发，正在执行中')
         // 开始轮询进度（这里简化处理，实际可以通过WebSocket或定期查询）
@@ -225,7 +227,7 @@ const Preheat: React.FC = () => {
 
   // 手动预热URL
   const handleManualPreheat = async () => {
-    if (!selectedSite) {
+    if (!selectedSiteId) {
       message.warning('请先选择站点')
       return
     }
@@ -238,7 +240,7 @@ const Preheat: React.FC = () => {
     try {
       setIsPreheating(true)
       const urls = manualUrls.split('\n').filter(url => url.trim())
-      const res = await prerenderApi.preheatUrls(selectedSite, urls)
+      const res = await prerenderApi.preheatUrls(selectedSiteId, urls)
       if (res.code === 200) {
         message.success(`已触发 ${urls.length} 个URL的预热任务`)
         setManualUrls('')
@@ -269,7 +271,7 @@ const Preheat: React.FC = () => {
   const handleSinglePreheat = async (url: string) => {
     try {
       setIsPreheating(true)
-      const res = await prerenderApi.preheatUrls(selectedSite, [url])
+      const res = await prerenderApi.preheatUrls(selectedSiteId, [url])
       if (res.code === 200) {
         message.success('URL预热任务已触发')
         // 模拟进度
@@ -331,15 +333,19 @@ const Preheat: React.FC = () => {
           <Col span={8}>
             <label style={{ marginRight: 8, fontWeight: 'bold' }}>选择站点：</label>
             <Select
-              value={selectedSite}
-              onChange={setSelectedSite}
+              value={selectedSiteId}
+              onChange={(value) => {
+                const site = sites.find((s: any) => s.id === value)
+                setSelectedSiteId(value)
+                setSelectedSiteName(site?.name || site?.Name || '')
+              }}
               style={{ width: 200 }}
               loading={loading}
               placeholder="请选择站点"
             >
-              {sites.map((site) => (
-                <Option key={site.name} value={site.name}>
-                  {site.name} ({site.domain})
+              {sites.map((site: any) => (
+                <Option key={site.id} value={site.id}>
+                  {site.name || site.Name} ({site.domain || site.Domains?.[0] || site.id})
                 </Option>
               ))}
             </Select>

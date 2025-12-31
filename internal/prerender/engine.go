@@ -301,6 +301,15 @@ func (pm *PreheatManager) IsRunning() bool {
 	return pm.isRunning
 }
 
+// GetStatus 获取预热状态
+func (pm *PreheatManager) GetStatus() map[string]interface{} {
+	pm.mutex.Lock()
+	defer pm.mutex.Unlock()
+	return map[string]interface{}{
+		"isRunning": pm.isRunning,
+	}
+}
+
 // Stop 停止预热
 func (pm *PreheatManager) Stop() {
 	pm.mutex.Lock()
@@ -879,12 +888,22 @@ func (e *Engine) clearExpiredCache() {
 	e.renderCache.ClearExpired(time.Duration(e.config.CacheTTL) * time.Second)
 }
 
-// TriggerPreheat 触发缓存预热
+// TriggerPreheat 触发预热
 func (e *Engine) TriggerPreheat() error {
 	if e.preheatManager == nil {
 		return nil
 	}
 	return e.preheatManager.TriggerPreheat()
+}
+
+// GetPreheatStatus 获取预热状态
+func (e *Engine) GetPreheatStatus() map[string]interface{} {
+	if e.preheatManager == nil {
+		return map[string]interface{}{
+			"isRunning": false,
+		}
+	}
+	return e.preheatManager.GetStatus()
 }
 
 // GetCrawlerHeaders 获取完整的爬虫协议头列表（包括默认和自定义的）
