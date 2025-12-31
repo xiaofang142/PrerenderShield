@@ -3,6 +3,8 @@ package redis
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -16,9 +18,38 @@ type Client struct {
 
 // NewClient 创建新的Redis客户端
 func NewClient(redisURL string) (*Client, error) {
-	opt, err := redis.ParseURL(redisURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse redis URL: %v", err)
+	// 直接创建Redis客户端选项，不使用ParseURL
+	opt := &redis.Options{}
+
+	// 如果redisURL是纯主机名或IP地址，使用默认端口
+	if !strings.Contains(redisURL, "://") {
+		opt.Addr = redisURL
+		if !strings.Contains(opt.Addr, ":") {
+			opt.Addr = fmt.Sprintf("%s:6379", opt.Addr)
+		}
+	} else {
+		// 否则尝试解析URL
+		parsed, err := url.Parse(redisURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse redis URL: %v", err)
+		}
+
+		opt.Addr = parsed.Host
+		if !strings.Contains(opt.Addr, ":") {
+			opt.Addr = fmt.Sprintf("%s:6379", opt.Addr)
+		}
+
+		// 解析密码
+		if parsed.User != nil {
+			opt.Password, _ = parsed.User.Password()
+		}
+
+		// 解析数据库
+		db := 0
+		if parsed.Path != "" && parsed.Path != "/" {
+			fmt.Sscanf(parsed.Path[1:], "%d", &db)
+		}
+		opt.DB = db
 	}
 
 	client := redis.NewClient(opt)
@@ -103,7 +134,7 @@ func (c *Client) GetCacheCount(siteName string) (int64, error) {
 	// 使用SCAN命令统计所有状态为cached的URL数量
 	keyPrefix := fmt.Sprintf("prerender:%s:url:", siteName)
 	count := int64(0)
-	
+
 	iter := c.client.Scan(c.ctx, 0, keyPrefix+"*", 0).Iterator()
 	for iter.Next(c.ctx) {
 		status, err := c.client.HGet(c.ctx, iter.Val(), "status").Result()
@@ -111,11 +142,11 @@ func (c *Client) GetCacheCount(siteName string) (int64, error) {
 			count++
 		}
 	}
-	
+
 	if err := iter.Err(); err != nil {
 		return 0, err
 	}
-	
+
 	return count, nil
 }
 

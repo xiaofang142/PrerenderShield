@@ -7,10 +7,11 @@ import (
 	"sync"
 	"time"
 
+	"prerender-shield/internal/redis"
+
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/google/uuid"
-	"prerender-shield/internal/redis"
 )
 
 // LRUCacheNode LRU缓存节点
@@ -48,6 +49,7 @@ type Engine struct {
 	activeTasks          int          // 当前活跃任务数
 	taskMutex            sync.RWMutex // 活跃任务数互斥锁
 	renderCache          *LRUCache    // 渲染缓存，使用LRU机制
+	redisClient          *redis.Client
 	// 默认爬虫协议头列表
 	defaultCrawlerHeaders []string
 }
@@ -164,16 +166,21 @@ func (pm *PreheatManager) TriggerPreheat() error {
 		pm.mutex.Unlock()
 	}()
 
+	// 检查Redis客户端是否可用
+	if pm.redisClient == nil {
+		return fmt.Errorf("redis client is not available, preheat cannot be triggered")
+	}
+
 	// 1. 首先爬取站点的所有链接
 	fmt.Printf("Starting URL crawler for site: %s\n", pm.engine.SiteName)
 
-	// 初始化baseURL，使用站点名称作为默认域名
-	baseURL := fmt.Sprintf("http://%s", pm.engine.SiteName)
+	// 初始化baseURL，使用localhost:8081作为默认域名
+	baseURL := "http://localhost:8081"
 
 	// 创建爬虫配置
 	crawlerConfig := CrawlerConfig{
 		SiteName:    pm.engine.SiteName,
-		Domain:      pm.engine.SiteName,
+		Domain:      "localhost:8081",
 		BaseURL:     baseURL,
 		MaxDepth:    pm.config.Preheat.MaxDepth,
 		Concurrency: pm.config.Preheat.Concurrency,
@@ -216,6 +223,11 @@ func (pm *PreheatManager) TriggerPreheat() error {
 
 // updateStats 更新站点统计数据
 func (pm *PreheatManager) updateStats() error {
+	// 检查Redis客户端是否可用
+	if pm.redisClient == nil {
+		return fmt.Errorf("redis client is not available, cannot update stats")
+	}
+
 	// 获取URL数量
 	urlCount, err := pm.redisClient.GetURLCount(pm.engine.SiteName)
 	if err != nil {
@@ -245,6 +257,11 @@ func (pm *PreheatManager) updateStats() error {
 
 // TriggerPreheatForURL 触发单个URL的预热
 func (pm *PreheatManager) TriggerPreheatForURL(url string) error {
+	// 检查Redis客户端是否可用
+	if pm.redisClient == nil {
+		return fmt.Errorf("redis client is not available, cannot preheat URL")
+	}
+
 	// 创建预热执行器配置
 	preheatConfig := PreheatWorkerConfig{
 		SiteName:       pm.engine.SiteName,
@@ -264,6 +281,16 @@ func (pm *PreheatManager) TriggerPreheatForURL(url string) error {
 
 // GetStats 获取站点预热统计数据
 func (pm *PreheatManager) GetStats() (map[string]string, error) {
+	// 检查Redis客户端是否可用
+	if pm.redisClient == nil {
+		// 返回空统计数据而不是报错，避免前端崩溃
+		return map[string]string{
+			"url_count":        "0",
+			"cache_count":      "0",
+			"total_cache_size": "0",
+		}, nil
+	}
+
 	return pm.redisClient.GetSiteStats(pm.engine.SiteName)
 }
 
@@ -405,7 +432,7 @@ func (c *LRUCache) ClearExpired(ttl time.Duration) {
 }
 
 // NewEngine 创建新的渲染预热引擎
-func NewEngine(siteName string, config PrerenderConfig) (*Engine, error) {
+func NewEngine(siteName string, config PrerenderConfig, redisClient *redis.Client) (*Engine, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// 设置默认值
@@ -465,6 +492,7 @@ func NewEngine(siteName string, config PrerenderConfig) (*Engine, error) {
 		activeTasks:           0,
 		renderCache:           NewLRUCache(1000), // 渲染缓存初始化，容量1000
 		defaultCrawlerHeaders: defaultCrawlerHeaders,
+		redisClient:           redisClient,
 	}
 
 	return engine, nil
@@ -482,7 +510,7 @@ func NewEngineManager() *EngineManager {
 }
 
 // AddSite 添加新站点
-func (em *EngineManager) AddSite(siteName string, config PrerenderConfig) error {
+func (em *EngineManager) AddSite(siteName string, config PrerenderConfig, redisClient *redis.Client) error {
 	em.mutex.Lock()
 	defer em.mutex.Unlock()
 
@@ -492,7 +520,7 @@ func (em *EngineManager) AddSite(siteName string, config PrerenderConfig) error 
 	}
 
 	// 创建新引擎实例
-	engine, err := NewEngine(siteName, config)
+	engine, err := NewEngine(siteName, config, redisClient)
 	if err != nil {
 		return err
 	}
@@ -596,8 +624,9 @@ func (e *Engine) Start() error {
 
 	// 初始化预热管理器
 	e.preheatManager = &PreheatManager{
-		config: e.config,
-		engine: e,
+		config:      e.config,
+		engine:      e,
+		redisClient: e.redisClient,
 	}
 
 	// 启动任务处理器

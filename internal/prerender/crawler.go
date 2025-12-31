@@ -7,8 +7,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/go-rod/rod"
 	"prerender-shield/internal/redis"
+
+	"github.com/go-rod/rod"
 )
 
 // Crawler 链接爬取器
@@ -116,6 +117,7 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 	}
 
 	// 获取浏览器实例
+	fmt.Printf("Creating browser instance for %s\n", urlStr)
 	browser := rod.New().MustConnect()
 	defer browser.MustClose()
 
@@ -123,17 +125,31 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 	page := browser.MustPage()
 
 	// 导航到URL
-	fmt.Printf("Crawling: %s (depth: %d)\n", urlStr, depth)
-
+	fmt.Printf("Navigating to %s (depth: %d)\n", urlStr, depth)
 	if err := page.Navigate(urlStr); err != nil {
 		fmt.Printf("Failed to navigate to %s: %v\n", urlStr, err)
 		return
 	}
 
 	// 等待页面加载完成
+	fmt.Printf("Waiting for page load %s\n", urlStr)
 	if err := page.WaitLoad(); err != nil {
 		fmt.Printf("Failed to wait for page load %s: %v\n", urlStr, err)
 		return
+	}
+
+	// 获取页面内容，检查是否能正确获取
+	html, err := page.HTML()
+	if err != nil {
+		fmt.Printf("Failed to get page HTML %s: %v\n", urlStr, err)
+	} else {
+		fmt.Printf("Page HTML length: %d\n", len(html))
+		// 简单检查页面是否包含<a>标签
+		if strings.Contains(html, "<a ") {
+			fmt.Printf("Page contains <a> tags\n")
+		} else {
+			fmt.Printf("Page does NOT contain <a> tags\n")
+		}
 	}
 
 	// 提取所有链接
@@ -272,7 +288,20 @@ func (c *Crawler) isSameDomain(urlStr string) bool {
 		return false
 	}
 
-	return strings.EqualFold(parsed.Hostname(), c.domain)
+	// 比较完整的host（包含端口号）或仅主机名
+	targetURL, err := url.Parse(fmt.Sprintf("http://%s", c.domain))
+	if err != nil {
+		// 如果目标域名解析失败，尝试仅比较主机名
+		return strings.EqualFold(parsed.Hostname(), c.domain)
+	}
+
+	// 如果目标URL有端口号，比较完整的host
+	if targetURL.Port() != "" {
+		return strings.EqualFold(parsed.Host, c.domain)
+	}
+
+	// 否则仅比较主机名
+	return strings.EqualFold(parsed.Hostname(), targetURL.Hostname())
 }
 
 // isValidURL 检查URL是否为有效的HTTP/HTTPS URL

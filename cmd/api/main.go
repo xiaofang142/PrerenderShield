@@ -520,7 +520,7 @@ func main() {
 
 		// 将引擎添加到管理器
 		// AddSite 方法会自动创建并启动引擎
-		if err := prerenderManager.AddSite(site.ID, prerenderConfig); err != nil {
+		if err := prerenderManager.AddSite(site.ID, prerenderConfig, redisClient); err != nil {
 			logging.DefaultLogger.Error("Failed to add site to prerender manager: %v", err)
 			log.Fatalf("Failed to add site to prerender manager: %v", err)
 		}
@@ -857,7 +857,25 @@ func main() {
 				return
 			}
 
-			// 简化实现，直接返回成功
+			// 获取站点的预渲染引擎
+			engine, exists := prerenderManager.GetEngine(req.SiteName)
+			if !exists {
+				c.JSON(http.StatusNotFound, gin.H{
+					"code":    http.StatusNotFound,
+					"message": "Site not found",
+				})
+				return
+			}
+
+			// 调用引擎的触发预热方法
+			if err := engine.TriggerPreheat(); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"code":    http.StatusInternalServerError,
+					"message": fmt.Sprintf("Failed to trigger preheat: %v", err),
+				})
+				return
+			}
+
 			c.JSON(http.StatusOK, gin.H{
 				"code":    200,
 				"message": "Preheat triggered successfully",
@@ -888,7 +906,7 @@ func main() {
 
 		apiGroup.GET("/preheat/urls", func(c *gin.Context) {
 			// 获取URL列表
-			// 忽略siteName参数，简化实现
+			siteName := c.Query("siteName")
 			page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 			pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 
@@ -899,12 +917,43 @@ func main() {
 				pageSize = 20
 			}
 
+			var urls []string
+			var total int64
+
+			// 检查Redis客户端是否可用
+			if redisClient != nil {
+				// 从Redis获取URL列表
+				allUrls, err := redisClient.GetURLs(siteName)
+				if err == nil {
+					urls = allUrls
+					total = int64(len(allUrls))
+				}
+			}
+
+			// 分页处理
+			start := (page - 1) * pageSize
+			end := start + pageSize
+			if end > len(urls) {
+				end = len(urls)
+			}
+
+			var pageUrls []string
+			if start < len(urls) {
+				pageUrls = urls[start:end]
+			}
+
+			// 转换为前端需要的格式
+			var list []gin.H
+			for _, url := range pageUrls {
+				list = append(list, gin.H{"url": url})
+			}
+
 			c.JSON(http.StatusOK, gin.H{
 				"code":    200,
 				"message": "success",
 				"data": gin.H{
-					"list":     []gin.H{},
-					"total":    0,
+					"list":     list,
+					"total":    total,
 					"page":     page,
 					"pageSize": pageSize,
 				},
@@ -1847,7 +1896,7 @@ func main() {
 					},
 				}
 
-				if err := prerenderManager.AddSite(req.Site, prerenderConfig); err != nil {
+				if err := prerenderManager.AddSite(req.Site, prerenderConfig, redisClient); err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to restart prerender engine"})
 					return
 				}
