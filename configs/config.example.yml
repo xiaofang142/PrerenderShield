@@ -14,7 +14,7 @@ firewall:
     default_action: "block"
     block_message: "Request blocked by PrerenderShield"
 
-# 预渲染配置
+# 渲染预热配置
 prerender:
   enabled: true
   pool_size: 5

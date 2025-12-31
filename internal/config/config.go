@@ -54,7 +54,7 @@ type SiteConfig struct {
 	Redirect RedirectConfig `yaml:"redirect" json:"redirect"`
 	// 防火墙配置
 	Firewall FirewallConfig `yaml:"firewall" json:"firewall"`
-	// 预渲染配置
+	// 渲染预热配置
 	Prerender PrerenderConfig `yaml:"prerender" json:"prerender"`
 	// 路由配置
 	Routing RoutingConfig `yaml:"routing" json:"routing"`
@@ -133,7 +133,7 @@ type ActionConfig struct {
 	BlockMessage  string `yaml:"block_message" json:"BlockMessage"`
 }
 
-// PrerenderConfig 预渲染配置
+// PrerenderConfig 渲染预热配置
 type PrerenderConfig struct {
 	Enabled           bool          `yaml:"enabled" json:"Enabled"`
 	PoolSize          int           `yaml:"pool_size" json:"PoolSize"`

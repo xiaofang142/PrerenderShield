@@ -27,7 +27,7 @@ type LRUCache struct {
 	mutex      sync.RWMutex
 }
 
-// Engine 预渲染引擎
+// Engine 渲染预热引擎
 type Engine struct {
 	SiteName             string
 	config               PrerenderConfig
@@ -51,7 +51,7 @@ type Engine struct {
 	defaultCrawlerHeaders []string
 }
 
-// EngineManager 预渲染引擎管理器，管理多个站点的预渲染引擎
+// EngineManager 渲染预热引擎管理器，管理多个站点的渲染预热引擎
 type EngineManager struct {
 	mutex   sync.RWMutex
 	engines map[string]*Engine // 站点名 -> 引擎实例
@@ -99,7 +99,7 @@ type CachedRenderResult struct {
 	ContentHash string // 内容哈希，用于检测内容变化
 }
 
-// PrerenderConfig 预渲染配置
+// PrerenderConfig 渲染预热配置
 type PrerenderConfig struct {
 	Enabled           bool
 	PoolSize          int // 初始浏览器池大小
@@ -252,7 +252,7 @@ func (c *LRUCache) ClearExpired(ttl time.Duration) {
 	}
 }
 
-// NewEngine 创建新的预渲染引擎
+// NewEngine 创建新的渲染预热引擎
 func NewEngine(siteName string, config PrerenderConfig) (*Engine, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -318,7 +318,7 @@ func NewEngine(siteName string, config PrerenderConfig) (*Engine, error) {
 	return engine, nil
 }
 
-// NewEngineManager 创建预渲染引擎管理器
+// NewEngineManager 创建渲染预热引擎管理器
 func NewEngineManager() *EngineManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &EngineManager{
@@ -428,7 +428,7 @@ func (em *EngineManager) StopAll() error {
 	return nil
 }
 
-// Start 启动预渲染引擎
+// Start 启动渲染预热引擎
 func (e *Engine) Start() error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
@@ -484,7 +484,7 @@ func (e *Engine) startCacheCleanup() {
 	}()
 }
 
-// Stop 停止预渲染引擎
+// Stop 停止渲染预热引擎
 func (e *Engine) Stop() error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
@@ -579,9 +579,9 @@ type RenderResultWithCache struct {
 
 // Render 执行渲染任务
 func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) (*RenderResultWithCache, error) {
-	// 检查是否为静态资源或支付返回页面，如果是则跳过预渲染
+	// 检查是否为静态资源或支付返回页面，如果是则跳过渲染预热
 	if e.isStaticResource(url) || e.isPaymentReturn(url) {
-		// 直接返回空结果或跳过预渲染，这里返回一个特殊的成功结果表示不需要预渲染
+		// 直接返回空结果或跳过渲染预热，这里返回一个特殊的成功结果表示不需要渲染预热
 		return &RenderResultWithCache{
 			Result: &RenderResult{
 				HTML:    "",

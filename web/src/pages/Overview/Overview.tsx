@@ -804,7 +804,7 @@ const Overview: React.FC = () => {
                 </Col>
                 <Col span={12}>
                   <Statistic 
-                    title="预渲染" 
+                    title="渲染预热" 
                     value={stats.prerenderEnabled ? "已启用" : "已禁用"} 
                     valueStyle={{ color: stats.prerenderEnabled ? '#52c41a' : '#faad14' }} 
                   />

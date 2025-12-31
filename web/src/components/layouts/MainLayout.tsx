@@ -69,7 +69,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             {
               key: '/prerender',
               icon: <CodeOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/prerender" style={{ color: '#333333' }}>预渲染</Link>
+              label: <Link to="/prerender" style={{ color: '#333333' }}>渲染预热</Link>
             },
 
             {

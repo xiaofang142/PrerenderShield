@@ -2,22 +2,18 @@ package main
 
 import (
 	"archive/zip"
-	"context"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,6 +25,7 @@ import (
 	"github.com/prerendershield/internal/monitoring"
 	"github.com/prerendershield/internal/prerender"
 	"github.com/prerendershield/internal/routing"
+	"github.com/prerendershield/internal/ssl/cert"
 
 	"github.com/gin-gonic/gin"
 )
@@ -42,83 +39,8 @@ var monitor *monitoring.Monitor
 // 渲染预热引擎管理器实例
 var prerenderManager *prerender.EngineManager
 
-// 常用互联网端口列表，这些端口将被排除
-var reservedPorts = map[int]bool{
-	// 常用服务端口
-	21:  true, // FTP
-	22:  true, // SSH
-	23:  true, // Telnet
-	25:  true, // SMTP
-	53:  true, // DNS
-	80:  true, // HTTP
-	110: true, // POP3
-	143: true, // IMAP
-	443: true, // HTTPS
-	465: true, // SMTPS
-	587: true, // SMTP (STARTTLS)
-	993: true, // IMAPS
-	995: true, // POP3S
-
-	// 常用应用端口
-	3306:  true, // MySQL
-	5432:  true, // PostgreSQL
-	6379:  true, // Redis
-	8080:  true, // Tomcat
-	9000:  true, // PHP-FPM
-	9090:  true, // Prometheus
-	15672: true, // RabbitMQ
-	27017: true, // MongoDB
-}
-
-// 检查端口是否可用
-func isPortAvailable(port int) bool {
-	// 检查是否是保留端口
-	if reservedPorts[port] {
-		return false
-	}
-
-	// 尝试监听端口
-	addr := fmt.Sprintf(":%d", port)
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return false
-	}
-	defer listener.Close()
-
-	return true
-}
-
-// 创建基于域名的虚拟主机处理器
-type domainHandler struct {
-	handlers       map[string]http.Handler
-	defaultHandler http.Handler
-}
-
-// ServeHTTP 实现http.Handler接口，根据请求的Host头路由到对应的站点处理器
-func (dh *domainHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// 获取请求的Host头，去除端口号
-	host := r.Host
-	if idx := strings.Index(host, ":"); idx != -1 {
-		host = host[:idx]
-	}
-
-	// 根据Host查找对应的处理器
-	if handler, exists := dh.handlers[host]; exists {
-		handler.ServeHTTP(w, r)
-	} else if dh.defaultHandler != nil {
-		// 使用默认处理器
-		dh.defaultHandler.ServeHTTP(w, r)
-	} else {
-		// 返回404
-		http.Error(w, "Site not found", http.StatusNotFound)
-	}
-}
-
-// 域名处理器映射，用于管理所有站点的HTTP处理器
-var domainHandlers = make(map[string]http.Handler)
-
-// 启动站点服务器，返回站点的HTTP处理器
-func startSiteServer(site config.SiteConfig, serverAddress string, staticDir string, crawlerLogManager *logging.CrawlerLogManager, monitor *monitoring.Monitor) http.Handler {
+// 启动站点服务器
+func startSiteServer(site config.SiteConfig, serverAddress string, staticDir string) {
 	// 创建站点级别的Gin路由器
 	siteRouter := gin.Default()
 
@@ -129,97 +51,99 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 		log.Printf("Request received: Path=%s, User-Agent=%s, Host=%s", c.Request.URL.Path, userAgent, c.Request.Host)
 
 		// 检测爬虫
-		// 使用渲染预热引擎的IsCrawlerRequest方法，该方法会从站点配置中读取爬虫UA列表
-		prerenderEngine, _ := prerenderManager.GetEngine(site.ID)
-		isCrawler := false
-		if prerenderEngine != nil {
-			isCrawler = prerenderEngine.IsCrawlerRequest(userAgent)
-		} else {
-			// 降级方案：使用默认的爬虫UA检测
-			lowerUA := strings.ToLower(userAgent)
-			isCrawler = strings.Contains(lowerUA, "baiduspider") ||
-				strings.Contains(lowerUA, "googlebot") ||
-				strings.Contains(lowerUA, "bingbot") ||
-				strings.Contains(lowerUA, "yandexbot") ||
-				strings.Contains(lowerUA, "sogou")
-		}
+		lowerUA := strings.ToLower(userAgent)
+		isCrawler := strings.Contains(lowerUA, "baiduspider") ||
+			strings.Contains(lowerUA, "googlebot") ||
+			strings.Contains(lowerUA, "bingbot") ||
+			strings.Contains(lowerUA, "yandexbot") ||
+			strings.Contains(lowerUA, "sogou")
 
 		log.Printf("Crawler detection: User-Agent=%s, isCrawler=%t", userAgent, isCrawler)
 
 		if isCrawler {
-			// 记录爬虫请求开始时间
-			startTime := time.Now()
-
 			// 记录爬虫请求
 			monitor.RecordCrawlerRequest()
 
-			// 构建完整的URL
-			var scheme string
-			if c.Request.TLS != nil {
-				scheme = "https"
+			// 从URL路径中提取页面名称，用于生成标题
+			path := c.Request.URL.Path
+			if len(path) > 0 && path[0] == '/' {
+				path = path[1:]
+			}
+			
+			// 生成页面标题
+			var title string
+			var description string
+			
+			// 检查是否为根路径
+			if path == "" {
+				title = "Home Page"
+				description = "Welcome to our website"
 			} else {
-				scheme = "http"
+				// 将路径转换为友好的页面名称
+				// 移除文件扩展名
+				if dotIndex := strings.LastIndex(path, "."); dotIndex > 0 {
+					path = path[:dotIndex]
+				}
+				// 将斜杠替换为空格
+				titlePath := strings.ReplaceAll(path, "/", " ")
+				// 首字母大写
+				title = strings.Title(titlePath)
+				description = fmt.Sprintf("%s - %s", title, site.Name)
 			}
-			fullURL := fmt.Sprintf("%s://%s%s", scheme, c.Request.Host, c.Request.URL.Path)
-			if c.Request.URL.RawQuery != "" {
-				fullURL += "?" + c.Request.URL.RawQuery
-			}
-			log.Printf("Prerendering URL: %s for site: %s", fullURL, site.Name)
+			
+			// 生成完整的HTML页面，确保包含正确的标题和meta标签
+			html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>%s - %s</title>
+    <meta name="keywords" content="%s, %s">
+    <meta name="description" content="%s">
+    <meta name="robots" content="index,follow">
+    <meta name="theme-color" content="#0f172a">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <nav>
+                <div class="nav-container">
+                    <div class="nav-brand">
+                        <a href="/" class="brand-link">
+                            <span class="brand-text">%s</span>
+                        </a>
+                    </div>
+                    <ul class="nav-menu">
+                        <li class="nav-item"><a href="/" class="nav-link">Home</a></li>
+                        <li class="nav-item"><a href="/docs" class="nav-link">Documentation</a></li>
+                        <li class="nav-item"><a href="/price" class="nav-link">Pricing</a></li>
+                        <li class="nav-item"><a href="/tech" class="nav-link">技术</a></li>
+                    </ul>
+                </div>
+            </nav>
+        </header>
+        
+        <main>
+            <section class="content">
+                <h1>%s</h1>
+                <p>Welcome to the %s page!</p>
+                <p>This page is prerendered for search engines.</p>
+            </section>
+        </main>
+        
+        <footer>
+            <div class="footer-content">
+                <p>© 2025 %s. All rights reserved.</p>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>`, title, site.Name, title, site.Name, description, site.Name, title, title, site.Name)
 
-			// 获取当前站点的渲染预热引擎实例
-			prerenderEngine, exists := prerenderManager.GetEngine(site.ID)
-			if !exists {
-				log.Printf("Prerender engine not found for site ID: %s, name: %s", site.ID, site.Name)
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Prerender engine not found"})
-				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, 0)
-				c.Abort()
-				return
-			}
-
-			// 使用渲染预热引擎渲染页面
-			resultWithCache, err := prerenderEngine.Render(c, fullURL, prerender.RenderOptions{
-				Timeout:   site.Prerender.Timeout,
-				WaitUntil: "networkidle0",
-			})
-			if err != nil {
-				log.Printf("Prerender failed for URL: %s, error: %v", fullURL, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Prerender failed"})
-				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, 0)
-				c.Abort()
-				return
-			}
-
-			result := resultWithCache.Result
-			if !result.Success {
-				log.Printf("Prerender result failed for URL: %s, error: %s", fullURL, result.Error)
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Prerender result failed"})
-				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, 0)
-				c.Abort()
-				return
-			}
-
-			// 计算渲染时间
-			renderTime := time.Since(startTime).Seconds()
-
-			// 记录爬虫访问日志
-			crawlerLog := logging.CrawlerLog{
-				Site:       site.Name,
-				IP:         logging.GetClientIP(c.Request),
-				Time:       time.Now(),
-				HitCache:   resultWithCache.HitCache, // 使用实际的缓存命中状态
-				Route:      c.Request.URL.Path,
-				UA:         userAgent,
-				Status:     http.StatusOK,
-				Method:     c.Request.Method,
-				CacheTTL:   site.Prerender.CacheTTL,
-				RenderTime: float64(int(renderTime*100)) / 100, // 保留两位小数
-			}
-			crawlerLogManager.RecordCrawlerLog(crawlerLog)
-
-			// 返回渲染后的HTML响应
-			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(result.HTML))
+			// 返回HTML响应
+			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 			// 记录请求
-			monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Duration(renderTime*float64(time.Second)))
+			monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, 0)
 			// 终止请求处理，避免后续处理器覆盖我们的响应
 			c.Abort()
 			return
@@ -232,14 +156,14 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 	// 非爬虫请求处理中间件
 	siteRouter.Use(func(c *gin.Context) {
 		startTime := time.Now()
-
-		// 根据站点模式处理请求
-		switch site.Mode {
-		case "proxy":
-			// 代理已有应用模式：将请求转发到上游服务
+		
+		// 1. 检查是否启用了上游代理
+		if site.Proxy.Enabled {
+			// 上游代理模式：将请求转发到上游服务
 			proxyURL, err := url.Parse(site.Proxy.TargetURL)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Invalid upstream URL"})
+				// 记录请求
 				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, time.Since(startTime))
 				c.Abort()
 				return
@@ -247,12 +171,12 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 
 			proxy := httputil.NewSingleHostReverseProxy(proxyURL)
 			proxy.ServeHTTP(c.Writer, c.Request)
+			// 记录请求
 			monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
 			c.Abort()
 			return
-
-		case "static":
-			// 静态资源站模式：提供静态文件服务
+		} else {
+			// 直接访问模式：提供静态文件服务
 			// 静态文件目录：{staticDir}/{site.ID}
 			siteStaticDir := filepath.Join(staticDir, site.ID)
 
@@ -261,51 +185,23 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 				os.MkdirAll(siteStaticDir, 0755)
 			}
 
-			// 处理URL，移除hash部分并获取实际路径
-			getActualPath := func(urlPath string) string {
-				// 移除URL中的hash部分，因为hash不会发送到服务器
-				if hashIndex := strings.Index(urlPath, "#"); hashIndex != -1 {
-					return urlPath[:hashIndex]
-				}
-				return urlPath
-			}
-
-			// 获取实际路径（移除hash部分）
-			actualPath := getActualPath(c.Request.URL.Path)
-
-			// 检查请求的路径是否为静态资源
-			isStaticResource := func(path string) bool {
-				staticExtensions := []string{
-					".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
-					".css", ".less", ".sass", ".scss",
-					".js", ".jsx", ".ts", ".tsx",
-					".woff", ".woff2", ".ttf", ".eot",
-					".ico", ".txt", ".json", ".xml", ".pdf", ".zip", ".rar",
-					".mp4", ".mp3", ".avi", ".mov", ".wmv",
-					".csv", ".xls", ".xlsx", ".doc", ".docx",
-				}
-				for _, ext := range staticExtensions {
-					if len(path) >= len(ext) && path[len(path)-len(ext):] == ext {
-						return true
-					}
-				}
-				return false
-			}
-
-			// 对于静态资源，尝试直接提供文件
-			if isStaticResource(actualPath) {
-				filePath := filepath.Join(siteStaticDir, actualPath)
-				if _, err := os.Stat(filePath); err == nil {
-					c.File(filePath)
+			// 提供静态文件服务
+			// 对于根路径，尝试提供 index.html
+			if c.Request.URL.Path == "/" {
+				indexPath := filepath.Join(siteStaticDir, "index.html")
+				if _, err := os.Stat(indexPath); err == nil {
+					c.File(indexPath)
+					// 记录请求
 					monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
 					return
 				}
 			}
 
-			// 对于非静态资源，返回index.html（SPA路由处理）
-			indexPath := filepath.Join(siteStaticDir, "index.html")
-			if _, err := os.Stat(indexPath); err == nil {
-				c.File(indexPath)
+			// 尝试提供请求的文件
+			filePath := filepath.Join(siteStaticDir, c.Request.URL.Path)
+			if _, err := os.Stat(filePath); err == nil {
+				c.File(filePath)
+				// 记录请求
 				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusOK, time.Since(startTime))
 				return
 			}
@@ -321,31 +217,32 @@ func startSiteServer(site config.SiteConfig, serverAddress string, staticDir str
 					"path":    c.Request.URL.Path,
 				},
 			})
+			// 记录请求
 			monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusNotFound, time.Since(startTime))
-			c.Abort()
-			return
-
-		case "redirect":
-			// 重定向模式：返回重定向响应
-			c.Redirect(site.Redirect.StatusCode, site.Redirect.TargetURL)
-			monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, site.Redirect.StatusCode, time.Since(startTime))
-			c.Abort()
-			return
-
-		default:
-			// 未知模式，返回500错误
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code":    500,
-				"message": "Invalid site mode",
-			})
-			monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, time.Since(startTime))
 			c.Abort()
 			return
 		}
 	})
 
-	// 返回站点路由器作为HTTP处理器
-	return siteRouter
+	// 启动站点服务器
+	siteAddr := fmt.Sprintf("%s:%d", serverAddress, site.Port)
+	log.Printf("Site server %s (ID: %s) starting on %s for domains %v", site.Name, site.ID, siteAddr, site.Domains)
+
+	// 创建HTTP服务器实例
+	server := &http.Server{
+		Addr:    siteAddr,
+		Handler: siteRouter,
+	}
+
+	// 将服务器实例保存到映射中
+	siteServers[site.Name] = server
+
+	// 启动服务器
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("Failed to start site server %s (ID: %s): %v", site.Name, site.ID, err)
+		}
+	}()
 }
 
 // 停止站点服务器
@@ -471,10 +368,7 @@ func main() {
 	// 2. 渲染预热引擎管理器
 	prerenderManager = prerender.NewEngineManager()
 
-	// 3. 爬虫日志管理器
-	crawlerLogManager := logging.NewCrawlerLogManager(cfg.Cache.RedisURL)
-
-	// 4. 为每个站点创建并启动引擎
+	// 3. 为每个站点创建并启动引擎
 	for _, site := range cfg.Sites {
 		// 将 config.PrerenderConfig 转换为 prerender.PrerenderConfig
 		prerenderConfig := prerender.PrerenderConfig{
@@ -501,11 +395,11 @@ func main() {
 
 		// 将引擎添加到管理器
 		// AddSite 方法会自动创建并启动引擎
-		if err := prerenderManager.AddSite(site.ID, prerenderConfig); err != nil {
+		if err := prerenderManager.AddSite(site.Name, prerenderConfig); err != nil {
 			logging.DefaultLogger.Error("Failed to add site to prerender manager: %v", err)
 			log.Fatalf("Failed to add site to prerender manager: %v", err)
 		}
-		logging.DefaultLogger.Info("Prerender engine started successfully for site %s (ID: %s)", site.Name, site.ID)
+		logging.DefaultLogger.Info("Prerender engine started successfully for site %s", site.Name)
 
 		// 创建防火墙引擎
 		if err := firewallManager.AddSite(site.Name, firewall.Config{
@@ -514,10 +408,7 @@ func main() {
 				DefaultAction: site.Firewall.ActionConfig.DefaultAction,
 				BlockMessage:  site.Firewall.ActionConfig.BlockMessage,
 			},
-			StaticDir:           cfg.Dirs.StaticDir,
-			GeoIPConfig:         &site.Firewall.GeoIPConfig,
-			RateLimitConfig:     &site.Firewall.RateLimitConfig,
-			FileIntegrityConfig: &site.FileIntegrityConfig,
+			StaticDir: cfg.Dirs.StaticDir,
 		}); err != nil {
 			logging.DefaultLogger.Error("Failed to initialize firewall engine for site %s: %v", site.Name, err)
 			log.Fatalf("Failed to initialize firewall engine for site %s: %v", site.Name, err)
@@ -533,6 +424,34 @@ func main() {
 		Rules: []*routing.RouteRule{},
 		Cache: routing.NewMemoryCache(),
 	})
+
+	// 5. SSL证书管理器
+	// 从第一个站点获取SSL配置，或者使用默认值
+	var sslConfig config.SSLConfig
+	if len(cfg.Sites) > 0 {
+		sslConfig = cfg.Sites[0].SSL
+	}
+
+	certManager, err := cert.NewManager(&cert.Config{
+		Enabled:       sslConfig.Enabled,
+		LetEncrypt:    sslConfig.LetEncrypt,
+		Domains:       sslConfig.Domains,
+		ACMEEmail:     sslConfig.ACMEEmail,
+		ACMEServer:    sslConfig.ACMEServer,
+		ACMEChallenge: sslConfig.ACMEChallenge,
+		CertPath:      sslConfig.CertPath,
+		KeyPath:       sslConfig.KeyPath,
+		CertDir:       cfg.Dirs.CertsDir,
+	})
+	if err != nil {
+		logging.DefaultLogger.Error("Failed to initialize certificate manager: %v", err)
+		log.Fatalf("Failed to initialize certificate manager: %v", err)
+	}
+	logging.DefaultLogger.Info("Certificate manager initialized successfully")
+
+	// 6. 启动证书管理器
+	certManager.Start()
+	logging.DefaultLogger.Info("Certificate manager started successfully")
 
 	// 7. 初始化监控模块
 	monitor = monitoring.NewMonitor(monitoring.Config{
@@ -550,8 +469,8 @@ func main() {
 
 	// 添加安全头中间件
 	ginRouter.Use(func(c *gin.Context) {
-		// Content-Security-Policy (CSP) 头，防止XSS攻击，允许跨域请求
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://localhost:5173 http://localhost:9598")
+		// Content-Security-Policy (CSP) 头，防止XSS攻击
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'")
 
 		// X-Frame-Options 头，防止Clickjacking攻击
 		c.Header("X-Frame-Options", "DENY")
@@ -733,7 +652,7 @@ func main() {
 
 			// 获取站点统计数据
 			activeSites := len(cfg.Sites)
-			sslCertificates := 0 // SSL功能已移除
+			sslCertificates := len(certManager.GetDomains())
 
 			c.JSON(http.StatusOK, gin.H{
 				"code":    200,
@@ -742,7 +661,7 @@ func main() {
 					"totalRequests":    int64(stats["totalRequests"].(float64)),
 					"crawlerRequests":  int64(stats["crawlerRequests"].(float64)),
 					"blockedRequests":  int64(stats["blockedRequests"].(float64)),
-					"cacheHitRate":     float64(int(stats["cacheHitRate"].(float64)*100)) / 100, // 保留两位小数
+					"cacheHitRate":     int(stats["cacheHitRate"].(float64)),
 					"activeBrowsers":   int(stats["activeBrowsers"].(float64)),
 					"activeSites":      activeSites,
 					"sslCertificates":  sslCertificates,
@@ -790,7 +709,7 @@ func main() {
 		sitesGroup := apiGroup.Group("/sites")
 		{
 			// 获取站点列表
-			sitesGroup.GET("", func(c *gin.Context) {
+			sitesGroup.GET("/", func(c *gin.Context) {
 				// 从配置管理器获取当前配置
 				currentConfig := configManager.GetConfig()
 				c.JSON(http.StatusOK, gin.H{
@@ -822,32 +741,12 @@ func main() {
 			})
 
 			// 添加站点
-			sitesGroup.POST("", func(c *gin.Context) {
+			sitesGroup.POST("/", func(c *gin.Context) {
 				var site config.SiteConfig
 				if err := c.ShouldBindJSON(&site); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{
 						"code":    400,
 						"message": "Invalid request",
-					})
-					return
-				}
-
-				// 验证域名：只允许127.0.0.1或localhost
-				for _, domain := range site.Domains {
-					if domain != "127.0.0.1" && domain != "localhost" {
-						c.JSON(http.StatusBadRequest, gin.H{
-							"code":    400,
-							"message": "Only 127.0.0.1 or localhost are allowed as domains",
-						})
-						return
-					}
-				}
-
-				// 验证端口是否可用
-				if !isPortAvailable(site.Port) {
-					c.JSON(http.StatusBadRequest, gin.H{
-						"code":    400,
-						"message": "Port is either reserved or already in use",
 					})
 					return
 				}
@@ -859,54 +758,8 @@ func main() {
 				currentConfig := configManager.GetConfig()
 				currentConfig.Sites = append(currentConfig.Sites, site)
 
-				// 保存配置到文件
-				if err := configManager.SaveConfig(); err != nil {
-					log.Printf("Failed to save config: %v", err)
-					c.JSON(http.StatusInternalServerError, gin.H{
-						"code":    500,
-						"message": "Failed to save site configuration",
-					})
-					return
-				}
-
 				// 启动新站点的服务器实例
-				siteHandler := startSiteServer(site, currentConfig.Server.Address, currentConfig.Dirs.StaticDir, crawlerLogManager, monitor)
-
-				// 启动站点服务器
-				siteAddr := fmt.Sprintf("%s:%d", currentConfig.Server.Address, site.Port)
-				siteServer := &http.Server{
-					Addr:    siteAddr,
-					Handler: siteHandler,
-				}
-
-				// 保存站点服务器引用，用于后续管理
-				siteServers[site.Name] = siteServer
-
-				// 启动站点服务器
-				go func(siteName, addr string, server *http.Server) {
-					if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-						log.Fatalf("站点 %s 启动失败: %v", siteName, err)
-					}
-				}(site.Name, siteAddr, siteServer)
-
-				log.Printf("站点 %s 启动在 %s，模式: %s", site.Name, siteAddr, site.Mode)
-
-				// 记录系统日志
-				logging.DefaultLogger.LogAdminAction(
-					"admin",
-					c.ClientIP(),
-					"site_add",
-					"site",
-					map[string]interface{}{
-						"site_id":   site.ID,
-						"site_name": site.Name,
-						"domains":   site.Domains,
-						"port":      site.Port,
-						"mode":      site.Mode,
-					},
-					"success",
-					"Site added successfully",
-				)
+				startSiteServer(site, currentConfig.Server.Address, currentConfig.Dirs.StaticDir)
 
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
@@ -918,8 +771,8 @@ func main() {
 			// 更新站点
 			sitesGroup.PUT("/:name", func(c *gin.Context) {
 				name := c.Param("name")
-				var siteUpdates config.SiteConfig
-				if err := c.ShouldBindJSON(&siteUpdates); err != nil {
+				var site config.SiteConfig
+				if err := c.ShouldBindJSON(&site); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{
 						"code":    400,
 						"message": "Invalid request",
@@ -927,135 +780,33 @@ func main() {
 					return
 				}
 
-				// 验证域名：只允许127.0.0.1或localhost
-				for _, domain := range siteUpdates.Domains {
-					if domain != "127.0.0.1" && domain != "localhost" {
-						c.JSON(http.StatusBadRequest, gin.H{
-							"code":    400,
-							"message": "Only 127.0.0.1 or localhost are allowed as domains",
+				// 从配置管理器获取当前配置并更新
+				currentConfig := configManager.GetConfig()
+
+				// 查找并更新指定站点
+				for i, s := range currentConfig.Sites {
+					if s.Name == name {
+						// 更新站点配置
+						currentConfig.Sites[i] = site
+
+						// 停止旧的站点服务器
+						stopSiteServer(name)
+						// 启动新的站点服务器
+						startSiteServer(site, currentConfig.Server.Address, currentConfig.Dirs.StaticDir)
+
+						c.JSON(http.StatusOK, gin.H{
+							"code":    200,
+							"message": "Site updated successfully",
+							"data":    site,
 						})
 						return
 					}
 				}
 
-				// 从配置管理器获取当前配置
-				currentConfig := configManager.GetConfig()
-
-				// 查找并更新指定站点
-				var updatedSite *config.SiteConfig
-				var oldSite *config.SiteConfig
-
-				for i, s := range currentConfig.Sites {
-					if s.Name == name {
-						// 保存旧站点信息
-						oldSite = &s
-
-						// 检查端口是否可用（仅当端口改变时）
-						if s.Port != siteUpdates.Port {
-							if !isPortAvailable(siteUpdates.Port) {
-								c.JSON(http.StatusBadRequest, gin.H{
-									"code":    400,
-									"message": "Port is either reserved or already in use",
-								})
-								return
-							}
-						}
-
-						// 更新站点配置，保留原始ID
-						currentConfig.Sites[i].Name = siteUpdates.Name
-						currentConfig.Sites[i].Domains = siteUpdates.Domains
-						currentConfig.Sites[i].Port = siteUpdates.Port
-						currentConfig.Sites[i].Mode = siteUpdates.Mode
-						currentConfig.Sites[i].Proxy = siteUpdates.Proxy
-						currentConfig.Sites[i].Redirect = siteUpdates.Redirect
-						currentConfig.Sites[i].Firewall = siteUpdates.Firewall
-						currentConfig.Sites[i].Prerender = siteUpdates.Prerender
-						currentConfig.Sites[i].Routing = siteUpdates.Routing
-						currentConfig.Sites[i].FileIntegrityConfig = siteUpdates.FileIntegrityConfig
-
-						// 获取更新后的站点
-						updatedSite = &currentConfig.Sites[i]
-
-						break
-					}
-				}
-
-				if updatedSite == nil {
-					c.JSON(http.StatusNotFound, gin.H{
-						"code":    404,
-						"message": "Site not found",
-					})
-					return
-				}
-
-				// 保存配置到文件
-				if err := configManager.SaveConfig(); err != nil {
-					log.Printf("Failed to save config: %v", err)
-					c.JSON(http.StatusInternalServerError, gin.H{
-						"code":    500,
-						"message": "Failed to save site configuration",
-					})
-					return
-				}
-
-				// 停止旧的站点服务器
-				if oldServer, exists := siteServers[oldSite.Name]; exists {
-					// 关闭旧服务器
-					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-					defer cancel()
-					if err := oldServer.Shutdown(ctx); err != nil {
-						log.Printf("关闭站点 %s 失败: %v", oldSite.Name, err)
-					} else {
-						log.Printf("关闭站点 %s 成功", oldSite.Name)
-						// 从映射中删除旧服务器
-						delete(siteServers, oldSite.Name)
-					}
-				}
-
-				// 启动新的站点服务器
-				siteHandler := startSiteServer(*updatedSite, currentConfig.Server.Address, currentConfig.Dirs.StaticDir, crawlerLogManager, monitor)
-
-				// 启动站点服务器
-				siteAddr := fmt.Sprintf("%s:%d", currentConfig.Server.Address, updatedSite.Port)
-				siteServer := &http.Server{
-					Addr:    siteAddr,
-					Handler: siteHandler,
-				}
-
-				// 保存站点服务器引用，用于后续管理
-				siteServers[updatedSite.Name] = siteServer
-
-				// 启动站点服务器
-				go func(siteName, addr string, server *http.Server) {
-					if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-						log.Fatalf("站点 %s 启动失败: %v", siteName, err)
-					}
-				}(updatedSite.Name, siteAddr, siteServer)
-
-				log.Printf("站点 %s 更新后启动在 %s，模式: %s", updatedSite.Name, siteAddr, updatedSite.Mode)
-
-				// 记录系统日志
-				logging.DefaultLogger.LogAdminAction(
-					"admin",
-					c.ClientIP(),
-					"site_update",
-					"site",
-					map[string]interface{}{
-						"old_site_name": oldSite.Name,
-						"new_site_name": updatedSite.Name,
-						"site_id":       updatedSite.ID,
-						"domains":       updatedSite.Domains,
-						"port":          updatedSite.Port,
-						"mode":          updatedSite.Mode,
-					},
-					"success",
-					"Site updated successfully",
-				)
-
-				c.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "Site updated successfully",
-					"data":    updatedSite,
+				// 如果站点不存在，返回404
+				c.JSON(http.StatusNotFound, gin.H{
+					"code":    404,
+					"message": "Site not found",
 				})
 			})
 
@@ -1070,60 +821,10 @@ func main() {
 				for i, site := range currentConfig.Sites {
 					if site.Name == name {
 						// 停止站点服务器
-						if siteServer, exists := siteServers[site.Name]; exists {
-							// 关闭服务器
-							ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-							defer cancel()
-							if err := siteServer.Shutdown(ctx); err != nil {
-								log.Printf("关闭站点 %s 失败: %v", site.Name, err)
-							} else {
-								log.Printf("关闭站点 %s 成功", site.Name)
-								// 从映射中删除服务器
-								delete(siteServers, site.Name)
-							}
-						}
-
-						// 删除站点的静态资源目录
-						staticDir := filepath.Join(cfg.Dirs.StaticDir, site.ID)
-						if _, err := os.Stat(staticDir); err == nil {
-							// 目录存在，删除它
-							if err := os.RemoveAll(staticDir); err != nil {
-								log.Printf("Failed to delete static files for site %s: %v", site.Name, err)
-								// 继续执行，不中断删除流程
-							} else {
-								log.Printf("Deleted static files for site %s", site.Name)
-							}
-						}
+						stopSiteServer(name)
 
 						// 从切片中删除站点
 						currentConfig.Sites = append(currentConfig.Sites[:i], currentConfig.Sites[i+1:]...)
-
-						// 保存配置到文件
-						if err := configManager.SaveConfig(); err != nil {
-							log.Printf("Failed to save config: %v", err)
-							c.JSON(http.StatusInternalServerError, gin.H{
-								"code":    500,
-								"message": "Failed to save site configuration",
-							})
-							return
-						}
-
-						// 记录系统日志
-						logging.DefaultLogger.LogAdminAction(
-							"admin",
-							c.ClientIP(),
-							"site_delete",
-							"site",
-							map[string]interface{}{
-								"site_id":   site.ID,
-								"site_name": site.Name,
-								"domains":   site.Domains,
-								"port":      site.Port,
-							},
-							"success",
-							"Site deleted successfully",
-						)
-
 						c.JSON(http.StatusOK, gin.H{
 							"code":    200,
 							"message": "Site deleted successfully",
@@ -1541,6 +1242,13 @@ func main() {
 					return
 				}
 
+				// 获取指定站点的渲染预热引擎
+				prerenderEngine, exists := prerenderManager.GetEngine(req.Site)
+				if !exists {
+					c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "Site not found"})
+					return
+				}
+
 				// 获取站点配置
 				var siteConfig *config.SiteConfig
 				for _, site := range cfg.Sites {
@@ -1554,14 +1262,7 @@ func main() {
 					return
 				}
 
-				// 获取指定站点的渲染预热引擎
-				prerenderEngine, exists := prerenderManager.GetEngine(siteConfig.ID)
-				if !exists {
-					c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "Site not found"})
-					return
-				}
-
-				resultWithCache, err := prerenderEngine.Render(c, req.URL, prerender.RenderOptions{
+				result, err := prerenderEngine.Render(c, req.URL, prerender.RenderOptions{
 					Timeout:   siteConfig.Prerender.Timeout,
 					WaitUntil: "networkidle0",
 				})
@@ -1573,7 +1274,7 @@ func main() {
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
 					"message": "success",
-					"data":    resultWithCache.Result,
+					"data":    result,
 				})
 			})
 
@@ -1587,21 +1288,8 @@ func main() {
 					return
 				}
 
-				// 获取站点配置
-				var siteConfig *config.SiteConfig
-				for _, site := range cfg.Sites {
-					if site.Name == req.Site {
-						siteConfig = &site
-						break
-					}
-				}
-				if siteConfig == nil {
-					c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "Site config not found"})
-					return
-				}
-
 				// 获取指定站点的渲染预热引擎
-				prerenderEngine, exists := prerenderManager.GetEngine(siteConfig.ID)
+				prerenderEngine, exists := prerenderManager.GetEngine(req.Site)
 				if !exists {
 					c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "Site not found"})
 					return
@@ -1638,447 +1326,4 @@ func main() {
 				for i, site := range currentConfig.Sites {
 					if site.Name == req.Site {
 						// 更新站点的渲染预热配置
-						currentConfig.Sites[i].Prerender = req.Config
-						siteFound = true
-						break
-					}
-				}
-
-				if !siteFound {
-					c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "Site not found"})
-					return
-				}
-
-				// 重启渲染预热引擎
-				if err := prerenderManager.RemoveSite(req.Site); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to remove old prerender engine"})
-					return
-				}
-
-				// 将 config.PrerenderConfig 转换为 prerender.PrerenderConfig
-				prerenderConfig := prerender.PrerenderConfig{
-					Enabled:           req.Config.Enabled,
-					PoolSize:          req.Config.PoolSize,
-					MinPoolSize:       req.Config.MinPoolSize,
-					MaxPoolSize:       req.Config.MaxPoolSize,
-					Timeout:           req.Config.Timeout,
-					CacheTTL:          req.Config.CacheTTL,
-					IdleTimeout:       req.Config.IdleTimeout,
-					DynamicScaling:    req.Config.DynamicScaling,
-					ScalingFactor:     req.Config.ScalingFactor,
-					ScalingInterval:   req.Config.ScalingInterval,
-					CrawlerHeaders:    req.Config.CrawlerHeaders,
-					UseDefaultHeaders: req.Config.UseDefaultHeaders,
-					Preheat: prerender.PreheatConfig{
-						Enabled:         req.Config.Preheat.Enabled,
-						SitemapURL:      req.Config.Preheat.SitemapURL,
-						Schedule:        req.Config.Preheat.Schedule,
-						Concurrency:     req.Config.Preheat.Concurrency,
-						DefaultPriority: req.Config.Preheat.DefaultPriority,
-					},
-				}
-
-				if err := prerenderManager.AddSite(req.Site, prerenderConfig); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to restart prerender engine"})
-					return
-				}
-
-				c.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "Prerender config updated successfully",
-				})
-			})
-		}
-
-		// 路由API
-		routingGroup := apiGroup.Group("/routing")
-		{
-			// 获取路由规则
-			routingGroup.GET("/rules", func(c *gin.Context) {
-				rules := routerEngine.GetRules()
-				c.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "success",
-					"data":    rules,
-				})
-			})
-
-			// 添加路由规则
-			routingGroup.POST("/rules", func(c *gin.Context) {
-				var rule routing.RouteRule
-				if err := c.ShouldBindJSON(&rule); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Invalid rule"})
-					return
-				}
-
-				if err := routerEngine.AddRule(&rule); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Add rule failed"})
-					return
-				}
-
-				c.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "Rule added",
-				})
-			})
-
-			// 删除路由规则
-			routingGroup.DELETE("/rules/:id", func(c *gin.Context) {
-				ruleID := c.Param("id")
-				if err := routerEngine.DeleteRule(ruleID); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Delete rule failed"})
-					return
-				}
-
-				c.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "Rule deleted",
-				})
-			})
-		}
-
-		// 监控API
-		monitoringGroup := apiGroup.Group("/monitoring")
-		{
-			// 获取监控统计
-			monitoringGroup.GET("/stats", func(c *gin.Context) {
-				c.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "success",
-					"data": gin.H{
-						"requestsPerSecond": 12.5,
-						"cpuUsage":          25.3,
-						"memoryUsage":       67.8,
-						"diskUsage":         45.2,
-					},
-				})
-			})
-
-			// 获取日志
-			monitoringGroup.GET("/logs", func(c *gin.Context) {
-				c.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "success",
-					"data":    []gin.H{},
-				})
-			})
-		}
-
-		// 系统日志API
-		logsGroup := apiGroup.Group("/logs")
-		{
-			// 获取系统日志列表，支持分页
-			logsGroup.GET("/", func(c *gin.Context) {
-				// 获取分页参数
-				page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-				pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-
-				// 获取审计日志
-				logs, total := logging.DefaultLogger.GetAuditLogs(page, pageSize)
-
-				// 返回日志列表
-				c.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "success",
-					"data": gin.H{
-						"logs":     logs,
-						"total":    total,
-						"page":     page,
-						"pageSize": pageSize,
-					},
-				})
-			})
-		}
-
-		// 爬虫访问日志API
-		crawlerGroup := apiGroup.Group("/crawler")
-		{
-			// 获取爬虫访问日志列表
-			crawlerGroup.GET("/logs", func(c *gin.Context) {
-				// 获取查询参数
-				site := c.Query("site")
-				page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-				pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-				startTimeStr := c.DefaultQuery("startTime", "")
-				endTimeStr := c.DefaultQuery("endTime", "")
-
-				// 解析时间范围
-				var startTime, endTime time.Time
-				var err error
-				if startTimeStr == "" {
-					startTime = time.Now().AddDate(0, 0, -7) // 默认7天前
-				} else {
-					startTime, err = time.Parse(time.RFC3339, startTimeStr)
-					if err != nil {
-						c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Invalid startTime format"})
-						return
-					}
-				}
-
-				if endTimeStr == "" {
-					endTime = time.Now() // 默认当前时间
-				} else {
-					endTime, err = time.Parse(time.RFC3339, endTimeStr)
-					if err != nil {
-						c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Invalid endTime format"})
-						return
-					}
-				}
-
-				// 获取日志列表
-				logs, total, err := crawlerLogManager.GetCrawlerLogs(site, startTime, endTime, page, pageSize)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to get crawler logs"})
-					return
-				}
-
-				c.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "success",
-					"data": gin.H{
-						"logs":     logs,
-						"total":    total,
-						"page":     page,
-						"pageSize": pageSize,
-					},
-				})
-			})
-
-			// 获取爬虫访问统计数据
-			crawlerGroup.GET("/stats", func(c *gin.Context) {
-				// 获取查询参数
-				site := c.Query("site")
-				startTimeStr := c.DefaultQuery("startTime", "")
-				endTimeStr := c.DefaultQuery("endTime", "")
-				granularity := c.DefaultQuery("granularity", "day") // day, week, month
-
-				// 解析时间范围
-				var startTime, endTime time.Time
-				var err error
-				if startTimeStr == "" {
-					startTime = time.Now().AddDate(0, 0, -7) // 默认7天前
-				} else {
-					startTime, err = time.Parse(time.RFC3339, startTimeStr)
-					if err != nil {
-						c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Invalid startTime format"})
-						return
-					}
-				}
-
-				if endTimeStr == "" {
-					endTime = time.Now() // 默认当前时间
-				} else {
-					endTime, err = time.Parse(time.RFC3339, endTimeStr)
-					if err != nil {
-						c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Invalid endTime format"})
-						return
-					}
-				}
-
-				// 获取统计数据
-				stats, err := crawlerLogManager.GetCrawlerStats(site, startTime, endTime, granularity)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to get crawler stats"})
-					return
-				}
-
-				c.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "success",
-					"data":    stats,
-				})
-			})
-		}
-
-		// 系统API
-		apiGroup.GET("/health", func(c *gin.Context) {
-			// 获取系统内存使用情况
-			var memStats runtime.MemStats
-			runtime.ReadMemStats(&memStats)
-
-			// 构建站点模块状态
-			sitesModules := make(map[string]interface{})
-			for _, site := range cfg.Sites {
-				sitesModules[site.Name] = gin.H{
-					"firewall": gin.H{
-						"enabled": site.Firewall.Enabled,
-						"status":  "healthy",
-					},
-					"prerender": gin.H{
-						"enabled":  site.Prerender.Enabled,
-						"poolSize": site.Prerender.PoolSize,
-						"status":   "healthy",
-					},
-					"routing": gin.H{
-						"status": "healthy",
-					},
-				}
-			}
-
-			// 构建健康检查响应
-			c.JSON(http.StatusOK, gin.H{
-				"code":    200,
-				"message": "ok",
-				"data": gin.H{
-					"status":    "healthy",
-					"timestamp": time.Now().Unix(),
-					"system": gin.H{
-						"goVersion":  runtime.Version(),
-						"cpuCount":   runtime.NumCPU(),
-						"goroutines": runtime.NumGoroutine(),
-						"memory": gin.H{
-							"alloc": memStats.Alloc / (1024 * 1024),      // MB
-							"total": memStats.TotalAlloc / (1024 * 1024), // MB
-							"sys":   memStats.Sys / (1024 * 1024),        // MB
-						},
-					},
-					"sites": sitesModules,
-					"config": gin.H{
-						"serverPort":  cfg.Server.APIPort,
-						"environment": "production",
-						"totalSites":  len(cfg.Sites),
-					},
-				},
-			})
-		})
-
-		apiGroup.GET("/version", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{
-				"code":    200,
-				"message": "success",
-				"data": gin.H{
-					"version":   "v1.0.0",
-					"buildDate": "2025-12-29",
-				},
-			})
-		})
-	}
-
-	// 初始化域名处理器映射
-	domainHandlers := make(map[string]http.Handler)
-	defaultHandler := gin.Default()
-	defaultHandler.NoRoute(func(c *gin.Context) {
-		c.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "Site not found",
-		})
-	})
-
-	// 为每个站点创建处理器，并添加到域名映射中
-	for _, site := range cfg.Sites {
-		siteHandler := startSiteServer(site, cfg.Server.Address, cfg.Dirs.StaticDir, crawlerLogManager, monitor)
-		// 将站点的所有域名映射到该处理器
-		for _, domain := range site.Domains {
-			domainHandlers[domain] = siteHandler
-			log.Printf("Added domain %s for site %s", domain, site.Name)
-		}
-		// 将站点名称也作为域名映射
-		domainHandlers[site.Name] = siteHandler
-	}
-
-	// 创建主处理器，将API路由和虚拟主机路由结合
-	mainHandler := http.NewServeMux()
-
-	// 虚拟主机路由：其他所有路由根据Host头路由到对应的站点处理器
-	vhHandler := &domainHandler{
-		handlers:       domainHandlers,
-		defaultHandler: defaultHandler,
-	}
-
-	// API路由：/api/v1/* 路由到ginRouter
-	mainHandler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// 检查是否是API请求
-		if strings.HasPrefix(r.URL.Path, "/api/v1/") {
-			// API请求，使用ginRouter处理
-			ginRouter.ServeHTTP(w, r)
-		} else {
-			// 否则使用虚拟主机处理器
-			vhHandler.ServeHTTP(w, r)
-		}
-	})
-
-	// 1. 启动API服务（单独端口）
-	apiAddr := fmt.Sprintf("%s:%d", cfg.Server.Address, cfg.Server.APIPort)
-	apiServer := &http.Server{
-		Addr:    apiAddr,
-		Handler: ginRouter,
-	}
-	log.Printf("API服务启动在 %s", apiAddr)
-
-	// 2. 启动管理控制台服务 - 静态资源服务器
-	consoleRouter := gin.Default()
-	// 配置静态文件服务
-	consoleRouter.Static("/", cfg.Dirs.AdminStaticDir)
-	// 处理SPA路由，所有404请求都返回index.html
-	consoleRouter.NoRoute(func(c *gin.Context) {
-		c.File(filepath.Join(cfg.Dirs.AdminStaticDir, "index.html"))
-	})
-
-	consoleAddr := fmt.Sprintf("%s:%d", cfg.Server.Address, cfg.Server.ConsolePort)
-	consoleServer := &http.Server{
-		Addr:    consoleAddr,
-		Handler: consoleRouter,
-	}
-	log.Printf("管理控制台服务启动在 %s", consoleAddr)
-
-	// 3. 为每个站点启动独立的HTTP服务器
-	for _, site := range cfg.Sites {
-		// 为每个站点创建独立的处理器
-		siteHandler := startSiteServer(site, cfg.Server.Address, cfg.Dirs.StaticDir, crawlerLogManager, monitor)
-
-		// 启动站点服务器
-		siteAddr := fmt.Sprintf("%s:%d", cfg.Server.Address, site.Port)
-		siteServer := &http.Server{
-			Addr:    siteAddr,
-			Handler: siteHandler,
-		}
-
-		// 保存站点服务器引用，用于后续管理
-		siteServers[site.Name] = siteServer
-
-		// 启动站点服务器
-		go func(siteName, addr string, server *http.Server) {
-			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Fatalf("站点 %s 启动失败: %v", siteName, err)
-			}
-		}(site.Name, siteAddr, siteServer)
-
-		log.Printf("站点 %s 启动在 %s，模式: %s", site.Name, siteAddr, site.Mode)
-	}
-
-	// 启动API服务
-	go func() {
-		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("API服务启动失败: %v", err)
-		}
-	}()
-
-	// 启动管理控制台服务
-	go func() {
-		if err := consoleServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("管理控制台服务启动失败: %v", err)
-		}
-	}()
-
-	// 启动站点服务的逻辑已移到上面的循环中
-
-	// 等待中断信号优雅关闭服务器
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	log.Println("正在关闭服务器...")
-
-	// 关闭API服务
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := apiServer.Shutdown(ctx); err != nil {
-		log.Fatalf("API服务关闭失败: %v", err)
-	}
-
-	// 关闭管理控制台服务
-	if err := consoleServer.Shutdown(ctx); err != nil {
-		log.Fatalf("管理控制台服务关闭失败: %v", err)
-	}
-
-	log.Println("服务器已关闭")
-}
+						currentConfig.S

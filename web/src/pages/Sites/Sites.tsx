@@ -29,7 +29,7 @@ const Sites: React.FC = () => {
   const [showNewFileModal, setShowNewFileModal] = useState(false)
   const [newFileName, setNewFileName] = useState<string>('')
   
-  // 预渲染配置弹窗状态
+  // 渲染预热配置弹窗状态
   const [prerenderConfigModalVisible, setPrerenderConfigModalVisible] = useState(false)
   const [currentPrerenderSite, setCurrentPrerenderSite] = useState<any>(null)
   const [prerenderConfigForm] = Form.useForm()
@@ -90,7 +90,7 @@ const Sites: React.FC = () => {
       }
     },
     {
-      title: '预渲染状态',
+      title: '渲染预热状态',
       dataIndex: 'prerenderEnabled',
       key: 'prerenderEnabled',
       render: (enabled: boolean, record: any) => (
@@ -144,7 +144,7 @@ const Sites: React.FC = () => {
                 onClick={() => handlePrerenderConfig(record)}
                 style={{ marginRight: 8 }}
               >
-                预渲染配置
+                渲染预热配置
               </Button>
             </>
           )}
@@ -196,7 +196,7 @@ const Sites: React.FC = () => {
               console.log('Found valid sites data!');
               console.log('Sites count:', res.data.length);
               
-              // 直接使用原始数据，不做复杂转换
+              // 直接使用原始数据，映射完整的渲染预热配置
               const mappedSites = res.data.map((site: any) => ({
                 name: site.name || site.Name || '未知站点',
                 domain: site.domains?.[0] || site.domain || '127.0.0.1',
@@ -205,7 +205,30 @@ const Sites: React.FC = () => {
                 mode: site.mode || 'proxy',
                 firewallEnabled: Boolean(site.firewall?.Enabled),
                 prerenderEnabled: Boolean(site.prerender?.Enabled),
+                // 映射完整的渲染预热配置对象
+                prerender: {
+                  enabled: site.prerender?.Enabled || false,
+                  poolSize: site.prerender?.PoolSize || 5,
+                  minPoolSize: site.prerender?.MinPoolSize || 2,
+                  maxPoolSize: site.prerender?.MaxPoolSize || 20,
+                  timeout: site.prerender?.Timeout || 30,
+                  cacheTTL: site.prerender?.CacheTTL || 3600,
+                  idleTimeout: site.prerender?.IdleTimeout || 300,
+                  dynamicScaling: site.prerender?.DynamicScaling !== false,
+                  scalingFactor: site.prerender?.ScalingFactor || 0.5,
+                  scalingInterval: site.prerender?.ScalingInterval || 60,
+                  useDefaultHeaders: site.prerender?.UseDefaultHeaders || false,
+                  crawlerHeaders: site.prerender?.CrawlerHeaders || [],
+                  preheat: {
+                    enabled: site.prerender?.Preheat?.Enabled || false,
+                    sitemapURL: site.prerender?.Preheat?.SitemapURL || '',
+                    schedule: site.prerender?.Preheat?.Schedule || '0 0 * * *',
+                    concurrency: site.prerender?.Preheat?.Concurrency || 5,
+                    defaultPriority: site.prerender?.Preheat?.DefaultPriority || 0
+                  }
+                }
               }));
+
               
               console.log('Mapped sites:', mappedSites);
               setSites(mappedSites);
@@ -279,11 +302,11 @@ const Sites: React.FC = () => {
         throw new Error('站点名称不存在')
       }
       
-      // 创建更新后的站点数据
+      // 创建更新后的站点数据，添加空对象默认值，增强代码健壮性
       const updatedSite = {
         ...record,
         [type]: {
-          ...record[type],
+          ...(record[type] || {}),
           enabled
         }
       }
@@ -647,29 +670,29 @@ const Sites: React.FC = () => {
     }
   }
   
-  // 打开预渲染配置弹窗
+  // 打开渲染预热配置弹窗
   const handlePrerenderConfig = (site: any) => {
     setCurrentPrerenderSite(site)
-    // 初始化表单值
+    // 初始化表单值，添加安全检查，处理site.prerender为undefined的情况
     const initialValues = {
-      enabled: site.prerender.enabled,
-      poolSize: site.prerender.poolSize,
-      minPoolSize: site.prerender.minPoolSize,
-      maxPoolSize: site.prerender.maxPoolSize,
-      timeout: site.prerender.timeout,
-      cacheTTL: site.prerender.cacheTTL,
-      idleTimeout: site.prerender.idleTimeout,
-      dynamicScaling: site.prerender.dynamicScaling,
-      scalingFactor: site.prerender.scalingFactor,
-      scalingInterval: site.prerender.scalingInterval,
-      useDefaultHeaders: site.prerender.useDefaultHeaders || false,
-      crawlerHeaders: site.prerender.crawlerHeaders || [],
+      enabled: site.prerender?.enabled || site.prerenderEnabled || false,
+      poolSize: site.prerender?.poolSize || 5,
+      minPoolSize: site.prerender?.minPoolSize || 2,
+      maxPoolSize: site.prerender?.maxPoolSize || 20,
+      timeout: site.prerender?.timeout || 30,
+      cacheTTL: site.prerender?.cacheTTL || 3600,
+      idleTimeout: site.prerender?.idleTimeout || 300,
+      dynamicScaling: site.prerender?.dynamicScaling !== false,
+      scalingFactor: site.prerender?.scalingFactor || 0.5,
+      scalingInterval: site.prerender?.scalingInterval || 60,
+      useDefaultHeaders: site.prerender?.useDefaultHeaders || false,
+      crawlerHeaders: site.prerender?.crawlerHeaders || [],
       preheat: {
-        enabled: site.prerender.preheat.enabled,
-        sitemapURL: site.prerender.preheat.sitemapURL,
-        schedule: site.prerender.preheat.schedule,
-        concurrency: site.prerender.preheat.concurrency,
-        defaultPriority: site.prerender.preheat.defaultPriority
+        enabled: site.prerender?.preheat?.enabled || false,
+        sitemapURL: site.prerender?.preheat?.sitemapURL || '',
+        schedule: site.prerender?.preheat?.schedule || '0 0 * * *',
+        concurrency: site.prerender?.preheat?.concurrency || 5,
+        defaultPriority: site.prerender?.preheat?.defaultPriority || 0
       }
     }
     prerenderConfigForm.setFieldsValue(initialValues)
@@ -804,7 +827,7 @@ const Sites: React.FC = () => {
     }
   }
 
-  // 处理预渲染配置表单提交
+  // 处理渲染预热配置表单提交
   const handlePrerenderConfigSubmit = async () => {
     try {
       const values = await prerenderConfigForm.validateFields()
@@ -834,7 +857,7 @@ const Sites: React.FC = () => {
       
       // 显示加载状态
       Modal.confirm({
-        title: '正在保存预渲染配置',
+        title: '正在保存渲染预热配置',
         content: '请稍候...',
         okButtonProps: { disabled: true },
         cancelButtonProps: { disabled: true },
@@ -843,18 +866,18 @@ const Sites: React.FC = () => {
         centered: true,
       });
 
-      // 调用API更新预渲染配置
+      // 调用API更新渲染预热配置
       const res = await prerenderApi.updateConfig(currentPrerenderSite.name, prerenderConfigData)
 
       // 关闭加载状态
       Modal.destroyAll();
 
       if (res.code === 200) {
-        message.success('更新预渲染配置成功')
+        message.success('更新渲染预热配置成功')
         setPrerenderConfigModalVisible(false)
         fetchSites() // 刷新站点列表
       } else {
-        message.error('更新预渲染配置失败：' + (res.message || '未知错误'))
+        message.error('更新渲染预热配置失败：' + (res.message || '未知错误'))
       }
     } catch (error: any) {
       // 关闭加载状态
@@ -887,7 +910,7 @@ const Sites: React.FC = () => {
           </Col>
           <Col span={8}>
             <Statistic
-              title="启用预渲染的站点"
+              title="启用渲染预热的站点"
               value={sites.filter(site => site.prerender && site.prerender.enabled).length}
               valueStyle={{ color: '#52c41a' }}
             />
@@ -1098,7 +1121,7 @@ const Sites: React.FC = () => {
             </Form.Item>
           </Card>
 
-          {/* 预渲染配置 */}
+          {/* 渲染预热配置 */}
           <Form.Item dependencies={['mode']} noStyle>
             {({ getFieldValue }) => {
               const mode = getFieldValue('mode');
@@ -1106,8 +1129,8 @@ const Sites: React.FC = () => {
                 return null;
               }
               return (
-                <Card title="预渲染配置" size="small" style={{ marginBottom: 16 }}>
-                  <Form.Item name={['prerender', 'enabled']} label="启用预渲染" valuePropName="checked">
+                <Card title="渲染预热配置" size="small" style={{ marginBottom: 16 }}>
+                  <Form.Item name={['prerender', 'enabled']} label="启用渲染预热" valuePropName="checked">
                     <Switch />
                   </Form.Item>
 
@@ -1503,9 +1526,9 @@ const Sites: React.FC = () => {
         </p>
       </Modal>
 
-      {/* 预渲染配置弹窗 */}
+      {/* 渲染预热配置弹窗 */}
       <Modal
-        title={`站点 "${currentPrerenderSite?.name}" 预渲染配置`}
+        title={`站点 "${currentPrerenderSite?.name}" 渲染预热配置`}
         open={prerenderConfigModalVisible}
         onOk={handlePrerenderConfigSubmit}
         onCancel={() => setPrerenderConfigModalVisible(false)}
@@ -1538,7 +1561,7 @@ const Sites: React.FC = () => {
           <Card title="基本配置" size="small" style={{ marginBottom: 16 }}>
             <Row gutter={16}>
               <Col span={12}>
-                <Form.Item name="enabled" label="启用预渲染" valuePropName="checked">
+                <Form.Item name="enabled" label="启用渲染预热" valuePropName="checked">
                   <Switch />
                 </Form.Item>
               </Col>

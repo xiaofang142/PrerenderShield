@@ -64,7 +64,7 @@ export const firewallApi = {
   scan: (data: { site?: string; url: string }) => api.post('/firewall/scan', data),
 }
 
-// 预渲染API
+// 渲染预热API
 export const prerenderApi = {
   getStatus: (site?: string) => api.get('/prerender/status', { params: site ? { site } : {} }),
   render: (data: { site: string; url: string }) => api.post('/prerender/render', data),

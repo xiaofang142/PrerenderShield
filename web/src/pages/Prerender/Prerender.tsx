@@ -78,7 +78,7 @@ const Prerender: React.FC = () => {
     }
   }
 
-  // 获取预渲染状态
+  // 获取渲染预热状态
   const fetchStatus = async () => {
     if (!selectedSite) return
     
@@ -92,7 +92,7 @@ const Prerender: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch prerender status:', error)
-      message.error('获取预渲染状态失败')
+      message.error('获取渲染预热状态失败')
     } finally {
       setLoading(false)
     }
@@ -180,7 +180,7 @@ const Prerender: React.FC = () => {
 
   return (
     <div>
-      <h1 className="page-title">预渲染</h1>
+      <h1 className="page-title">渲染预热</h1>
       
       {/* 站点选择器 */}
       <Card className="card" style={{ marginBottom: 16 }}>
@@ -208,12 +208,12 @@ const Prerender: React.FC = () => {
         </Row>
       </Card>
       
-      {/* 预渲染状态卡片 */}
+      {/* 渲染预热状态卡片 */}
       <Card className="card">
         <Row gutter={[16, 16]}>
           <Col span={6}>
             <Statistic
-              title="预渲染状态"
+              title="渲染预热状态"
               value={status.enabled ? '已启用' : '已禁用'}
               prefix={<CodeOutlined />}
               valueStyle={{ color: status.enabled ? '#52c41a' : '#faad14' }}
