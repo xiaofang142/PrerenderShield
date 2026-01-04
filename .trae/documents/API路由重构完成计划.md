@@ -1,73 +1,32 @@
-package routes
+# API路由重构完成计划
 
-import (
-	"archive/zip"
-	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"os"
-	"path/filepath"
+## 当前状态
+- 已创建所有必要的控制器文件
+- 已开始重构routes.go文件，但尚未完成
+- 系统处于plan mode，需要提交完整计划后才能继续执行
 
-	"github.com/gin-gonic/gin"
+## 剩余工作
 
-	"prerender-shield/internal/api/controllers"
-	"prerender-shield/internal/auth"
-	"prerender-shield/internal/config"
-	"prerender-shield/internal/logging"
-	"prerender-shield/internal/monitoring"
-	"prerender-shield/internal/prerender"
-	"prerender-shield/internal/redis"
-	"prerender-shield/internal/scheduler"
-	sitehandler "prerender-shield/internal/site-handler"
-	siteserver "prerender-shield/internal/site-server"
-)
+### 1. 完成routes.go文件的重构
+- 替换整个RegisterRoutes函数，使用控制器实例处理所有API请求
+- 移除所有不再需要的辅助函数（如isPortAvailable, ExtractZIP等）
+- 确保所有控制器实例正确初始化和使用
 
-// Router API路由器，负责注册所有API路由
-type Router struct {
-	userManager      *auth.UserManager
-	jwtManager       *auth.JWTManager
-	configManager    *config.ConfigManager
-	prerenderManager *prerender.EngineManager
-	firewallManager  *auth.UserManager
-	redisClient      *redis.Client
-	scheduler        *scheduler.Scheduler
-	siteServerMgr    *siteserver.Manager
-	siteHandler      *sitehandler.Handler
-	monitor          *monitoring.Monitor
-	crawlerLogMgr    *logging.CrawlerLogManager
-	cfg              *config.Config
-}
+### 2. 清理routes.go文件
+- 删除所有未使用的导入
+- 移除所有内嵌的处理函数
+- 确保代码结构清晰，只包含路由注册逻辑
 
-// NewRouter 创建API路由器实例
-func NewRouter(
-	userManager *auth.UserManager,
-	jwtManager *auth.JWTManager,
-	configManager *config.ConfigManager,
-	prerenderManager *prerender.EngineManager,
-	redisClient *redis.Client,
-	scheduler *scheduler.Scheduler,
-	siteServerMgr *siteserver.Manager,
-	siteHandler *sitehandler.Handler,
-	monitor *monitoring.Monitor,
-	crawlerLogMgr *logging.CrawlerLogManager,
-	cfg *config.Config,
-) *Router {
-	return &Router{
-		userManager:      userManager,
-		jwtManager:       jwtManager,
-		configManager:    configManager,
-		prerenderManager: prerenderManager,
-		redisClient:      redisClient,
-		scheduler:        scheduler,
-		siteServerMgr:    siteServerMgr,
-		siteHandler:      siteHandler,
-		monitor:          monitor,
-		crawlerLogMgr:    crawlerLogMgr,
-		cfg:              cfg,
-	}
-}
+### 3. 验证重构后的代码
+- 确保所有路由正确映射到对应的控制器方法
+- 检查控制器依赖注入是否正确
+- 确保中间件配置保持不变
 
+## 具体实现步骤
+
+### 步骤1：替换RegisterRoutes函数
+将当前的RegisterRoutes函数替换为使用控制器的版本：
+```go
 // RegisterRoutes 注册所有API路由
 func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 	// 添加安全头中间件
@@ -117,7 +76,15 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 	firewallController := controllers.NewFirewallController()
 	crawlerController := controllers.NewCrawlerController(r.crawlerLogMgr)
 	preheatController := controllers.NewPreheatController(r.prerenderManager, r.redisClient, r.cfg)
-	sitesController := controllers.NewSitesController(r.configManager, r.siteServerMgr, r.siteHandler, r.redisClient, r.monitor, r.crawlerLogMgr, r.cfg)
+	sitesController := controllers.NewSitesController(
+		r.configManager,
+		r.siteServerMgr,
+		r.siteHandler,
+		r.redisClient,
+		r.monitor,
+		r.crawlerLogMgr,
+		r.cfg,
+	)
 
 	// 注册API路由
 	apiGroup := ginRouter.Group("/api/v1")
@@ -127,10 +94,8 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 		{
 			// 检查是否是首次运行
 			authGroup.GET("/first-run", authController.CheckFirstRun)
-
 			// 用户登录
 			authGroup.POST("/login", authController.Login)
-
 			// 用户退出登录
 			authGroup.POST("/logout", authController.Logout)
 		}
@@ -144,10 +109,9 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 
 			// 监控API
 			protectedGroup.GET("/monitoring/stats", monitoringController.GetStats)
+			
 			// 防火墙API
 			protectedGroup.GET("/firewall/status", firewallController.GetFirewallStatus)
-
-			// 防火墙规则API
 			protectedGroup.GET("/firewall/rules", firewallController.GetFirewallRules)
 
 			// 爬虫日志API
@@ -168,140 +132,54 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 			{
 				// 获取站点列表
 				sitesGroup.GET("", sitesController.GetSites)
-
 				// 获取单个站点信息
 				sitesGroup.GET("/:id", sitesController.GetSite)
-
 				// 添加站点
 				sitesGroup.POST("", sitesController.AddSite)
-
 				// 更新站点
 				sitesGroup.PUT("/:id", sitesController.UpdateSite)
-
 				// 删除站点
 				sitesGroup.DELETE("/:id", sitesController.DeleteSite)
-
-				// 静态资源管理API
 				// 获取站点的静态资源文件列表
 				sitesGroup.GET("/:id/static", sitesController.GetStaticFiles)
-
 				// 上传静态资源文件
 				sitesGroup.POST("/:id/static", sitesController.UploadStaticFile)
-
 				// 解压文件
 				sitesGroup.POST("/:id/static/extract", sitesController.ExtractFile)
-
 				// 删除静态资源文件
 				sitesGroup.DELETE("/:id/static", sitesController.DeleteStaticFile)
 			}
 		}
 	}
 }
+```
 
-// 检查端口是否可用
-func isPortAvailable(port int) bool {
-	// 常用互联网端口列表，这些端口将被排除
-	reservedPorts := map[int]bool{
-		// 常用服务端口
-		21:  true, // FTP
-		22:  true, // SSH
-		23:  true, // Telnet
-		25:  true, // SMTP
-		53:  true, // DNS
-		80:  true, // HTTP
-		110: true, // POP3
-		143: true, // IMAP
-		443: true, // HTTPS
-		465: true, // SMTPS
-		587: true, // SMTP (STARTTLS)
-		993: true, // IMAPS
-		995: true, // POP3S
+### 步骤2：清理routes.go文件
+- 删除所有未使用的导入（如time, strconv, strings, os, filepath, io, archive/zip, log, net等）
+- 移除所有内嵌的辅助函数（isPortAvailable, ExtractZIP等）
+- 确保只保留必要的导入和路由注册逻辑
 
-		// 常用应用端口
-		3306:  true, // MySQL
-		5432:  true, // PostgreSQL
-		6379:  true, // Redis
-		8080:  true, // Tomcat
-		9000:  true, // PHP-FPM
-		9090:  true, // Prometheus
-		15672: true, // RabbitMQ
-		27017: true, // MongoDB
-	}
+### 步骤3：验证重构
+- 检查所有控制器实例是否正确初始化
+- 确保所有路由正确映射到对应的控制器方法
+- 验证中间件配置保持不变
+- 确保没有遗漏任何API路由
 
-	// 检查是否是保留端口
-	if reservedPorts[port] {
-		return false
-	}
+## 预期结果
+- routes.go文件将只负责API声明和路由注册
+- 所有路由处理逻辑将迁移到对应的控制器中
+- 代码结构更加清晰，符合良好的架构设计
+- 便于后续维护和扩展
 
-	// 尝试监听端口
-	addr := fmt.Sprintf(":%d", port)
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return false
-	}
-	defer listener.Close()
+## 风险评估
+- 可能存在控制器依赖注入错误
+- 可能遗漏某些API路由
+- 可能存在导入错误
 
-	return true
-}
+## 缓解措施
+- 仔细检查每个控制器的初始化和依赖注入
+- 对比原始路由和重构后的路由，确保没有遗漏
+- 使用IDE的自动导入功能确保导入正确
+- 在完成重构后进行测试，确保所有API正常工作
 
-// ExtractZIP 解压ZIP文件，导出供测试使用
-func ExtractZIP(filePath, destDir string) error {
-	// 打开ZIP文件
-	reader, err := zip.OpenReader(filePath)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-
-	// 确保目标目录存在
-	if err := os.MkdirAll(destDir, 0755); err != nil {
-		return err
-	}
-
-	// 遍历ZIP文件中的所有文件
-	for _, file := range reader.File {
-		// 构建目标文件路径
-		destFilePath := filepath.Join(destDir, file.Name)
-
-		// 检查文件是否是目录
-		if file.FileInfo().IsDir() {
-			// 创建目录
-			if err := os.MkdirAll(destFilePath, file.Mode()); err != nil {
-				return err
-			}
-			continue
-		}
-
-		// 确保父目录存在
-		if err := os.MkdirAll(filepath.Dir(destFilePath), 0755); err != nil {
-			return err
-		}
-
-		// 创建目标文件
-		destFile, err := os.OpenFile(destFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
-		if err != nil {
-			return err
-		}
-		// 不使用defer，而是立即关闭文件
-
-		// 获取ZIP文件中的文件
-		zipFile, err := file.Open()
-		if err != nil {
-			destFile.Close() // 确保文件关闭
-			return err
-		}
-
-		// 复制文件内容
-		if _, err := io.Copy(destFile, zipFile); err != nil {
-			zipFile.Close()
-			destFile.Close() // 确保文件关闭
-			return err
-		}
-
-		// 立即关闭文件，避免资源泄漏和文件锁定问题
-		zipFile.Close()
-		destFile.Close()
-	}
-
-	return nil
-}
+现在我已经准备好执行这个计划，完成API路由的重构工作。
