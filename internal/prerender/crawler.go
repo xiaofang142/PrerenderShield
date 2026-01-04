@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"prerender-shield/internal/redis"
 
@@ -131,12 +132,21 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 		return
 	}
 
-	// 等待页面加载完成
+	// 等待页面加载完成，支持hash模式和history模式
 	fmt.Printf("Waiting for page load %s\n", urlStr)
+	// 对于hash模式，WaitLoad可能不会触发，所以我们先尝试WaitLoad
 	if err := page.WaitLoad(); err != nil {
-		fmt.Printf("Failed to wait for page load %s: %v\n", urlStr, err)
-		return
+		// 如果WaitLoad失败，尝试等待网络空闲状态
+		fmt.Printf("WaitLoad failed for %s, trying to wait for network idle: %v\n", urlStr, err)
+		// 使用简单的等待策略，适用于hash模式
+		time.Sleep(2 * time.Second)
+	} else {
+		// 对于成功的WaitLoad，也额外等待一小段时间确保JavaScript渲染完成
+		time.Sleep(1 * time.Second)
 	}
+
+	// 额外等待一小段时间，确保JavaScript框架有足够时间渲染页面内容
+	time.Sleep(1 * time.Second)
 
 	// 获取页面内容，检查是否能正确获取
 	html, err := page.HTML()
@@ -216,10 +226,23 @@ func (c *Crawler) extractLinks(page *rod.Page) ([]string, error) {
 			continue
 		}
 
-		// 解析URL
-		fullURL, err := c.resolveURL(*href)
-		if err != nil {
-			continue
+		// 直接使用原始href值，不进行resolveURL处理，以保留完整的hash信息
+		fullURL := *href
+
+		// 如果是相对路径，解析为绝对URL
+		if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
+			// 处理相对路径
+			base, err := url.Parse(c.baseURL)
+			if err != nil {
+				continue
+			}
+
+			relative, err := url.Parse(fullURL)
+			if err != nil {
+				continue
+			}
+
+			fullURL = base.ResolveReference(relative).String()
 		}
 
 		// 检查是否为目标域名
@@ -232,7 +255,7 @@ func (c *Crawler) extractLinks(page *rod.Page) ([]string, error) {
 			continue
 		}
 
-		// 去重
+		// 添加到链接列表
 		links = append(links, fullURL)
 	}
 
@@ -251,11 +274,6 @@ func (c *Crawler) extractLinks(page *rod.Page) ([]string, error) {
 
 // resolveURL 解析相对URL为绝对URL
 func (c *Crawler) resolveURL(href string) (string, error) {
-	// 处理锚点链接
-	if strings.HasPrefix(href, "#") {
-		return c.baseURL, nil
-	}
-
 	// 处理相对路径
 	base, err := url.Parse(c.baseURL)
 	if err != nil {
@@ -269,14 +287,14 @@ func (c *Crawler) resolveURL(href string) (string, error) {
 
 	fullURL := base.ResolveReference(relative).String()
 
-	// 移除URL查询参数和片段
+	// 解析完整URL
 	parsed, err := url.Parse(fullURL)
 	if err != nil {
 		return "", err
 	}
 
+	// 移除URL查询参数，但保留片段（用于支持hash模式路由）
 	parsed.RawQuery = ""
-	parsed.Fragment = ""
 
 	return parsed.String(), nil
 }

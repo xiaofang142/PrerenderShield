@@ -1,0 +1,124 @@
+server:
+    address: 0.0.0.0
+    api_port: 9598
+    console_port: 9597
+dirs:
+    data_dir: ./data
+    static_dir: ./static
+    certs_dir: ./certs
+    admin_static_dir: ./web/dist
+cache:
+    type: redis
+    redis_url: 127.0.0.1:6379
+    memory_size: 1000
+storage:
+    type: postgres
+    postgres_url: postgres://prerender:prerender@localhost:5432/prerender?sslmode=disable
+monitoring:
+    enabled: true
+    prometheus_address: :9090
+sites:
+    - id: 9dbfaa2b-9015-4012-a00a-8e7f47ab01dd
+      name: test2
+      domains:
+        - 127.0.0.1
+      port: 8082
+      mode: static
+      proxy:
+        target_url: ""
+      redirect:
+        status_code: 0
+        target_url: ""
+      firewall:
+        enabled: false
+        rules_path: /etc/prerender-shield/rules
+        action:
+            default_action: block
+            block_message: Request blocked by firewall
+        geoip:
+            enabled: false
+            allow_list: []
+            block_list: []
+        rate_limit:
+            enabled: false
+            requests: 100
+            window: 60
+            ban_time: 3600
+      prerender:
+        enabled: true
+        pool_size: 5
+        min_pool_size: 2
+        max_pool_size: 20
+        timeout: 30
+        cache_ttl: 3600
+        idle_timeout: 300
+        dynamic_scaling: true
+        scaling_factor: 0.5
+        scaling_interval: 60
+        preheat:
+            enabled: true
+            sitemap_url: http://127.0.0.1:8082/
+            schedule: 0 0 * * *
+            concurrency: 5
+            default_priority: 0
+            max_depth: 0
+        crawler_headers: []
+        use_default_headers: true
+      routing:
+        rules: []
+      file_integrity:
+        enabled: false
+        check_interval: 300
+        hash_algorithm: sha256
+    - id: 89da7d00-7500-4e3c-8b3d-f524946a2241
+      name: test3
+      domains:
+        - 127.0.0.1
+      port: 8083
+      mode: static
+      proxy:
+        target_url: ""
+      redirect:
+        status_code: 0
+        target_url: ""
+      firewall:
+        enabled: true
+        rules_path: /etc/prerender-shield/rules
+        action:
+            default_action: block
+            block_message: Request blocked by firewall
+        geoip:
+            enabled: false
+            allow_list: []
+            block_list: []
+        rate_limit:
+            enabled: false
+            requests: 100
+            window: 60
+            ban_time: 3600
+      prerender:
+        enabled: true
+        pool_size: 5
+        min_pool_size: 2
+        max_pool_size: 20
+        timeout: 30
+        cache_ttl: 3600
+        idle_timeout: 300
+        dynamic_scaling: true
+        scaling_factor: 0.5
+        scaling_interval: 60
+        preheat:
+            enabled: false
+            sitemap_url: ""
+            schedule: 0 0 * * *
+            concurrency: 5
+            default_priority: 0
+            max_depth: 0
+        crawler_headers: []
+        use_default_headers: false
+      routing:
+        rules: []
+      file_integrity:
+        enabled: false
+        check_interval: 300
+        hash_algorithm: sha256

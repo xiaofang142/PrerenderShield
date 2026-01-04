@@ -36,33 +36,33 @@ func (m *Manager) StartSiteServer(site config.SiteConfig, serverAddress string, 
 		Handler: siteHandler,
 	}
 
-	// 保存站点服务器引用，用于后续管理
-	m.siteServers[site.Name] = siteServer
+	// 保存站点服务器引用，用于后续管理，使用站点ID作为键
+	m.siteServers[site.ID] = siteServer
 
 	// 启动站点服务器
-	go func(siteName, addr string, server *http.Server) {
+	go func(siteName, siteID, addr string, server *http.Server) {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("站点 %s 启动失败: %v", siteName, err)
+			log.Fatalf("站点 %s(%s) 启动失败: %v", siteName, siteID, err)
 		}
-	}(site.Name, siteAddr, siteServer)
+	}(site.Name, site.ID, siteAddr, siteServer)
 
-	log.Printf("站点 %s 启动在 %s，模式: %s", site.Name, siteAddr, site.Mode)
+	log.Printf("站点 %s(%s) 启动在 %s，模式: %s", site.Name, site.ID, siteAddr, site.Mode)
 }
 
 // StopSiteServer 停止站点服务器
-func (m *Manager) StopSiteServer(siteName string) error {
+func (m *Manager) StopSiteServer(siteID string) error {
 	// 检查站点服务器是否存在
-	if server, exists := m.siteServers[siteName]; exists {
+	if server, exists := m.siteServers[siteID]; exists {
 		// 关闭服务器
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
-			log.Printf("关闭站点 %s 失败: %v", siteName, err)
+			log.Printf("关闭站点 %s 失败: %v", siteID, err)
 			return err
 		} else {
-			log.Printf("关闭站点 %s 成功", siteName)
+			log.Printf("关闭站点 %s 成功", siteID)
 			// 从映射中删除服务器
-			delete(m.siteServers, siteName)
+			delete(m.siteServers, siteID)
 			return nil
 		}
 	}
@@ -70,8 +70,8 @@ func (m *Manager) StopSiteServer(siteName string) error {
 }
 
 // GetSiteServer 获取站点服务器实例
-func (m *Manager) GetSiteServer(siteName string) (*http.Server, bool) {
-	server, exists := m.siteServers[siteName]
+func (m *Manager) GetSiteServer(siteID string) (*http.Server, bool) {
+	server, exists := m.siteServers[siteID]
 	return server, exists
 }
 

@@ -1,7 +1,9 @@
 package routes
 
 import (
+	"archive/zip"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -452,6 +454,23 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 					return
 				}
 
+				// 获取站点配置
+				var siteConfig *config.SiteConfig
+				for _, site := range r.cfg.Sites {
+					if site.ID == req.SiteId {
+						siteConfig = &site
+						break
+					}
+				}
+
+				if siteConfig == nil {
+					c.JSON(http.StatusNotFound, gin.H{
+						"code":    http.StatusNotFound,
+						"message": fmt.Sprintf("Site with ID '%s' not found", req.SiteId),
+					})
+					return
+				}
+
 				// 获取站点的预渲染引擎
 				engine, exists := r.prerenderManager.GetEngine(req.SiteId)
 				if !exists {
@@ -462,8 +481,31 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 					return
 				}
 
-				// 调用引擎的触发预热方法
-				if err := engine.TriggerPreheat(); err != nil {
+				// 构建正确的baseURL和Domain
+				var baseURL, domain string
+				switch siteConfig.Mode {
+				case "proxy":
+					// 代理模式下，使用代理的目标URL
+					baseURL = siteConfig.Proxy.TargetURL
+					domain = siteConfig.Proxy.TargetURL
+				case "redirect":
+					// 重定向模式下，使用重定向的目标URL
+					baseURL = siteConfig.Redirect.TargetURL
+					domain = siteConfig.Redirect.TargetURL
+				default:
+					// 静态模式下，使用站点的域名和端口
+					if len(siteConfig.Domains) > 0 {
+						domain = fmt.Sprintf("%s:%d", siteConfig.Domains[0], siteConfig.Port)
+						baseURL = fmt.Sprintf("http://%s", domain)
+					} else {
+						// 默认使用localhost
+						domain = fmt.Sprintf("localhost:%d", siteConfig.Port)
+						baseURL = fmt.Sprintf("http://%s", domain)
+					}
+				}
+
+				// 调用引擎的触发预热方法，传递正确的baseURL和Domain
+				if err := engine.TriggerPreheatWithURL(baseURL, domain); err != nil {
 					// 检查错误类型，返回更友好的错误信息
 					if strings.Contains(err.Error(), "preheat is already running") {
 						c.JSON(http.StatusConflict, gin.H{
@@ -662,12 +704,12 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 				})
 
 				// 获取单个站点信息
-				sitesGroup.GET("/:name", func(c *gin.Context) {
-					name := c.Param("name")
+				sitesGroup.GET("/:id", func(c *gin.Context) {
+					id := c.Param("id")
 					// 从配置管理器获取当前配置
 					currentConfig := r.configManager.GetConfig()
 					for _, site := range currentConfig.Sites {
-						if site.Name == name {
+						if site.ID == id {
 							c.JSON(http.StatusOK, gin.H{
 								"code":    200,
 								"message": "success",
@@ -760,8 +802,8 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 				})
 
 				// 更新站点
-				sitesGroup.PUT("/:name", func(c *gin.Context) {
-					name := c.Param("name")
+				sitesGroup.PUT("/:id", func(c *gin.Context) {
+					id := c.Param("id")
 					var siteUpdates config.SiteConfig
 					if err := c.ShouldBindJSON(&siteUpdates); err != nil {
 						c.JSON(http.StatusBadRequest, gin.H{
@@ -790,7 +832,7 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 					var oldSite *config.SiteConfig
 
 					for i, s := range currentConfig.Sites {
-						if s.Name == name {
+						if s.ID == id {
 							// 保存旧站点信息
 							oldSite = &s
 
@@ -842,8 +884,8 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 					}
 
 					// 停止旧的站点服务器
-					if _, exists := r.siteServerMgr.GetSiteServer(oldSite.Name); exists {
-						r.siteServerMgr.StopSiteServer(oldSite.Name)
+					if _, exists := r.siteServerMgr.GetSiteServer(oldSite.ID); exists {
+						r.siteServerMgr.StopSiteServer(oldSite.ID)
 					}
 
 					// 启动新的站点服务器
@@ -878,17 +920,17 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 				})
 
 				// 删除站点
-				sitesGroup.DELETE("/:name", func(c *gin.Context) {
-					name := c.Param("name")
+				sitesGroup.DELETE("/:id", func(c *gin.Context) {
+					id := c.Param("id")
 
 					// 从配置管理器获取当前配置并更新
 					currentConfig := r.configManager.GetConfig()
 
 					// 查找并删除指定站点
 					for i, site := range currentConfig.Sites {
-						if site.Name == name {
+						if site.ID == id {
 							// 停止站点服务器
-							r.siteServerMgr.StopSiteServer(site.Name)
+							r.siteServerMgr.StopSiteServer(site.ID)
 
 							// 删除站点的静态资源目录
 							staticDir := filepath.Join(r.cfg.Dirs.StaticDir, site.ID)
@@ -944,6 +986,366 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 						"message": "Site not found",
 					})
 				})
+
+				// 静态资源管理API
+				// 获取站点的静态资源文件列表
+				sitesGroup.GET("/:id/static", func(c *gin.Context) {
+					id := c.Param("id")
+					path := c.Query("path")
+
+					// 从配置管理器获取当前配置
+					currentConfig := r.configManager.GetConfig()
+
+					// 查找指定站点
+					var site *config.SiteConfig
+					for i, s := range currentConfig.Sites {
+						if s.ID == id {
+							site = &currentConfig.Sites[i]
+							break
+						}
+					}
+
+					if site == nil {
+						c.JSON(http.StatusNotFound, gin.H{
+							"code":    404,
+							"message": "Site not found",
+						})
+						return
+					}
+
+					// 构建静态资源目录路径
+					siteStaticDir := filepath.Join(r.cfg.Dirs.StaticDir, site.ID)
+
+					// 构建完整的文件路径
+					filePath := filepath.Join(siteStaticDir, path)
+
+					// 检查文件路径是否存在
+					fileInfo, err := os.Stat(filePath)
+					if os.IsNotExist(err) {
+						// 如果是目录路径不存在，返回空文件列表
+						if strings.HasSuffix(path, "/") {
+							c.JSON(http.StatusOK, gin.H{
+								"code":    200,
+								"message": "success",
+								"data":    []gin.H{},
+							})
+							return
+						}
+						// 如果是文件路径不存在，返回404
+						c.JSON(http.StatusNotFound, gin.H{
+							"code":    404,
+							"message": "File not found",
+						})
+						return
+					}
+
+					// 如果是文件，直接返回文件内容
+					if fileInfo.IsDir() {
+						// 如果是目录，返回目录下的文件列表
+						files, err := os.ReadDir(filePath)
+						if err != nil {
+							c.JSON(http.StatusInternalServerError, gin.H{
+								"code":    500,
+								"message": "Failed to read directory",
+							})
+							return
+						}
+
+						var fileList []gin.H
+						for _, file := range files {
+							fileInfo, _ := file.Info()
+							fileType := "file"
+							if file.IsDir() {
+								fileType = "dir"
+							}
+							var filePath string
+							if path == "" || path == "/" {
+								filePath = "/" + file.Name()
+							} else {
+								filePath = filepath.Join(path, file.Name())
+							}
+							var key string
+							if file.IsDir() {
+								key = file.Name() + "/"
+							} else {
+								key = file.Name()
+							}
+							fileList = append(fileList, gin.H{
+								"key":   key,
+								"name":  file.Name(),
+								"type":  fileType,
+								"size":  fileInfo.Size(),
+								"isDir": file.IsDir(),
+								"path":  filePath,
+							})
+						}
+
+						c.JSON(http.StatusOK, gin.H{
+							"code":    200,
+							"message": "success",
+							"data":    fileList,
+						})
+					} else {
+						// 返回文件内容
+						c.File(filePath)
+					}
+				})
+
+				// 上传静态资源文件
+				sitesGroup.POST("/:id/static", func(c *gin.Context) {
+					id := c.Param("id")
+					path := c.PostForm("path")
+
+					// 从配置管理器获取当前配置
+					currentConfig := r.configManager.GetConfig()
+
+					// 查找指定站点
+					var site *config.SiteConfig
+					for i, s := range currentConfig.Sites {
+						if s.ID == id {
+							site = &currentConfig.Sites[i]
+							break
+						}
+					}
+
+					if site == nil {
+						c.JSON(http.StatusNotFound, gin.H{
+							"code":    404,
+							"message": "Site not found",
+						})
+						return
+					}
+
+					// 构建静态资源目录路径
+					siteStaticDir := filepath.Join(r.cfg.Dirs.StaticDir, site.ID)
+
+					// 保存上传的文件
+					file, err := c.FormFile("file")
+					if err != nil {
+						c.JSON(http.StatusBadRequest, gin.H{
+							"code":    400,
+							"message": "Failed to get file",
+						})
+						return
+					}
+
+					// 构建完整的文件路径，包含文件名
+					filePath := filepath.Join(siteStaticDir, path, file.Filename)
+
+					// 确保目录存在
+					if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+						c.JSON(http.StatusInternalServerError, gin.H{
+							"code":    500,
+							"message": "Failed to create directory",
+						})
+						return
+					}
+
+					// 保存文件
+					if err := c.SaveUploadedFile(file, filePath); err != nil {
+						c.JSON(http.StatusInternalServerError, gin.H{
+							"code":    500,
+							"message": "Failed to save file",
+						})
+						return
+					}
+
+					c.JSON(http.StatusOK, gin.H{
+						"code":    200,
+						"message": "File uploaded successfully",
+					})
+				})
+
+				// 解压文件
+				sitesGroup.POST("/:id/static/extract", func(c *gin.Context) {
+					id := c.Param("id")
+					fileName := c.PostForm("filename")
+					path := c.PostForm("path")
+
+					// 添加调试日志
+					fmt.Printf("[DEBUG] Extract API call:\n")
+					fmt.Printf("[DEBUG]   id: %s\n", id)
+					fmt.Printf("[DEBUG]   fileName: %s\n", fileName)
+					fmt.Printf("[DEBUG]   path: %s\n", path)
+
+					// 从配置管理器获取当前配置
+					currentConfig := r.configManager.GetConfig()
+
+					// 查找指定站点
+					var site *config.SiteConfig
+					for i, s := range currentConfig.Sites {
+						if s.ID == id {
+							site = &currentConfig.Sites[i]
+							break
+						}
+					}
+
+					if site == nil {
+						fmt.Printf("[DEBUG] Site not found: %s\n", id)
+						c.JSON(http.StatusNotFound, gin.H{
+							"code":    404,
+							"message": "Site not found",
+						})
+						return
+					}
+
+					// 构建静态资源目录路径
+					siteStaticDir := filepath.Join(r.cfg.Dirs.StaticDir, site.ID)
+					fmt.Printf("[DEBUG]   siteStaticDir: %s\n", siteStaticDir)
+
+					// 清理路径，移除前导斜杠，确保filepath.Join工作正常
+					cleanPath := strings.TrimPrefix(path, "/")
+					if cleanPath == "" {
+						cleanPath = "."
+					}
+					fmt.Printf("[DEBUG]   cleanPath: %s\n", cleanPath)
+
+					// 构建完整的文件路径
+					filePath := filepath.Join(siteStaticDir, cleanPath, fileName)
+					fmt.Printf("[DEBUG]   filePath: %s\n", filePath)
+
+					// 检查文件是否存在
+					fileInfo, err := os.Stat(filePath)
+					if os.IsNotExist(err) {
+						fmt.Printf("[DEBUG] File not found: %s\n", filePath)
+						c.JSON(http.StatusNotFound, gin.H{
+							"code":    404,
+							"message": fmt.Sprintf("File not found at path: %s", filePath),
+						})
+						return
+					}
+					fmt.Printf("[DEBUG] File found: %s, size: %d bytes\n", filePath, fileInfo.Size())
+
+					// 构建解压目标目录
+					destDir := filepath.Join(siteStaticDir, cleanPath)
+					fmt.Printf("[DEBUG]   destDir: %s\n", destDir)
+
+					// 根据文件扩展名选择解压方法
+					if strings.HasSuffix(strings.ToLower(fileName), ".zip") {
+						// 确保目标目录存在
+						if err := os.MkdirAll(destDir, 0755); err != nil {
+							c.JSON(http.StatusInternalServerError, gin.H{
+								"code":    500,
+								"message": fmt.Sprintf("Failed to create destination directory: %v", err),
+							})
+							return
+						}
+						// 解压ZIP文件
+						fmt.Printf("[DEBUG] Calling ExtractZIP with filePath: %s, destDir: %s\n", filePath, destDir)
+						if err := ExtractZIP(filePath, destDir); err != nil {
+							fmt.Printf("[DEBUG] ExtractZIP error: %v\n", err)
+							c.JSON(http.StatusInternalServerError, gin.H{
+								"code":    500,
+								"message": fmt.Sprintf("Failed to extract ZIP file: %v", err),
+							})
+							return
+						}
+						fmt.Printf("[DEBUG] ExtractZIP completed successfully\n")
+
+						// 将提取的文件信息存储到Redis中
+						if r.redisClient != nil {
+							// 遍历解压目录，收集所有HTML文件的URL
+							var htmlFiles []string
+							walkErr := filepath.Walk(destDir, func(path string, info os.FileInfo, err error) error {
+								if err != nil {
+									return err
+								}
+								if !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".html") {
+									// 构建相对URL路径
+									relPath, err := filepath.Rel(destDir, path)
+									if err != nil {
+										return err
+									}
+									// 构建完整URL
+									baseURL := fmt.Sprintf("http://%s:%d", site.Domains[0], site.Port)
+									fileURL := fmt.Sprintf("%s/%s", baseURL, strings.ReplaceAll(relPath, "\\", "/"))
+									htmlFiles = append(htmlFiles, fileURL)
+								}
+								return nil
+							})
+
+							if walkErr != nil {
+								fmt.Printf("[DEBUG] Failed to walk extracted files: %v\n", walkErr)
+							} else {
+								// 将收集到的URL存储到Redis中
+								for _, url := range htmlFiles {
+									if err := r.redisClient.AddURL(site.ID, url); err != nil {
+										fmt.Printf("[DEBUG] Failed to add URL to Redis: %v\n", err)
+										continue
+									}
+									fmt.Printf("[DEBUG] Added URL to Redis: %s\n", url)
+								}
+								// 更新站点统计信息
+								if len(htmlFiles) > 0 {
+									// 创建新的统计信息
+									stats := map[string]interface{}{
+										"url_count": len(htmlFiles),
+									}
+									if err := r.redisClient.SetSiteStats(site.ID, stats); err != nil {
+										fmt.Printf("[DEBUG] Failed to update site stats: %v\n", err)
+									}
+								}
+							}
+						}
+					} else {
+						c.JSON(http.StatusBadRequest, gin.H{
+							"code":    400,
+							"message": "Only ZIP files are supported for extraction",
+						})
+						return
+					}
+
+					c.JSON(http.StatusOK, gin.H{
+						"code":    200,
+						"message": "File extracted successfully",
+					})
+				})
+
+				// 删除静态资源文件
+				sitesGroup.DELETE("/:id/static", func(c *gin.Context) {
+					id := c.Param("id")
+					path := c.Query("path")
+
+					// 从配置管理器获取当前配置
+					currentConfig := r.configManager.GetConfig()
+
+					// 查找指定站点
+					var site *config.SiteConfig
+					for i, s := range currentConfig.Sites {
+						if s.ID == id {
+							site = &currentConfig.Sites[i]
+							break
+						}
+					}
+
+					if site == nil {
+						c.JSON(http.StatusNotFound, gin.H{
+							"code":    404,
+							"message": "Site not found",
+						})
+						return
+					}
+
+					// 构建静态资源目录路径
+					siteStaticDir := filepath.Join(r.cfg.Dirs.StaticDir, site.ID)
+
+					// 构建完整的文件路径
+					filePath := filepath.Join(siteStaticDir, path)
+
+					// 删除文件或目录
+					if err := os.RemoveAll(filePath); err != nil {
+						c.JSON(http.StatusInternalServerError, gin.H{
+							"code":    500,
+							"message": "Failed to delete file",
+						})
+						return
+					}
+
+					c.JSON(http.StatusOK, gin.H{
+						"code":    200,
+						"message": "File deleted successfully",
+					})
+				})
 			}
 		}
 	}
@@ -993,4 +1395,66 @@ func isPortAvailable(port int) bool {
 	defer listener.Close()
 
 	return true
+}
+
+// ExtractZIP 解压ZIP文件，导出供测试使用
+func ExtractZIP(filePath, destDir string) error {
+	// 打开ZIP文件
+	reader, err := zip.OpenReader(filePath)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	// 确保目标目录存在
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+
+	// 遍历ZIP文件中的所有文件
+	for _, file := range reader.File {
+		// 构建目标文件路径
+		destFilePath := filepath.Join(destDir, file.Name)
+
+		// 检查文件是否是目录
+		if file.FileInfo().IsDir() {
+			// 创建目录
+			if err := os.MkdirAll(destFilePath, file.Mode()); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// 确保父目录存在
+		if err := os.MkdirAll(filepath.Dir(destFilePath), 0755); err != nil {
+			return err
+		}
+
+		// 创建目标文件
+		destFile, err := os.OpenFile(destFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+		if err != nil {
+			return err
+		}
+		// 不使用defer，而是立即关闭文件
+
+		// 获取ZIP文件中的文件
+		zipFile, err := file.Open()
+		if err != nil {
+			destFile.Close() // 确保文件关闭
+			return err
+		}
+
+		// 复制文件内容
+		if _, err := io.Copy(destFile, zipFile); err != nil {
+			zipFile.Close()
+			destFile.Close() // 确保文件关闭
+			return err
+		}
+
+		// 立即关闭文件，避免资源泄漏和文件锁定问题
+		zipFile.Close()
+		destFile.Close()
+	}
+
+	return nil
 }

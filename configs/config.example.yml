@@ -49,8 +49,8 @@ ssl:
 
 # 缓存配置
 cache:
-  type: "memory"
-  redis_url: "localhost:6379"
+  type: "redis"
+  redis_url: "127.0.0.1:6379"
   memory_size: 1000
 
 # 存储配置

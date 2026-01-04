@@ -156,25 +156,25 @@ export const monitoringApi = {
 // 站点管理API
 export const sitesApi = {
   getSites: () => api.get('/sites'),
-  getSite: (name: string) => api.get(`/sites/${name}`),
+  getSite: (id: string) => api.get(`/sites/${id}`),
   addSite: (site: any) => api.post('/sites', site),
-  updateSite: (name: string, site: any) => api.put(`/sites/${name}`, site),
-  deleteSite: (name: string) => api.delete(`/sites/${name}`),
+  updateSite: (id: string, site: any) => api.put(`/sites/${id}`, site),
+  deleteSite: (id: string) => api.delete(`/sites/${id}`),
   // 静态资源管理API
-  getFileList: (siteName: string, path: string) => api.get(`/sites/${siteName}/static`, { params: { path } }),
-  uploadFile: (siteName: string, file: any, path: string, onUploadProgress?: (progressEvent: any) => void) => {
+  getFileList: (siteId: string, path: string) => api.get(`/sites/${siteId}/static`, { params: { path } }),
+  uploadFile: (siteId: string, file: any, path: string, onUploadProgress?: (progressEvent: any) => void) => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('path', path)
-    return api.post(`/sites/${siteName}/static`, formData, { onUploadProgress })
+    return api.post(`/sites/${siteId}/static`, formData, { onUploadProgress })
   },
-  extractFile: (siteName: string, filename: string, path: string) => {
+  extractFile: (siteId: string, filename: string, path: string) => {
     const formData = new FormData()
     formData.append('filename', filename)
     formData.append('path', path)
-    return api.post(`/sites/${siteName}/static/extract`, formData)
+    return api.post(`/sites/${siteId}/static/extract`, formData)
   },
-  deleteStaticResources: (siteName: string, path: string) => api.delete(`/sites/${siteName}/static`, { params: { path } }),
+  deleteStaticResources: (siteId: string, path: string) => api.delete(`/sites/${siteId}/static`, { params: { path } }),
 }
 
 // 爬虫日志API

@@ -150,8 +150,14 @@ func NewPreheatManager(engine *Engine, redisClient *redis.Client) *PreheatManage
 	}
 }
 
-// TriggerPreheat 触发缓存预热
+// TriggerPreheat 触发缓存预热，默认使用localhost:8081
 func (pm *PreheatManager) TriggerPreheat() error {
+	// 默认使用localhost:8081，兼容旧版API
+	return pm.TriggerPreheatWithURL("http://localhost:8081", "localhost:8081")
+}
+
+// TriggerPreheatWithURL 触发缓存预热，支持自定义baseURL和Domain
+func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) error {
 	pm.mutex.Lock()
 	if pm.isRunning {
 		pm.mutex.Unlock()
@@ -172,15 +178,12 @@ func (pm *PreheatManager) TriggerPreheat() error {
 	}
 
 	// 1. 首先爬取站点的所有链接
-	fmt.Printf("Starting URL crawler for site: %s\n", pm.engine.SiteName)
-
-	// 初始化baseURL，使用localhost:8081作为默认域名
-	baseURL := "http://localhost:8081"
+	fmt.Printf("Starting URL crawler for site: %s with baseURL: %s\n", pm.engine.SiteName, baseURL)
 
 	// 创建爬虫配置
 	crawlerConfig := CrawlerConfig{
 		SiteName:    pm.engine.SiteName,
-		Domain:      "localhost:8081",
+		Domain:      domain,
 		BaseURL:     baseURL,
 		MaxDepth:    pm.config.Preheat.MaxDepth,
 		Concurrency: pm.config.Preheat.Concurrency,
@@ -888,12 +891,21 @@ func (e *Engine) clearExpiredCache() {
 	e.renderCache.ClearExpired(time.Duration(e.config.CacheTTL) * time.Second)
 }
 
-// TriggerPreheat 触发预热
+// TriggerPreheat 触发缓存预热
 func (e *Engine) TriggerPreheat() error {
 	if e.preheatManager == nil {
 		return nil
 	}
-	return e.preheatManager.TriggerPreheat()
+	// 默认使用localhost:8081，兼容旧版API
+	return e.preheatManager.TriggerPreheatWithURL("http://localhost:8081", "localhost:8081")
+}
+
+// TriggerPreheatWithURL 触发缓存预热，支持自定义baseURL和Domain
+func (e *Engine) TriggerPreheatWithURL(baseURL, domain string) error {
+	if e.preheatManager == nil {
+		return nil
+	}
+	return e.preheatManager.TriggerPreheatWithURL(baseURL, domain)
 }
 
 // GetPreheatStatus 获取预热状态

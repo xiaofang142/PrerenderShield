@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Table, Button, Modal, Form, Input, Switch, message, Select, Row, Col, Statistic, Upload, Typography, Space } from 'antd'
+import { Card, Table, Button, Modal, Form, Input, Switch, Select, Row, Col, Statistic, Upload, Typography, Space, message } from 'antd'
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, UploadOutlined, 
   UnorderedListOutlined, CloudUploadOutlined, FolderOpenOutlined, 
@@ -12,6 +12,8 @@ import type { UploadProps } from 'antd'
 const { Option } = Select
 
 const Sites: React.FC = () => {
+  // 使用useMessage hook来获取message实例，支持主题配置
+  const [messageApi, contextHolder] = message.useMessage();
   const [sites, setSites] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [visible, setVisible] = useState(false)
@@ -207,6 +209,7 @@ const Sites: React.FC = () => {
         
         // 直接使用原始数据，映射完整的渲染预热配置
         const mappedSites = response.data.map((site: any) => ({
+          id: site.id || site.ID,
           name: site.name || site.Name || '未知站点',
           domain: site.domains?.[0] || site.domain || '127.0.0.1',
           domains: site.domains || [],
@@ -241,17 +244,17 @@ const Sites: React.FC = () => {
         
         console.log('Mapped sites:', mappedSites);
         setSites(mappedSites);
-        message.success('获取站点列表成功');
+        messageApi.success('获取站点列表成功');
       } else {
         // 请求失败
         console.error('Failed to return valid sites data');
-        message.error('获取站点列表失败');
+        messageApi.error('获取站点列表失败');
       }
       
     } catch (error: any) {
       console.error('Unexpected error in fetchSites:', error);
       console.error('Error response:', error.response?.data);
-      message.error('获取站点列表失败: ' + (error.message || '未知错误'));
+      messageApi.error('获取站点列表失败: ' + (error.message || '未知错误'));
     } finally {
       setLoading(false);
     }
@@ -387,16 +390,16 @@ const Sites: React.FC = () => {
       }
 
       // 更新站点
-      const res = await sitesApi.updateSite(record.name, apiSiteData)
+      const res = await sitesApi.updateSite(record.id, apiSiteData)
       if (res.code === 200) {
-        message.success('更新站点成功')
+        messageApi.success('更新站点成功')
         fetchSites() // 刷新站点列表
       } else {
-        message.error('更新站点失败')
+        messageApi.error('更新站点失败')
       }
     } catch (error) {
       console.error('Switch change error:', error)
-      message.error('更新失败')
+      messageApi.error('更新失败')
     }
   }
 
@@ -410,7 +413,7 @@ const Sites: React.FC = () => {
     // 确保site、site.domain和site.port存在
     if (!site || typeof site.domain === 'undefined' || site.domain === '') {
       console.error('Invalid site domain, cannot open preview')
-      message.error('站点域名无效，无法打开预览')
+      messageApi.error('站点域名无效，无法打开预览')
       return
     }
     
@@ -428,46 +431,66 @@ const Sites: React.FC = () => {
 
   // 打开静态资源管理弹窗
   const handleStaticResources = (site: any) => {
-    // 确保site和site.name存在
+    // 确保site和site.id存在
     if (!site || typeof site !== 'object') {
       console.error('Invalid site provided, cannot open static resources')
-      message.error('站点信息无效，无法打开静态资源管理')
+      messageApi.error('站点信息无效，无法打开静态资源管理')
       return
     }
     
-    // 确保站点名称存在且不为空
-    const siteName = site.name || site.Name || '';
-    if (!siteName.trim()) {
-      console.error('Site name is empty, cannot open static resources')
-      message.error('站点名称不存在，无法打开静态资源管理')
+    // 确保站点ID存在且不为空
+    const siteId = site.id || site.ID || '';
+    if (!siteId.trim()) {
+      console.error('Site ID is empty, cannot open static resources')
+      messageApi.error('站点ID不存在，无法打开静态资源管理')
       return
     }
     
     setCurrentSite(site)
     setCurrentPath('/')
     setStaticResModalVisible(true)
-    // 直接传递site.name给loadFileList，避免依赖currentSite的异步更新
-    loadFileList('/', siteName)
+    // 直接传递site.id给loadFileList，避免依赖currentSite的异步更新
+    loadFileList('/', site.id)
   }
 
   // 加载当前路径下的文件列表
-  const loadFileList = async (path: string, siteName?: string) => {
-    // 优先使用传入的siteName，否则使用currentSite.name
-    const finalSiteName = siteName || (currentSite && currentSite.name)
+  const loadFileList = async (path: string, siteId?: string) => {
+    // 优先使用传入的siteId，否则使用currentSite.id
+    let finalSiteId = siteId || (currentSite && currentSite.id)
     
-    // 确保站点名称存在
-    if (typeof finalSiteName === 'undefined' || finalSiteName === '') {
-      console.error('Site name is not available, cannot load file list')
+    // 确保站点ID存在
+    if (typeof finalSiteId === 'undefined' || finalSiteId === '') {
+      console.error('Site ID is invalid, cannot load file list')
       return
+    }
+    
+    // 特殊处理默认站点，其ID为"default"
+    if (finalSiteId === 'default') {
+      // 直接使用默认站点ID，无需查找
+      console.log('Using default site ID:', finalSiteId);
+    } else {
+      // 如果finalSiteId看起来是站点名称而不是ID，尝试从sites数组中查找对应的ID
+      // UUID格式的ID不需要查找
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(finalSiteId);
+      if (!isUUID && (finalSiteId.includes(' ') || finalSiteId.length < 36)) {
+        const site = sites.find(s => s.name === finalSiteId || s.Name === finalSiteId)
+        if (site && site.id) {
+          finalSiteId = site.id
+          console.log('Corrected site ID from name to ID:', finalSiteId)
+        } else {
+          console.error('Failed to find site ID for name:', finalSiteId)
+          return
+        }
+      }
     }
     
     try {
       // 发送API请求获取文件列表
-      const response = await sitesApi.getFileList(finalSiteName, path)
+      const response = await sitesApi.getFileList(finalSiteId, path)
       if (response.code === 200) {
         setFileList(response.data)
       } else {
-        message.error('获取文件列表失败')
+        messageApi.error('获取文件列表失败')
       }
     } catch (error) {
       console.error('Failed to load file list:', error)
@@ -500,7 +523,7 @@ const Sites: React.FC = () => {
   // 确认新建目录
   const confirmNewFolder = () => {
     if (!newFolderName.trim()) {
-      message.warning('请输入目录名称')
+      messageApi.warning('请输入目录名称')
       return
     }
     
@@ -515,7 +538,7 @@ const Sites: React.FC = () => {
     
     setFileList(prev => [...prev, newDir])
     setShowNewFolderModal(false)
-    message.success('目录创建成功')
+    messageApi.success('目录创建成功')
   }
 
   // 新建文件
@@ -527,7 +550,7 @@ const Sites: React.FC = () => {
   // 确认新建文件
   const confirmNewFile = () => {
     if (!newFileName.trim()) {
-      message.warning('请输入文件名称')
+      messageApi.warning('请输入文件名称')
       return
     }
     
@@ -542,7 +565,7 @@ const Sites: React.FC = () => {
     
     setFileList(prev => [...prev, newFile])
     setShowNewFileModal(false)
-    message.success('文件创建成功')
+    messageApi.success('文件创建成功')
   }
 
 
@@ -552,7 +575,7 @@ const Sites: React.FC = () => {
     message.info(`正在下载 ${file.name}`)
     // 创建临时下载链接
     const downloadLink = document.createElement('a');
-    downloadLink.href = `/api/sites/${currentSite?.name}/static${file.path}`;
+    downloadLink.href = `/api/sites/${currentSite?.id}/static${file.path}`;
     downloadLink.download = file.name;
     downloadLink.target = '_blank';
     document.body.appendChild(downloadLink);
@@ -562,29 +585,29 @@ const Sites: React.FC = () => {
 
   // 解压文件
   const handleExtract = async (file: any) => {
-    // 确保currentSite和currentSite.name存在
-    if (!currentSite || typeof currentSite.name === 'undefined' || currentSite.name === '') {
+    // 确保currentSite和currentSite.id存在
+    if (!currentSite || typeof currentSite.id === 'undefined' || currentSite.id === '') {
       console.error('Current site is not set, cannot extract file')
-      message.error('站点信息无效，无法解压文件')
+      messageApi.error('站点信息无效，无法解压文件')
       return
     }
     
     try {
-      message.info(`正在解压 ${file.name}...`)
+      messageApi.info(`正在解压 ${file.name}...`)
       
       // 发送解压请求到后端
-      const response = await sitesApi.extractFile(currentSite.name, file.name, currentPath)
+      const response = await sitesApi.extractFile(currentSite.id, file.name, currentPath)
       
       if (response.code === 200) {
-        message.success(`${file.name} 解压成功`)
+        messageApi.success(`${file.name} 解压成功`)
         // 重新加载文件列表
         loadFileList(currentPath)
       } else {
-        message.error(`${file.name} 解压失败: ${response.message || '未知错误'}`)
+        messageApi.error(`${file.name} 解压失败: ${response.message || '未知错误'}`)
       }
     } catch (error) {
       console.error('解压失败:', error)
-      message.error(`${file.name} 解压失败`)
+      messageApi.error(`${file.name} 解压失败`)
     }
   }
 
@@ -603,7 +626,7 @@ const Sites: React.FC = () => {
     // 调整rar/zip上传大小限制为不超过100m
     const isLt100M = file.size / 1024 / 1024 < 100
     if (!isLt100M) {
-      message.error('文件大小不能超过100MB')
+      messageApi.error('文件大小不能超过100MB')
       return Upload.LIST_IGNORE
     }
     
@@ -614,16 +637,16 @@ const Sites: React.FC = () => {
   const customRequest: UploadProps['customRequest'] = (options) => {
     const { onSuccess, onError, file, onProgress } = options
     
-    // 确保站点和站点名称存在
-    if (!currentSite || typeof currentSite.name === 'undefined' || currentSite.name === '') {
+    // 确保站点和站点ID存在
+    if (!currentSite || typeof currentSite.id === 'undefined' || currentSite.id === '') {
       console.error('Site is not set, cannot upload file')
-      message.error('站点信息无效，无法上传文件')
+      messageApi.error('站点信息无效，无法上传文件')
       if (onError) onError(new Error('站点信息无效'))
       return
     }
     
     // 发送实际的API请求，使用当前路径
-    sitesApi.uploadFile(currentSite.name, file, currentPath, (progressEvent) => {
+    sitesApi.uploadFile(currentSite.id, file, currentPath, (progressEvent) => {
       if (progressEvent.total && onProgress) {
         const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
         onProgress({ percent: percentCompleted });
@@ -631,7 +654,7 @@ const Sites: React.FC = () => {
     })
     .then((response) => {
       if (response.code === 200) {
-        message.success(`${typeof file === 'string' ? file : (file as any).name} 上传成功`)
+        messageApi.success(`${typeof file === 'string' ? file : (file as any).name} 上传成功`)
         // 重新加载文件列表
         loadFileList(currentPath)
         if (onSuccess) onSuccess({ status: 'ok', message: '上传成功' })
@@ -640,7 +663,7 @@ const Sites: React.FC = () => {
       }
     })
     .catch((error) => {
-      message.error(`${typeof file === 'string' ? file : (file as any).name} 上传失败: ${error.message}`)
+      messageApi.error(`${typeof file === 'string' ? file : (file as any).name} 上传失败: ${error.message}`)
       if (onError) onError(error)
     })
   }
@@ -648,29 +671,29 @@ const Sites: React.FC = () => {
   // 处理删除站点
   const handleDelete = async (site: any) => {
     try {
-      // 确保site对象有效且有name属性
+      // 确保site对象有效且有id属性
       if (!site || typeof site !== 'object') {
         throw new Error('无效的站点对象')
       }
       
-      // 确保站点名称存在且不为空
-      const siteName = site.name || site.Name || '';
-      if (!siteName.trim()) {
-        throw new Error('站点名称不存在')
+      // 确保站点ID存在且不为空
+      const siteId = site.id || site.ID || '';
+      if (!siteId.trim()) {
+        throw new Error('站点ID不存在')
       }
       
-      console.log('Deleting site with name:', siteName);
-      const res = await sitesApi.deleteSite(siteName)
+      console.log('Deleting site with id:', siteId);
+      const res = await sitesApi.deleteSite(siteId)
       // 直接使用res.code，因为API响应拦截器已经返回了response.data
       if (res.code === 200) {
-        message.success('删除站点成功')
+        messageApi.success('删除站点成功')
         fetchSites()
       } else {
-        message.error('删除站点失败：' + res.message)
+        messageApi.error('删除站点失败：' + res.message)
       }
     } catch (error) {
       console.error('Failed to delete site:', error)
-      message.error('删除站点失败：' + (error as any).message)
+      messageApi.error('删除站点失败：' + (error as any).message)
     }
   }
   
@@ -782,9 +805,9 @@ const Sites: React.FC = () => {
         centered: true,
       });
 
-      if (editingSite && editingSite.name) {
+      if (editingSite && editingSite.id) {
         // 更新站点
-        res = await sitesApi.updateSite(editingSite.name, siteData)
+        res = await sitesApi.updateSite(editingSite.id, siteData)
       } else {
         // 添加站点
         console.log('Adding site with data:', siteData);
@@ -797,13 +820,13 @@ const Sites: React.FC = () => {
 
       // 直接使用res，因为API响应拦截器已经返回了response.data
       if (res.code === 200) {
-        message.success(editingSite ? '更新站点成功' : '添加站点成功')
+        messageApi.success(editingSite ? '更新站点成功' : '添加站点成功')
         setVisible(false)
         // 立即刷新站点列表
         console.log('Refreshing sites list...');
         fetchSites()
       } else {
-        message.error(editingSite ? '更新站点失败：' + (res.message || '未知错误') : '添加站点失败：' + (res.message || '未知错误'))
+        messageApi.error(editingSite ? '更新站点失败：' + (res.message || '未知错误') : '添加站点失败：' + (res.message || '未知错误'))
       }
     } catch (error: any) {
       // 关闭加载状态
@@ -811,10 +834,10 @@ const Sites: React.FC = () => {
       
       // 处理表单验证错误
       if (error.errorFields) {
-        message.error('表单验证失败，请检查输入');
+        messageApi.error('表单验证失败，请检查输入');
       } else {
         // 处理网络错误或其他错误
-        message.error('表单提交失败：' + (error.message || '未知错误'));
+        messageApi.error('表单提交失败：' + (error.message || '未知错误'));
       }
       console.error('Form submission error:', error)
     }
@@ -906,17 +929,17 @@ const Sites: React.FC = () => {
       });
       
       // 更新站点配置
-      const res = await sitesApi.updateSite(editingPrerenderSite.name, siteData)
+      const res = await sitesApi.updateSite(editingPrerenderSite.id, siteData)
       
       // 关闭加载状态
       Modal.destroyAll();
       
       if (res.code === 200) {
-        message.success('更新渲染预热配置成功')
+        messageApi.success('更新渲染预热配置成功')
         setPrerenderConfigModalVisible(false)
         fetchSites() // 刷新站点列表
       } else {
-        message.error(res.message || '更新渲染预热配置失败')
+        messageApi.error(res.message || '更新渲染预热配置失败')
       }
     } catch (error: any) {
       // 关闭加载状态
@@ -924,10 +947,10 @@ const Sites: React.FC = () => {
       
       // 处理表单验证错误
       if (error.errorFields) {
-        message.error('表单验证失败，请检查输入');
+        messageApi.error('表单验证失败，请检查输入');
       } else {
         // 处理网络错误或其他错误
-        message.error('表单提交失败：' + (error.message || '未知错误'));
+        messageApi.error('表单提交失败：' + (error.message || '未知错误'));
       }
       console.error('Prerender config submission error:', error)
     }
@@ -936,7 +959,9 @@ const Sites: React.FC = () => {
 
 
   return (
-    <div>
+    <>
+      {contextHolder}
+      <div>
       <h1 className="page-title">站点管理</h1>
 
       {/* 站点概览卡片 */}
@@ -1431,18 +1456,18 @@ const Sites: React.FC = () => {
                   cancelText: '取消',
                   onOk: async () => {
                     try {
-                      // 确保站点名称存在
-                      const siteName = currentSite && currentSite.name;
-                      if (!siteName) {
-                        throw new Error('站点名称不存在');
+                      // 确保站点ID存在
+                      const siteId = currentSite && currentSite.id;
+                      if (!siteId) {
+                        throw new Error('站点ID不存在');
                       }
-                      
+                        
                       // 调用API删除当前路径下的所有静态资源
-                      const response = await sitesApi.deleteStaticResources(siteName, currentPath);
+                      const response = await sitesApi.deleteStaticResources(siteId, currentPath);
                       if (response.code === 200) {
                         message.success('删除成功');
                         // 重新加载文件列表
-                        loadFileList(currentPath, siteName);
+                        loadFileList(currentPath, siteId);
                       } else {
                         message.error(`删除失败: ${response.message}`);
                       }
@@ -1469,6 +1494,19 @@ const Sites: React.FC = () => {
               onClick={handleNewFile}
             >
               新建文件
+            </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => {
+                // 确保站点ID存在
+                const siteId = currentSite && currentSite.id;
+                if (siteId) {
+                  loadFileList(currentPath, siteId);
+                  messageApi.info('正在刷新文件列表...');
+                }
+              }}
+            >
+              刷新
             </Button>
             <Upload
               beforeUpload={beforeUpload}
@@ -1820,6 +1858,7 @@ const Sites: React.FC = () => {
       </Modal>
 
     </div>
+    </>
   )
 }
 

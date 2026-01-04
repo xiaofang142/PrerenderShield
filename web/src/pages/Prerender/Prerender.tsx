@@ -69,7 +69,7 @@ const Prerender: React.FC = () => {
       if (res.code === 200) {
         setSites(res.data)
         if (res.data.length > 0) {
-          setSelectedSite(res.data[0].name)
+          setSelectedSite(res.data[0].id)
         }
       }
     } catch (error) {
@@ -194,7 +194,7 @@ const Prerender: React.FC = () => {
               loading={sites.length === 0}
             >
               {sites.map((site) => (
-                <Option key={site.name} value={site.name}>
+                <Option key={site.id} value={site.id}>
                   {site.name} ({site.domain})
                 </Option>
               ))}
