@@ -62,22 +62,22 @@ func main() {
 	// 1. Redis客户端初始化
 	redisClient, err := redis.NewClient(cfg.Cache.RedisURL)
 	if err != nil {
-		log.Printf("Failed to initialize Redis client: %v, continuing with limited functionality", err)
-		// 继续运行，Redis错误不会导致程序崩溃
-	} else {
-		// 启动Redis订阅者，监听配置变更
-		redisSubscriber := redis.NewSubscriber(redisClient.GetRawClient())
-		// 添加配置变更处理
-		redisSubscriber.AddHandler("site:update", func(channel, payload string) {
-			log.Printf("Received site update event: %s, payload: %s", channel, payload)
-			// 这里可以添加站点更新逻辑
-		})
-		// 启动订阅者
-		if err := redisSubscriber.Start(); err != nil {
-			log.Printf("Failed to start Redis subscriber: %v", err)
-		}
-		defer redisSubscriber.Stop()
+		log.Fatalf("Failed to initialize Redis client: %v", err)
+		// Redis不可用，系统直接退出
 	}
+
+	// 启动Redis订阅者，监听配置变更
+	redisSubscriber := redis.NewSubscriber(redisClient.GetRawClient())
+	// 添加配置变更处理
+	redisSubscriber.AddHandler("site:update", func(channel, payload string) {
+		log.Printf("Received site update event: %s, payload: %s", channel, payload)
+		// 这里可以添加站点更新逻辑
+	})
+	// 启动订阅者
+	if err := redisSubscriber.Start(); err != nil {
+		log.Printf("Failed to start Redis subscriber: %v", err)
+	}
+	defer redisSubscriber.Stop()
 
 	// 2. 认证模块初始化
 	userManager := auth.NewUserManager(cfg.Dirs.DataDir, redisClient)

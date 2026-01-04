@@ -139,21 +139,34 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 					Password string `json:"password" binding:"required"`
 				}
 				if err := c.ShouldBindJSON(&req); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{
-						"code":    http.StatusBadRequest,
-						"message": "Invalid request",
-					})
+					c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "Invalid request"})
 					return
 				}
 
-				// 验证用户
-				user, err := r.userManager.AuthenticateUser(req.Username, req.Password)
-				if err != nil {
-					c.JSON(http.StatusUnauthorized, gin.H{
-						"code":    http.StatusUnauthorized,
-						"message": "Invalid username or password",
-					})
-					return
+				var user *auth.User
+				var err error
+
+				// 检查是否是首次登录
+				if r.userManager.IsFirstRun() {
+					// 首次登录，创建用户
+					user, err = r.userManager.CreateUser(req.Username, req.Password)
+					if err != nil {
+						c.JSON(http.StatusInternalServerError, gin.H{
+							"code":    http.StatusInternalServerError,
+							"message": "Failed to create user: " + err.Error(),
+						})
+						return
+					}
+				} else {
+					// 非首次登录，验证用户
+					user, err = r.userManager.AuthenticateUser(req.Username, req.Password)
+					if err != nil {
+						c.JSON(http.StatusUnauthorized, gin.H{
+							"code":    http.StatusUnauthorized,
+							"message": "Invalid username or password",
+						})
+						return
+					}
 				}
 
 				// 生成JWT令牌
@@ -166,6 +179,7 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 					return
 				}
 
+				// 返回登录成功响应
 				c.JSON(http.StatusOK, gin.H{
 					"code":    200,
 					"message": "Login successful",

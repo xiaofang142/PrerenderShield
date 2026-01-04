@@ -1,10 +1,7 @@
 package auth
 
 import (
-	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 
 	"prerender-shield/internal/redis"
 
@@ -29,15 +26,13 @@ type User struct {
 // UserManager 用户管理器
 type UserManager struct {
 	users       map[string]*User
-	dataPath    string
 	redisClient *redis.Client
 }
 
 // NewUserManager 创建用户管理器
-func NewUserManager(dataPath string, redisClient *redis.Client) *UserManager {
+func NewUserManager(_ string, redisClient *redis.Client) *UserManager {
 	manager := &UserManager{
 		users:       make(map[string]*User),
-		dataPath:    filepath.Join(dataPath, "users.json"),
 		redisClient: redisClient,
 	}
 
@@ -73,7 +68,7 @@ func (m *UserManager) CreateUser(username, password string) (*User, error) {
 	// 保存用户到内存
 	m.users[userID] = user
 
-	// 保存用户到文件和Redis
+	// 保存用户到Redis和文件
 	if err := m.saveUsers(); err != nil {
 		return nil, err
 	}
@@ -101,6 +96,7 @@ func (m *UserManager) AuthenticateUser(username, password string) (*User, error)
 
 	// 验证密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		// 密码验证失败，返回错误
 		return nil, ErrInvalidCredentials
 	}
 
@@ -109,12 +105,18 @@ func (m *UserManager) AuthenticateUser(username, password string) (*User, error)
 
 // IsFirstRun 检查是否是首次运行（没有用户）
 func (m *UserManager) IsFirstRun() bool {
+	// 重新加载用户数据，确保与Redis保持同步
+	m.loadUsers()
+	// 返回内存中用户数量是否为0
 	return len(m.users) == 0
 }
 
 // loadUsers 加载用户数据
 func (m *UserManager) loadUsers() {
-	// 优先从Redis加载用户数据（如果Redis客户端可用）
+	// 初始化用户映射
+	m.users = make(map[string]*User)
+
+	// 从Redis加载用户数据
 	if m.redisClient != nil {
 		userIDs, err := m.redisClient.GetAllUsers()
 		if err == nil && len(userIDs) > 0 {
@@ -129,80 +131,15 @@ func (m *UserManager) loadUsers() {
 					m.users[user.ID] = user
 				}
 			}
-			return
 		}
-	}
-
-	// Redis加载失败或没有用户，从文件加载
-	// 检查文件是否存在
-	if _, err := os.Stat(m.dataPath); os.IsNotExist(err) {
-		// 文件不存在，创建空文件
-		file, err := os.Create(m.dataPath)
-		if err != nil {
-			return
-		}
-		file.Close()
-		return
-	}
-
-	// 读取文件
-	file, err := os.Open(m.dataPath)
-	if err != nil {
-		return
-	}
-	defer file.Close()
-
-	// 获取文件大小
-	fileInfo, err := file.Stat()
-	if err != nil {
-		return
-	}
-	fileSize := fileInfo.Size()
-	if fileSize == 0 {
-		return
-	}
-
-	// 读取文件内容
-	content := make([]byte, fileSize)
-	_, err = file.Read(content)
-	if err != nil {
-		return
-	}
-
-	// 解析JSON
-	var users []*User
-	if err := json.Unmarshal(content, &users); err != nil {
-		return
-	}
-
-	// 将用户添加到map
-	for _, user := range users {
-		m.users[user.ID] = user
 	}
 }
 
-// saveUsers 保存用户数据
+// saveUsers 保存用户数据，只保存到Redis
 func (m *UserManager) saveUsers() error {
-	// 将map转换为切片
-	var users []*User
-	for _, user := range m.users {
-		users = append(users, user)
-	}
-
-	// 序列化JSON
-	content, err := json.MarshalIndent(users, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	// 写入文件
-	if err := os.WriteFile(m.dataPath, content, 0644); err != nil {
-		return err
-	}
-
 	// 保存到Redis（如果Redis客户端可用）
 	if m.redisClient != nil {
-		for _, user := range users {
+		for _, user := range m.users {
 			if err := m.redisClient.SaveUser(user.ID, user.Username, user.Password); err != nil {
 				return err
 			}

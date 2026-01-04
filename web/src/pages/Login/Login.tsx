@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
-import { Card, Form, Input, Button, Typography, Spin, Modal, message } from 'antd'
-import { LoginOutlined, LockOutlined } from '@ant-design/icons'
+import React, { useState, useEffect } from 'react'
+import { Card, Form, Input, Button, Typography, Spin, Modal, message, Alert } from 'antd'
+import { LoginOutlined, LockOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
@@ -14,6 +14,9 @@ const Login: React.FC = () => {
   const [modalTitle, setModalTitle] = useState('')
   const [modalContent, setModalContent] = useState('')
   const [modalType, setModalType] = useState<'success' | 'error' | 'info'>('info')
+  // 首次运行状态
+  const [isFirstRun, setIsFirstRun] = useState(false)
+  const [checkingFirstRun, setCheckingFirstRun] = useState(true)
   const navigate = useNavigate()
   const { login: authLogin } = useAuth()
 
@@ -24,6 +27,24 @@ const Login: React.FC = () => {
     setModalContent(content)
     setModalVisible(true)
   }
+
+  // 检查是否是首次运行
+  useEffect(() => {
+    const checkFirstRun = async () => {
+      try {
+        const response = await api.get('/auth/first-run')
+        if (response.code === 200) {
+          setIsFirstRun(response.data.isFirstRun)
+        }
+      } catch (error) {
+        console.error('检查首次运行状态失败:', error)
+      } finally {
+        setCheckingFirstRun(false)
+      }
+    }
+
+    checkFirstRun()
+  }, [])
 
   // 登录处理
   const handleLogin = async (values: { username: string; password: string }) => {
@@ -85,6 +106,25 @@ const Login: React.FC = () => {
           </div>
         }
       >
+        {!checkingFirstRun && isFirstRun && (
+          <Alert
+            message={
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <InfoCircleOutlined style={{ marginRight: 8, color: '#faad14' }} />
+                <span>首次访问提示</span>
+              </div>
+            }
+            description={
+              <div>
+                <p>当前是首次访问系统，您设置的账号密码将是后续登录使用的凭证。</p>
+                <p style={{ color: '#ff4d4f', fontWeight: 'bold' }}>注意：首次设置的账号密码不可修改，请妥善保管！</p>
+              </div>
+            }
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
         <Form
           name="login"
           initialValues={{ remember: true }}
@@ -131,7 +171,7 @@ const Login: React.FC = () => {
               size="large"
               loading={loading}
             >
-              登录
+              {isFirstRun ? '设置并登录' : '登录'}
             </Button>
           </Form.Item>
         </Form>
