@@ -661,6 +661,26 @@ func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) 
 		}, nil
 	}
 
+	// 构建缓存键
+	cacheKey := fmt.Sprintf("prerender:%s:content:%s", e.SiteName, url)
+
+	// 尝试从Redis获取缓存
+	if e.redisClient != nil {
+		// 获取缓存的HTML内容
+		cachedHTML, err := e.redisClient.GetRawClient().Get(e.ctx, cacheKey).Result()
+		if err == nil {
+			// 缓存命中，直接返回
+			return &RenderResultWithCache{
+				Result: &RenderResult{
+					HTML:    cachedHTML,
+					Success: true,
+					Error:   "",
+				},
+				HitCache: true,
+			}, nil
+		}
+	}
+
 	// 创建渲染任务
 	task := &RenderTask{
 		ID:      uuid.New().String(),
@@ -675,7 +695,13 @@ func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) 
 		// 等待结果
 		select {
 		case result := <-task.Result:
-			// 不再将结果存入缓存，直接返回
+			if result.Success && result.HTML != "" && e.redisClient != nil {
+				// 将渲染结果存入Redis缓存
+				cacheTTL := time.Duration(e.config.CacheTTL) * time.Second
+				e.redisClient.GetRawClient().Set(e.ctx, cacheKey, result.HTML, cacheTTL).Err()
+				// 更新URL状态为cached
+				e.redisClient.SetURLPreheatStatus(e.SiteName, url, "cached", int64(len(result.HTML)))
+			}
 			return &RenderResultWithCache{
 				Result:   result,
 				HitCache: false,
