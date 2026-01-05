@@ -135,7 +135,6 @@ export const prerenderApi = {
   // 渲染预热扩展API
   getPreheatStats: (siteId?: string) => api.get('/preheat/stats', { params: siteId ? { siteId } : {} }),
   triggerPreheat: (siteId: string) => api.post('/preheat/trigger', { siteId }),
-  preheatUrls: (siteId: string, urls: string[]) => api.post('/preheat/url', { siteId, urls }),
   getUrls: (siteId?: string, page: number = 1, pageSize: number = 20) => api.get('/preheat/urls', { params: { siteId, page, pageSize } }),
   getCrawlerHeaders: () => api.get('/preheat/crawler-headers'),
 }

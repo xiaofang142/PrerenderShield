@@ -266,56 +266,6 @@ func (c *PreheatController) TriggerPreheat(ctx *gin.Context) {
 	})
 }
 
-// PreheatURLs 手动预热指定URL
-func (c *PreheatController) PreheatURLs(ctx *gin.Context) {
-	// 手动预热指定URL
-	var req struct {
-		SiteId string   `json:"siteId" binding:"required"`
-		URLs   []string `json:"urls" binding:"required"`
-	}
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code":    http.StatusBadRequest,
-			"message": "无效的请求参数",
-		})
-		return
-	}
-
-	// 检查站点是否存在
-	engine, exists := c.prerenderManager.GetEngine(req.SiteId)
-	if !exists {
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"code":    http.StatusNotFound,
-			"message": fmt.Sprintf("站点 %s 不存在", req.SiteId),
-		})
-		return
-	}
-
-	// 调用引擎的预热方法
-	for _, url := range req.URLs {
-		// 使用预热管理器来预热单个URL
-		if err := engine.GetPreheatManager().TriggerPreheatForURL(url); err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{
-				"code":    http.StatusInternalServerError,
-				"message": fmt.Sprintf("URL预热失败: %v", err),
-			})
-			return
-		}
-	}
-
-	// 返回成功响应
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "URL预热任务已成功触发",
-		"data": gin.H{
-			"siteId":   req.SiteId,
-			"urlCount": len(req.URLs),
-			"urls":     req.URLs,
-		},
-	})
-}
-
 // GetPreheatUrls 获取URL列表
 func (c *PreheatController) GetPreheatUrls(ctx *gin.Context) {
 	// 获取URL列表

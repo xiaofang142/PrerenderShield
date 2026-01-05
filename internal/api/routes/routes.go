@@ -170,7 +170,6 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 			protectedGroup.GET("/preheat/sites", preheatController.GetPreheatSites)
 			protectedGroup.GET("/preheat/stats", preheatController.GetPreheatStats)
 			protectedGroup.POST("/preheat/trigger", preheatController.TriggerPreheat)
-			protectedGroup.POST("/preheat/url", preheatController.PreheatURLs)
 			protectedGroup.GET("/preheat/urls", preheatController.GetPreheatUrls)
 			protectedGroup.GET("/preheat/task/status", preheatController.GetPreheatTaskStatus)
 			protectedGroup.GET("/preheat/crawler-headers", preheatController.GetCrawlerHeaders)

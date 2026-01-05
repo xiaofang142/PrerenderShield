@@ -19,7 +19,6 @@ const Preheat: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [urlList, setUrlList] = useState<any[]>([])
   const [urlLoading, setUrlLoading] = useState(false)
-  const [manualUrls, setManualUrls] = useState<string>('')
   const [preheatModalVisible, setPreheatModalVisible] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
@@ -139,7 +138,7 @@ const Preheat: React.FC = () => {
   const handleRefreshStats = () => {
     fetchStats()
     fetchUrls(currentPage, pageSize)
-    message.success('统计数据已刷新')
+    message.success('数据已刷新')
   }
 
   // 触发站点预热
@@ -172,83 +171,6 @@ const Preheat: React.FC = () => {
     } catch (error) {
       console.error('Failed to trigger preheat:', error)
       message.error('触发预热失败')
-    } finally {
-      // setIsPreheating(false)
-    }
-  }
-
-  // 手动预热URL
-  const handleManualPreheat = async () => {
-    if (!selectedSiteId) {
-      message.warning('请先选择站点')
-      return
-    }
-
-    if (!manualUrls.trim()) {
-      message.warning('请输入要预热的URL')
-      return
-    }
-
-    try {
-      setIsPreheating(true)
-      const urls = manualUrls.split('\n').filter(url => url.trim())
-      const res = await prerenderApi.preheatUrls(selectedSiteId, urls)
-      if (res.code === 200) {
-        message.success(`已触发 ${urls.length} 个URL的预热任务`)
-        setManualUrls('')
-        setPreheatModalVisible(true)
-        // 开始轮询进度
-        let progress = 0
-        const interval = setInterval(() => {
-          progress += 10
-          setPreheatProgress(progress)
-          if (progress >= 100) {
-            clearInterval(interval)
-            setIsPreheating(false)
-            setPreheatProgress(0)
-            fetchStats()
-            fetchUrls(currentPage, pageSize)
-          }
-        }, 1000)
-      }
-    } catch (error) {
-      console.error('Failed to preheat URLs:', error)
-      message.error('手动预热失败')
-    } finally {
-      // setIsPreheating(false)
-    }
-  }
-
-  // 单个URL预热
-  const handleSinglePreheat = async (url: string) => {
-    if (!selectedSiteId) {
-      message.warning('请先选择站点')
-      return
-    }
-    
-    try {
-      setIsPreheating(true)
-      const res = await prerenderApi.preheatUrls(selectedSiteId, [url])
-      if (res.code === 200) {
-        message.success('URL预热任务已触发')
-        // 模拟进度
-        let progress = 0
-        const interval = setInterval(() => {
-          progress += 20
-          setPreheatProgress(progress)
-          if (progress >= 100) {
-            clearInterval(interval)
-            setIsPreheating(false)
-            setPreheatProgress(0)
-            fetchStats()
-            fetchUrls(currentPage, pageSize)
-          }
-        }, 500)
-        setPreheatModalVisible(true)
-      }
-    } catch (error) {
-      console.error('Failed to preheat URL:', error)
-      message.error('URL预热失败')
     } finally {
       // setIsPreheating(false)
     }
@@ -307,10 +229,15 @@ const Preheat: React.FC = () => {
               ))}
             </Select>
           </Col>
-          <Col span={8}>
-            <Button type="primary" icon={<ReloadOutlined />} onClick={handleRefreshStats} loading={loading}>
-              刷新数据
-            </Button>
+          <Col span={12}>
+            <Space>
+              <Button type="primary" icon={<ReloadOutlined />} onClick={handleRefreshStats} loading={loading}>
+                刷新数据
+              </Button>
+              <Button type="primary" icon={<FireOutlined />} onClick={handleTriggerPreheat} loading={isPreheating}>
+                触发站点预热
+              </Button>
+            </Space>
           </Col>
         </Row>
       </Card>
@@ -356,47 +283,6 @@ const Preheat: React.FC = () => {
                 valueStyle={{ color: '#722ed1' }}
               />
             </Col>
-        </Row>
-      </Card>
-      
-      {/* 手动操作区 */}
-      <Card className="card" title="手动操作" style={{ marginBottom: 16 }}>
-        <Row gutter={[16, 16]}>
-          {/* 左侧面板：站点操作 */}
-          <Col span={12}>
-            <Card size="small" title="站点操作">
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <Button type="primary" icon={<FireOutlined />} onClick={handleTriggerPreheat} loading={isPreheating} block>
-                  触发站点预热
-                </Button>
-                <Button icon={<ReloadOutlined />} onClick={() => fetchUrls(currentPage, pageSize)} loading={urlLoading} block>
-                  刷新URL列表
-                </Button>
-              </Space>
-            </Card>
-          </Col>
-          {/* 右侧面板：手动预热URL */}
-          <Col span={12}>
-            <Card size="small" title="手动预热URL">
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <TextArea
-                  rows={4}
-                  placeholder="请输入要预热的URL，一行一个地址"
-                  value={manualUrls}
-                  onChange={(e) => setManualUrls(e.target.value)}
-                />
-                <Button
-                  type="primary"
-                  icon={<PlayCircleOutlined />}
-                  onClick={handleManualPreheat}
-                  loading={isPreheating}
-                  block
-                >
-                  执行手动预热
-                </Button>
-              </Space>
-            </Card>
-          </Col>
         </Row>
       </Card>
       
