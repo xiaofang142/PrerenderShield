@@ -3,6 +3,8 @@ package prerender
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -752,6 +754,63 @@ func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) 
 					Error:   "",
 				},
 				HitCache: true,
+			}, nil
+		}
+	}
+
+	// 对于静态模式的站点，直接读取静态文件而不是使用浏览器渲染，避免循环依赖
+	// 检查URL是否指向本地静态资源
+	isLocalURL := strings.Contains(url, "localhost:8081") || strings.Contains(url, "127.0.0.1:8081")
+	if isLocalURL {
+		// 尝试直接读取静态文件
+		// 移除协议和域名，只保留路径
+		path := url
+		if idx := strings.Index(url, "/"); idx != -1 {
+			path = url[idx:]
+		}
+
+		// 默认站点的静态文件目录
+		staticDir := fmt.Sprintf("./static/%s", e.SiteName)
+
+		// 处理URL，移除hash部分并获取实际路径
+		getActualPath := func(urlPath string) string {
+			// 移除URL中的hash部分，因为hash不会发送到服务器
+			if hashIndex := strings.Index(urlPath, "#"); hashIndex != -1 {
+				return urlPath[:hashIndex]
+			}
+			return urlPath
+		}
+
+		// 获取实际路径（移除hash部分）
+		actualPath := getActualPath(path)
+
+		// 构建文件路径
+		filePath := staticDir + actualPath
+
+		// 如果路径是目录或不存在，尝试添加index.html
+		if info, err := os.Stat(filePath); err != nil || info.IsDir() {
+			filePath = filepath.Join(staticDir, actualPath, "index.html")
+		}
+
+		// 读取文件内容
+		htmlContent, err := os.ReadFile(filePath)
+		if err == nil {
+			// 成功读取文件，将内容返回并缓存
+			htmlStr := string(htmlContent)
+			if e.redisClient != nil {
+				// 将渲染结果存入Redis缓存
+				cacheTTL := time.Duration(e.config.CacheTTL) * time.Second
+				e.redisClient.GetRawClient().Set(e.ctx, cacheKey, htmlStr, cacheTTL).Err()
+				// 更新URL状态为cached
+				e.redisClient.SetURLPreheatStatus(e.SiteName, url, "cached", int64(len(htmlStr)))
+			}
+			return &RenderResultWithCache{
+				Result: &RenderResult{
+					HTML:    htmlStr,
+					Success: true,
+					Error:   "",
+				},
+				HitCache: false,
 			}, nil
 		}
 	}
