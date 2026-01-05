@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -98,7 +99,7 @@ type SiteConfig struct {
 	// 路由配置
 	Routing RoutingConfig `yaml:"routing" json:"routing"`
 	// 网页防篡改配置
-	FileIntegrityConfig FileIntegrityConfig `yaml:"file_integrity" json:"FileIntegrityConfig"`
+	FileIntegrityConfig FileIntegrityConfig `yaml:"file_integrity" json:"file_integrity"`
 }
 
 // FileIntegrityConfig 网页防篡改配置结构体
@@ -110,9 +111,9 @@ type SiteConfig struct {
 //   HashAlgorithm: 哈希算法，可选值：md5, sha256等
 
 type FileIntegrityConfig struct {
-	Enabled       bool   `yaml:"enabled" json:"Enabled"`
-	CheckInterval int    `yaml:"check_interval" json:"CheckInterval"` // 检查间隔（秒）
-	HashAlgorithm string `yaml:"hash_algorithm" json:"HashAlgorithm"` // 哈希算法（md5, sha256等）
+	Enabled       bool   `yaml:"enabled" json:"enabled"`
+	CheckInterval int    `yaml:"check_interval" json:"check_interval"` // 检查间隔（秒）
+	HashAlgorithm string `yaml:"hash_algorithm" json:"hash_algorithm"` // 哈希算法（md5, sha256等）
 }
 
 // RedirectConfig 重定向配置结构体
@@ -123,8 +124,8 @@ type FileIntegrityConfig struct {
 //   TargetURL: 重定向目标URL
 
 type RedirectConfig struct {
-	StatusCode int    `yaml:"status_code" json:"StatusCode"`
-	TargetURL  string `yaml:"target_url" json:"TargetURL"`
+	StatusCode int    `yaml:"status_code" json:"status_code"`
+	TargetURL  string `yaml:"target_url" json:"target_url"`
 }
 
 // ProxyConfig 代理配置结构体
@@ -134,7 +135,7 @@ type RedirectConfig struct {
 //   TargetURL: 代理目标URL，即真实后端服务地址
 
 type ProxyConfig struct {
-	TargetURL string `yaml:"target_url" json:"TargetURL"`
+	TargetURL string `yaml:"target_url" json:"target_url"`
 }
 
 // Config 应用全局配置结构体
@@ -172,86 +173,86 @@ type ServerConfig struct {
 
 // FirewallConfig 防火墙配置
 type FirewallConfig struct {
-	Enabled         bool            `yaml:"enabled" json:"Enabled"`
-	RulesPath       string          `yaml:"rules_path" json:"RulesPath"`
-	ActionConfig    ActionConfig    `yaml:"action" json:"ActionConfig"`
-	GeoIPConfig     GeoIPConfig     `yaml:"geoip" json:"GeoIPConfig"`
-	RateLimitConfig RateLimitConfig `yaml:"rate_limit" json:"RateLimitConfig"`
+	Enabled         bool            `yaml:"enabled" json:"enabled"`
+	RulesPath       string          `yaml:"rules_path" json:"rules_path"`
+	ActionConfig    ActionConfig    `yaml:"action" json:"action"`
+	GeoIPConfig     GeoIPConfig     `yaml:"geoip" json:"geoip"`
+	RateLimitConfig RateLimitConfig `yaml:"rate_limit" json:"rate_limit"`
 }
 
 // GeoIPConfig 地理位置访问控制配置
 type GeoIPConfig struct {
-	Enabled   bool     `yaml:"enabled" json:"Enabled"`
-	AllowList []string `yaml:"allow_list" json:"AllowList"` // 允许的国家/地区代码列表
-	BlockList []string `yaml:"block_list" json:"BlockList"` // 阻止的国家/地区代码列表
+	Enabled   bool     `yaml:"enabled" json:"enabled"`
+	AllowList []string `yaml:"allow_list" json:"allow_list"` // 允许的国家/地区代码列表
+	BlockList []string `yaml:"block_list" json:"block_list"` // 阻止的国家/地区代码列表
 }
 
 // RateLimitConfig 频率限制配置
 type RateLimitConfig struct {
-	Enabled  bool `yaml:"enabled" json:"Enabled"`
-	Requests int  `yaml:"requests" json:"Requests"` // 时间窗口内允许的请求数
-	Window   int  `yaml:"window" json:"Window"`     // 时间窗口（秒）
-	BanTime  int  `yaml:"ban_time" json:"BanTime"`  // 封禁时间（秒）
+	Enabled  bool `yaml:"enabled" json:"enabled"`
+	Requests int  `yaml:"requests" json:"requests"` // 时间窗口内允许的请求数
+	Window   int  `yaml:"window" json:"window"`     // 时间窗口（秒）
+	BanTime  int  `yaml:"ban_time" json:"ban_time"` // 封禁时间（秒）
 }
 
 // ActionConfig 防火墙动作配置
 type ActionConfig struct {
-	DefaultAction string `yaml:"default_action" json:"DefaultAction"`
-	BlockMessage  string `yaml:"block_message" json:"BlockMessage"`
+	DefaultAction string `yaml:"default_action" json:"default_action"`
+	BlockMessage  string `yaml:"block_message" json:"block_message"`
 }
 
 // PrerenderConfig 渲染预热配置
 type PrerenderConfig struct {
-	Enabled           bool          `yaml:"enabled" json:"Enabled"`
-	PoolSize          int           `yaml:"pool_size" json:"PoolSize"`
-	MinPoolSize       int           `yaml:"min_pool_size" json:"MinPoolSize"`
-	MaxPoolSize       int           `yaml:"max_pool_size" json:"MaxPoolSize"`
-	Timeout           int           `yaml:"timeout" json:"Timeout"`
-	CacheTTL          int           `yaml:"cache_ttl" json:"CacheTTL"`
-	IdleTimeout       int           `yaml:"idle_timeout" json:"IdleTimeout"`
-	DynamicScaling    bool          `yaml:"dynamic_scaling" json:"DynamicScaling"`
-	ScalingFactor     float64       `yaml:"scaling_factor" json:"ScalingFactor"`
-	ScalingInterval   int           `yaml:"scaling_interval" json:"ScalingInterval"`
-	Preheat           PreheatConfig `yaml:"preheat" json:"Preheat"`
-	Push              PushConfig    `yaml:"push" json:"Push"`
-	CrawlerHeaders    []string      `yaml:"crawler_headers" json:"CrawlerHeaders"`        // 爬虫协议头列表
-	UseDefaultHeaders bool          `yaml:"use_default_headers" json:"UseDefaultHeaders"` // 是否使用默认爬虫协议头
+	Enabled           bool          `yaml:"enabled" json:"enabled"`
+	PoolSize          int           `yaml:"pool_size" json:"pool_size"`
+	MinPoolSize       int           `yaml:"min_pool_size" json:"min_pool_size"`
+	MaxPoolSize       int           `yaml:"max_pool_size" json:"max_pool_size"`
+	Timeout           int           `yaml:"timeout" json:"timeout"`
+	CacheTTL          int           `yaml:"cache_ttl" json:"cache_ttl"`
+	IdleTimeout       int           `yaml:"idle_timeout" json:"idle_timeout"`
+	DynamicScaling    bool          `yaml:"dynamic_scaling" json:"dynamic_scaling"`
+	ScalingFactor     float64       `yaml:"scaling_factor" json:"scaling_factor"`
+	ScalingInterval   int           `yaml:"scaling_interval" json:"scaling_interval"`
+	Preheat           PreheatConfig `yaml:"preheat" json:"preheat"`
+	Push              PushConfig    `yaml:"push" json:"push"`
+	CrawlerHeaders    []string      `yaml:"crawler_headers" json:"crawler_headers"`         // 爬虫协议头列表
+	UseDefaultHeaders bool          `yaml:"use_default_headers" json:"use_default_headers"` // 是否使用默认爬虫协议头
 }
 
 // PreheatConfig 缓存预热配置
 type PreheatConfig struct {
-	Enabled         bool   `yaml:"enabled" json:"Enabled"`
-	SitemapURL      string `yaml:"sitemap_url" json:"SitemapURL"`
-	Schedule        string `yaml:"schedule" json:"Schedule"`
-	Concurrency     int    `yaml:"concurrency" json:"Concurrency"`
-	DefaultPriority int    `yaml:"default_priority" json:"DefaultPriority"`
-	MaxDepth        int    `yaml:"max_depth" json:"MaxDepth"` // 爬取深度
+	Enabled         bool   `yaml:"enabled" json:"enabled"`
+	SitemapURL      string `yaml:"sitemap_url" json:"sitemap_url"`
+	Schedule        string `yaml:"schedule" json:"schedule"`
+	Concurrency     int    `yaml:"concurrency" json:"concurrency"`
+	DefaultPriority int    `yaml:"default_priority" json:"default_priority"`
+	MaxDepth        int    `yaml:"max_depth" json:"max_depth"` // 爬取深度
 }
 
 // PushConfig 搜索引擎推送配置
 type PushConfig struct {
-	Enabled         bool   `yaml:"enabled" json:"Enabled"`
-	BaiduAPI        string `yaml:"baidu_api" json:"BaiduAPI"`
-	BaiduToken      string `yaml:"baidu_token" json:"BaiduToken"`
-	BingAPI         string `yaml:"bing_api" json:"BingAPI"`
-	BingToken       string `yaml:"bing_token" json:"BingToken"`
-	BaiduDailyLimit int    `yaml:"baidu_daily_limit" json:"BaiduDailyLimit"`
-	BingDailyLimit  int    `yaml:"bing_daily_limit" json:"BingDailyLimit"`
-	PushDomain      string `yaml:"push_domain" json:"PushDomain"`
-	Schedule        string `yaml:"schedule" json:"Schedule"`
+	Enabled         bool   `yaml:"enabled" json:"enabled"`
+	BaiduAPI        string `yaml:"baidu_api" json:"baidu_api"`
+	BaiduToken      string `yaml:"baidu_token" json:"baidu_token"`
+	BingAPI         string `yaml:"bing_api" json:"bing_api"`
+	BingToken       string `yaml:"bing_token" json:"bing_token"`
+	BaiduDailyLimit int    `yaml:"baidu_daily_limit" json:"baidu_daily_limit"`
+	BingDailyLimit  int    `yaml:"bing_daily_limit" json:"bing_daily_limit"`
+	PushDomain      string `yaml:"push_domain" json:"push_domain"`
+	Schedule        string `yaml:"schedule" json:"schedule"`
 }
 
 // RoutingConfig 路由配置
 type RoutingConfig struct {
-	Rules []RouteRule `yaml:"rules" json:"Rules"`
+	Rules []RouteRule `yaml:"rules" json:"rules"`
 }
 
 // RouteRule 路由规则
 type RouteRule struct {
-	ID       string `yaml:"id" json:"ID"`
-	Pattern  string `yaml:"pattern" json:"Pattern"`
-	Action   string `yaml:"action" json:"Action"`
-	Priority int    `yaml:"priority" json:"Priority"`
+	ID       string `yaml:"id" json:"id"`
+	Pattern  string `yaml:"pattern" json:"pattern"`
+	Action   string `yaml:"action" json:"action"`
+	Priority int    `yaml:"priority" json:"priority"`
 }
 
 // CacheConfig 缓存配置
@@ -322,6 +323,35 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// 从环境变量加载配置，覆盖文件配置
 	loadFromEnv(cfg)
+
+	// 确保所有目录路径都是绝对路径
+	// 获取应用程序二进制文件的位置
+	exePath, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	// 获取二进制文件所在目录
+	appDir := filepath.Dir(exePath)
+
+	// 处理静态目录
+	if !filepath.IsAbs(cfg.Dirs.StaticDir) {
+		cfg.Dirs.StaticDir = filepath.Join(appDir, cfg.Dirs.StaticDir)
+	}
+
+	// 处理数据目录
+	if !filepath.IsAbs(cfg.Dirs.DataDir) {
+		cfg.Dirs.DataDir = filepath.Join(appDir, cfg.Dirs.DataDir)
+	}
+
+	// 处理证书目录
+	if !filepath.IsAbs(cfg.Dirs.CertsDir) {
+		cfg.Dirs.CertsDir = filepath.Join(appDir, cfg.Dirs.CertsDir)
+	}
+
+	// 处理管理控制台静态目录
+	if !filepath.IsAbs(cfg.Dirs.AdminStaticDir) {
+		cfg.Dirs.AdminStaticDir = filepath.Join(appDir, cfg.Dirs.AdminStaticDir)
+	}
 
 	// 更新配置
 	manager.config = cfg
@@ -597,18 +627,82 @@ func defaultConfig() *Config {
 			},
 		},
 		Prerender: PrerenderConfig{
-			Enabled:           true,
-			PoolSize:          5,
-			MinPoolSize:       2,
-			MaxPoolSize:       20,
-			Timeout:           30,
-			CacheTTL:          3600,
-			IdleTimeout:       300,
-			DynamicScaling:    true,
-			ScalingFactor:     0.5,
-			ScalingInterval:   60,
-			CrawlerHeaders:    []string{}, // 默认空列表
-			UseDefaultHeaders: true,       // 默认使用默认爬虫协议头
+			Enabled:         true,
+			PoolSize:        5,
+			MinPoolSize:     2,
+			MaxPoolSize:     20,
+			Timeout:         30,
+			CacheTTL:        3600,
+			IdleTimeout:     300,
+			DynamicScaling:  true,
+			ScalingFactor:   0.5,
+			ScalingInterval: 60,
+			// 默认包含市面上常见的爬虫协议头
+			CrawlerHeaders: []string{
+				"Googlebot",
+				"Bingbot",
+				"Slurp",
+				"DuckDuckBot",
+				"Baiduspider",
+				"Sogou spider",
+				"YandexBot",
+				"Exabot",
+				"FacebookBot",
+				"Twitterbot",
+				"LinkedInBot",
+				"WhatsAppBot",
+				"TelegramBot",
+				"DiscordBot",
+				"PinterestBot",
+				"InstagramBot",
+				"Google-InspectionTool",
+				"Google-Site-Verification",
+				"AhrefsBot",
+				"SEMrushBot",
+				"Majestic",
+				"Yahoo! Slurp",
+				"Applebot",
+				"Mediapartners-Google",
+				"AdsBot-Google",
+				"Feedfetcher-Google",
+				"Googlebot-Image",
+				"Googlebot-News",
+				"Googlebot-Video",
+				"Googlebot-Extended",
+				"bingbot/2.0",
+				"msnbot",
+				"MSNbot-Media",
+				"bingbot/1.0",
+				"msnbot-media/1.1",
+				"adidxbot",
+				"BingPreview",
+				"BingSiteAuth",
+				"BingLocalSearchBot",
+				"Baiduspider-image",
+				"Baiduspider-video",
+				"Baiduspider-mobile",
+				"Baiduspider-news",
+				"Baiduspider-favo",
+				"Baiduspider-cpro",
+				"Baiduspider-ads",
+				"Sogou web spider",
+				"Sogou inst spider",
+				"Sogou spider2",
+				"Sogou blog",
+				"Sogou News Spider",
+				"Sogou Orion spider",
+				"Sogou video spider",
+				"Sogou image spider",
+				"YandexBot/3.0",
+				"YandexMobileBot",
+				"YandexImages",
+				"YandexVideo",
+				"YandexMedia",
+				"YandexBlogs",
+				"YandexNews",
+				"YandexCatalog",
+			},
+			UseDefaultHeaders: false, // 不再使用默认爬虫协议头，直接使用配置的CrawlerHeaders
 			Preheat: PreheatConfig{
 				Enabled:         false,
 				SitemapURL:      "",

@@ -103,8 +103,8 @@ start() {
     echo "版本信息接口: http://0.0.0.0:9598/api/v1/version"
     echo "========================================"
 
-    # 启动应用程序
-    nohup "$APP_BINARY" --config "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
+    # 启动应用程序，确保工作目录正确
+    cd "$(dirname "$0")" && nohup "$APP_BINARY" --config "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
     echo "$APP_NAME 启动成功，PID: $(cat "$PID_FILE")"
     echo "日志文件: $LOG_FILE"

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,34 +19,36 @@ import (
 
 // Engine 渲染预热引擎
 type Engine struct {
-	SiteName             string
-	config               PrerenderConfig
-	browserPool          []*Browser
-	idleBrowsers         chan *Browser
-	taskQueue            chan *RenderTask
-	isRunning            bool
-	mutex                sync.RWMutex
-	preheatManager       *PreheatManager
-	workerWg             sync.WaitGroup
-	ctx                  context.Context
-	cancel               context.CancelFunc
-	healthCheckTicker    *time.Ticker
-	dynamicScalingTicker *time.Ticker // 动态扩容检查定时器
-	queueLengthHistory   []int        // 任务队列长度历史，用于动态扩容决策
-	queueMutex           sync.RWMutex // 队列长度历史互斥锁
-	activeTasks          int          // 当前活跃任务数
-	taskMutex            sync.RWMutex // 活跃任务数互斥锁
-	redisClient          *redis.Client
+	SiteName           string
+	staticDir          string // 静态文件目录
+	config             PrerenderConfig
+	browserPool        []*Browser
+	idleBrowsers       chan *Browser
+	taskQueue          chan *RenderTask
+	isRunning          bool
+	mutex              sync.RWMutex
+	preheatManager     *PreheatManager
+	workerWg           sync.WaitGroup
+	ctx                context.Context
+	cancel             context.CancelFunc
+	healthCheckTicker  *time.Ticker
+	queueLengthHistory []int        // 任务队列长度历史，用于动态扩容决策
+	queueMutex         sync.RWMutex // 队列长度历史互斥锁
+	activeTasks        int          // 当前活跃任务数
+	taskMutex          sync.RWMutex // 活跃任务数互斥锁
+	redisClient        *redis.Client
 	// 默认爬虫协议头列表
 	defaultCrawlerHeaders []string
 }
 
 // EngineManager 渲染预热引擎管理器，管理多个站点的渲染预热引擎
 type EngineManager struct {
-	mutex   sync.RWMutex
-	engines map[string]*Engine // 站点名 -> 引擎实例
-	ctx     context.Context
-	cancel  context.CancelFunc
+	mutex             sync.RWMutex
+	engines           map[string]*Engine // 站点名 -> 引擎实例
+	ctx               context.Context
+	cancel            context.CancelFunc
+	autoPreheatTicker *time.Ticker // 自动预热检查定时器
+	staticDir         string       // 静态文件目录
 }
 
 // Browser 浏览器实例
@@ -89,22 +92,14 @@ type PrerenderConfig struct {
 	Timeout           int
 	CacheTTL          int
 	Preheat           PreheatConfig
-	IdleTimeout       int      // 浏览器空闲超时时间（秒）
-	DynamicScaling    bool     // 是否启用动态扩容/缩容
-	ScalingFactor     float64  // 扩容因子，如0.5表示每次增加50%
-	ScalingInterval   int      // 扩容检查间隔（秒）
 	CrawlerHeaders    []string // 爬虫协议头列表
 	UseDefaultHeaders bool     // 是否使用默认爬虫协议头
 }
 
 // PreheatConfig 缓存预热配置
 type PreheatConfig struct {
-	Enabled         bool
-	SitemapURL      string
-	Schedule        string
-	Concurrency     int
-	DefaultPriority int
-	MaxDepth        int
+	Enabled  bool
+	MaxDepth int
 }
 
 // PreheatManager 缓存预热管理器
@@ -190,7 +185,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 		)
 
 		// 创建并发控制信号量
-		semaphore := make(chan struct{}, pm.config.Preheat.Concurrency)
+		semaphore := make(chan struct{}, 5) // Default concurrency: 5
 		var wg sync.WaitGroup
 
 		// 并发执行渲染预热
@@ -274,7 +269,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 		Domain:      domain,
 		BaseURL:     baseURL,
 		MaxDepth:    pm.config.Preheat.MaxDepth,
-		Concurrency: pm.config.Preheat.Concurrency,
+		Concurrency: 5, // Default concurrency: 5
 		RedisClient: pm.redisClient,
 	}
 
@@ -419,7 +414,7 @@ func (pm *PreheatManager) Stop() {
 }
 
 // NewEngine 创建新的渲染预热引擎
-func NewEngine(siteName string, config PrerenderConfig, redisClient *redis.Client) (*Engine, error) {
+func NewEngine(siteName string, config PrerenderConfig, redisClient *redis.Client, staticDir string) (*Engine, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// 设置默认值
@@ -428,17 +423,6 @@ func NewEngine(siteName string, config PrerenderConfig, redisClient *redis.Clien
 	}
 	if config.MaxPoolSize == 0 {
 		config.MaxPoolSize = config.PoolSize * 2 // 默认最大浏览器数为初始值的2倍
-	}
-	if config.IdleTimeout == 0 {
-		config.IdleTimeout = 300 // 默认空闲超时5分钟
-	}
-	if config.DynamicScaling {
-		if config.ScalingFactor == 0 {
-			config.ScalingFactor = 0.5 // 默认扩容因子50%
-		}
-		if config.ScalingInterval == 0 {
-			config.ScalingInterval = 60 // 默认每分钟检查一次
-		}
 	}
 
 	// 默认爬虫协议头列表
@@ -469,6 +453,7 @@ func NewEngine(siteName string, config PrerenderConfig, redisClient *redis.Clien
 
 	engine := &Engine{
 		SiteName:              siteName,
+		staticDir:             staticDir,
 		config:                config,
 		taskQueue:             make(chan *RenderTask, 100),
 		idleBrowsers:          make(chan *Browser, config.MaxPoolSize),
@@ -485,14 +470,18 @@ func NewEngine(siteName string, config PrerenderConfig, redisClient *redis.Clien
 }
 
 // NewEngineManager 创建渲染预热引擎管理器
-func NewEngineManager() *EngineManager {
+func NewEngineManager(staticDir string) *EngineManager {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &EngineManager{
-		engines: make(map[string]*Engine),
-		mutex:   sync.RWMutex{},
-		ctx:     ctx,
-		cancel:  cancel,
+	manager := &EngineManager{
+		engines:   make(map[string]*Engine),
+		mutex:     sync.RWMutex{},
+		ctx:       ctx,
+		cancel:    cancel,
+		staticDir: staticDir,
 	}
+	// Start the auto-preheating daemon
+	manager.startAutoPreheating()
+	return manager
 }
 
 // AddSite 添加新站点
@@ -506,7 +495,7 @@ func (em *EngineManager) AddSite(siteName string, config PrerenderConfig, redisC
 	}
 
 	// 创建新引擎实例
-	engine, err := NewEngine(siteName, config, redisClient)
+	engine, err := NewEngine(siteName, config, redisClient, em.staticDir)
 	if err != nil {
 		return err
 	}
@@ -590,8 +579,99 @@ func (em *EngineManager) StopAll() error {
 		engine.Stop()
 	}
 
+	// Stop the auto-preheating daemon
+	if em.autoPreheatTicker != nil {
+		em.autoPreheatTicker.Stop()
+	}
+
 	em.cancel()
 	return nil
+}
+
+// startAutoPreheating 启动自动预热守护进程
+func (em *EngineManager) startAutoPreheating() {
+	// Run every minute
+	em.autoPreheatTicker = time.NewTicker(1 * time.Minute)
+	go func() {
+		for {
+			select {
+			case <-em.autoPreheatTicker.C:
+				em.checkAutoPreheat()
+			case <-em.ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+// checkAutoPreheat 检查所有站点的自动预热配置
+func (em *EngineManager) checkAutoPreheat() {
+	em.mutex.RLock()
+	engines := make(map[string]*Engine, len(em.engines))
+	for k, v := range em.engines {
+		engines[k] = v
+	}
+	em.mutex.RUnlock()
+
+	for siteName, engine := range engines {
+		// Check if auto-preheating is enabled for this site
+		if !engine.config.Preheat.Enabled {
+			continue
+		}
+
+		// Check all URLs for this site
+		urls, err := engine.redisClient.GetURLs(siteName)
+		if err != nil {
+			continue
+		}
+
+		for _, url := range urls {
+			// Check if cache is about to expire or already expired
+			if em.shouldPreheatURL(engine, url) {
+				// Trigger preheating for this URL
+				go func(url string) {
+					if err := engine.preheatManager.TriggerPreheatForURL(url); err != nil {
+						// Log error but continue with other URLs
+						fmt.Printf("Auto-preheat failed for URL %s: %v\n", url, err)
+					}
+				}(url)
+			}
+		}
+	}
+}
+
+// shouldPreheatURL 检查URL是否需要预热
+func (em *EngineManager) shouldPreheatURL(engine *Engine, url string) bool {
+	// Get cache TTL from configuration
+	cacheTTL := engine.config.CacheTTL
+	if cacheTTL <= 0 {
+		cacheTTL = 3600 // Default to 1 hour
+	}
+
+	// Check cache status
+	status, err := engine.redisClient.GetURLPreheatStatus(engine.SiteName, url)
+	if err != nil {
+		// If we can't get the status, assume it needs preheating
+		return true
+	}
+
+	// Get last updated time
+	updatedAtStr, exists := status["updated_at"]
+	if !exists {
+		// If no updated time, assume it needs preheating
+		return true
+	}
+
+	updatedAt, err := strconv.ParseInt(updatedAtStr, 10, 64)
+	if err != nil {
+		// If invalid updated time, assume it needs preheating
+		return true
+	}
+
+	// Calculate time elapsed since last update
+	elapsed := time.Now().Unix() - updatedAt
+	// Check if cache is within 10 minutes of expiration or already expired
+	return elapsed >= int64(cacheTTL)-600 || elapsed >= int64(cacheTTL)
 }
 
 // Start 启动渲染预热引擎
@@ -621,11 +701,6 @@ func (e *Engine) Start() error {
 	// 启动浏览器健康检查
 	e.startHealthCheck()
 
-	// 启动动态扩容检查（如果启用）
-	if e.config.DynamicScaling {
-		e.startDynamicScaling()
-	}
-
 	e.isRunning = true
 	return nil
 }
@@ -643,12 +718,6 @@ func (e *Engine) Stop() error {
 	if e.healthCheckTicker != nil {
 		e.healthCheckTicker.Stop()
 		e.healthCheckTicker = nil
-	}
-
-	// 停止动态扩容检查
-	if e.dynamicScalingTicker != nil {
-		e.dynamicScalingTicker.Stop()
-		e.dynamicScalingTicker = nil
 	}
 
 	// 取消上下文
@@ -769,8 +838,8 @@ func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) 
 			path = url[idx:]
 		}
 
-		// 默认站点的静态文件目录
-		staticDir := fmt.Sprintf("./static/%s", e.SiteName)
+		// 默认站点的静态文件目录，使用配置文件中的路径
+		staticDir := filepath.Join(e.staticDir, e.SiteName)
 
 		// 处理URL，移除hash部分并获取实际路径
 		getActualPath := func(urlPath string) string {
@@ -901,20 +970,10 @@ func (e *Engine) GetPreheatManager() *PreheatManager {
 	return e.preheatManager
 }
 
-// GetCrawlerHeaders 获取完整的爬虫协议头列表（包括默认和自定义的）
+// GetCrawlerHeaders 获取完整的爬虫协议头列表
 func (e *Engine) GetCrawlerHeaders() []string {
-	// 合并默认和自定义爬虫协议头
-	allHeaders := make([]string, 0)
-
-	// 如果启用了默认爬虫协议头，添加默认列表
-	if e.config.UseDefaultHeaders {
-		allHeaders = append(allHeaders, e.defaultCrawlerHeaders...)
-	}
-
-	// 添加自定义爬虫协议头
-	if len(e.config.CrawlerHeaders) > 0 {
-		allHeaders = append(allHeaders, e.config.CrawlerHeaders...)
-	}
+	// 直接使用配置中的CrawlerHeaders，已经包含了所有需要的爬虫协议头
+	allHeaders := e.config.CrawlerHeaders
 
 	// 去重
 	uniqueHeaders := make([]string, 0, len(allHeaders))
@@ -1345,156 +1404,4 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 		// 如果任务上下文已取消，忽略结果
 	}
 	close(task.Result)
-}
-
-// startDynamicScaling 启动动态扩容检查
-func (e *Engine) startDynamicScaling() {
-	// 每config.ScalingInterval秒检查一次
-	e.dynamicScalingTicker = time.NewTicker(time.Duration(e.config.ScalingInterval) * time.Second)
-	go func() {
-		for {
-			select {
-			case <-e.dynamicScalingTicker.C:
-				e.adjustPoolSize()
-			case <-e.ctx.Done():
-				return
-			}
-		}
-	}()
-}
-
-// adjustPoolSize 根据当前负载调整浏览器池大小
-func (e *Engine) adjustPoolSize() {
-	// 获取当前队列长度
-	queueLen := len(e.taskQueue)
-
-	// 记录队列长度历史
-	e.queueMutex.Lock()
-	e.queueLengthHistory = append(e.queueLengthHistory, queueLen)
-	// 只保留最近10个记录
-	if len(e.queueLengthHistory) > 10 {
-		e.queueLengthHistory = e.queueLengthHistory[len(e.queueLengthHistory)-10:]
-	}
-	e.queueMutex.Unlock()
-
-	// 获取当前浏览器池大小和活跃任务数
-	e.mutex.RLock()
-	currentSize := len(e.browserPool)
-	e.mutex.RUnlock()
-
-	e.taskMutex.RLock()
-	activeTasks := e.activeTasks
-	e.taskMutex.RUnlock()
-
-	// 计算空闲浏览器数
-	idleCount := currentSize - activeTasks
-
-	// 扩容策略：如果队列中有任务且没有空闲浏览器，且当前大小小于最大限制，则扩容
-	needScaleUp := queueLen > 0 && idleCount == 0 && currentSize < e.config.MaxPoolSize
-
-	// 缩容策略：如果空闲浏览器数超过当前大小的30%，且当前大小大于最小限制，则缩容
-	needScaleDown := float64(idleCount) > float64(currentSize)*0.3 && currentSize > e.config.MinPoolSize
-
-	if needScaleUp {
-		// 计算需要增加的浏览器数
-		addCount := int(float64(currentSize) * e.config.ScalingFactor)
-		if addCount == 0 {
-			addCount = 1 // 至少增加1个
-		}
-		// 确保不超过最大限制
-		newSize := currentSize + addCount
-		if newSize > e.config.MaxPoolSize {
-			addCount = e.config.MaxPoolSize - currentSize
-		}
-
-		if addCount > 0 {
-			for i := 0; i < addCount; i++ {
-				e.addBrowser()
-			}
-		}
-	} else if needScaleDown {
-		// 计算需要减少的浏览器数
-		removeCount := int(float64(idleCount) * e.config.ScalingFactor)
-		if removeCount == 0 {
-			removeCount = 1 // 至少减少1个
-		}
-		// 确保不低于最小限制
-		newSize := currentSize - removeCount
-		if newSize < e.config.MinPoolSize {
-			removeCount = currentSize - e.config.MinPoolSize
-		}
-
-		if removeCount > 0 {
-			for i := 0; i < removeCount; i++ {
-				e.removeIdleBrowser()
-			}
-		}
-	}
-}
-
-// addBrowser 添加一个浏览器到池
-func (e *Engine) addBrowser() {
-	// 启动一个新的浏览器实例
-	launchOpts := launcher.New()
-	launchOpts.Set("headless")
-	launchOpts.Set("no-sandbox")
-	launchOpts.Set("disable-dev-shm-usage")
-	launchOpts.Set("disable-gpu")
-	launchOpts.Set("disable-setuid-sandbox")
-	launchOpts.Set("single-process")
-	launchOpts.Set("disable-accelerated-2d-canvas")
-	launchOpts.Set("disable-javascript-harmony")
-	launchOpts.Set("disable-features", "site-per-process")
-	launchOpts.Set("ignore-certificate-errors")
-	launchOpts.Set("disable-web-security")
-
-	// 启动浏览器
-	browserURL, err := launchOpts.Launch()
-	if err != nil {
-		return // 如果启动失败，直接返回
-	}
-
-	// 连接到浏览器
-	rodBrowser := rod.New().ControlURL(browserURL).MustConnect()
-
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
-
-	browser := &Browser{
-		ID:         fmt.Sprintf("browser-%d", time.Now().UnixNano()),
-		Status:     "available",
-		LastUsed:   time.Now(),
-		Healthy:    true,
-		ErrorCount: 0,
-		CreatedAt:  time.Now(),
-		Instance:   rodBrowser,
-	}
-
-	e.browserPool = append(e.browserPool, browser)
-	// 添加到空闲浏览器通道
-	select {
-	case e.idleBrowsers <- browser:
-	default:
-		// 如果通道已满，忽略
-	}
-}
-
-// removeIdleBrowser 移除一个空闲浏览器
-func (e *Engine) removeIdleBrowser() {
-	// 从空闲浏览器通道获取一个浏览器
-	select {
-	case browser := <-e.idleBrowsers:
-		e.mutex.Lock()
-		// 从浏览器池中移除
-		for i, b := range e.browserPool {
-			if b.ID == browser.ID {
-				// 移除该浏览器
-				e.browserPool = append(e.browserPool[:i], e.browserPool[i+1:]...)
-				break
-			}
-		}
-		e.mutex.Unlock()
-	default:
-		// 如果没有空闲浏览器，忽略
-	}
 }

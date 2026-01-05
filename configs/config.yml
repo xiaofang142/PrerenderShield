@@ -57,82 +57,25 @@ sites:
         scaling_interval: 60
         preheat:
             enabled: true
-            sitemap_url: http://127.0.0.1:8082/
-            schedule: 0 0 * * *
-            concurrency: 5
+            sitemap_url: ""
+            schedule: ""
+            concurrency: 0
             default_priority: 0
-            max_depth: 0
+            max_depth: 1
         push:
             enabled: false
             baidu_api: http://data.zz.baidu.com/urls
             baidu_token: "12"
             bing_api: https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl
             bing_token: "12"
-            daily_limit: 0
+            baidu_daily_limit: 1000
+            bing_daily_limit: 1000
             push_domain: ""
             schedule: 0 1 * * *
-        crawler_headers: []
-        use_default_headers: true
-      routing:
-        rules: []
-      file_integrity:
-        enabled: false
-        check_interval: 300
-        hash_algorithm: sha256
-    - id: 89da7d00-7500-4e3c-8b3d-f524946a2241
-      name: test3
-      domains:
-        - 127.0.0.1
-      port: 8083
-      mode: static
-      proxy:
-        target_url: ""
-      redirect:
-        status_code: 0
-        target_url: ""
-      firewall:
-        enabled: true
-        rules_path: /etc/prerender-shield/rules
-        action:
-            default_action: block
-            block_message: Request blocked by firewall
-        geoip:
-            enabled: false
-            allow_list: []
-            block_list: []
-        rate_limit:
-            enabled: false
-            requests: 100
-            window: 60
-            ban_time: 3600
-      prerender:
-        enabled: true
-        pool_size: 5
-        min_pool_size: 2
-        max_pool_size: 20
-        timeout: 30
-        cache_ttl: 3600
-        idle_timeout: 300
-        dynamic_scaling: true
-        scaling_factor: 0.5
-        scaling_interval: 60
-        preheat:
-            enabled: false
-            sitemap_url: ""
-            schedule: 0 0 * * *
-            concurrency: 5
-            default_priority: 0
-            max_depth: 0
-        push:
-            enabled: false
-            baidu_api: ""
-            baidu_token: ""
-            bing_api: ""
-            bing_token: ""
-            daily_limit: 0
-            push_domain: ""
-            schedule: ""
-        crawler_headers: []
+        crawler_headers:
+            - Googlebot
+            - Bingbot
+            - Baiduspider
         use_default_headers: false
       routing:
         rules: []

@@ -724,15 +724,83 @@ const Sites: React.FC = () => {
   const handlePrerenderConfig = (site: any) => {
     // 打开预渲染配置模态框
     setEditingPrerenderSite(site)
+    
+    // 常见爬虫头列表
+    const commonCrawlerHeaders = [
+      'Googlebot',
+      'Bingbot',
+      'Slurp',
+      'DuckDuckBot',
+      'Baiduspider',
+      'Sogou spider',
+      'YandexBot',
+      'Exabot',
+      'FacebookBot',
+      'Twitterbot',
+      'LinkedInBot',
+      'WhatsAppBot',
+      'TelegramBot',
+      'DiscordBot',
+      'PinterestBot',
+      'InstagramBot',
+      'Google-InspectionTool',
+      'Google-Site-Verification',
+      'AhrefsBot',
+      'SEMrushBot',
+      'Majestic',
+      'Yahoo! Slurp',
+      'Applebot',
+      'Mediapartners-Google',
+      'AdsBot-Google',
+      'Feedfetcher-Google',
+      'Googlebot-Image',
+      'Googlebot-News',
+      'Googlebot-Video',
+      'Googlebot-Extended',
+      'bingbot/2.0',
+      'msnbot',
+      'MSNbot-Media',
+      'bingbot/1.0',
+      'msnbot-media/1.1',
+      'adidxbot',
+      'BingPreview',
+      'BingSiteAuth',
+      'BingLocalSearchBot',
+      'Baiduspider-image',
+      'Baiduspider-video',
+      'Baiduspider-mobile',
+      'Baiduspider-news',
+      'Baiduspider-favo',
+      'Baiduspider-cpro',
+      'Baiduspider-ads',
+      'Sogou web spider',
+      'Sogou inst spider',
+      'Sogou spider2',
+      'Sogou blog',
+      'Sogou News Spider',
+      'Sogou Orion spider',
+      'Sogou video spider',
+      'Sogou image spider',
+      'YandexBot/3.0',
+      'YandexMobileBot',
+      'YandexImages',
+      'YandexVideo',
+      'YandexMedia',
+      'YandexBlogs',
+      'YandexNews',
+      'YandexCatalog'
+    ];
+    
     // 设置表单初始值
+    const crawlerHeaders = Array.isArray(site.prerender.crawlerHeaders) 
+      ? site.prerender.crawlerHeaders.join('\n') 
+      : (site.prerender.crawlerHeaders || commonCrawlerHeaders.join('\n'));
+    
     prerenderConfigForm.setFieldsValue({
       ...site.prerender,
+      crawlerHeaders: crawlerHeaders,
       preheat: site.prerender.preheat || {
-        enabled: false,
-        sitemapURL: '',
-        schedule: '0 0 * * *',
-        concurrency: 5,
-        defaultPriority: 0
+        enabled: false
       },
       push: site.prerender.push || {
         enabled: false,
@@ -902,6 +970,11 @@ const Sites: React.FC = () => {
     try {
       const values = await prerenderConfigForm.validateFields();
       
+      // 转换爬虫协议头为数组格式
+      const crawlerHeadersArray = typeof values.crawlerHeaders === 'string' 
+        ? values.crawlerHeaders.split('\n').filter(header => header.trim() !== '')
+        : (values.crawlerHeaders || []);
+      
       // 转换表单数据格式，确保与后端API期望的结构匹配
       const siteData = {
         Name: editingPrerenderSite.name,
@@ -957,13 +1030,10 @@ const Sites: React.FC = () => {
           ScalingFactor: values.scalingFactor || 0.5,
           ScalingInterval: values.scalingInterval || 60,
           UseDefaultHeaders: values.useDefaultHeaders || false,
-          CrawlerHeaders: values.crawlerHeaders || [],
+          CrawlerHeaders: crawlerHeadersArray,
           Preheat: {
             Enabled: values.preheat?.enabled || false,
-            SitemapURL: values.preheat?.sitemapURL || '',
-            Schedule: values.preheat?.schedule || '0 0 * * *',
-            Concurrency: values.preheat?.concurrency || 5,
-            DefaultPriority: values.preheat?.defaultPriority || 0
+            MaxDepth: values.preheat?.maxDepth || 1
           },
           Push: {
             Enabled: editingPrerenderSite.prerender.push?.enabled || false,
@@ -1239,6 +1309,70 @@ const Sites: React.FC = () => {
               dynamicScaling: true,
               scalingFactor: 0.5,
               scalingInterval: 60,
+              crawlerHeaders: [
+                "Googlebot",
+                "Bingbot",
+                "Slurp",
+                "DuckDuckBot",
+                "Baiduspider",
+                "Sogou spider",
+                "YandexBot",
+                "Exabot",
+                "FacebookBot",
+                "Twitterbot",
+                "LinkedInBot",
+                "WhatsAppBot",
+                "TelegramBot",
+                "DiscordBot",
+                "PinterestBot",
+                "InstagramBot",
+                "Google-InspectionTool",
+                "Google-Site-Verification",
+                "AhrefsBot",
+                "SEMrushBot",
+                "Majestic",
+                "Yahoo! Slurp",
+                "Applebot",
+                "Mediapartners-Google",
+                "AdsBot-Google",
+                "Feedfetcher-Google",
+                "Googlebot-Image",
+                "Googlebot-News",
+                "Googlebot-Video",
+                "Googlebot-Extended",
+                "bingbot/2.0",
+                "msnbot",
+                "MSNbot-Media",
+                "bingbot/1.0",
+                "msnbot-media/1.1",
+                "adidxbot",
+                "BingPreview",
+                "BingSiteAuth",
+                "BingLocalSearchBot",
+                "Baiduspider-image",
+                "Baiduspider-video",
+                "Baiduspider-mobile",
+                "Baiduspider-news",
+                "Baiduspider-favo",
+                "Baiduspider-cpro",
+                "Baiduspider-ads",
+                "Sogou web spider",
+                "Sogou inst spider",
+                "Sogou spider2",
+                "Sogou blog",
+                "Sogou News Spider",
+                "Sogou Orion spider",
+                "Sogou video spider",
+                "Sogou image spider",
+                "YandexBot/3.0",
+                "YandexMobileBot",
+                "YandexImages",
+                "YandexVideo",
+                "YandexMedia",
+                "YandexBlogs",
+                "YandexNews",
+                "YandexCatalog"
+              ],
               preheat: {
                 enabled: false
               }
@@ -1931,56 +2065,12 @@ const Sites: React.FC = () => {
               }
               return (
                 <Card title="高级配置" size="small" style={{ marginBottom: 16 }}>
-                  <Row gutter={16}>
-                    <Col span={8}>
-                      <Form.Item
-                        name="idleTimeout"
-                        label="浏览器空闲超时（秒）"
-                      >
-                        <Input type="number" min={60} max={3600} placeholder="请输入浏览器空闲超时时间" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name="dynamicScaling"
-                        label="启用动态扩容"
-                        valuePropName="checked"
-                      >
-                        <Switch />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name="scalingFactor"
-                        label="扩容因子"
-                      >
-                        <Input type="number" min={0.1} max={2} step={0.1} placeholder="请输入扩容因子" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name="scalingInterval"
-                        label="扩容检查间隔（秒）"
-                      >
-                        <Input type="number" min={10} max={300} placeholder="请输入扩容检查间隔" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name="useDefaultHeaders"
-                        label="使用默认爬虫头"
-                        valuePropName="checked"
-                      >
-                        <Switch />
-                      </Form.Item>
-                    </Col>
-                  </Row>
                   <Form.Item
                     name="crawlerHeaders"
-                    label="自定义爬虫协议头"
-                    extra="每行一个，支持多个"
+                    label="爬虫协议头"
+                    extra="每行一个，支持多个，默认包含市面上常见爬虫头。常见主流爬虫协议头参考：Googlebot, Bingbot, Baiduspider, Sogou spider, YandexBot, FacebookBot, Twitterbot等。"
                   >
-                    <Input.TextArea rows={4} placeholder="请输入自定义爬虫协议头，每行一个" />
+                    <Input.TextArea rows={6} placeholder="请输入爬虫协议头，每行一个" />
                   </Form.Item>
                 </Card>
               );
@@ -2004,38 +2094,6 @@ const Sites: React.FC = () => {
                         valuePropName="checked"
                       >
                         <Switch />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name={["preheat", "sitemapURL"]}
-                        label="Sitemap URL"
-                      >
-                        <Input placeholder="请输入Sitemap URL" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name={["preheat", "schedule"]}
-                        label="预热调度规则"
-                      >
-                        <Input placeholder="Cron表达式，如：0 0 * * *" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name={["preheat", "concurrency"]}
-                        label="预热并发数"
-                      >
-                        <Input type="number" min={1} max={50} placeholder="请输入预热并发数" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name={["preheat", "defaultPriority"]}
-                        label="默认优先级"
-                      >
-                        <Input type="number" min={0} max={100} placeholder="请输入默认优先级" />
                       </Form.Item>
                     </Col>
                   </Row>

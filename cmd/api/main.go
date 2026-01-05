@@ -90,7 +90,7 @@ func main() {
 	firewallManager := firewall.NewEngineManager()
 
 	// 4. 渲染预热引擎管理器
-	prerenderManager := prerender.NewEngineManager()
+	prerenderManager := prerender.NewEngineManager(cfg.Dirs.StaticDir)
 
 	// 5. 爬虫日志管理器
 	crawlerLogManager := logging.NewCrawlerLogManager(cfg.Cache.RedisURL)
@@ -105,18 +105,11 @@ func main() {
 			MaxPoolSize:       site.Prerender.MaxPoolSize,
 			Timeout:           site.Prerender.Timeout,
 			CacheTTL:          site.Prerender.CacheTTL,
-			IdleTimeout:       site.Prerender.IdleTimeout,
-			DynamicScaling:    site.Prerender.DynamicScaling,
-			ScalingFactor:     site.Prerender.ScalingFactor,
-			ScalingInterval:   site.Prerender.ScalingInterval,
 			CrawlerHeaders:    site.Prerender.CrawlerHeaders,
 			UseDefaultHeaders: site.Prerender.UseDefaultHeaders,
 			Preheat: prerender.PreheatConfig{
-				Enabled:         site.Prerender.Preheat.Enabled,
-				SitemapURL:      site.Prerender.Preheat.SitemapURL,
-				Schedule:        site.Prerender.Preheat.Schedule,
-				Concurrency:     site.Prerender.Preheat.Concurrency,
-				DefaultPriority: site.Prerender.Preheat.DefaultPriority,
+				Enabled:  site.Prerender.Preheat.Enabled,
+				MaxDepth: site.Prerender.Preheat.MaxDepth,
 			},
 		}
 
