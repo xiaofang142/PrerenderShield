@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"prerender-shield/internal/logging"
 	"prerender-shield/internal/redis"
 
 	"github.com/go-rod/rod"
@@ -112,7 +113,13 @@ func (c *Crawler) Stop() {
 
 // crawl 递归爬取URL
 func (c *Crawler) crawl(urlStr string, depth int) {
-	defer c.wg.Done()
+	// 添加panic恢复机制，防止单个爬取任务崩溃整个服务
+	defer func() {
+		if r := recover(); r != nil {
+			logging.DefaultLogger.Error("Panic recovered in crawl %s: %v", urlStr, r)
+		}
+		c.wg.Done()
+	}()
 
 	// 检查上下文是否已取消
 	select {
@@ -127,26 +134,34 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 	}
 
 	// 获取浏览器实例
-	fmt.Printf("Creating browser instance for %s\n", urlStr)
-	browser := rod.New().MustConnect()
-	defer browser.MustClose()
+	logging.DefaultLogger.Debug("Creating browser instance for %s", urlStr)
+	browser := rod.New()
+	if err := browser.Connect(); err != nil {
+		logging.DefaultLogger.Error("Failed to connect to browser for %s: %v", urlStr, err)
+		return
+	}
+	defer func() {
+		if err := browser.Close(); err != nil {
+			logging.DefaultLogger.Warn("Failed to close browser for %s: %v", urlStr, err)
+		}
+	}()
 
 	// 创建页面
 	page := browser.MustPage()
 
 	// 导航到URL
-	fmt.Printf("Navigating to %s (depth: %d)\n", urlStr, depth)
+	logging.DefaultLogger.Debug("Navigating to %s (depth: %d)", urlStr, depth)
 	if err := page.Navigate(urlStr); err != nil {
-		fmt.Printf("Failed to navigate to %s: %v\n", urlStr, err)
+		logging.DefaultLogger.Error("Failed to navigate to %s: %v", urlStr, err)
 		return
 	}
 
 	// 等待页面加载完成，支持hash模式和history模式
-	fmt.Printf("Waiting for page load %s\n", urlStr)
+	logging.DefaultLogger.Debug("Waiting for page load %s", urlStr)
 	// 对于hash模式，WaitLoad可能不会触发，所以我们先尝试WaitLoad
 	if err := page.WaitLoad(); err != nil {
 		// 如果WaitLoad失败，尝试等待网络空闲状态
-		fmt.Printf("WaitLoad failed for %s, trying to wait for network idle: %v\n", urlStr, err)
+		logging.DefaultLogger.Warn("WaitLoad failed for %s, trying to wait for network idle: %v", urlStr, err)
 		// 使用简单的等待策略，适用于hash模式
 		time.Sleep(2 * time.Second)
 	} else {
@@ -160,21 +175,21 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 	// 获取页面内容，检查是否能正确获取
 	html, err := page.HTML()
 	if err != nil {
-		fmt.Printf("Failed to get page HTML %s: %v\n", urlStr, err)
+		logging.DefaultLogger.Error("Failed to get page HTML %s: %v", urlStr, err)
 	} else {
-		fmt.Printf("Page HTML length: %d\n", len(html))
+		logging.DefaultLogger.Debug("Page HTML length: %d", len(html))
 		// 简单检查页面是否包含<a>标签
 		if strings.Contains(html, "<a ") {
-			fmt.Printf("Page contains <a> tags\n")
+			logging.DefaultLogger.Debug("Page contains <a> tags")
 		} else {
-			fmt.Printf("Page does NOT contain <a> tags\n")
+			logging.DefaultLogger.Debug("Page does NOT contain <a> tags")
 		}
 	}
 
 	// 提取所有链接
 	links, err := c.extractLinks(page)
 	if err != nil {
-		fmt.Printf("Failed to extract links from %s: %v\n", urlStr, err)
+		logging.DefaultLogger.Error("Failed to extract links from %s: %v", urlStr, err)
 		return
 	}
 
@@ -200,13 +215,13 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 		
 		// 添加到Redis，只存储路由部分
 		if err := c.redisClient.AddURL(c.siteName, route); err != nil {
-			fmt.Printf("Failed to add URL to redis %s: %v\n", route, err)
+			logging.DefaultLogger.Warn("Failed to add URL to redis %s: %v", route, err)
 			continue
 		}
 		
 		// 设置URL的初始状态和更新时间
 		if err := c.redisClient.SetURLPreheatStatus(c.siteName, route, "pending", 0); err != nil {
-			fmt.Printf("Failed to set URL preheat status %s: %v\n", route, err)
+			logging.DefaultLogger.Warn("Failed to set URL preheat status %s: %v", route, err)
 			// 不中断流程，继续处理
 		}
 
@@ -215,13 +230,16 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 		c.wg.Add(1)
 		go func(link string, depth int) {
 			defer func() {
+				if r := recover(); r != nil {
+					logging.DefaultLogger.Error("Panic recovered in recursive crawl %s: %v", link, r)
+				}
 				<-c.semaphore
 				c.wg.Done()
 			}()
 			c.crawl(link, depth+1)
 		}(link, depth)
 	}
-} // 闭合for循环
+}
 
 // extractLinks 从页面中提取所有链接
 func (c *Crawler) extractLinks(page *rod.Page) ([]string, error) {

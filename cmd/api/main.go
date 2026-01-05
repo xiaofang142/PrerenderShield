@@ -143,7 +143,7 @@ func main() {
 	logging.DefaultLogger.Info("Initialized %d sites", len(cfg.Sites))
 
 	// 5. 定时任务调度器初始化
-	schedulerInstance := scheduler.NewScheduler(prerenderManager, redisClient)
+	schedulerInstance := scheduler.NewScheduler(prerenderManager, redisClient, cfg)
 	schedulerInstance.Start()
 	defer schedulerInstance.Stop()
 

@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"prerender-shield/internal/logging"
 	"strconv"
 	"sync"
 	"time"
@@ -239,7 +240,7 @@ type PushConfig struct {
 	BaiduDailyLimit int    `yaml:"baidu_daily_limit" json:"baidu_daily_limit"`
 	BingDailyLimit  int    `yaml:"bing_daily_limit" json:"bing_daily_limit"`
 	PushDomain      string `yaml:"push_domain" json:"push_domain"`
-	Schedule        string `yaml:"schedule" json:"schedule"`
+	Hour            int    `yaml:"hour" json:"hour"` // 每日推送时间（0-24）
 }
 
 // RoutingConfig 路由配置
@@ -304,19 +305,27 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// 如果指定了配置文件路径，从文件加载配置
 	if configPath != "" {
+		// 检查配置文件是否存在
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			return nil, fmt.Errorf("配置文件不存在: %s", configPath)
+		}
+
 		file, err := ioutil.ReadFile(configPath)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("读取配置文件失败: %s, 错误: %v", configPath, err)
 		}
 
 		if err := yaml.Unmarshal(file, cfg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("解析配置文件失败: %s, 错误: %v", configPath, err)
 		}
 
 		// 保存配置文件路径和修改时间
 		manager.configPath = configPath
 		info, err := os.Stat(configPath)
-		if err == nil {
+		if err != nil {
+			fmt.Printf("无法获取配置文件修改时间: %s, 错误: %v\n", configPath, err)
+			manager.lastModified = time.Now()
+		} else {
 			manager.lastModified = info.ModTime()
 		}
 	}
@@ -328,7 +337,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	// 获取应用程序二进制文件的位置
 	exePath, err := os.Executable()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("无法获取应用程序路径: %v", err)
 	}
 	// 获取二进制文件所在目录
 	appDir := filepath.Dir(exePath)
@@ -351,6 +360,13 @@ func LoadConfig(configPath string) (*Config, error) {
 	// 处理管理控制台静态目录
 	if !filepath.IsAbs(cfg.Dirs.AdminStaticDir) {
 		cfg.Dirs.AdminStaticDir = filepath.Join(appDir, cfg.Dirs.AdminStaticDir)
+	}
+
+	// 创建必要的目录
+	for _, dir := range []string{cfg.Dirs.DataDir, cfg.Dirs.StaticDir, cfg.Dirs.CertsDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("无法创建目录: %s, 错误: %v", dir, err)
+		}
 	}
 
 	// 更新配置
@@ -558,10 +574,12 @@ func (cm *ConfigManager) reloadConfig() {
 	// 从文件加载配置
 	file, err := ioutil.ReadFile(cm.configPath)
 	if err != nil {
+		logging.DefaultLogger.Error("重新读取配置文件失败: %s, 错误: %v", cm.configPath, err)
 		return
 	}
 
 	if err := yaml.Unmarshal(file, cfg); err != nil {
+		logging.DefaultLogger.Error("重新解析配置文件失败: %s, 错误: %v", cm.configPath, err)
 		return
 	}
 
@@ -570,13 +588,16 @@ func (cm *ConfigManager) reloadConfig() {
 
 	// 验证配置
 	if err := cm.ValidateConfig(cfg); err != nil {
-		fmt.Printf("Config validation failed: %v\n", err)
+		logging.DefaultLogger.Error("配置验证失败: %v", err)
 		return
 	}
 
 	// 保存修改时间
-	info, _ := os.Stat(cm.configPath)
-	if info != nil {
+	info, err := os.Stat(cm.configPath)
+	if err != nil {
+		logging.DefaultLogger.Warn("无法获取配置文件修改时间: %s, 错误: %v", cm.configPath, err)
+		cm.lastModified = time.Now()
+	} else {
 		cm.lastModified = info.ModTime()
 	}
 
@@ -585,8 +606,17 @@ func (cm *ConfigManager) reloadConfig() {
 
 	// 通知所有配置变化处理函数
 	for _, handler := range cm.handlers {
-		go handler(cfg) // 异步调用，避免阻塞
+		go func(handler ConfigChangeHandler, config *Config) {
+			defer func() {
+				if r := recover(); r != nil {
+					logging.DefaultLogger.Error("配置变化处理函数panic: %v", r)
+				}
+			}()
+			handler(config)
+		}(handler, cfg) // 异步调用，避免阻塞
 	}
+
+	logging.DefaultLogger.Info("配置文件已重新加载: %s", cm.configPath)
 }
 
 // defaultConfig 创建默认配置
@@ -720,7 +750,7 @@ func defaultConfig() *Config {
 				BaiduDailyLimit: 1000,
 				BingDailyLimit:  1000,
 				PushDomain:      "",
-				Schedule:        "0 1 * * *", // 每天凌晨1点执行
+				Hour:            1, // 每天凌晨1点执行
 			},
 		},
 		Routing: RoutingConfig{

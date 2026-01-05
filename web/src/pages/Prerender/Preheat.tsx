@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, Button, Input, message, Table, Select, Space, Form, Modal, Spin } from 'antd'
+import { Card, Row, Col, Statistic, Button, Select, Space, message, Table } from 'antd'
 import { ReloadOutlined, FireOutlined, PlayCircleOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
 import { sitesApi, prerenderApi } from '../../services/api'
 
 const { Option } = Select
-const { TextArea } = Input
 
 const Preheat: React.FC = () => {
   const [sites, setSites] = useState<any[]>([])
@@ -23,6 +22,7 @@ const Preheat: React.FC = () => {
   const [pageSize, setPageSize] = useState(20)
   const [total, setTotal] = useState(0)
   const [isPreheating, setIsPreheating] = useState(false)
+  const [isClearingCache, setIsClearingCache] = useState(false)
 
   // 表格列配置
   const columns = [
@@ -157,21 +157,34 @@ const Preheat: React.FC = () => {
       message.error('触发预热失败')
     } finally {
       setIsPreheating(false)
-      setPreheatProgress(0)
     }
   }
 
-  // 删除URL
-  const handleRemoveURL = async (_url: string) => {
+  // 清除站点缓存
+  const handleClearCache = async () => {
+    if (!selectedSiteId) {
+      message.warning('请先选择站点')
+      return
+    }
+
     try {
-      // 这里简化处理，实际应该调用API删除URL
-      message.success('URL已删除')
-      fetchUrls(currentPage, pageSize)
+      setIsClearingCache(true)
+      const res = await prerenderApi.clearCache(selectedSiteId)
+      if (res.code === 200) {
+        message.success(`缓存清除成功，共清除 ${res.data.clearedCount} 个缓存`)
+        // 刷新统计数据和URL列表
+        fetchStats()
+        fetchUrls(currentPage, pageSize)
+      }
     } catch (error) {
-      console.error('Failed to remove URL:', error)
-      message.error('删除URL失败')
+      console.error('Failed to clear cache:', error)
+      message.error('清除缓存失败')
+    } finally {
+      setIsClearingCache(false)
     }
   }
+
+
 
   // 处理分页变化
   const handlePageChange = (page: number, size: number) => {
@@ -214,6 +227,9 @@ const Preheat: React.FC = () => {
               </Button>
               <Button type="primary" icon={<FireOutlined />} onClick={handleTriggerPreheat} loading={isPreheating}>
                 触发站点预热
+              </Button>
+              <Button danger icon={<DeleteOutlined />} onClick={handleClearCache} loading={isClearingCache}>
+                清除缓存
               </Button>
             </Space>
           </Col>

@@ -118,24 +118,8 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 
 	pushConfig := siteConfig.Prerender.Push
 
-	// 获取今日已推送的URL数量和最后推送日期
+	// 获取今日日期
 	today := time.Now().Format("2006-01-02")
-	lastPushDate, err := pm.redisClient.GetLastPushDate(task.SiteID)
-	if err != nil {
-		lastPushDate = ""
-	}
-
-	// 如果今天已经推送过，跳过本次推送
-	if lastPushDate == today {
-		// 更新任务状态为completed
-		task.Status = "completed"
-		task.CompletedAt = time.Now()
-		task.SuccessCount = 0
-		task.FailedCount = 0
-		task.URLs = []string{}
-		pm.redisClient.SetPushTask(task.SiteID, task)
-		return
-	}
 
 	// 获取当前推送进度
 	pushOffset, err := pm.redisClient.GetPushOffset(task.SiteID)
@@ -144,29 +128,27 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 	}
 
 	// 推送URL到搜索引擎
+	totalPushed := 0
 	successCount := 0
 	failedCount := 0
 
+	// 分别处理百度和必应的推送，使用不同的偏移量逻辑
 	// 推送到百度
 	if pushConfig.BaiduAPI != "" && pushConfig.BaiduToken != "" {
 		// 计算百度本次推送的URL数量
 		var baiduUrlsToPush []string
-		if len(allURLs) <= pushConfig.BaiduDailyLimit {
-			// URL数量不超过百度每日限制，推送全部
-			baiduUrlsToPush = allURLs
-		} else {
-			// URL数量超过百度每日限制，推送指定数量
-			start := pushOffset
-			end := start + pushConfig.BaiduDailyLimit
 
-			// 如果超过URL总数，循环到开头
-			if end > len(allURLs) {
-				// 推送剩余部分
-				baiduUrlsToPush = append(allURLs[start:], allURLs[:end-len(allURLs)]...)
-			} else {
-				// 正常推送
-				baiduUrlsToPush = allURLs[start:end]
-			}
+		// 计算百度本次推送的URL数量
+		baiduStart := pushOffset % len(allURLs)
+		baiduEnd := baiduStart + pushConfig.BaiduDailyLimit
+
+		// 如果超过URL总数，循环到开头
+		if baiduEnd > len(allURLs) {
+			// 推送剩余部分
+			baiduUrlsToPush = append(allURLs[baiduStart:], allURLs[:baiduEnd-len(allURLs)]...)
+		} else {
+			// 正常推送
+			baiduUrlsToPush = allURLs[baiduStart:baiduEnd]
 		}
 
 		// 执行百度推送
@@ -179,6 +161,7 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 			} else {
 				successCount++
 			}
+			totalPushed++
 
 			// 避免推送过快
 			time.Sleep(100 * time.Millisecond)
@@ -189,22 +172,18 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 	if pushConfig.BingAPI != "" && pushConfig.BingToken != "" {
 		// 计算必应本次推送的URL数量
 		var bingUrlsToPush []string
-		if len(allURLs) <= pushConfig.BingDailyLimit {
-			// URL数量不超过必应每日限制，推送全部
-			bingUrlsToPush = allURLs
-		} else {
-			// URL数量超过必应每日限制，推送指定数量
-			start := pushOffset
-			end := start + pushConfig.BingDailyLimit
 
-			// 如果超过URL总数，循环到开头
-			if end > len(allURLs) {
-				// 推送剩余部分
-				bingUrlsToPush = append(allURLs[start:], allURLs[:end-len(allURLs)]...)
-			} else {
-				// 正常推送
-				bingUrlsToPush = allURLs[start:end]
-			}
+		// 计算必应本次推送的URL数量
+		bingStart := pushOffset % len(allURLs)
+		bingEnd := bingStart + pushConfig.BingDailyLimit
+
+		// 如果超过URL总数，循环到开头
+		if bingEnd > len(allURLs) {
+			// 推送剩余部分
+			bingUrlsToPush = append(allURLs[bingStart:], allURLs[:bingEnd-len(allURLs)]...)
+		} else {
+			// 正常推送
+			bingUrlsToPush = allURLs[bingStart:bingEnd]
 		}
 
 		// 执行必应推送
@@ -217,20 +196,31 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 			} else {
 				successCount++
 			}
+			totalPushed++
 
 			// 避免推送过快
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
 
-	// 更新推送进度和日期
-	// 计算新的偏移量（使用最大的限制作为偏移量计算基准）
-	maxLimit := pushConfig.BaiduDailyLimit
-	if pushConfig.BingDailyLimit > maxLimit {
-		maxLimit = pushConfig.BingDailyLimit
+	// 更新每日推送计数
+	if totalPushed > 0 {
+		pm.redisClient.IncrDailyPushCount(task.SiteID, totalPushed)
 	}
 
-	newOffset := pushOffset + maxLimit
+	// 更新推送进度和日期
+	// 计算新的偏移量，使用最小的限制作为偏移量计算基准，确保所有搜索引擎都能完成推送
+	minLimit := pushConfig.BaiduDailyLimit
+	if minLimit == 0 || (pushConfig.BingDailyLimit > 0 && pushConfig.BingDailyLimit < minLimit) {
+		minLimit = pushConfig.BingDailyLimit
+	}
+
+	// 如果没有设置限制，使用默认值100
+	if minLimit == 0 {
+		minLimit = 100
+	}
+
+	newOffset := pushOffset + minLimit
 	if newOffset >= len(allURLs) {
 		newOffset = 0 // 推送完毕，重置偏移量
 	}
@@ -264,6 +254,9 @@ func buildFullURL(pushDomain string, port int, route string) string {
 	// 构建URL
 	var urlBuilder strings.Builder
 	urlBuilder.WriteString("http://")
+
+	// 确保推送域名没有尾部斜杠
+	pushDomain = strings.TrimSuffix(pushDomain, "/")
 	urlBuilder.WriteString(pushDomain)
 
 	// 只有非80端口才需要显示
@@ -390,7 +383,12 @@ func (pm *PushManager) logPushResult(siteID, siteName, url, route, searchEngine,
 
 // GetPushStats 获取推送统计
 func (pm *PushManager) GetPushStats(siteID string) (map[string]interface{}, error) {
-	return pm.redisClient.GetPushStats(siteID)
+	return pm.redisClient.GetPushStatsWithURLCounts(siteID)
+}
+
+// GetPushTrend 获取最近15天的推送趋势
+func (pm *PushManager) GetPushTrend(siteID string) (map[string]int64, error) {
+	return pm.redisClient.GetLast15DaysPushCount(siteID)
 }
 
 // GetPushLogs 获取推送日志

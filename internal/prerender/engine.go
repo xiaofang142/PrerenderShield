@@ -10,10 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"prerender-shield/internal/logging"
 	"prerender-shield/internal/redis"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/google/uuid"
 )
 
@@ -168,7 +170,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 		urls, err := pm.redisClient.GetURLs(pm.engine.SiteName)
 		if err != nil {
 			pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "failed")
-			fmt.Printf("Failed to get URLs for preheat: %v\n", err)
+			logging.DefaultLogger.Error("Failed to get URLs for preheat: %v", err)
 			return
 		}
 
@@ -209,7 +211,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 
-				fmt.Printf("Starting preheat for URL: %s\n", url)
+				logging.DefaultLogger.Debug("Starting preheat for URL: %s", url)
 
 				// 调用引擎的Render方法，这将自动缓存渲染结果
 				resultWithCache, err := pm.engine.Render(ctx, url, RenderOptions{
@@ -218,7 +220,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 				})
 
 				if err != nil {
-					fmt.Printf("Preheat failed for URL %s: %v\n", url, err)
+					logging.DefaultLogger.Error("Preheat failed for URL %s: %v", url, err)
 					progressMux.Lock()
 					failed++
 					progressMux.Unlock()
@@ -228,7 +230,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 				}
 
 				if !resultWithCache.Result.Success {
-					fmt.Printf("Render failed for URL %s: %s\n", url, resultWithCache.Result.Error)
+					logging.DefaultLogger.Error("Render failed for URL %s: %s", url, resultWithCache.Result.Error)
 					progressMux.Lock()
 					failed++
 					progressMux.Unlock()
@@ -238,7 +240,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 				}
 
 				// 渲染成功，更新成功计数和URL状态
-				fmt.Printf("Successfully preheated URL: %s\n", url)
+				logging.DefaultLogger.Debug("Successfully preheated URL: %s", url)
 				progressMux.Lock()
 				success++
 				progressMux.Unlock()
@@ -256,12 +258,12 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 
 		// 标记任务完成
 		pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "completed")
-		fmt.Printf("Preheat completed for site: %s\n", pm.engine.SiteName)
-		fmt.Printf("Preheat summary: total=%d, success=%d, failed=%d\n", totalURLs, success, failed)
+		logging.DefaultLogger.Info("Preheat completed for site: %s", pm.engine.SiteName)
+		logging.DefaultLogger.Info("Preheat summary: total=%d, success=%d, failed=%d", totalURLs, success, failed)
 	}()
 
 	// 1. 首先爬取站点的所有链接
-	fmt.Printf("Starting URL crawler for site: %s with baseURL: %s\n", pm.engine.SiteName, baseURL)
+	logging.DefaultLogger.Info("Starting URL crawler for site: %s with baseURL: %s", pm.engine.SiteName, baseURL)
 
 	// 创建爬虫配置
 	crawlerConfig := CrawlerConfig{
@@ -276,11 +278,11 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 	// 创建爬虫实例
 	crawler := NewCrawler(crawlerConfig)
 
-	// 开始爬取
+	// 开始爬取（异步执行，避免阻塞HTTP请求）
 	go func() {
 		if err := crawler.Start(); err != nil {
 			pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "failed")
-			fmt.Printf("Failed to crawl URLs: %v\n", err)
+			logging.DefaultLogger.Error("Failed to crawl URLs: %v", err)
 			pm.mutex.Lock()
 			pm.isRunning = false
 			pm.mutex.Unlock()
@@ -336,7 +338,7 @@ func (pm *PreheatManager) TriggerPreheatForURL(url string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	fmt.Printf("Starting preheat for single URL: %s\n", url)
+	logging.DefaultLogger.Info("Starting preheat for single URL: %s", url)
 
 	// 调用引擎的Render方法，这将自动缓存渲染结果
 	resultWithCache, err := pm.engine.Render(ctx, url, RenderOptions{
@@ -345,14 +347,14 @@ func (pm *PreheatManager) TriggerPreheatForURL(url string) error {
 	})
 
 	if err != nil {
-		fmt.Printf("Preheat failed for URL %s: %v\n", url, err)
+		logging.DefaultLogger.Error("Preheat failed for URL %s: %v", url, err)
 		// 更新URL状态为failed
 		pm.redisClient.SetURLPreheatStatus(pm.engine.SiteName, url, "failed", 0)
 		return err
 	}
 
 	if !resultWithCache.Result.Success {
-		fmt.Printf("Render failed for URL %s: %s\n", url, resultWithCache.Result.Error)
+		logging.DefaultLogger.Error("Render failed for URL %s: %s", url, resultWithCache.Result.Error)
 		// 更新URL状态为failed
 		pm.redisClient.SetURLPreheatStatus(pm.engine.SiteName, url, "failed", 0)
 		return fmt.Errorf("render failed: %s", resultWithCache.Result.Error)
@@ -362,7 +364,7 @@ func (pm *PreheatManager) TriggerPreheatForURL(url string) error {
 	cacheSize := int64(len(resultWithCache.Result.HTML))
 	pm.redisClient.SetURLPreheatStatus(pm.engine.SiteName, url, "cached", cacheSize)
 
-	fmt.Printf("Successfully preheated URL: %s (size: %d bytes)\n", url, cacheSize)
+	logging.DefaultLogger.Info("Successfully preheated URL: %s (size: %d bytes)", url, cacheSize)
 	return nil
 }
 
@@ -632,7 +634,7 @@ func (em *EngineManager) checkAutoPreheat() {
 				go func(url string) {
 					if err := engine.preheatManager.TriggerPreheatForURL(url); err != nil {
 						// Log error but continue with other URLs
-						fmt.Printf("Auto-preheat failed for URL %s: %v\n", url, err)
+						logging.DefaultLogger.Error("Auto-preheat failed for URL %s: %v", url, err)
 					}
 				}(url)
 			}
@@ -1033,7 +1035,10 @@ func (e *Engine) initBrowserPool() error {
 		}
 
 		// 连接到浏览器
-		rodBrowser := rod.New().ControlURL(browserURL).MustConnect()
+		rodBrowser := rod.New().ControlURL(browserURL)
+		if err := rodBrowser.Connect(); err != nil {
+			return fmt.Errorf("failed to connect to browser: %v", err)
+		}
 
 		// 创建浏览器实例
 		browser := &Browser{
@@ -1062,7 +1067,9 @@ func (e *Engine) closeBrowserPool() {
 
 		// 关闭实际的浏览器实例
 		if browser.Instance != nil {
-			browser.Instance.MustClose()
+			if err := browser.Instance.Close(); err != nil {
+				logging.DefaultLogger.Warn("Failed to close browser %s: %v", browser.ID, err)
+			}
 		}
 
 		e.browserPool[i] = browser
@@ -1158,7 +1165,14 @@ func (e *Engine) replaceBrowser(index int, oldBrowser *Browser) {
 	}
 
 	// 连接到浏览器
-	rodBrowser := rod.New().ControlURL(browserURL).MustConnect()
+	rodBrowser := rod.New().ControlURL(browserURL)
+	if err := rodBrowser.Connect(); err != nil {
+		// 如果连接失败，标记原浏览器为健康并返回
+		oldBrowser.Healthy = true
+		oldBrowser.ErrorCount = 0
+		logging.DefaultLogger.Error("Failed to connect to browser: %v", err)
+		return
+	}
 
 	// 创建新浏览器
 	newBrowser := &Browser{
@@ -1173,7 +1187,9 @@ func (e *Engine) replaceBrowser(index int, oldBrowser *Browser) {
 
 	// 关闭旧浏览器实例
 	if oldBrowser.Instance != nil {
-		oldBrowser.Instance.MustClose()
+		if err := oldBrowser.Instance.Close(); err != nil {
+			logging.DefaultLogger.Warn("Failed to close old browser %s: %v", oldBrowser.ID, err)
+		}
 	}
 
 	// 替换浏览器
@@ -1249,7 +1265,7 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 
 	// 执行渲染
 	func() {
-		// 使用defer恢复panic
+		// 使用defer恢复panic，作为最后一道防线
 		defer func() {
 			if r := recover(); r != nil {
 				result.Error = fmt.Sprintf("render panic: %v", r)
@@ -1262,14 +1278,34 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 		}()
 
 		// 创建新页面
-		page := browser.Instance.MustPage()
-		defer page.MustClose()
+		page, err := browser.Instance.Page(proto.TargetCreateTarget{})
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to create page: %v", err)
+			// 标记浏览器为不健康
+			e.mutex.Lock()
+			browser.Healthy = false
+			browser.ErrorCount++
+			e.mutex.Unlock()
+			return
+		}
+		defer func() {
+			if err := page.Close(); err != nil {
+				logging.DefaultLogger.Warn("Failed to close page: %v", err)
+			}
+		}()
 
 		// 导航到URL
-		page.MustNavigate(task.URL)
+		if err := page.Navigate(task.URL); err != nil {
+			result.Error = fmt.Sprintf("failed to navigate to %s: %v", task.URL, err)
+			return
+		}
 
 		// 等待页面加载完成
-		page.MustWaitLoad()
+		if err := page.WaitLoad(); err != nil {
+			logging.DefaultLogger.Warn("WaitLoad failed for %s, trying to wait for network idle: %v", task.URL, err)
+			// 使用简单的等待策略，适用于hash模式
+			time.Sleep(2 * time.Second)
+		}
 
 		// 检查URL是否包含hash
 		isHashURL := strings.Contains(task.URL, "#")
@@ -1381,7 +1417,9 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 	} else {
 		// 如果浏览器不健康，关闭并替换它
 		if browser.Instance != nil {
-			browser.Instance.MustClose()
+			if err := browser.Instance.Close(); err != nil {
+				logging.DefaultLogger.Warn("Failed to close unhealthy browser %s: %v", browser.ID, err)
+			}
 		}
 		// 异步替换浏览器
 		go func() {

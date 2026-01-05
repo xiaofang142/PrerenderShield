@@ -137,6 +137,7 @@ export const prerenderApi = {
   triggerPreheat: (siteId: string) => api.post('/preheat/trigger', { siteId }),
   getUrls: (siteId?: string, page: number = 1, pageSize: number = 20) => api.get('/preheat/urls', { params: { siteId, page, pageSize } }),
   getCrawlerHeaders: () => api.get('/preheat/crawler-headers'),
+  clearCache: (siteId: string) => api.post('/preheat/clear-cache', { siteId }),
 }
 
 // 路由API

@@ -28,7 +28,7 @@ type Scheduler struct {
 }
 
 // NewScheduler 创建新的定时任务调度器
-func NewScheduler(engineManager *prerender.EngineManager, redisClient *redis.Client) *Scheduler {
+func NewScheduler(engineManager *prerender.EngineManager, redisClient *redis.Client, cfg *config.Config) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	
 	// 创建cron实例，支持秒级精度
@@ -37,6 +37,7 @@ func NewScheduler(engineManager *prerender.EngineManager, redisClient *redis.Cli
 	return &Scheduler{
 		cron:          c,
 		engineManager: engineManager,
+		pushManager:   push.NewPushManager(cfg, redisClient),
 		redisClient:   redisClient,
 		tasks:         make(map[string]cron.EntryID),
 		ctx:           ctx,
@@ -149,21 +150,24 @@ func (s *Scheduler) createTask(siteName string, config config.PrerenderConfig) {
 		}
 	}
 
-	// 为推送任务创建定时任务 - 暂时禁用
-	// if config.Push.Enabled && config.Push.Schedule != "" {
-	// 	// 创建推送任务函数
-	// 	pushTaskFunc := func() {
-	// 		s.executePush(siteName)
-	// 	}
-	// 	
-	// 	// 添加到cron调度器
-	// 	_, err := s.cron.AddFunc(config.Push.Schedule, pushTaskFunc)
-	// 	if err != nil {
-	// 		fmt.Printf("Failed to add push cron task for site %s: %v\n", siteName, err)
-	// 	} else {
-	// 		fmt.Printf("Created push cron task for site %s with schedule: %s\n", siteName, config.Push.Schedule)
-	// 	}
-	// }
+	// 为推送任务创建定时任务
+	if config.Push.Enabled && config.Push.Hour >= 0 && config.Push.Hour <= 24 {
+		// 创建推送任务函数
+		pushTaskFunc := func() {
+			s.executePush(siteName)
+		}
+		
+		// 使用Hour字段创建cron表达式 (每天指定小时推送)
+		cronExpr := fmt.Sprintf("0 0 %d * * *", config.Push.Hour)
+		
+		// 添加到cron调度器
+		_, err := s.cron.AddFunc(cronExpr, pushTaskFunc)
+		if err != nil {
+			fmt.Printf("Failed to add push cron task for site %s: %v\n", siteName, err)
+		} else {
+			fmt.Printf("Created push cron task for site %s with hour: %d\n", siteName, config.Push.Hour)
+		}
+	}
 }
 
 // updateTask 更新站点的定时任务
@@ -216,19 +220,19 @@ func (s *Scheduler) executePreheat(siteName string) {
 	fmt.Printf("Preheat completed for site %s\n", siteName)
 }
 
-// executePush 执行站点的推送任务 - 暂时禁用
-// func (s *Scheduler) executePush(siteName string) {
-// 	fmt.Printf("Executing push for site %s at %s\n", siteName, time.Now().Format("2006-01-02 15:04:05"))
-// 	
-// 	// 调用推送管理器的TriggerPush方法
-// 	_, err := s.pushManager.TriggerPush(siteName)
-// 	if err != nil {
-// 		fmt.Printf("Failed to trigger push for site %s: %v\n", siteName, err)
-// 		return
-// 	}
-// 	
-// 	fmt.Printf("Push completed for site %s\n", siteName)
-// }
+// executePush 执行站点的推送任务
+func (s *Scheduler) executePush(siteName string) {
+	fmt.Printf("Executing push for site %s at %s\n", siteName, time.Now().Format("2006-01-02 15:04:05"))
+	
+	// 调用推送管理器的TriggerPush方法
+	_, err := s.pushManager.TriggerPush(siteName)
+	if err != nil {
+		fmt.Printf("Failed to trigger push for site %s: %v\n", siteName, err)
+		return
+	}
+	
+	fmt.Printf("Push completed for site %s\n", siteName)
+}
 
 // AddManualTask 添加手动触发的预热任务
 func (s *Scheduler) AddManualTask(siteName string) {

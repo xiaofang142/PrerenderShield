@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -29,12 +30,32 @@ func NewPushController(pushManager *push.PushManager, redisClient *redis.Client,
 
 // GetSites 获取站点列表
 func (c *PushController) GetSites(ctx *gin.Context) {
+	// 检查必要的依赖项是否可用
+	if c.cfg == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "配置信息不可用",
+		})
+		return
+	}
+
+	// 检查站点列表是否可用
+	if c.cfg.Sites == nil {
+		c.cfg.Sites = []config.SiteConfig{}
+	}
+
 	var sites []gin.H
 	for _, site := range c.cfg.Sites {
+		// 检查站点域名是否可用
+		domain := ""
+		if len(site.Domains) > 0 {
+			domain = site.Domains[0]
+		}
+
 		sites = append(sites, gin.H{
 			"id":      site.ID,
 			"name":    site.Name,
-			"domain":  site.Domains[0],
+			"domain":  domain,
 			"enabled": site.Prerender.Push.Enabled,
 		})
 	}
@@ -48,6 +69,28 @@ func (c *PushController) GetSites(ctx *gin.Context) {
 
 // GetPushStats 获取推送统计数据
 func (c *PushController) GetPushStats(ctx *gin.Context) {
+	// 检查必要的依赖项是否可用
+	if c.cfg == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "配置信息不可用",
+		})
+		return
+	}
+
+	if c.pushManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "推送管理器不可用",
+		})
+		return
+	}
+
+	// 检查站点列表是否可用
+	if c.cfg.Sites == nil {
+		c.cfg.Sites = []config.SiteConfig{}
+	}
+
 	siteID := ctx.Query("siteId")
 
 	if siteID == "" {
@@ -56,6 +99,8 @@ func (c *PushController) GetPushStats(ctx *gin.Context) {
 		for _, site := range c.cfg.Sites {
 			stats, err := c.pushManager.GetPushStats(site.ID)
 			if err != nil {
+				// 记录错误但不中断处理
+				fmt.Printf("Failed to get push stats for site %s: %v\n", site.ID, err)
 				continue
 			}
 
@@ -79,7 +124,7 @@ func (c *PushController) GetPushStats(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": "Failed to get push stats",
+			"message": fmt.Sprintf("获取推送统计数据失败: %v", err),
 		})
 		return
 	}
@@ -135,36 +180,32 @@ func (c *PushController) GetPushLogs(ctx *gin.Context) {
 	})
 }
 
-// TriggerPush 手动触发推送
-func (c *PushController) TriggerPush(ctx *gin.Context) {
-	var req struct {
-		SiteId string `json:"siteId" binding:"required"`
-	}
+// GetPushTrend 获取推送趋势
+func (c *PushController) GetPushTrend(ctx *gin.Context) {
+	siteID := ctx.Query("siteId")
 
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+	if siteID == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "Invalid request",
+			"message": "Missing siteId parameter",
 		})
 		return
 	}
 
-	// 触发推送，获取任务ID
-	taskID, err := c.pushManager.TriggerPush(req.SiteId)
+	// 获取推送趋势数据
+	trend, err := c.pushManager.GetPushTrend(siteID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": err.Error(),
+			"message": "Failed to get push trend",
 		})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
-		"message": "Push triggered successfully",
-		"data": gin.H{
-			"taskId": taskID,
-		},
+		"message": "success",
+		"data":    trend,
 	})
 }
 
@@ -200,7 +241,7 @@ func (c *PushController) GetPushConfig(ctx *gin.Context) {
 // UpdatePushConfig 更新推送配置
 func (c *PushController) UpdatePushConfig(ctx *gin.Context) {
 	var req struct {
-		SiteId string           `json:"siteId" binding:"required"`
+		SiteId string            `json:"siteId" binding:"required"`
 		Config config.PushConfig `json:"config" binding:"required"`
 	}
 

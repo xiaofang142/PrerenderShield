@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"prerender-shield/internal/logging"
+
 	"github.com/go-redis/redis/v8"
 )
 
@@ -113,19 +115,30 @@ func (c *Client) RemoveURL(siteName, url string) error {
 // GetURLs 获取站点的所有URL
 func (c *Client) GetURLs(siteName string) ([]string, error) {
 	key := fmt.Sprintf("prerender:%s:urls", siteName)
-	return c.client.SMembers(c.ctx, key).Result()
+	urls, err := c.client.SMembers(c.ctx, key).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get URLs for site %s: %v", siteName, err)
+	}
+	return urls, nil
 }
 
 // GetURLCount 获取站点的URL数量
 func (c *Client) GetURLCount(siteName string) (int64, error) {
 	key := fmt.Sprintf("prerender:%s:urls", siteName)
-	return c.client.SCard(c.ctx, key).Result()
+	count, err := c.client.SCard(c.ctx, key).Result()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get URL count for site %s: %v", siteName, err)
+	}
+	return count, nil
 }
 
 // ClearURLs 清空站点的所有URL
 func (c *Client) ClearURLs(siteName string) error {
 	key := fmt.Sprintf("prerender:%s:urls", siteName)
-	return c.client.Del(c.ctx, key).Err()
+	if err := c.client.Del(c.ctx, key).Err(); err != nil {
+		return fmt.Errorf("failed to clear URLs for site %s: %v", siteName, err)
+	}
+	return nil
 }
 
 // SetURLPreheatStatus 设置URL的预热状态
@@ -172,6 +185,28 @@ func (c *Client) GetCacheCount(siteName string) (int64, error) {
 
 	if err := iter.Err(); err != nil {
 		return 0, err
+	}
+
+	return count, nil
+}
+
+// ClearCache 清除站点的所有缓存
+func (c *Client) ClearCache(siteName string) (int64, error) {
+	// 使用SCAN命令遍历所有以"prerender:{siteName}:url:"为前缀的键
+	keyPrefix := fmt.Sprintf("prerender:%s:url:", siteName)
+	count := int64(0)
+
+	iter := c.client.Scan(c.ctx, 0, keyPrefix+"*", 100).Iterator() // 使用100作为每次扫描的数量限制
+	for iter.Next(c.ctx) {
+		// 删除该URL的预热状态，实现清除缓存
+		if err := c.client.Del(c.ctx, iter.Val()).Err(); err != nil {
+			return count, fmt.Errorf("failed to delete cache key %s for site %s: %v", iter.Val(), siteName, err)
+		}
+		count++
+	}
+
+	if err := iter.Err(); err != nil {
+		return count, fmt.Errorf("failed to scan cache keys for site %s: %v", siteName, err)
 	}
 
 	return count, nil
@@ -375,7 +410,8 @@ func (c *Client) GetPushStats(siteName string) (map[string]interface{}, error) {
 	key := fmt.Sprintf("prerender:%s:push:stats", siteName)
 	stats, err := c.client.HGetAll(c.ctx, key).Result()
 	if err != nil {
-		return nil, err
+		// 提供更详细的错误信息
+		return nil, fmt.Errorf("failed to get push stats for site %s: %v", siteName, err)
 	}
 
 	// 转换为数字类型
@@ -383,6 +419,8 @@ func (c *Client) GetPushStats(siteName string) (map[string]interface{}, error) {
 	for k, v := range stats {
 		val, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
+			// 记录转换错误，但不中断处理
+			logging.DefaultLogger.Warn("Failed to parse %s value %s to int: %v", k, v, err)
 			result[k] = v
 		} else {
 			result[k] = val
@@ -400,9 +438,16 @@ func (c *Client) GetPushStats(siteName string) (map[string]interface{}, error) {
 		result["failed"] = 0
 	}
 
-	// 获取URL推送统计
+	// 获取URL推送统计，即使失败也不影响主功能
 	urlStats, err := c.GetURLPushStats(siteName)
-	if err == nil {
+	if err != nil {
+		// 记录错误，但不中断处理
+		logging.DefaultLogger.Warn("Failed to get URL push stats for site %s: %v", siteName, err)
+		// 使用默认值
+		result["total_urls"] = 0
+		result["pushed_urls"] = 0
+		result["not_pushed_urls"] = 0
+	} else {
 		result["total_urls"] = urlStats["total_urls"]
 		result["pushed_urls"] = urlStats["pushed_urls"]
 		result["not_pushed_urls"] = urlStats["not_pushed_urls"]
@@ -522,7 +567,104 @@ func (c *Client) AddPushLog(siteName string, log interface{}) error {
 		return err
 	}
 	// 只保留最近1000条日志
-	return c.client.LTrim(c.ctx, key, 0, 999).Err()
+	if err := c.client.LTrim(c.ctx, key, 0, 999).Err(); err != nil {
+		return err
+	}
+	// 设置30天过期时间
+	return c.client.Expire(c.ctx, key, 30*24*time.Hour).Err()
+}
+
+// IncrDailyPushCount 增加每日推送计数
+func (c *Client) IncrDailyPushCount(siteName string, count int) error {
+	today := time.Now().Format("2006-01-02")
+	key := fmt.Sprintf("prerender:%s:push:daily:%s", siteName, today)
+	return c.client.IncrBy(c.ctx, key, int64(count)).Err()
+}
+
+// GetDailyPushCount 获取每日推送计数
+func (c *Client) GetDailyPushCount(siteName string, date string) (int64, error) {
+	key := fmt.Sprintf("prerender:%s:push:daily:%s", siteName, date)
+	strVal, err := c.client.Get(c.ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return strconv.ParseInt(strVal, 10, 64)
+}
+
+// GetLast15DaysPushCount 获取最近15天的推送计数
+func (c *Client) GetLast15DaysPushCount(siteName string) (map[string]int64, error) {
+	result := make(map[string]int64)
+	
+	// 获取最近15天的日期
+	for i := 14; i >= 0; i-- {
+		date := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
+		count, err := c.GetDailyPushCount(siteName, date)
+		if err != nil && err != redis.Nil {
+			return nil, err
+		}
+		if err == redis.Nil {
+			result[date] = 0
+		} else {
+			result[date] = count
+		}
+	}
+	
+	return result, nil
+}
+
+// GetPushStatsWithURLCounts 获取包含URL计数的推送统计
+func (c *Client) GetPushStatsWithURLCounts(siteName string) (map[string]interface{}, error) {
+	key := fmt.Sprintf("prerender:%s:push:stats", siteName)
+	stats, err := c.client.HGetAll(c.ctx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为数字类型
+	result := make(map[string]interface{})
+	for k, v := range stats {
+		val, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			result[k] = v
+		} else {
+			result[k] = val
+		}
+	}
+
+	// 添加默认值
+	if _, exists := result["total"]; !exists {
+		result["total"] = 0
+	}
+	if _, exists := result["success"]; !exists {
+		result["success"] = 0
+	}
+	if _, exists := result["failed"]; !exists {
+		result["failed"] = 0
+	}
+
+	// 获取所有URL
+	allURLs, err := c.GetURLs(siteName)
+	if err != nil {
+		return nil, err
+	}
+	
+	// 获取所有已推送的URL状态
+	pushedURLs, err := c.GetAllURLPushStatuses(siteName)
+	if err != nil {
+		return nil, err
+	}
+	
+	// 添加URL计数
+	totalURLs := int64(len(allURLs))
+	pushed := int64(len(pushedURLs))
+	result["total_urls"] = totalURLs
+	result["pushed_urls"] = pushed
+	result["not_pushed_urls"] = totalURLs - pushed
+
+	return result, nil
 }
 
 // GetPushLogs 获取推送日志

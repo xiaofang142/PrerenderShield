@@ -35,6 +35,20 @@ func NewPreheatController(
 
 // GetPreheatSites 获取静态网站列表
 func (c *PreheatController) GetPreheatSites(ctx *gin.Context) {
+	// 检查必要的依赖项是否可用
+	if c.cfg == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "配置信息不可用",
+		})
+		return
+	}
+
+	// 检查站点列表是否可用
+	if c.cfg.Sites == nil {
+		c.cfg.Sites = []config.SiteConfig{}
+	}
+
 	// 获取配置中的所有站点
 	var sites []gin.H
 	for _, site := range c.cfg.Sites {
@@ -67,6 +81,28 @@ func (c *PreheatController) GetPreheatSites(ctx *gin.Context) {
 func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 	// 获取预热统计数据
 	siteId := ctx.Query("siteId")
+
+	// 检查必要的依赖项是否可用
+	if c.cfg == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "配置信息不可用",
+		})
+		return
+	}
+
+	if c.prerenderManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "渲染引擎管理器不可用",
+		})
+		return
+	}
+
+	// 检查站点列表是否可用
+	if c.cfg.Sites == nil {
+		c.cfg.Sites = []config.SiteConfig{}
+	}
 
 	if siteId == "" {
 		// 获取所有站点的统计数据
@@ -452,5 +488,65 @@ func (c *PreheatController) GetCrawlerHeaders(ctx *gin.Context) {
 		"code":    200,
 		"message": "success",
 		"data":    defaultHeaders,
+	})
+}
+
+// ClearCache 清除站点缓存
+func (c *PreheatController) ClearCache(ctx *gin.Context) {
+	// 清除站点缓存
+	var req struct {
+		SiteId string `json:"siteId" binding:"required"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "Invalid request",
+		})
+		return
+	}
+
+	// 获取站点配置
+	var siteConfig *config.SiteConfig
+	for _, site := range c.cfg.Sites {
+		if site.ID == req.SiteId {
+			siteConfig = &site
+			break
+		}
+	}
+
+	if siteConfig == nil {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"code":    http.StatusNotFound,
+			"message": fmt.Sprintf("Site with ID '%s' not found", req.SiteId),
+		})
+		return
+	}
+
+	// 检查Redis客户端是否可用
+	if c.redisClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    http.StatusServiceUnavailable,
+			"message": "Redis服务不可用，无法清除缓存",
+		})
+		return
+	}
+
+	// 调用Redis客户端的ClearCache方法清除缓存
+	clearedCount, err := c.redisClient.ClearCache(req.SiteId)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": fmt.Sprintf("清除缓存失败: %v", err),
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "缓存清除成功",
+		"data": gin.H{
+			"clearedCount": clearedCount,
+		},
 	})
 }

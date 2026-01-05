@@ -11,12 +11,6 @@ cache:
     type: redis
     redis_url: 127.0.0.1:6379
     memory_size: 1000
-storage:
-    type: postgres
-    postgres_url: postgres://prerender:prerender@localhost:5432/prerender?sslmode=disable
-monitoring:
-    enabled: true
-    prometheus_address: :9090
 sites:
     - id: 9dbfaa2b-9015-4012-a00a-8e7f47ab01dd
       name: test2
@@ -71,7 +65,7 @@ sites:
             baidu_daily_limit: 1000
             bing_daily_limit: 1000
             push_domain: ""
-            schedule: 0 1 * * *
+            hour: 1
         crawler_headers:
             - Googlebot
             - Bingbot
