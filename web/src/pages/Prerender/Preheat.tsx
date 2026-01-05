@@ -19,12 +19,10 @@ const Preheat: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [urlList, setUrlList] = useState<any[]>([])
   const [urlLoading, setUrlLoading] = useState(false)
-  const [preheatModalVisible, setPreheatModalVisible] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [total, setTotal] = useState(0)
   const [isPreheating, setIsPreheating] = useState(false)
-  const [preheatProgress, setPreheatProgress] = useState(0)
 
   // 表格列配置
   const columns = [
@@ -152,27 +150,14 @@ const Preheat: React.FC = () => {
       setIsPreheating(true)
       const res = await prerenderApi.triggerPreheat(selectedSiteId)
       if (res.code === 200) {
-        message.success('预热任务已触发，正在执行中')
-        // 开始轮询进度（这里简化处理，实际可以通过WebSocket或定期查询）
-        let progress = 0
-        const interval = setInterval(() => {
-          progress += 10
-          setPreheatProgress(progress)
-          if (progress >= 100) {
-            clearInterval(interval)
-            setIsPreheating(false)
-            setPreheatProgress(0)
-            fetchStats()
-            fetchUrls(currentPage, pageSize)
-          }
-        }, 1000)
-        setPreheatModalVisible(true)
+        message.success('预热任务已创建成功，请稍后查看')
       }
     } catch (error) {
       console.error('Failed to trigger preheat:', error)
       message.error('触发预热失败')
     } finally {
-      // setIsPreheating(false)
+      setIsPreheating(false)
+      setPreheatProgress(0)
     }
   }
 
@@ -193,13 +178,6 @@ const Preheat: React.FC = () => {
     setCurrentPage(page)
     setPageSize(size)
     fetchUrls(page, size)
-  }
-
-  // 关闭预热弹窗
-  const handleClosePreheatModal = () => {
-    setPreheatModalVisible(false)
-    setIsPreheating(false)
-    setPreheatProgress(0)
   }
 
   return (
@@ -304,33 +282,6 @@ const Preheat: React.FC = () => {
           }}
         />
       </Card>
-      
-      {/* 预热进度弹窗 */}
-      <Modal
-        title="预热进度"
-        open={preheatModalVisible}
-        onCancel={handleClosePreheatModal}
-        footer={null}
-        closable={false}
-      >
-        <div style={{ textAlign: 'center', padding: '20px 0' }}>
-          <Spin tip="正在预热中..." spinning={isPreheating} size="large">
-            <div style={{ marginBottom: 20 }}>
-              <Statistic
-                title="预热进度"
-                value={preheatProgress}
-                suffix="%"
-                valueStyle={{ color: '#1890ff' }}
-              />
-            </div>
-            <div style={{ marginTop: 20 }}>
-              <Button type="primary" onClick={handleClosePreheatModal} disabled={isPreheating}>
-                关闭
-              </Button>
-            </div>
-          </Spin>
-        </div>
-      </Modal>
     </div>
   )
 }

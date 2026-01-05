@@ -179,23 +179,80 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 		totalURLs := int64(len(urls))
 		pm.redisClient.UpdatePreheatTaskProgress(pm.engine.SiteName, taskID, totalURLs, 0, 0, 0)
 
-		// 创建预热执行器配置
-		preheatConfig := PreheatWorkerConfig{
-			SiteName:       pm.engine.SiteName,
-			RedisClient:    pm.redisClient,
-			Concurrency:    pm.config.Preheat.Concurrency,
-			CrawlerHeaders: pm.config.CrawlerHeaders,
+		// 初始化进度统计
+		var (
+			success     int64 = 0
+			failed      int64 = 0
+			processed   int64 = 0
+			progressMux sync.Mutex
+		)
+
+		// 创建并发控制信号量
+		semaphore := make(chan struct{}, pm.config.Preheat.Concurrency)
+		var wg sync.WaitGroup
+
+		// 并发执行渲染预热
+		for _, url := range urls {
+			wg.Add(1)
+			semaphore <- struct{}{}
+
+			go func(url string) {
+				defer func() {
+					wg.Done()
+					<-semaphore
+
+					// 更新进度
+					progressMux.Lock()
+					processed++
+					pm.redisClient.UpdatePreheatTaskProgress(pm.engine.SiteName, taskID, totalURLs, processed, success, failed)
+					progressMux.Unlock()
+				}()
+
+				// 使用渲染引擎进行真正的缓存预热
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+
+				fmt.Printf("Starting preheat for URL: %s\n", url)
+
+				// 调用引擎的Render方法，这将自动缓存渲染结果
+				resultWithCache, err := pm.engine.Render(ctx, url, RenderOptions{
+					Timeout:   30,
+					WaitUntil: "networkidle0",
+				})
+
+				if err != nil {
+					fmt.Printf("Preheat failed for URL %s: %v\n", url, err)
+					progressMux.Lock()
+					failed++
+					progressMux.Unlock()
+					// 更新URL状态为failed
+					pm.redisClient.SetURLPreheatStatus(pm.engine.SiteName, url, "failed", 0)
+					return
+				}
+
+				if !resultWithCache.Result.Success {
+					fmt.Printf("Render failed for URL %s: %s\n", url, resultWithCache.Result.Error)
+					progressMux.Lock()
+					failed++
+					progressMux.Unlock()
+					// 更新URL状态为failed
+					pm.redisClient.SetURLPreheatStatus(pm.engine.SiteName, url, "failed", 0)
+					return
+				}
+
+				// 渲染成功，更新成功计数和URL状态
+				fmt.Printf("Successfully preheated URL: %s\n", url)
+				progressMux.Lock()
+				success++
+				progressMux.Unlock()
+				// 更新URL状态为cached
+				cacheSize := int64(len(resultWithCache.Result.HTML))
+				pm.redisClient.SetURLPreheatStatus(pm.engine.SiteName, url, "cached", cacheSize)
+			}(url)
 		}
 
-		// 创建预热执行器实例
-		preheatWorker := NewPreheatWorker(preheatConfig)
-
-		// 开始预热
-		if err := preheatWorker.Start(); err != nil {
-			pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "failed")
-			fmt.Printf("Failed to preheat URLs: %v\n", err)
-			return
-		}
+		// 等待所有预热任务完成
+		wg.Wait()
 
 		// 更新统计数据
 		pm.updateStats()
@@ -203,6 +260,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 		// 标记任务完成
 		pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "completed")
 		fmt.Printf("Preheat completed for site: %s\n", pm.engine.SiteName)
+		fmt.Printf("Preheat summary: total=%d, success=%d, failed=%d\n", totalURLs, success, failed)
 	}()
 
 	// 1. 首先爬取站点的所有链接
@@ -277,21 +335,38 @@ func (pm *PreheatManager) TriggerPreheatForURL(url string) error {
 		return fmt.Errorf("redis client is not available, cannot preheat URL")
 	}
 
-	// 创建预热执行器配置
-	preheatConfig := PreheatWorkerConfig{
-		SiteName:       pm.engine.SiteName,
-		RedisClient:    pm.redisClient,
-		Concurrency:    1,
-		CrawlerHeaders: pm.config.CrawlerHeaders,
+	// 创建上下文，设置30秒超时
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	fmt.Printf("Starting preheat for single URL: %s\n", url)
+
+	// 调用引擎的Render方法，这将自动缓存渲染结果
+	resultWithCache, err := pm.engine.Render(ctx, url, RenderOptions{
+		Timeout:   30,
+		WaitUntil: "networkidle0",
+	})
+
+	if err != nil {
+		fmt.Printf("Preheat failed for URL %s: %v\n", url, err)
+		// 更新URL状态为failed
+		pm.redisClient.SetURLPreheatStatus(pm.engine.SiteName, url, "failed", 0)
+		return err
 	}
 
-	// 创建预热执行器实例
-	preheatWorker := NewPreheatWorker(preheatConfig)
+	if !resultWithCache.Result.Success {
+		fmt.Printf("Render failed for URL %s: %s\n", url, resultWithCache.Result.Error)
+		// 更新URL状态为failed
+		pm.redisClient.SetURLPreheatStatus(pm.engine.SiteName, url, "failed", 0)
+		return fmt.Errorf("render failed: %s", resultWithCache.Result.Error)
+	}
 
-	// 预热单个URL
-	return preheatWorker.PreheatURLWithHeaders(url, map[string]string{
-		"User-Agent": pm.config.CrawlerHeaders[0], // 使用第一个爬虫协议头
-	})
+	// 渲染成功，更新URL状态为cached
+	cacheSize := int64(len(resultWithCache.Result.HTML))
+	pm.redisClient.SetURLPreheatStatus(pm.engine.SiteName, url, "cached", cacheSize)
+
+	fmt.Printf("Successfully preheated URL: %s (size: %d bytes)\n", url, cacheSize)
+	return nil
 }
 
 // GetStats 获取站点预热统计数据
