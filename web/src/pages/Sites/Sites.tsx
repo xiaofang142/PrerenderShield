@@ -792,9 +792,21 @@ const Sites: React.FC = () => {
     ];
     
     // 设置表单初始值
-    const crawlerHeaders = Array.isArray(site.prerender.crawlerHeaders) 
-      ? site.prerender.crawlerHeaders.join('\n') 
-      : (site.prerender.crawlerHeaders || commonCrawlerHeaders.join('\n'));
+    // 处理爬虫头字段，同时支持下划线分隔和驼峰式命名，确保兼容性
+    let rawCrawlerHeaders = [];
+    if (Array.isArray(site.prerender.crawler_headers)) {
+      rawCrawlerHeaders = site.prerender.crawler_headers;
+    } else if (Array.isArray(site.prerender.crawlerHeaders)) {
+      rawCrawlerHeaders = site.prerender.crawlerHeaders;
+    } else if (site.prerender.crawler_headers) {
+      rawCrawlerHeaders = [site.prerender.crawler_headers];
+    } else if (site.prerender.crawlerHeaders) {
+      rawCrawlerHeaders = [site.prerender.crawlerHeaders];
+    } else {
+      rawCrawlerHeaders = commonCrawlerHeaders;
+    }
+    
+    const crawlerHeaders = rawCrawlerHeaders.join('\n');
     
     prerenderConfigForm.setFieldsValue({
       ...site.prerender,
@@ -850,67 +862,67 @@ const Sites: React.FC = () => {
         Port: parseInt(values.port, 10) || 80, // 转换为整数类型，默认为80
         Mode: values.mode, // 添加站点模式
         // 代理配置 - 根据模式决定是否启用
-        Proxy: {
-          Enabled: values.mode === 'proxy',
-          TargetURL: values.mode === 'proxy' ? (values.proxy?.targetURL || "") : "",
-          Type: "direct" // 简化为固定值
+        proxy: {
+          enabled: values.mode === 'proxy',
+          target_url: values.mode === 'proxy' ? (values.proxy?.targetURL || "") : "",
+          type: "direct" // 简化为固定值
         },
         // 重定向配置 - 根据模式决定是否启用
-        Redirect: {
-          Enabled: values.mode === 'redirect',
-          Code: values.mode === 'redirect' ? (values.redirect?.code || 302) : 302,
-          URL: values.mode === 'redirect' ? (values.redirect?.url || "") : ""
+        redirect: {
+          enabled: values.mode === 'redirect',
+          status_code: values.mode === 'redirect' ? (values.redirect?.code || 302) : 302,
+          target_url: values.mode === 'redirect' ? (values.redirect?.url || "") : ""
         },
-        Firewall: {
-          Enabled: values.firewall.enabled || false,
-          RulesPath: values.firewall.rulesPath || '/etc/prerender-shield/rules',
-          ActionConfig: {
-            DefaultAction: values.firewall.action?.defaultAction || 'block',
-            BlockMessage: values.firewall.action?.blockMessage || 'Request blocked by firewall'
+        firewall: {
+          enabled: values.firewall.enabled || false,
+          rules_path: values.firewall.rulesPath || '/etc/prerender-shield/rules',
+          action: {
+            default_action: values.firewall.action?.defaultAction || 'block',
+            block_message: values.firewall.action?.blockMessage || 'Request blocked by firewall'
           },
           // 地理位置访问控制配置
-          GeoIPConfig: {
-            Enabled: values.firewall.geoip?.enabled || false,
-            AllowList: values.firewall.geoip?.allowList ? values.firewall.geoip.allowList.split(',').map((s: string) => s.trim()) : [],
-            BlockList: values.firewall.geoip?.blockList ? values.firewall.geoip.blockList.split(',').map((s: string) => s.trim()) : []
+          geoip: {
+            enabled: values.firewall.geoip?.enabled || false,
+            allow_list: values.firewall.geoip?.allowList ? values.firewall.geoip.allowList.split(',').map((s: string) => s.trim()) : [],
+            block_list: values.firewall.geoip?.blockList ? values.firewall.geoip.blockList.split(',').map((s: string) => s.trim()) : []
           },
           // 频率限制配置
-          RateLimitConfig: {
-            Enabled: values.firewall.rate_limit?.enabled || false,
-            Requests: values.firewall.rate_limit?.requests || 100,
-            Window: values.firewall.rate_limit?.window || 60,
-            BanTime: values.firewall.rate_limit?.ban_time || 3600
+          rate_limit: {
+            enabled: values.firewall.rate_limit?.enabled || false,
+            requests: values.firewall.rate_limit?.requests || 100,
+            window: values.firewall.rate_limit?.window || 60,
+            ban_time: values.firewall.rate_limit?.ban_time || 3600
           }
         },
         // 网页防篡改配置
-        FileIntegrityConfig: {
-          Enabled: values.file_integrity?.enabled || false,
-          CheckInterval: values.file_integrity?.check_interval || 300,
-          HashAlgorithm: values.file_integrity?.hash_algorithm || 'sha256'
+        file_integrity: {
+          enabled: values.file_integrity?.enabled || false,
+          check_interval: values.file_integrity?.check_interval || 300,
+          hash_algorithm: values.file_integrity?.hash_algorithm || 'sha256'
         },
-        Prerender: {
-          Enabled: values.prerender.enabled || false,
-          PoolSize: values.prerender.poolSize || 5,
-          MinPoolSize: values.prerender.minPoolSize || 2,
-          MaxPoolSize: values.prerender.maxPoolSize || 20,
-          Timeout: values.prerender.timeout || 30,
-          CacheTTL: values.prerender.cacheTTL || 3600,
-          IdleTimeout: values.prerender.idleTimeout || 300,
-          DynamicScaling: values.prerender.dynamicScaling || true,
-          ScalingFactor: values.prerender.scalingFactor || 0.5,
-          ScalingInterval: values.prerender.scalingInterval || 60,
-          UseDefaultHeaders: values.prerender.useDefaultHeaders || false,
-          CrawlerHeaders: values.prerender.crawlerHeaders || [],
-          Preheat: {
-            Enabled: values.prerender.preheat?.enabled || false,
-            SitemapURL: values.prerender.preheat?.sitemapURL || '',
-            Schedule: values.prerender.preheat?.schedule || '0 0 * * *',
-            Concurrency: values.prerender.preheat?.concurrency || 5,
-            DefaultPriority: values.prerender.preheat?.defaultPriority || 0
+        prerender: {
+          enabled: values.prerender.enabled || false,
+          pool_size: values.prerender.poolSize || 5,
+          min_pool_size: values.prerender.minPoolSize || 2,
+          max_pool_size: values.prerender.maxPoolSize || 20,
+          timeout: values.prerender.timeout || 30,
+          cache_ttl: values.prerender.cacheTTL || 3600,
+          idle_timeout: values.prerender.idleTimeout || 300,
+          dynamic_scaling: values.prerender.dynamicScaling || true,
+          scaling_factor: values.prerender.scalingFactor || 0.5,
+          scaling_interval: values.prerender.scalingInterval || 60,
+          use_default_headers: values.prerender.useDefaultHeaders || false,
+          crawler_headers: values.prerender.crawlerHeaders || [],
+          preheat: {
+            enabled: values.prerender.preheat?.enabled || false,
+            sitemap_url: values.prerender.preheat?.sitemapURL || '',
+            schedule: values.prerender.preheat?.schedule || '0 0 * * *',
+            concurrency: values.prerender.preheat?.concurrency || 5,
+            default_priority: values.prerender.preheat?.defaultPriority || 0
           }
         },
-        Routing: {
-          Rules: values.routing?.rules || []
+        routing: {
+          rules: values.routing?.rules || []
         }
       }
       
@@ -972,7 +984,7 @@ const Sites: React.FC = () => {
       
       // 转换爬虫协议头为数组格式
       const crawlerHeadersArray = typeof values.crawlerHeaders === 'string' 
-        ? values.crawlerHeaders.split('\n').filter(header => header.trim() !== '')
+        ? values.crawlerHeaders.split('\n').filter((header: string) => header.trim() !== '')
         : (values.crawlerHeaders || []);
       
       // 转换表单数据格式，确保与后端API期望的结构匹配
@@ -983,71 +995,68 @@ const Sites: React.FC = () => {
         Port: editingPrerenderSite.port || 80,
         Mode: editingPrerenderSite.mode || 'proxy',
         // 保留原有的其他配置
-        Proxy: {
-          Enabled: editingPrerenderSite.proxy?.enabled || false,
-          TargetURL: editingPrerenderSite.proxy?.targetURL || "",
-          Type: "direct"
+        proxy: {
+          enabled: editingPrerenderSite.proxy?.enabled || false,
+          target_url: editingPrerenderSite.proxy?.targetURL || "",
+          type: "direct"
         },
-        Redirect: {
-          Enabled: editingPrerenderSite.redirect?.enabled || false,
-          Code: editingPrerenderSite.redirect?.code || 302,
-          URL: editingPrerenderSite.redirect?.url || ""
+        redirect: {
+          enabled: editingPrerenderSite.redirect?.enabled || false,
+          status_code: editingPrerenderSite.redirect?.code || 302,
+          target_url: editingPrerenderSite.redirect?.url || ""
         },
-        Firewall: {
-          Enabled: editingPrerenderSite.firewall?.enabled || false,
-          RulesPath: editingPrerenderSite.firewall?.rulesPath || '/etc/prerender-shield/rules',
-          ActionConfig: {
-            DefaultAction: editingPrerenderSite.firewall?.action?.defaultAction || 'block',
-            BlockMessage: editingPrerenderSite.firewall?.action?.blockMessage || 'Request blocked by firewall'
+        firewall: {
+          enabled: editingPrerenderSite.firewall?.enabled || false,
+          rules_path: editingPrerenderSite.firewall?.rulesPath || '/etc/prerender-shield/rules',
+          action: {
+            default_action: editingPrerenderSite.firewall?.action?.defaultAction || 'block',
+            block_message: editingPrerenderSite.firewall?.action?.blockMessage || 'Request blocked by firewall'
           },
-          GeoIPConfig: {
-            Enabled: editingPrerenderSite.firewall?.geoip?.enabled || false,
-            AllowList: editingPrerenderSite.firewall?.geoip?.allowList || [],
-            BlockList: editingPrerenderSite.firewall?.geoip?.blockList || []
+          geoip: {
+            enabled: editingPrerenderSite.firewall?.geoip?.enabled || false,
+            allow_list: editingPrerenderSite.firewall?.geoip?.allowList || [],
+            block_list: editingPrerenderSite.firewall?.geoip?.blockList || []
           },
-          RateLimitConfig: {
-            Enabled: editingPrerenderSite.firewall?.rateLimit?.enabled || false,
-            Requests: editingPrerenderSite.firewall?.rateLimit?.requests || 100,
-            Window: editingPrerenderSite.firewall?.rateLimit?.window || 60,
-            BanTime: editingPrerenderSite.firewall?.rateLimit?.banTime || 3600
+          rate_limit: {
+            enabled: editingPrerenderSite.firewall?.rateLimit?.enabled || false,
+            requests: editingPrerenderSite.firewall?.rateLimit?.requests || 100,
+            window: editingPrerenderSite.firewall?.rateLimit?.window || 60,
+            ban_time: editingPrerenderSite.firewall?.rateLimit?.banTime || 3600
           }
         },
         // 网页防篡改配置
-        FileIntegrityConfig: {
-          Enabled: editingPrerenderSite.fileIntegrity?.enabled || false,
-          CheckInterval: editingPrerenderSite.fileIntegrity?.checkInterval || 300,
-          HashAlgorithm: editingPrerenderSite.fileIntegrity?.hashAlgorithm || 'sha256'
+        file_integrity: {
+          enabled: editingPrerenderSite.fileIntegrity?.enabled || false,
+          check_interval: editingPrerenderSite.fileIntegrity?.checkInterval || 300,
+          hash_algorithm: editingPrerenderSite.fileIntegrity?.hashAlgorithm || 'sha256'
         },
-        Prerender: {
-          Enabled: values.enabled || false,
-          PoolSize: values.poolSize || 5,
-          MinPoolSize: values.minPoolSize || 2,
-          MaxPoolSize: values.maxPoolSize || 20,
-          Timeout: values.timeout || 30,
-          CacheTTL: values.cacheTTL || 3600,
-          IdleTimeout: values.idleTimeout || 300,
-          DynamicScaling: values.dynamicScaling || true,
-          ScalingFactor: values.scalingFactor || 0.5,
-          ScalingInterval: values.scalingInterval || 60,
-          UseDefaultHeaders: values.useDefaultHeaders || false,
-          CrawlerHeaders: crawlerHeadersArray,
-          Preheat: {
-            Enabled: values.preheat?.enabled || false,
-            MaxDepth: values.preheat?.maxDepth || 1
+        prerender: {
+          enabled: values.enabled || false,
+          pool_size: values.poolSize || 5,
+          min_pool_size: values.minPoolSize || 2,
+          max_pool_size: values.maxPoolSize || 20,
+          timeout: values.timeout || 30,
+          cache_ttl: values.cacheTTL || 3600,
+          idle_timeout: values.idleTimeout || 300,
+          dynamic_scaling: values.dynamicScaling || true,
+          scaling_factor: values.scalingFactor || 0.5,
+          scaling_interval: values.scalingInterval || 60,
+          use_default_headers: values.useDefaultHeaders || false,
+          crawler_headers: crawlerHeadersArray, // 使用下划线分隔式命名，与后端JSON标签一致
+          preheat: {
+            enabled: values.preheat?.enabled || false,
+            max_depth: values.preheat?.maxDepth || 1
           },
-          Push: {
-            Enabled: editingPrerenderSite.prerender.push?.enabled || false,
-            BaiduAPI: editingPrerenderSite.prerender.push?.baiduAPI || 'http://data.zz.baidu.com/urls',
-            BaiduToken: editingPrerenderSite.prerender.push?.baiduToken || '',
-            BaiduDailyLimit: editingPrerenderSite.prerender.push?.baiduDailyLimit || editingPrerenderSite.prerender.push?.dailyLimit || 1000,
-            BingAPI: editingPrerenderSite.prerender.push?.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
-            BingToken: editingPrerenderSite.prerender.push?.bingToken || '',
-            BingDailyLimit: editingPrerenderSite.prerender.push?.bingDailyLimit || editingPrerenderSite.prerender.push?.dailyLimit || 1000,
-            PushDomain: editingPrerenderSite.prerender.push?.pushDomain || '',
-            Schedule: editingPrerenderSite.prerender.push?.schedule || '0 1 * * *'
-          },
-          Routing: {
-            Rules: editingPrerenderSite.routing?.rules || []
+          push: {
+            enabled: editingPrerenderSite.prerender.push?.enabled || false,
+            baidu_api: editingPrerenderSite.prerender.push?.baiduAPI || 'http://data.zz.baidu.com/urls',
+            baidu_token: editingPrerenderSite.prerender.push?.baiduToken || '',
+            baidu_daily_limit: editingPrerenderSite.prerender.push?.baiduDailyLimit || editingPrerenderSite.prerender.push?.dailyLimit || 1000,
+            bing_api: editingPrerenderSite.prerender.push?.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
+            bing_token: editingPrerenderSite.prerender.push?.bingToken || '',
+            bing_daily_limit: editingPrerenderSite.prerender.push?.bingDailyLimit || editingPrerenderSite.prerender.push?.dailyLimit || 1000,
+            push_domain: editingPrerenderSite.prerender.push?.pushDomain || '',
+            schedule: editingPrerenderSite.prerender.push?.schedule || '0 1 * * *'
           }
         }
       };
@@ -1104,74 +1113,71 @@ const Sites: React.FC = () => {
         Port: editingPushSite.port || 80,
         Mode: editingPushSite.mode || 'proxy',
         // 保留原有的其他配置
-        Proxy: {
-          Enabled: editingPushSite.proxy?.enabled || false,
-          TargetURL: editingPushSite.proxy?.targetURL || "",
-          Type: "direct"
+        proxy: {
+          enabled: editingPushSite.proxy?.enabled || false,
+          target_url: editingPushSite.proxy?.targetURL || "",
+          type: "direct"
         },
-        Redirect: {
-          Enabled: editingPushSite.redirect?.enabled || false,
-          Code: editingPushSite.redirect?.code || 302,
-          URL: editingPushSite.redirect?.url || ""
+        redirect: {
+          enabled: editingPushSite.redirect?.enabled || false,
+          status_code: editingPushSite.redirect?.code || 302,
+          target_url: editingPushSite.redirect?.url || ""
         },
-        Firewall: {
-          Enabled: editingPushSite.firewall?.enabled || false,
-          RulesPath: editingPushSite.firewall?.rulesPath || '/etc/prerender-shield/rules',
-          ActionConfig: {
-            DefaultAction: editingPushSite.firewall?.action?.defaultAction || 'block',
-            BlockMessage: editingPushSite.firewall?.action?.blockMessage || 'Request blocked by firewall'
+        firewall: {
+          enabled: editingPushSite.firewall?.enabled || false,
+          rules_path: editingPushSite.firewall?.rulesPath || '/etc/prerender-shield/rules',
+          action: {
+            default_action: editingPushSite.firewall?.action?.defaultAction || 'block',
+            block_message: editingPushSite.firewall?.action?.blockMessage || 'Request blocked by firewall'
           },
-          GeoIPConfig: {
-            Enabled: editingPushSite.firewall?.geoip?.enabled || false,
-            AllowList: editingPushSite.firewall?.geoip?.allowList || [],
-            BlockList: editingPushSite.firewall?.geoip?.blockList || []
+          geoip: {
+            enabled: editingPushSite.firewall?.geoip?.enabled || false,
+            allow_list: editingPushSite.firewall?.geoip?.allowList || [],
+            block_list: editingPushSite.firewall?.geoip?.blockList || []
           },
-          RateLimitConfig: {
-            Enabled: editingPushSite.firewall?.rateLimit?.enabled || false,
-            Requests: editingPushSite.firewall?.rateLimit?.requests || 100,
-            Window: editingPushSite.firewall?.rateLimit?.window || 60,
-            BanTime: editingPushSite.firewall?.rateLimit?.banTime || 3600
+          rate_limit: {
+            enabled: editingPushSite.firewall?.rateLimit?.enabled || false,
+            requests: editingPushSite.firewall?.rateLimit?.requests || 100,
+            window: editingPushSite.firewall?.rateLimit?.window || 60,
+            ban_time: editingPushSite.firewall?.rateLimit?.banTime || 3600
           }
         },
         // 网页防篡改配置
-        FileIntegrityConfig: {
-          Enabled: editingPushSite.fileIntegrity?.enabled || false,
-          CheckInterval: editingPushSite.fileIntegrity?.checkInterval || 300,
-          HashAlgorithm: editingPushSite.fileIntegrity?.hashAlgorithm || 'sha256'
+        file_integrity: {
+          enabled: editingPushSite.fileIntegrity?.enabled || false,
+          check_interval: editingPushSite.fileIntegrity?.checkInterval || 300,
+          hash_algorithm: editingPushSite.fileIntegrity?.hashAlgorithm || 'sha256'
         },
-        Prerender: {
-          Enabled: editingPushSite.prerender.enabled || false,
-          PoolSize: editingPushSite.prerender.poolSize || 5,
-          MinPoolSize: editingPushSite.prerender.minPoolSize || 2,
-          MaxPoolSize: editingPushSite.prerender.maxPoolSize || 20,
-          Timeout: editingPushSite.prerender.timeout || 30,
-          CacheTTL: editingPushSite.prerender.cacheTTL || 3600,
-          IdleTimeout: editingPushSite.prerender.idleTimeout || 300,
-          DynamicScaling: editingPushSite.prerender.dynamicScaling || true,
-          ScalingFactor: editingPushSite.prerender.scalingFactor || 0.5,
-          ScalingInterval: editingPushSite.prerender.scalingInterval || 60,
-          UseDefaultHeaders: editingPushSite.prerender.useDefaultHeaders || false,
-          CrawlerHeaders: editingPushSite.prerender.crawlerHeaders || [],
-          Preheat: {
-            Enabled: editingPushSite.prerender.preheat?.enabled || false,
-            SitemapURL: editingPushSite.prerender.preheat?.sitemapURL || '',
-            Schedule: editingPushSite.prerender.preheat?.schedule || '0 0 * * *',
-            Concurrency: editingPushSite.prerender.preheat?.concurrency || 5,
-            DefaultPriority: editingPushSite.prerender.preheat?.defaultPriority || 0
+        prerender: {
+          enabled: editingPushSite.prerender.enabled || false,
+          pool_size: editingPushSite.prerender.poolSize || 5,
+          min_pool_size: editingPushSite.prerender.minPoolSize || 2,
+          max_pool_size: editingPushSite.prerender.maxPoolSize || 20,
+          timeout: editingPushSite.prerender.timeout || 30,
+          cache_ttl: editingPushSite.prerender.cacheTTL || 3600,
+          idle_timeout: editingPushSite.prerender.idleTimeout || 300,
+          dynamic_scaling: editingPushSite.prerender.dynamicScaling || true,
+          scaling_factor: editingPushSite.prerender.scalingFactor || 0.5,
+          scaling_interval: editingPushSite.prerender.scalingInterval || 60,
+          use_default_headers: editingPushSite.prerender.useDefaultHeaders || false,
+          crawler_headers: editingPushSite.prerender.crawlerHeaders || [],
+          preheat: {
+            enabled: editingPushSite.prerender.preheat?.enabled || false,
+            sitemap_url: editingPushSite.prerender.preheat?.sitemapURL || '',
+            schedule: editingPushSite.prerender.preheat?.schedule || '0 0 * * *',
+            concurrency: editingPushSite.prerender.preheat?.concurrency || 5,
+            default_priority: editingPushSite.prerender.preheat?.defaultPriority || 0
           },
-          Push: {
-            Enabled: values.enabled || false,
-            BaiduAPI: values.baiduAPI || 'http://data.zz.baidu.com/urls',
-            BaiduToken: values.baiduToken || '',
-            BaiduDailyLimit: values.baiduDailyLimit || 1000,
-            BingAPI: values.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
-            BingToken: values.bingToken || '',
-            BingDailyLimit: values.bingDailyLimit || 1000,
-            PushDomain: values.pushDomain || '',
-            Schedule: values.schedule || '0 1 * * *'
-          },
-          Routing: {
-            Rules: editingPushSite.routing?.rules || []
+          push: {
+            enabled: values.enabled || false,
+            baidu_api: values.baiduAPI || 'http://data.zz.baidu.com/urls',
+            baidu_token: values.baiduToken || '',
+            baidu_daily_limit: values.baiduDailyLimit || 1000,
+            bing_api: values.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
+            bing_token: values.bingToken || '',
+            bing_daily_limit: values.bingDailyLimit || 1000,
+            push_domain: values.pushDomain || '',
+            schedule: values.schedule || '0 1 * * *'
           }
         }
       };

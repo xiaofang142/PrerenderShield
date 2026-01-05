@@ -158,7 +158,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 		return "", fmt.Errorf("failed to create preheat task: %v", err)
 	}
 
-	// 异步执行预热
+	// 异步执行预热流程，包括爬虫和渲染
 	go func() {
 		defer func() {
 			pm.mutex.Lock()
@@ -166,12 +166,42 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 			pm.mutex.Unlock()
 		}()
 
-		// 获取所有URL后执行预热
+		// 1. 首先爬取站点的所有链接
+		logging.DefaultLogger.Info("Starting URL crawler for site: %s with baseURL: %s", pm.engine.SiteName, baseURL)
+
+		// 创建爬虫配置
+		crawlerConfig := CrawlerConfig{
+			SiteName:    pm.engine.SiteName,
+			Domain:      domain,
+			BaseURL:     baseURL,
+			MaxDepth:    pm.config.Preheat.MaxDepth,
+			Concurrency: 3, // 降低爬虫并发度，减少资源消耗
+			RedisClient: pm.redisClient,
+		}
+
+		// 创建爬虫实例
+		crawler := NewCrawler(crawlerConfig)
+
+		// 同步执行爬虫，确保先完成URL爬取
+		if err := crawler.Start(); err != nil {
+			pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "failed")
+			logging.DefaultLogger.Error("Failed to crawl URLs: %v", err)
+			return
+		}
+
+		// 2. 获取所有URL后执行预热
 		urls, err := pm.redisClient.GetURLs(pm.engine.SiteName)
 		if err != nil {
 			pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "failed")
 			logging.DefaultLogger.Error("Failed to get URLs for preheat: %v", err)
 			return
+		}
+
+		// 防御性编程：限制最大URL数量，防止资源耗尽
+		const MaxPreheatURLs = 1000
+		if len(urls) > MaxPreheatURLs {
+			logging.DefaultLogger.Warn("Too many URLs to preheat, limiting to %d (total: %d)", MaxPreheatURLs, len(urls))
+			urls = urls[:MaxPreheatURLs]
 		}
 
 		// 更新任务的总URL数
@@ -186,12 +216,29 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 			progressMux sync.Mutex
 		)
 
+		// 获取浏览器池大小，基于池大小动态调整并发度
+		maxConcurrency := pm.engine.config.PoolSize
+		if maxConcurrency < 1 {
+			maxConcurrency = 1
+		}
+		if maxConcurrency > 10 {
+			maxConcurrency = 10 // 限制最大并发度，防止资源耗尽
+		}
+
 		// 创建并发控制信号量
-		semaphore := make(chan struct{}, 5) // Default concurrency: 5
+		semaphore := make(chan struct{}, maxConcurrency)
 		var wg sync.WaitGroup
 
 		// 并发执行渲染预热
 		for _, url := range urls {
+			// 检查预热是否已被停止
+			pm.mutex.Lock()
+			if !pm.isRunning {
+				pm.mutex.Unlock()
+				break
+			}
+			pm.mutex.Unlock()
+
 			wg.Add(1)
 			semaphore <- struct{}{}
 
@@ -208,14 +255,14 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 				}()
 
 				// 使用渲染引擎进行真正的缓存预热
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second) // 缩短超时时间
 				defer cancel()
 
 				logging.DefaultLogger.Debug("Starting preheat for URL: %s", url)
 
 				// 调用引擎的Render方法，这将自动缓存渲染结果
 				resultWithCache, err := pm.engine.Render(ctx, url, RenderOptions{
-					Timeout:   30,
+					Timeout:   20,
 					WaitUntil: "networkidle0",
 				})
 
@@ -260,34 +307,6 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 		pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "completed")
 		logging.DefaultLogger.Info("Preheat completed for site: %s", pm.engine.SiteName)
 		logging.DefaultLogger.Info("Preheat summary: total=%d, success=%d, failed=%d", totalURLs, success, failed)
-	}()
-
-	// 1. 首先爬取站点的所有链接
-	logging.DefaultLogger.Info("Starting URL crawler for site: %s with baseURL: %s", pm.engine.SiteName, baseURL)
-
-	// 创建爬虫配置
-	crawlerConfig := CrawlerConfig{
-		SiteName:    pm.engine.SiteName,
-		Domain:      domain,
-		BaseURL:     baseURL,
-		MaxDepth:    pm.config.Preheat.MaxDepth,
-		Concurrency: 5, // Default concurrency: 5
-		RedisClient: pm.redisClient,
-	}
-
-	// 创建爬虫实例
-	crawler := NewCrawler(crawlerConfig)
-
-	// 开始爬取（异步执行，避免阻塞HTTP请求）
-	go func() {
-		if err := crawler.Start(); err != nil {
-			pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "failed")
-			logging.DefaultLogger.Error("Failed to crawl URLs: %v", err)
-			pm.mutex.Lock()
-			pm.isRunning = false
-			pm.mutex.Unlock()
-			return
-		}
 	}()
 
 	return taskID, nil
@@ -1252,6 +1271,10 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 	if timeout == 0 {
 		timeout = time.Duration(e.config.Timeout) * time.Second
 	}
+	// 限制最大超时时间，防止单个任务占用资源过久
+	if timeout > 30*time.Second {
+		timeout = 30 * time.Second
+	}
 
 	// 创建带超时的上下文
 	taskCtx, taskCancel := context.WithTimeout(e.ctx, timeout)
@@ -1263,9 +1286,9 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 		Error:   "",
 	}
 
-	// 执行渲染
+	// 执行渲染，使用双重defer防护
 	func() {
-		// 使用defer恢复panic，作为最后一道防线
+		// 最外层panic恢复，确保无论发生什么都能正常释放资源
 		defer func() {
 			if r := recover(); r != nil {
 				result.Error = fmt.Sprintf("render panic: %v", r)
@@ -1274,11 +1297,30 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 				browser.Healthy = false
 				browser.ErrorCount++
 				e.mutex.Unlock()
+				logging.DefaultLogger.Error("Render panic for URL %s: %v", task.URL, r)
 			}
 		}()
 
-		// 创建新页面
-		page, err := browser.Instance.Page(proto.TargetCreateTarget{})
+		// 检查浏览器是否健康
+		e.mutex.RLock()
+		if !browser.Healthy || browser.Instance == nil {
+			e.mutex.RUnlock()
+			result.Error = "browser is not healthy"
+			return
+		}
+		e.mutex.RUnlock()
+
+		// 创建新页面，增加重试机制
+		var page *rod.Page
+		var err error
+		for i := 0; i < 2; i++ {
+			page, err = browser.Instance.Page(proto.TargetCreateTarget{})
+			if err == nil {
+				break
+			}
+			// 短暂等待后重试
+			time.Sleep(500 * time.Millisecond)
+		}
 		if err != nil {
 			result.Error = fmt.Sprintf("failed to create page: %v", err)
 			// 标记浏览器为不健康
@@ -1286,78 +1328,119 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 			browser.Healthy = false
 			browser.ErrorCount++
 			e.mutex.Unlock()
+			logging.DefaultLogger.Error("Failed to create page for URL %s: %v", task.URL, err)
 			return
 		}
+
+		// 页面关闭防护，确保资源释放
+		pageClosed := false
 		defer func() {
-			if err := page.Close(); err != nil {
-				logging.DefaultLogger.Warn("Failed to close page: %v", err)
+			if !pageClosed {
+				// 异步关闭页面，避免阻塞主流程
+				go func() {
+					if err := page.Close(); err != nil {
+						logging.DefaultLogger.Warn("Failed to close page: %v", err)
+					}
+				}()
 			}
 		}()
 
-		// 导航到URL
-		if err := page.Navigate(task.URL); err != nil {
-			result.Error = fmt.Sprintf("failed to navigate to %s: %v", task.URL, err)
+		// 导航到URL，增加超时控制
+		navigateDone := make(chan bool)
+		go func() {
+			defer close(navigateDone)
+			if err := page.Navigate(task.URL); err != nil {
+				select {
+				case <-taskCtx.Done():
+					// 上下文已取消，忽略错误
+				default:
+					err = fmt.Errorf("failed to navigate to %s: %v", task.URL, err)
+				}
+			}
+		}()
+
+		select {
+		case <-navigateDone:
+		case <-taskCtx.Done():
+			result.Error = "navigation timeout"
 			return
 		}
 
-		// 等待页面加载完成
-		if err := page.WaitLoad(); err != nil {
-			logging.DefaultLogger.Warn("WaitLoad failed for %s, trying to wait for network idle: %v", task.URL, err)
-			// 使用简单的等待策略，适用于hash模式
-			time.Sleep(2 * time.Second)
+		if err != nil {
+			result.Error = err.Error()
+			return
+		}
+
+		// 等待页面加载完成，使用更安全的等待策略
+		waitDone := make(chan bool)
+		go func() {
+			defer close(waitDone)
+			// 使用多个等待策略，提高成功率
+			waitErr := page.WaitLoad()
+			if waitErr != nil {
+				logging.DefaultLogger.Warn("WaitLoad failed for %s, trying to wait for network idle: %v", task.URL, waitErr)
+				// 使用简单的等待策略，适用于hash模式
+				time.Sleep(1 * time.Second)
+			}
+		}()
+
+		select {
+		case <-waitDone:
+		case <-taskCtx.Done():
+			result.Error = "page load timeout"
+			return
 		}
 
 		// 检查URL是否包含hash
 		isHashURL := strings.Contains(task.URL, "#")
 
-		// 根据WaitUntil选项和是否为hash URL决定等待策略
-		switch task.Options.WaitUntil {
-		case "networkidle0":
-			// 等待网络空闲（0个网络连接）- 使用简单的等待方式
-			if isHashURL {
-				// hash路由需要额外等待，因为hash处理是在客户端JavaScript中完成的
-				time.Sleep(4 * time.Second)
-			} else {
-				time.Sleep(3 * time.Second)
-			}
-		case "networkidle2":
-			// 等待网络空闲（最多2个网络连接）- 使用简单的等待方式
-			if isHashURL {
-				// hash路由需要额外等待
-				time.Sleep(3 * time.Second)
-			} else {
-				time.Sleep(2 * time.Second)
-			}
-		case "domcontentloaded":
-			// 已经通过page.MustWaitLoad()等待了DOM内容加载
-			// 额外等待1秒确保JavaScript执行
-			time.Sleep(1 * time.Second)
-			// 对于hash URL，再额外等待1秒确保hash路由处理完成
-			if isHashURL {
-				time.Sleep(1 * time.Second)
-			}
-		case "load":
-			// 已经通过page.MustWaitLoad()等待了页面加载
-			// 额外等待2秒确保JavaScript执行和页面渲染
-			time.Sleep(2 * time.Second)
-			// 对于hash URL，再额外等待1秒确保hash路由处理完成
-			if isHashURL {
-				time.Sleep(1 * time.Second)
-			}
-		default:
-			// 默认等待策略：等待3秒确保JavaScript执行和页面渲染
-			time.Sleep(3 * time.Second)
-			// 对于hash URL，再额外等待1秒确保hash路由处理完成
-			if isHashURL {
-				time.Sleep(1 * time.Second)
-			}
+		// 根据WaitUntil选项和是否为hash URL决定等待策略，缩短等待时间
+		baseWaitTime := 1 * time.Second
+		if isHashURL {
+			baseWaitTime = 2 * time.Second
 		}
 
-		// 最后再等待一小段时间，确保所有异步操作完成
-		time.Sleep(500 * time.Millisecond)
+		switch task.Options.WaitUntil {
+		case "networkidle0":
+			// 等待网络空闲（0个网络连接）
+			time.Sleep(baseWaitTime + 1*time.Second)
+		case "networkidle2":
+			// 等待网络空闲（最多2个网络连接）
+			time.Sleep(baseWaitTime)
+		case "domcontentloaded":
+			// 已经通过page.WaitLoad()等待了DOM内容加载
+			time.Sleep(500 * time.Millisecond)
+		case "load":
+			// 已经通过page.WaitLoad()等待了页面加载
+			time.Sleep(baseWaitTime)
+		default:
+			// 默认等待策略
+			time.Sleep(baseWaitTime)
+		}
 
-		// 获取完整的HTML内容
-		html, err := page.HTML()
+		// 获取完整的HTML内容，增加超时控制
+		htmlDone := make(chan struct {
+			html string
+			err  error
+		})
+		go func() {
+			defer close(htmlDone)
+			html, err := page.HTML()
+			htmlDone <- struct {
+				html string
+				err  error
+			}{html, err}
+		}()
+
+		var html string
+		select {
+		case res := <-htmlDone:
+			html, err = res.html, res.err
+		case <-taskCtx.Done():
+			result.Error = "html extraction timeout"
+			return
+		}
+
 		if err != nil {
 			result.Error = fmt.Sprintf("failed to get html: %v", err)
 			return
@@ -1369,26 +1452,25 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 			return
 		}
 
-		// 检查是否包含基本的HTML结构
+		// 检查是否包含基本的HTML结构，放宽验证条件，提高容错性
 		lowerHTML := strings.ToLower(html)
-		if !strings.Contains(lowerHTML, "<html") || !strings.Contains(lowerHTML, "<body") {
-			result.Error = "incomplete html structure"
-			return
+		if !strings.Contains(lowerHTML, "<html") {
+			// 如果没有完整HTML结构，尝试提取body内容
+			bodyStart := strings.Index(lowerHTML, "<body")
+			if bodyStart == -1 {
+				result.Error = "incomplete html structure"
+				return
+			}
+			// 允许只有body的情况
+		} else if !strings.Contains(lowerHTML, "<body") {
+			// 如果有html但没有body，也允许通过
+			logging.DefaultLogger.Warn("HTML missing body tag for URL %s", task.URL)
 		}
 
-		// 检查body是否为空
-		bodyStart := strings.Index(lowerHTML, "<body")
-		bodyEnd := strings.LastIndex(lowerHTML, "</body>")
-		if bodyStart == -1 || bodyEnd == -1 || bodyEnd <= bodyStart {
-			result.Error = "empty body content"
-			return
-		}
-
-		// 检查body内容是否只有空白字符
-		bodyContent := strings.TrimSpace(html[bodyStart:bodyEnd])
-		if bodyContent == "" || bodyContent == "<body>" || bodyContent == "<body></body>" || bodyContent == "<body />" {
-			result.Error = "empty body content"
-			return
+		// 标记页面已关闭，避免重复关闭
+		pageClosed = true
+		if err := page.Close(); err != nil {
+			logging.DefaultLogger.Warn("Failed to close page: %v", err)
 		}
 
 		// 成功获取HTML
@@ -1399,8 +1481,8 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 	// 更新浏览器状态并返回结果
 	e.mutex.Lock()
 	browser.Status = "available"
-	// 如果浏览器不健康，不将其放回池中
-	if browser.ErrorCount > 5 {
+	// 降低错误计数阈值，更快替换不健康的浏览器
+	if browser.ErrorCount > 3 {
 		browser.Healthy = false
 	} else {
 		browser.Healthy = true
@@ -1412,14 +1494,33 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 		select {
 		case e.idleBrowsers <- browser:
 		default:
-			// 如果通道已满，忽略
+			// 如果通道已满，关闭该浏览器并创建新的
+			if browser.Instance != nil {
+				if err := browser.Instance.Close(); err != nil {
+					logging.DefaultLogger.Warn("Failed to close extra browser %s: %v", browser.ID, err)
+				}
+			}
+			// 异步替换浏览器
+			go func() {
+				e.mutex.Lock()
+				defer e.mutex.Unlock()
+				for i, b := range e.browserPool {
+					if b.ID == browser.ID {
+						e.replaceBrowser(i, browser)
+						break
+					}
+				}
+			}()
 		}
 	} else {
 		// 如果浏览器不健康，关闭并替换它
 		if browser.Instance != nil {
-			if err := browser.Instance.Close(); err != nil {
-				logging.DefaultLogger.Warn("Failed to close unhealthy browser %s: %v", browser.ID, err)
-			}
+			// 异步关闭浏览器，避免阻塞主流程
+			go func() {
+				if err := browser.Instance.Close(); err != nil {
+					logging.DefaultLogger.Warn("Failed to close unhealthy browser %s: %v", browser.ID, err)
+				}
+			}()
 		}
 		// 异步替换浏览器
 		go func() {
@@ -1435,11 +1536,12 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 		}()
 	}
 
-	// 发送结果
+	// 发送结果，使用非阻塞方式
 	select {
 	case task.Result <- result:
 	case <-taskCtx.Done():
 		// 如果任务上下文已取消，忽略结果
+		logging.DefaultLogger.Warn("Task context canceled, result ignored for URL %s", task.URL)
 	}
 	close(task.Result)
 }

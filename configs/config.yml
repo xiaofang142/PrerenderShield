@@ -3,14 +3,20 @@ server:
     api_port: 9598
     console_port: 9597
 dirs:
-    data_dir: ./data
-    static_dir: ./static
-    certs_dir: ./certs
-    admin_static_dir: ./web/dist
+    data_dir: /Users/xiaofang/Documents/www/prerender/prerender-shield/data
+    static_dir: /Users/xiaofang/Documents/www/prerender/prerender-shield/static
+    certs_dir: /Users/xiaofang/Documents/www/prerender/prerender-shield/certs
+    admin_static_dir: /Users/xiaofang/Documents/www/prerender/prerender-shield/web/dist
 cache:
     type: redis
     redis_url: 127.0.0.1:6379
     memory_size: 1000
+storage:
+    type: postgres
+    postgres_url: postgres://prerender:prerender@localhost:5432/prerender?sslmode=disable
+monitoring:
+    enabled: true
+    prometheus_address: :9090
 sites:
     - id: 9dbfaa2b-9015-4012-a00a-8e7f47ab01dd
       name: test2
@@ -25,19 +31,19 @@ sites:
         target_url: ""
       firewall:
         enabled: false
-        rules_path: /etc/prerender-shield/rules
+        rules_path: ""
         action:
-            default_action: block
-            block_message: Request blocked by firewall
+            default_action: ""
+            block_message: ""
         geoip:
             enabled: false
             allow_list: []
             block_list: []
         rate_limit:
             enabled: false
-            requests: 100
-            window: 60
-            ban_time: 3600
+            requests: 0
+            window: 0
+            ban_time: 0
       prerender:
         enabled: true
         pool_size: 5
@@ -59,21 +65,19 @@ sites:
         push:
             enabled: false
             baidu_api: http://data.zz.baidu.com/urls
-            baidu_token: "12"
+            baidu_token: ""
             bing_api: https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl
-            bing_token: "12"
+            bing_token: ""
             baidu_daily_limit: 1000
             bing_daily_limit: 1000
             push_domain: ""
-            hour: 1
+            hour: 0
         crawler_headers:
             - Googlebot
-            - Bingbot
-            - Baiduspider
         use_default_headers: false
       routing:
         rules: []
       file_integrity:
         enabled: false
-        check_interval: 300
-        hash_algorithm: sha256
+        check_interval: 0
+        hash_algorithm: ""
