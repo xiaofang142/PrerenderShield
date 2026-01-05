@@ -15,6 +15,7 @@ import Overview from './pages/Overview/Overview'
 import Firewall from './pages/Firewall/Firewall'
 import Prerender from './pages/Prerender/Prerender'
 import Preheat from './pages/Prerender/Preheat'
+import Push from './pages/Prerender/Push'
 import Monitoring from './pages/Monitoring/Monitoring'
 import Logs from './pages/Logs/Logs'
 import Sites from './pages/Sites/Sites'
@@ -114,6 +115,16 @@ function App() {
                 <PrivateRoute>
                   <MainLayout>
                     <Preheat />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/prerender/push" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Push />
                   </MainLayout>
                 </PrivateRoute>
               } 

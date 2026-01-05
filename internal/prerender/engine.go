@@ -14,21 +14,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// LRUCacheNode LRU缓存节点
-type LRUCacheNode struct {
-	key        string
-	value      *CachedRenderResult
-	prev, next *LRUCacheNode
-}
-
-// LRUCache LRU缓存
-type LRUCache struct {
-	capacity   int
-	cache      map[string]*LRUCacheNode
-	head, tail *LRUCacheNode
-	mutex      sync.RWMutex
-}
-
 // Engine 渲染预热引擎
 type Engine struct {
 	SiteName             string
@@ -48,7 +33,6 @@ type Engine struct {
 	queueMutex           sync.RWMutex // 队列长度历史互斥锁
 	activeTasks          int          // 当前活跃任务数
 	taskMutex            sync.RWMutex // 活跃任务数互斥锁
-	renderCache          *LRUCache    // 渲染缓存，使用LRU机制
 	redisClient          *redis.Client
 	// 默认爬虫协议头列表
 	defaultCrawlerHeaders []string
@@ -92,14 +76,6 @@ type RenderResult struct {
 	HTML    string
 	Success bool
 	Error   string
-}
-
-// CachedRenderResult 缓存的渲染结果
-type CachedRenderResult struct {
-	Result      *RenderResult
-	URL         string
-	CreatedAt   time.Time
-	ContentHash string // 内容哈希，用于检测内容变化
 }
 
 // PrerenderConfig 渲染预热配置
@@ -151,31 +127,83 @@ func NewPreheatManager(engine *Engine, redisClient *redis.Client) *PreheatManage
 }
 
 // TriggerPreheat 触发缓存预热，默认使用localhost:8081
-func (pm *PreheatManager) TriggerPreheat() error {
+func (pm *PreheatManager) TriggerPreheat() (string, error) {
 	// 默认使用localhost:8081，兼容旧版API
 	return pm.TriggerPreheatWithURL("http://localhost:8081", "localhost:8081")
 }
 
 // TriggerPreheatWithURL 触发缓存预热，支持自定义baseURL和Domain
-func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) error {
+func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string, error) {
 	pm.mutex.Lock()
 	if pm.isRunning {
 		pm.mutex.Unlock()
-		return fmt.Errorf("preheat is already running")
+		return "", fmt.Errorf("preheat is already running")
 	}
 	pm.isRunning = true
 	pm.mutex.Unlock()
 
-	defer func() {
+	// 检查Redis客户端是否可用
+	if pm.redisClient == nil {
 		pm.mutex.Lock()
 		pm.isRunning = false
 		pm.mutex.Unlock()
-	}()
-
-	// 检查Redis客户端是否可用
-	if pm.redisClient == nil {
-		return fmt.Errorf("redis client is not available, preheat cannot be triggered")
+		return "", fmt.Errorf("redis client is not available, preheat cannot be triggered")
 	}
+
+	// 创建预热任务
+	taskID, err := pm.redisClient.CreatePreheatTask(pm.engine.SiteName)
+	if err != nil {
+		pm.mutex.Lock()
+		pm.isRunning = false
+		pm.mutex.Unlock()
+		return "", fmt.Errorf("failed to create preheat task: %v", err)
+	}
+
+	// 异步执行预热
+	go func() {
+		defer func() {
+			pm.mutex.Lock()
+			pm.isRunning = false
+			pm.mutex.Unlock()
+		}()
+
+		// 获取所有URL后执行预热
+		urls, err := pm.redisClient.GetURLs(pm.engine.SiteName)
+		if err != nil {
+			pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "failed")
+			fmt.Printf("Failed to get URLs for preheat: %v\n", err)
+			return
+		}
+
+		// 更新任务的总URL数
+		totalURLs := int64(len(urls))
+		pm.redisClient.UpdatePreheatTaskProgress(pm.engine.SiteName, taskID, totalURLs, 0, 0, 0)
+
+		// 创建预热执行器配置
+		preheatConfig := PreheatWorkerConfig{
+			SiteName:       pm.engine.SiteName,
+			RedisClient:    pm.redisClient,
+			Concurrency:    pm.config.Preheat.Concurrency,
+			CrawlerHeaders: pm.config.CrawlerHeaders,
+		}
+
+		// 创建预热执行器实例
+		preheatWorker := NewPreheatWorker(preheatConfig)
+
+		// 开始预热
+		if err := preheatWorker.Start(); err != nil {
+			pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "failed")
+			fmt.Printf("Failed to preheat URLs: %v\n", err)
+			return
+		}
+
+		// 更新统计数据
+		pm.updateStats()
+
+		// 标记任务完成
+		pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "completed")
+		fmt.Printf("Preheat completed for site: %s\n", pm.engine.SiteName)
+	}()
 
 	// 1. 首先爬取站点的所有链接
 	fmt.Printf("Starting URL crawler for site: %s with baseURL: %s\n", pm.engine.SiteName, baseURL)
@@ -194,34 +222,18 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) error {
 	crawler := NewCrawler(crawlerConfig)
 
 	// 开始爬取
-	if err := crawler.Start(); err != nil {
-		return fmt.Errorf("failed to crawl URLs: %v", err)
-	}
+	go func() {
+		if err := crawler.Start(); err != nil {
+			pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "failed")
+			fmt.Printf("Failed to crawl URLs: %v\n", err)
+			pm.mutex.Lock()
+			pm.isRunning = false
+			pm.mutex.Unlock()
+			return
+		}
+	}()
 
-	// 2. 然后执行预热
-	fmt.Printf("Starting preheat for site: %s\n", pm.engine.SiteName)
-
-	// 创建预热执行器配置
-	preheatConfig := PreheatWorkerConfig{
-		SiteName:       pm.engine.SiteName,
-		RedisClient:    pm.redisClient,
-		Concurrency:    pm.config.Preheat.Concurrency,
-		CrawlerHeaders: pm.config.CrawlerHeaders,
-	}
-
-	// 创建预热执行器实例
-	preheatWorker := NewPreheatWorker(preheatConfig)
-
-	// 开始预热
-	if err := preheatWorker.Start(); err != nil {
-		return fmt.Errorf("failed to preheat URLs: %v", err)
-	}
-
-	// 3. 更新统计数据
-	pm.updateStats()
-
-	fmt.Printf("Preheat completed for site: %s\n", pm.engine.SiteName)
-	return nil
+	return taskID, nil
 }
 
 // updateStats 更新站点统计数据
@@ -329,120 +341,6 @@ func (pm *PreheatManager) Stop() {
 	pm.isRunning = false
 }
 
-// NewLRUCache 创建新的LRU缓存
-func NewLRUCache(capacity int) *LRUCache {
-	if capacity <= 0 {
-		capacity = 1000 // 默认容量1000
-	}
-
-	head := &LRUCacheNode{}
-	tail := &LRUCacheNode{}
-	head.next = tail
-	tail.prev = head
-
-	return &LRUCache{
-		capacity: capacity,
-		cache:    make(map[string]*LRUCacheNode),
-		head:     head,
-		tail:     tail,
-	}
-}
-
-// removeNode 从双向链表中移除节点
-func (c *LRUCache) removeNode(node *LRUCacheNode) {
-	node.prev.next = node.next
-	node.next.prev = node.prev
-}
-
-// addToHead 将节点添加到双向链表头部
-func (c *LRUCache) addToHead(node *LRUCacheNode) {
-	node.next = c.head.next
-	node.prev = c.head
-	c.head.next.prev = node
-	c.head.next = node
-}
-
-// Get 从缓存中获取值
-func (c *LRUCache) Get(key string) (*CachedRenderResult, bool) {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
-	node, ok := c.cache[key]
-	if !ok {
-		return nil, false
-	}
-
-	// 将访问的节点移到头部
-	c.mutex.RUnlock()
-	c.mutex.Lock()
-	c.removeNode(node)
-	c.addToHead(node)
-	c.mutex.Unlock()
-	c.mutex.RLock()
-
-	return node.value, true
-}
-
-// Put 将值存入缓存
-func (c *LRUCache) Put(key string, value *CachedRenderResult) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	// 如果键已存在，更新值并移到头部
-	if node, ok := c.cache[key]; ok {
-		node.value = value
-		c.removeNode(node)
-		c.addToHead(node)
-		return
-	}
-
-	// 如果缓存已满，移除尾部节点
-	if len(c.cache) >= c.capacity {
-		// 移除尾部节点
-		removed := c.tail.prev
-		c.removeNode(removed)
-		delete(c.cache, removed.key)
-	}
-
-	// 添加新节点
-	newNode := &LRUCacheNode{
-		key:   key,
-		value: value,
-	}
-	c.addToHead(newNode)
-	c.cache[key] = newNode
-}
-
-// Remove 从缓存中移除指定键
-func (c *LRUCache) Remove(key string) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if node, ok := c.cache[key]; ok {
-		c.removeNode(node)
-		delete(c.cache, key)
-	}
-}
-
-// ClearExpired 清理过期缓存
-func (c *LRUCache) ClearExpired(ttl time.Duration) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	now := time.Now()
-	current := c.head.next
-
-	for current != c.tail {
-		next := current.next
-		if now.Sub(current.value.CreatedAt) > ttl {
-			// 移除过期节点
-			c.removeNode(current)
-			delete(c.cache, current.key)
-		}
-		current = next
-	}
-}
-
 // NewEngine 创建新的渲染预热引擎
 func NewEngine(siteName string, config PrerenderConfig, redisClient *redis.Client) (*Engine, error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -502,7 +400,6 @@ func NewEngine(siteName string, config PrerenderConfig, redisClient *redis.Clien
 		cancel:                cancel,
 		queueLengthHistory:    make([]int, 0, 10), // 保存最近10次的队列长度
 		activeTasks:           0,
-		renderCache:           NewLRUCache(1000), // 渲染缓存初始化，容量1000
 		defaultCrawlerHeaders: defaultCrawlerHeaders,
 		redisClient:           redisClient,
 	}
@@ -652,29 +549,8 @@ func (e *Engine) Start() error {
 		e.startDynamicScaling()
 	}
 
-	// 启动缓存清理（如果启用缓存）
-	if e.config.CacheTTL > 0 {
-		e.startCacheCleanup()
-	}
-
 	e.isRunning = true
 	return nil
-}
-
-// startCacheCleanup 启动缓存清理
-func (e *Engine) startCacheCleanup() {
-	// 每5分钟清理一次过期缓存
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		for {
-			select {
-			case <-ticker.C:
-				e.clearExpiredCache()
-			case <-e.ctx.Done():
-				return
-			}
-		}
-	}()
 }
 
 // Stop 停止渲染预热引擎
@@ -785,17 +661,6 @@ func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) 
 		}, nil
 	}
 
-	// 尝试从缓存获取
-	if e.config.CacheTTL > 0 {
-		cachedResult, exists := e.getFromCache(url)
-		if exists {
-			return &RenderResultWithCache{
-				Result:   cachedResult,
-				HitCache: true,
-			}, nil
-		}
-	}
-
 	// 创建渲染任务
 	task := &RenderTask{
 		ID:      uuid.New().String(),
@@ -810,10 +675,7 @@ func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) 
 		// 等待结果
 		select {
 		case result := <-task.Result:
-			// 将结果存入缓存
-			if e.config.CacheTTL > 0 && result.Success {
-				e.addToCache(url, result)
-			}
+			// 不再将结果存入缓存，直接返回
 			return &RenderResultWithCache{
 				Result:   result,
 				HitCache: false,
@@ -842,68 +704,19 @@ func (e *Engine) Render(ctx context.Context, url string, options RenderOptions) 
 	}
 }
 
-// calculateContentHash 计算内容哈希
-func (e *Engine) calculateContentHash(content string) string {
-	// 使用简单的哈希算法，实际生产环境可以使用更安全的算法如SHA-256
-	// 这里为了演示，使用简单的字符串哈希
-	hash := 0
-	for _, c := range content {
-		hash = 31*hash + int(c)
-	}
-	return fmt.Sprintf("%d", hash)
-}
-
-// getFromCache 从缓存获取渲染结果
-func (e *Engine) getFromCache(url string) (*RenderResult, bool) {
-	cachedResult, exists := e.renderCache.Get(url)
-	if !exists {
-		return nil, false
-	}
-
-	// 检查缓存是否过期
-	if time.Since(cachedResult.CreatedAt) > time.Duration(e.config.CacheTTL)*time.Second {
-		// 缓存已过期，移除它
-		e.renderCache.Remove(url)
-		return nil, false
-	}
-
-	return cachedResult.Result, true
-}
-
-// addToCache 将渲染结果存入缓存
-func (e *Engine) addToCache(url string, result *RenderResult) {
-	// 计算内容哈希
-	contentHash := e.calculateContentHash(result.HTML)
-
-	// 创建缓存结果
-	cachedResult := &CachedRenderResult{
-		Result:      result,
-		URL:         url,
-		CreatedAt:   time.Now(),
-		ContentHash: contentHash,
-	}
-
-	e.renderCache.Put(url, cachedResult)
-}
-
-// clearExpiredCache 清理过期缓存
-func (e *Engine) clearExpiredCache() {
-	e.renderCache.ClearExpired(time.Duration(e.config.CacheTTL) * time.Second)
-}
-
 // TriggerPreheat 触发缓存预热
-func (e *Engine) TriggerPreheat() error {
+func (e *Engine) TriggerPreheat() (string, error) {
 	if e.preheatManager == nil {
-		return nil
+		return "", nil
 	}
 	// 默认使用localhost:8081，兼容旧版API
 	return e.preheatManager.TriggerPreheatWithURL("http://localhost:8081", "localhost:8081")
 }
 
 // TriggerPreheatWithURL 触发缓存预热，支持自定义baseURL和Domain
-func (e *Engine) TriggerPreheatWithURL(baseURL, domain string) error {
+func (e *Engine) TriggerPreheatWithURL(baseURL, domain string) (string, error) {
 	if e.preheatManager == nil {
-		return nil
+		return "", nil
 	}
 	return e.preheatManager.TriggerPreheatWithURL(baseURL, domain)
 }
@@ -916,6 +729,16 @@ func (e *Engine) GetPreheatStatus() map[string]interface{} {
 		}
 	}
 	return e.preheatManager.GetStatus()
+}
+
+// GetConfig 获取引擎配置
+func (e *Engine) GetConfig() PrerenderConfig {
+	return e.config
+}
+
+// GetPreheatManager 获取预热管理器
+func (e *Engine) GetPreheatManager() *PreheatManager {
+	return e.preheatManager
 }
 
 // GetCrawlerHeaders 获取完整的爬虫协议头列表（包括默认和自定义的）

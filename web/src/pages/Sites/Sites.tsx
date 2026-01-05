@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Table, Button, Modal, Form, Input, Switch, Select, Row, Col, Statistic, Upload, Typography, Space, message } from 'antd'
+import { Card, Table, Button, Modal, Form, Input, Switch, Select, Row, Col, Statistic, Upload, Typography, Space, message, Divider } from 'antd'
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, UploadOutlined, 
   UnorderedListOutlined, CloudUploadOutlined, FolderOpenOutlined, 
@@ -35,6 +35,11 @@ const Sites: React.FC = () => {
   const [prerenderConfigModalVisible, setPrerenderConfigModalVisible] = useState(false)
   const [editingPrerenderSite, setEditingPrerenderSite] = useState<any>(null)
   const [prerenderConfigForm] = Form.useForm()
+  
+  // 推送配置模态框状态
+  const [pushConfigModalVisible, setPushConfigModalVisible] = useState(false)
+  const [editingPushSite, setEditingPushSite] = useState<any>(null)
+  const [pushConfigForm] = Form.useForm()
 
 
   // 表格列配置
@@ -72,7 +77,7 @@ const Sites: React.FC = () => {
       dataIndex: 'port',
       key: 'port',
       width: 80,
-      align: 'center',
+      align: 'center' as const,
       onCell: () => ({
         style: {
           whiteSpace: 'nowrap',
@@ -103,7 +108,7 @@ const Sites: React.FC = () => {
       dataIndex: 'prerenderEnabled',
       key: 'prerenderEnabled',
       width: 120,
-      align: 'center',
+      align: 'center' as const,
       render: (enabled: boolean, record: any) => (
         record.mode === 'static' ? (
           <Switch checked={enabled} onChange={(checked) => handleSwitchChange(record, 'prerender', checked)} />
@@ -120,7 +125,7 @@ const Sites: React.FC = () => {
       dataIndex: 'firewallEnabled',
       key: 'firewallEnabled',
       width: 120,
-      align: 'center',
+      align: 'center' as const,
       render: (enabled: boolean, record: any) => (
         <Switch checked={enabled} onChange={(checked) => handleSwitchChange(record, 'firewall', checked)} />
       ),
@@ -134,7 +139,7 @@ const Sites: React.FC = () => {
       title: '操作',
       key: 'action',
       width: 400,
-      fixed: 'right',
+      fixed: 'right' as const,
       render: (_: any, record: any) => (
         <div style={{ display: 'flex', flexWrap: 'nowrap' }}>
           <Button
@@ -169,7 +174,15 @@ const Sites: React.FC = () => {
                 onClick={() => handlePrerenderConfig(record)}
                 style={{ marginRight: 8, whiteSpace: 'nowrap' }}
               >
-                渲染预热配置
+                渲染预热
+              </Button>
+              <Button
+                type="link"
+                icon={<CloudUploadOutlined />}
+                onClick={() => handlePushConfig(record)}
+                style={{ marginRight: 8, whiteSpace: 'nowrap' }}
+              >
+                推送配置
               </Button>
             </>
           )}
@@ -237,6 +250,16 @@ const Sites: React.FC = () => {
               schedule: site.prerender?.Preheat?.Schedule || '0 0 * * *',
               concurrency: site.prerender?.Preheat?.Concurrency || 5,
               defaultPriority: site.prerender?.Preheat?.DefaultPriority || 0
+            },
+            push: {
+              enabled: site.prerender?.Push?.Enabled || false,
+              baiduAPI: site.prerender?.Push?.BaiduAPI || 'http://data.zz.baidu.com/urls',
+              baiduToken: site.prerender?.Push?.BaiduToken || '',
+              bingAPI: site.prerender?.Push?.BingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
+              bingToken: site.prerender?.Push?.BingToken || '',
+              dailyLimit: site.prerender?.Push?.DailyLimit || 1000,
+              pushDomain: site.prerender?.Push?.PushDomain || '',
+              schedule: site.prerender?.Push?.Schedule || '0 1 * * *'
             }
           }
         }));
@@ -710,9 +733,40 @@ const Sites: React.FC = () => {
         schedule: '0 0 * * *',
         concurrency: 5,
         defaultPriority: 0
+      },
+      push: site.prerender.push || {
+        enabled: false,
+        baiduAPI: 'http://data.zz.baidu.com/urls',
+        baiduToken: '',
+        bingAPI: 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
+        bingToken: '',
+        dailyLimit: 1000,
+        pushDomain: '',
+        schedule: '0 1 * * *'
       }
     })
     setPrerenderConfigModalVisible(true)
+  }
+  
+  // 处理推送配置
+  const handlePushConfig = (site: any) => {
+    // 打开推送配置模态框
+    setEditingPushSite(site)
+    // 设置表单初始值
+    pushConfigForm.setFieldsValue({
+      ...site.prerender.push || {
+        enabled: false,
+        baiduAPI: 'http://data.zz.baidu.com/urls',
+        baiduToken: '',
+        baiduDailyLimit: site.prerender.push?.dailyLimit || 1000,
+        bingAPI: 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
+        bingToken: '',
+        bingDailyLimit: site.prerender.push?.dailyLimit || 1000,
+        pushDomain: '',
+        schedule: '0 1 * * *'
+      }
+    })
+    setPushConfigModalVisible(true)
   }
 
   // 处理表单提交
@@ -846,7 +900,7 @@ const Sites: React.FC = () => {
   // 处理预渲染配置表单提交
   const handlePrerenderConfigSubmit = async () => {
     try {
-      const values = await prerenderConfigForm.validateFields()
+      const values = await prerenderConfigForm.validateFields();
       
       // 转换表单数据格式，确保与后端API期望的结构匹配
       const siteData = {
@@ -910,12 +964,23 @@ const Sites: React.FC = () => {
             Schedule: values.preheat?.schedule || '0 0 * * *',
             Concurrency: values.preheat?.concurrency || 5,
             DefaultPriority: values.preheat?.defaultPriority || 0
+          },
+          Push: {
+            Enabled: editingPrerenderSite.prerender.push?.enabled || false,
+            BaiduAPI: editingPrerenderSite.prerender.push?.baiduAPI || 'http://data.zz.baidu.com/urls',
+            BaiduToken: editingPrerenderSite.prerender.push?.baiduToken || '',
+            BaiduDailyLimit: editingPrerenderSite.prerender.push?.baiduDailyLimit || editingPrerenderSite.prerender.push?.dailyLimit || 1000,
+            BingAPI: editingPrerenderSite.prerender.push?.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
+            BingToken: editingPrerenderSite.prerender.push?.bingToken || '',
+            BingDailyLimit: editingPrerenderSite.prerender.push?.bingDailyLimit || editingPrerenderSite.prerender.push?.dailyLimit || 1000,
+            PushDomain: editingPrerenderSite.prerender.push?.pushDomain || '',
+            Schedule: editingPrerenderSite.prerender.push?.schedule || '0 1 * * *'
+          },
+          Routing: {
+            Rules: editingPrerenderSite.routing?.rules || []
           }
-        },
-        Routing: {
-          Rules: editingPrerenderSite.routing?.rules || []
         }
-      }
+      };
       
       // 显示加载状态
       Modal.confirm({
@@ -929,17 +994,17 @@ const Sites: React.FC = () => {
       });
       
       // 更新站点配置
-      const res = await sitesApi.updateSite(editingPrerenderSite.id, siteData)
+      const res = await sitesApi.updateSite(editingPrerenderSite.id, siteData);
       
       // 关闭加载状态
       Modal.destroyAll();
       
       if (res.code === 200) {
-        messageApi.success('更新渲染预热配置成功')
-        setPrerenderConfigModalVisible(false)
-        fetchSites() // 刷新站点列表
+        messageApi.success('更新渲染预热配置成功');
+        setPrerenderConfigModalVisible(false);
+        fetchSites(); // 刷新站点列表
       } else {
-        messageApi.error(res.message || '更新渲染预热配置失败')
+        messageApi.error(res.message || '更新渲染预热配置失败');
       }
     } catch (error: any) {
       // 关闭加载状态
@@ -952,7 +1017,131 @@ const Sites: React.FC = () => {
         // 处理网络错误或其他错误
         messageApi.error('表单提交失败：' + (error.message || '未知错误'));
       }
-      console.error('Prerender config submission error:', error)
+      console.error('Prerender config submission error:', error);
+    }
+  }
+  
+  // 处理推送配置表单提交
+  const handlePushConfigSubmit = async () => {
+    try {
+      const values = await pushConfigForm.validateFields();
+      
+      // 转换表单数据格式，确保与后端API期望的结构匹配
+      const siteData = {
+        Name: editingPushSite.name,
+        Domain: editingPushSite.domain,
+        Domains: editingPushSite.domains || [editingPushSite.domain],
+        Port: editingPushSite.port || 80,
+        Mode: editingPushSite.mode || 'proxy',
+        // 保留原有的其他配置
+        Proxy: {
+          Enabled: editingPushSite.proxy?.enabled || false,
+          TargetURL: editingPushSite.proxy?.targetURL || "",
+          Type: "direct"
+        },
+        Redirect: {
+          Enabled: editingPushSite.redirect?.enabled || false,
+          Code: editingPushSite.redirect?.code || 302,
+          URL: editingPushSite.redirect?.url || ""
+        },
+        Firewall: {
+          Enabled: editingPushSite.firewall?.enabled || false,
+          RulesPath: editingPushSite.firewall?.rulesPath || '/etc/prerender-shield/rules',
+          ActionConfig: {
+            DefaultAction: editingPushSite.firewall?.action?.defaultAction || 'block',
+            BlockMessage: editingPushSite.firewall?.action?.blockMessage || 'Request blocked by firewall'
+          },
+          GeoIPConfig: {
+            Enabled: editingPushSite.firewall?.geoip?.enabled || false,
+            AllowList: editingPushSite.firewall?.geoip?.allowList || [],
+            BlockList: editingPushSite.firewall?.geoip?.blockList || []
+          },
+          RateLimitConfig: {
+            Enabled: editingPushSite.firewall?.rateLimit?.enabled || false,
+            Requests: editingPushSite.firewall?.rateLimit?.requests || 100,
+            Window: editingPushSite.firewall?.rateLimit?.window || 60,
+            BanTime: editingPushSite.firewall?.rateLimit?.banTime || 3600
+          }
+        },
+        // 网页防篡改配置
+        FileIntegrityConfig: {
+          Enabled: editingPushSite.fileIntegrity?.enabled || false,
+          CheckInterval: editingPushSite.fileIntegrity?.checkInterval || 300,
+          HashAlgorithm: editingPushSite.fileIntegrity?.hashAlgorithm || 'sha256'
+        },
+        Prerender: {
+          Enabled: editingPushSite.prerender.enabled || false,
+          PoolSize: editingPushSite.prerender.poolSize || 5,
+          MinPoolSize: editingPushSite.prerender.minPoolSize || 2,
+          MaxPoolSize: editingPushSite.prerender.maxPoolSize || 20,
+          Timeout: editingPushSite.prerender.timeout || 30,
+          CacheTTL: editingPushSite.prerender.cacheTTL || 3600,
+          IdleTimeout: editingPushSite.prerender.idleTimeout || 300,
+          DynamicScaling: editingPushSite.prerender.dynamicScaling || true,
+          ScalingFactor: editingPushSite.prerender.scalingFactor || 0.5,
+          ScalingInterval: editingPushSite.prerender.scalingInterval || 60,
+          UseDefaultHeaders: editingPushSite.prerender.useDefaultHeaders || false,
+          CrawlerHeaders: editingPushSite.prerender.crawlerHeaders || [],
+          Preheat: {
+            Enabled: editingPushSite.prerender.preheat?.enabled || false,
+            SitemapURL: editingPushSite.prerender.preheat?.sitemapURL || '',
+            Schedule: editingPushSite.prerender.preheat?.schedule || '0 0 * * *',
+            Concurrency: editingPushSite.prerender.preheat?.concurrency || 5,
+            DefaultPriority: editingPushSite.prerender.preheat?.defaultPriority || 0
+          },
+          Push: {
+            Enabled: values.enabled || false,
+            BaiduAPI: values.baiduAPI || 'http://data.zz.baidu.com/urls',
+            BaiduToken: values.baiduToken || '',
+            BaiduDailyLimit: values.baiduDailyLimit || 1000,
+            BingAPI: values.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
+            BingToken: values.bingToken || '',
+            BingDailyLimit: values.bingDailyLimit || 1000,
+            PushDomain: values.pushDomain || '',
+            Schedule: values.schedule || '0 1 * * *'
+          },
+          Routing: {
+            Rules: editingPushSite.routing?.rules || []
+          }
+        }
+      };
+      
+      // 显示加载状态
+      Modal.confirm({
+        title: '正在保存推送配置',
+        content: '请稍候...',
+        okButtonProps: { disabled: true },
+        cancelButtonProps: { disabled: true },
+        closable: false,
+        keyboard: false,
+        centered: true,
+      });
+      
+      // 更新站点配置
+      const res = await sitesApi.updateSite(editingPushSite.id, siteData);
+      
+      // 关闭加载状态
+      Modal.destroyAll();
+      
+      if (res.code === 200) {
+        messageApi.success('更新推送配置成功');
+        setPushConfigModalVisible(false);
+        fetchSites(); // 刷新站点列表
+      } else {
+        messageApi.error(res.message || '更新推送配置失败');
+      }
+    } catch (error: any) {
+      // 关闭加载状态
+      Modal.destroyAll();
+      
+      // 处理表单验证错误
+      if (error.errorFields) {
+        messageApi.error('表单验证失败，请检查输入');
+      } else {
+        // 处理网络错误或其他错误
+        messageApi.error('表单提交失败：' + (error.message || '未知错误'));
+      }
+      console.error('Push config submission error:', error);
     }
   }
 
@@ -1789,7 +1978,7 @@ const Sites: React.FC = () => {
                   <Form.Item
                     name="crawlerHeaders"
                     label="自定义爬虫协议头"
-                    description="每行一个，支持多个"
+                    extra="每行一个，支持多个"
                   >
                     <Input.TextArea rows={4} placeholder="请输入自定义爬虫协议头，每行一个" />
                   </Form.Item>
@@ -1854,6 +2043,109 @@ const Sites: React.FC = () => {
               );
             }}
           </Form.Item>
+        </Form>
+      </Modal>
+      
+      {/* 推送配置弹窗 */}
+      <Modal
+        title="推送配置"
+        open={pushConfigModalVisible}
+        onOk={handlePushConfigSubmit}
+        onCancel={() => setPushConfigModalVisible(false)}
+        width={800}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form
+          form={pushConfigForm}
+          layout="vertical"
+        >
+          {/* 推送配置 */}
+          <Card title="推送配置" size="small" style={{ marginBottom: 16 }}>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item
+                  name="enabled"
+                  label="启用搜索引擎推送"
+                  valuePropName="checked"
+                >
+                  <Switch />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  name="pushDomain"
+                  label="推送域名"
+                >
+                  <Input placeholder="请输入用于推送的域名" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  name="schedule"
+                  label="推送调度规则"
+                >
+                  <Input placeholder="Cron表达式，如：0 1 * * *" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Divider orientation="left">百度推送配置</Divider>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="baiduAPI"
+                  label="百度API地址"
+                >
+                  <Input placeholder="请输入百度推送API地址" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="baiduToken"
+                  label="百度推送Token"
+                >
+                  <Input placeholder="请输入百度推送Token" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="baiduDailyLimit"
+                  label="百度每日推送限制条数"
+                  rules={[{ required: true, message: '请输入百度每日推送限制条数' }]}
+                >
+                  <Input type="number" min={1} max={10000} placeholder="请输入百度每日推送限制条数" />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Divider orientation="left">必应推送配置</Divider>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="bingAPI"
+                  label="必应API地址"
+                >
+                  <Input placeholder="请输入必应推送API地址" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="bingToken"
+                  label="必应推送Token"
+                >
+                  <Input placeholder="请输入必应推送Token" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="bingDailyLimit"
+                  label="必应每日推送限制条数"
+                  rules={[{ required: true, message: '请输入必应每日推送限制条数' }]}
+                >
+                  <Input type="number" min={1} max={10000} placeholder="请输入必应每日推送限制条数" />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Card>
         </Form>
       </Modal>
 

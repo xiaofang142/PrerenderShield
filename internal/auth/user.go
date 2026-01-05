@@ -25,28 +25,25 @@ type User struct {
 
 // UserManager 用户管理器
 type UserManager struct {
-	users       map[string]*User
+	// 移除内存缓存，直接从Redis读取数据
 	redisClient *redis.Client
 }
 
 // NewUserManager 创建用户管理器
 func NewUserManager(_ string, redisClient *redis.Client) *UserManager {
-	manager := &UserManager{
-		users:       make(map[string]*User),
+	return &UserManager{
 		redisClient: redisClient,
 	}
-
-	// 加载用户数据
-	manager.loadUsers()
-
-	return manager
 }
 
 // CreateUser 创建用户
 func (m *UserManager) CreateUser(username, password string) (*User, error) {
 	// 检查是否已经有用户存在（只允许创建一个用户）
-	if len(m.users) > 0 {
-		return nil, errors.New("system already initialized, only one user is allowed")
+	if m.redisClient != nil {
+		userIDs, err := m.redisClient.GetAllUsers()
+		if err == nil && len(userIDs) > 0 {
+			return nil, errors.New("system already initialized, only one user is allowed")
+		}
 	}
 
 	// 生成用户ID
@@ -65,12 +62,11 @@ func (m *UserManager) CreateUser(username, password string) (*User, error) {
 		Password: string(hashedPassword),
 	}
 
-	// 保存用户到内存
-	m.users[userID] = user
-
-	// 保存用户到Redis和文件
-	if err := m.saveUsers(); err != nil {
-		return nil, err
+	// 直接保存用户到Redis
+	if m.redisClient != nil {
+		if err := m.redisClient.SaveUser(user.ID, user.Username, user.Password); err != nil {
+			return nil, err
+		}
 	}
 
 	return user, nil
@@ -78,12 +74,31 @@ func (m *UserManager) CreateUser(username, password string) (*User, error) {
 
 // GetUserByUsername 通过用户名获取用户
 func (m *UserManager) GetUserByUsername(username string) (*User, error) {
-	for _, user := range m.users {
-		if user.Username == username {
-			return user, nil
-		}
+	// 直接从Redis中获取用户数据
+	if m.redisClient == nil {
+		return nil, ErrUserNotFound
 	}
-	return nil, ErrUserNotFound
+
+	// 通过用户名获取用户ID
+	userID, err := m.redisClient.GetUserByUsername(username)
+	if err != nil || userID == "" {
+		return nil, ErrUserNotFound
+	}
+
+	// 通过用户ID获取用户数据
+	userData, err := m.redisClient.GetUser(userID)
+	if err != nil || len(userData) == 0 {
+		return nil, ErrUserNotFound
+	}
+
+	// 创建用户对象
+	user := &User{
+		ID:       userData["id"],
+		Username: userData["username"],
+		Password: userData["password"],
+	}
+
+	return user, nil
 }
 
 // AuthenticateUser 验证用户身份
@@ -105,46 +120,16 @@ func (m *UserManager) AuthenticateUser(username, password string) (*User, error)
 
 // IsFirstRun 检查是否是首次运行（没有用户）
 func (m *UserManager) IsFirstRun() bool {
-	// 重新加载用户数据，确保与Redis保持同步
-	m.loadUsers()
-	// 返回内存中用户数量是否为0
-	return len(m.users) == 0
-}
-
-// loadUsers 加载用户数据
-func (m *UserManager) loadUsers() {
-	// 初始化用户映射
-	m.users = make(map[string]*User)
-
-	// 从Redis加载用户数据
+	// 直接检查Redis中是否存在用户数据
 	if m.redisClient != nil {
+		// 获取所有用户ID
 		userIDs, err := m.redisClient.GetAllUsers()
 		if err == nil && len(userIDs) > 0 {
-			for _, userID := range userIDs {
-				userData, err := m.redisClient.GetUser(userID)
-				if err == nil && len(userData) > 0 {
-					user := &User{
-						ID:       userData["id"],
-						Username: userData["username"],
-						Password: userData["password"],
-					}
-					m.users[user.ID] = user
-				}
-			}
-		}
-	}
-}
-
-// saveUsers 保存用户数据，只保存到Redis
-func (m *UserManager) saveUsers() error {
-	// 保存到Redis（如果Redis客户端可用）
-	if m.redisClient != nil {
-		for _, user := range m.users {
-			if err := m.redisClient.SaveUser(user.ID, user.Username, user.Password); err != nil {
-				return err
-			}
+			// Redis中有用户数据，不是首次运行
+			return false
 		}
 	}
 
-	return nil
+	// Redis中没有用户数据，或者Redis不可用，返回首次运行
+	return true
 }

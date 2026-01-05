@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,9 +34,6 @@ type CrawlerLogManager struct {
 	redisClient *redis.Client
 	ctx         context.Context
 	logChan     chan CrawlerLog
-	// 内存存储，用于Redis连接失败时的fallback
-	inMemoryLogs   map[string][]CrawlerLog // key: site:date 或 all:date
-	redisAvailable bool                    // Redis是否可用
 }
 
 // NewCrawlerLogManager 创建爬虫日志管理器
@@ -53,7 +51,7 @@ func NewCrawlerLogManager(redisURL string) *CrawlerLogManager {
 		// 否则尝试解析URL
 		parsed, err := url.Parse(redisURL)
 		if err != nil {
-			log.Printf("解析Redis URL失败: %v，将使用内存存储", err)
+			log.Printf("解析Redis URL失败: %v", err)
 			opt = &redis.Options{
 				Addr: "localhost:6379",
 			}
@@ -82,19 +80,15 @@ func NewCrawlerLogManager(redisURL string) *CrawlerLogManager {
 
 	// 测试连接
 	ctx := context.Background()
-	redisAvailable := true
 	if err := client.Ping(ctx).Err(); err != nil {
-		log.Printf("连接Redis失败: %v，将使用内存存储", err)
-		redisAvailable = false
+		log.Printf("连接Redis失败: %v", err)
 	}
 
 	// 创建日志管理器
 	manager := &CrawlerLogManager{
-		redisClient:    client,
-		ctx:            ctx,
-		logChan:        make(chan CrawlerLog, 1000),   // 缓冲区大小
-		inMemoryLogs:   make(map[string][]CrawlerLog), // 初始化内存存储
-		redisAvailable: redisAvailable,                // 设置Redis可用标志
+		redisClient: client,
+		ctx:         ctx,
+		logChan:     make(chan CrawlerLog, 1000), // 缓冲区大小
 	}
 
 	// 启动异步日志处理
@@ -141,62 +135,39 @@ func (clm *CrawlerLogManager) saveLog(crawlerLog CrawlerLog) {
 	siteKey := fmt.Sprintf("crawler_logs:%s:%s", crawlerLog.Site, dateStr)
 	totalKey := fmt.Sprintf("crawler_logs:all:%s", dateStr)
 
-	// 如果Redis可用，保存到Redis
-	if clm.redisAvailable {
-		// 序列化日志
-		logJSON, err := json.Marshal(crawlerLog)
-		if err != nil {
-			log.Printf("序列化日志失败: %v", err)
-			return
-		}
-
-		// 保存到Redis有序集合，使用时间戳作为分数，便于排序
-		if err := clm.redisClient.ZAdd(clm.ctx, siteKey, &redis.Z{
-			Score:  float64(crawlerLog.Time.UnixNano()),
-			Member: logJSON,
-		}).Err(); err != nil {
-			log.Printf("保存日志到Redis失败: %v", err)
-			// Redis保存失败，降级到内存存储
-			clm.saveToMemory(siteKey, crawlerLog)
-			clm.saveToMemory(totalKey, crawlerLog)
-			return
-		}
-
-		// 设置过期时间: 15天
-		expireTime := 15 * 24 * time.Hour
-		if err := clm.redisClient.Expire(clm.ctx, siteKey, expireTime).Err(); err != nil {
-			log.Printf("设置日志过期时间失败: %v", err)
-		}
-
-		// 同时添加到总日志集合，用于全局查询
-		if err := clm.redisClient.ZAdd(clm.ctx, totalKey, &redis.Z{
-			Score:  float64(crawlerLog.Time.UnixNano()),
-			Member: logJSON,
-		}).Err(); err != nil {
-			log.Printf("保存日志到总集合失败: %v", err)
-			// Redis保存失败，降级到内存存储
-			clm.saveToMemory(totalKey, crawlerLog)
-			return
-		}
-
-		if err := clm.redisClient.Expire(clm.ctx, totalKey, expireTime).Err(); err != nil {
-			log.Printf("设置总日志集合过期时间失败: %v", err)
-		}
-	} else {
-		// Redis不可用，保存到内存存储
-		clm.saveToMemory(siteKey, crawlerLog)
-		clm.saveToMemory(totalKey, crawlerLog)
+	// 序列化日志
+	logJSON, err := json.Marshal(crawlerLog)
+	if err != nil {
+		log.Printf("序列化日志失败: %v", err)
+		return
 	}
-}
 
-// saveToMemory 保存日志到内存存储
-func (clm *CrawlerLogManager) saveToMemory(key string, crawlerLog CrawlerLog) {
-	// 添加到内存存储
-	clm.inMemoryLogs[key] = append(clm.inMemoryLogs[key], crawlerLog)
-	// 限制内存存储的日志数量，防止内存溢出
-	if len(clm.inMemoryLogs[key]) > 10000 {
-		// 只保留最新的10000条日志
-		clm.inMemoryLogs[key] = clm.inMemoryLogs[key][len(clm.inMemoryLogs[key])-10000:]
+	// 保存到Redis有序集合，使用时间戳作为分数，便于排序
+	if err := clm.redisClient.ZAdd(clm.ctx, siteKey, &redis.Z{
+		Score:  float64(crawlerLog.Time.UnixNano()),
+		Member: logJSON,
+	}).Err(); err != nil {
+		log.Printf("保存日志到Redis失败: %v", err)
+		return
+	}
+
+	// 设置过期时间: 15天
+	expireTime := 15 * 24 * time.Hour
+	if err := clm.redisClient.Expire(clm.ctx, siteKey, expireTime).Err(); err != nil {
+		log.Printf("设置日志过期时间失败: %v", err)
+	}
+
+	// 同时添加到总日志集合，用于全局查询
+	if err := clm.redisClient.ZAdd(clm.ctx, totalKey, &redis.Z{
+		Score:  float64(crawlerLog.Time.UnixNano()),
+		Member: logJSON,
+	}).Err(); err != nil {
+		log.Printf("保存日志到总集合失败: %v", err)
+		return
+	}
+
+	if err := clm.redisClient.Expire(clm.ctx, totalKey, expireTime).Err(); err != nil {
+		log.Printf("设置总日志集合过期时间失败: %v", err)
 	}
 }
 
@@ -236,101 +207,75 @@ func (clm *CrawlerLogManager) cleanupOldLogs() {
 
 // GetCrawlerLogs 获取爬虫访问日志
 func (clm *CrawlerLogManager) GetCrawlerLogs(site string, startTime, endTime time.Time, page, pageSize int) ([]CrawlerLog, int64, error) {
-	// 确定键
-	key := fmt.Sprintf("crawler_logs:%s:%s", site, time.Now().Format("2006-01-02"))
-	if site == "" {
-		key = fmt.Sprintf("crawler_logs:all:%s", time.Now().Format("2006-01-02"))
+	// 获取时间范围内的所有日期
+	days := int(endTime.Sub(startTime).Hours()/24) + 1
+
+	// 初始化总日志列表和总数
+	var allLogJSONs []string
+	total := int64(0)
+
+	// 确定键前缀
+	keyPrefix := "crawler_logs:all:"
+	if site != "" {
+		keyPrefix = fmt.Sprintf("crawler_logs:%s:", site)
 	}
 
-	// 如果Redis可用，从Redis获取日志
-	if clm.redisAvailable {
-		// 计算起始和结束时间戳
-		startScore := float64(startTime.UnixNano())
-		endScore := float64(endTime.UnixNano())
+	// 计算起始和结束时间戳
+	startScore := float64(startTime.UnixNano())
+	endScore := float64(endTime.UnixNano())
 
-		// 计算分页参数
-		offset := (page - 1) * pageSize
-		count := int64(pageSize)
+	// 遍历所有日期，获取日志
+	for i := 0; i < days; i++ {
+		date := startTime.AddDate(0, 0, i)
+		dateStr := date.Format("2006-01-02")
+		key := keyPrefix + dateStr
 
-		// 获取日志总数
-		total, err := clm.redisClient.ZCount(clm.ctx, key, fmt.Sprintf("%f", startScore), fmt.Sprintf("%f", endScore)).Result()
+		// 获取当日日志总数
+		dailyTotal, err := clm.redisClient.ZCount(clm.ctx, key, fmt.Sprintf("%f", startScore), fmt.Sprintf("%f", endScore)).Result()
 		if err != nil {
-			// Redis获取失败，从内存存储获取
-			return clm.getLogsFromMemory(site, startTime, endTime, page, pageSize)
+			continue
 		}
+		total += dailyTotal
 
-		// 获取日志列表（按时间倒序）
-		logJSONs, err := clm.redisClient.ZRevRangeByScore(clm.ctx, key, &redis.ZRangeBy{
-			Min:    fmt.Sprintf("%f", startScore),
-			Max:    fmt.Sprintf("%f", endScore),
-			Offset: int64(offset),
-			Count:  count,
+		// 获取当日所有日志
+		dailyLogs, err := clm.redisClient.ZRangeByScore(clm.ctx, key, &redis.ZRangeBy{
+			Min: fmt.Sprintf("%f", startScore),
+			Max: fmt.Sprintf("%f", endScore),
 		}).Result()
 		if err != nil {
-			// Redis获取失败，从内存存储获取
-			return clm.getLogsFromMemory(site, startTime, endTime, page, pageSize)
+			continue
 		}
 
-		// 反序列化日志
-		logs := make([]CrawlerLog, 0, len(logJSONs))
-		for _, logJSON := range logJSONs {
-			var log CrawlerLog
-			if err := json.Unmarshal([]byte(logJSON), &log); err != nil {
-				continue
-			}
-			logs = append(logs, log)
+		allLogJSONs = append(allLogJSONs, dailyLogs...)
+	}
+
+	// 计算分页参数
+	offset := (page - 1) * pageSize
+
+	// 反序列化日志
+	var allLogs []CrawlerLog
+	for _, logJSON := range allLogJSONs {
+		var log CrawlerLog
+		if err := json.Unmarshal([]byte(logJSON), &log); err != nil {
+			continue
 		}
-
-		return logs, total, nil
-	} else {
-		// Redis不可用，从内存存储获取日志
-		return clm.getLogsFromMemory(site, startTime, endTime, page, pageSize)
-	}
-}
-
-// getLogsFromMemory 从内存存储中获取日志
-func (clm *CrawlerLogManager) getLogsFromMemory(site string, startTime, endTime time.Time, page, pageSize int) ([]CrawlerLog, int64, error) {
-	// 确定键
-	key := fmt.Sprintf("crawler_logs:%s:%s", site, time.Now().Format("2006-01-02"))
-	if site == "" {
-		key = fmt.Sprintf("crawler_logs:all:%s", time.Now().Format("2006-01-02"))
-	}
-
-	// 从内存存储获取日志
-	allLogs := clm.inMemoryLogs[key]
-	if allLogs == nil {
-		return []CrawlerLog{}, 0, nil
-	}
-
-	// 过滤时间范围内的日志
-	var filteredLogs []CrawlerLog
-	for _, log := range allLogs {
-		if log.Time.After(startTime) && log.Time.Before(endTime) || log.Time.Equal(startTime) || log.Time.Equal(endTime) {
-			filteredLogs = append(filteredLogs, log)
-		}
+		allLogs = append(allLogs, log)
 	}
 
 	// 按时间倒序排序
-	for i := 0; i < len(filteredLogs); i++ {
-		for j := i + 1; j < len(filteredLogs); j++ {
-			if filteredLogs[i].Time.Before(filteredLogs[j].Time) {
-				filteredLogs[i], filteredLogs[j] = filteredLogs[j], filteredLogs[i]
-			}
-		}
-	}
-
-	// 计算总数
-	total := int64(len(filteredLogs))
+	sort.Slice(allLogs, func(i, j int) bool {
+		return allLogs[i].Time.After(allLogs[j].Time)
+	})
 
 	// 分页处理
-	offset := (page - 1) * pageSize
 	var pagedLogs []CrawlerLog
-	if offset < len(filteredLogs) {
-		end := offset + pageSize
-		if end > len(filteredLogs) {
-			end = len(filteredLogs)
+	start := offset
+	end := offset + pageSize
+	if start < len(allLogs) {
+		if end > len(allLogs) {
+			end = len(allLogs)
 		}
-		pagedLogs = filteredLogs[offset:end]
+		pagedLogs = allLogs[start:end]
 	}
 
 	return pagedLogs, total, nil
@@ -359,36 +304,26 @@ func (clm *CrawlerLogManager) GetCrawlerStats(site string, startTime, endTime ti
 		dateStr := date.Format("2006-01-02")
 		key := keyPrefix + dateStr
 
-		// 如果Redis可用，从Redis获取日志
-		if clm.redisAvailable {
-			// 计算起始和结束时间戳
-			startScore := float64(startTime.UnixNano())
-			endScore := float64(endTime.UnixNano())
+		// 计算起始和结束时间戳
+		startScore := float64(startTime.UnixNano())
+		endScore := float64(endTime.UnixNano())
 
-			// 获取当日所有日志
-			logJSONs, err := clm.redisClient.ZRangeByScore(clm.ctx, key, &redis.ZRangeBy{
-				Min: fmt.Sprintf("%f", startScore),
-				Max: fmt.Sprintf("%f", endScore),
-			}).Result()
-			if err != nil {
-				// Redis获取失败，从内存存储获取
-				logs, _, _ := clm.getLogsFromMemory(site, startTime, endTime, 1, 10000)
-				allLogs = append(allLogs, logs...)
+		// 获取当日所有日志
+		logJSONs, err := clm.redisClient.ZRangeByScore(clm.ctx, key, &redis.ZRangeBy{
+			Min: fmt.Sprintf("%f", startScore),
+			Max: fmt.Sprintf("%f", endScore),
+		}).Result()
+		if err != nil {
+			continue
+		}
+
+		// 处理每条日志
+		for _, logJSON := range logJSONs {
+			var log CrawlerLog
+			if err := json.Unmarshal([]byte(logJSON), &log); err != nil {
 				continue
 			}
-
-			// 处理每条日志
-			for _, logJSON := range logJSONs {
-				var log CrawlerLog
-				if err := json.Unmarshal([]byte(logJSON), &log); err != nil {
-					continue
-				}
-				allLogs = append(allLogs, log)
-			}
-		} else {
-			// Redis不可用，从内存存储获取日志
-			logs, _, _ := clm.getLogsFromMemory(site, startTime, endTime, 1, 10000)
-			allLogs = append(allLogs, logs...)
+			allLogs = append(allLogs, log)
 		}
 	}
 

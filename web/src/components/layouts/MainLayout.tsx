@@ -1,6 +1,6 @@
 import React from 'react'
 import { Layout, Menu, ConfigProvider, Button, message } from 'antd'
-import { MenuUnfoldOutlined, MenuFoldOutlined, DashboardOutlined, SecurityScanOutlined, CodeOutlined, BarChartOutlined, FileTextOutlined, BugOutlined, LogoutOutlined } from '@ant-design/icons'
+import { MenuUnfoldOutlined, MenuFoldOutlined, DashboardOutlined, SecurityScanOutlined, CodeOutlined, BarChartOutlined, FileTextOutlined, BugOutlined, LogoutOutlined, CloudUploadOutlined } from '@ant-design/icons'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 
@@ -80,6 +80,11 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               key: '/prerender/preheat',
               icon: <CodeOutlined style={{ color: '#2f855a' }} />,
               label: <Link to="/prerender/preheat" style={{ color: '#333333' }}>渲染预热</Link>
+            },
+            {
+              key: '/prerender/push',
+              icon: <CloudUploadOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/prerender/push" style={{ color: '#333333' }}>推送管理</Link>
             },
 
             {

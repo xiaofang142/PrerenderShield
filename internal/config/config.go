@@ -213,6 +213,7 @@ type PrerenderConfig struct {
 	ScalingFactor     float64       `yaml:"scaling_factor" json:"ScalingFactor"`
 	ScalingInterval   int           `yaml:"scaling_interval" json:"ScalingInterval"`
 	Preheat           PreheatConfig `yaml:"preheat" json:"Preheat"`
+	Push              PushConfig    `yaml:"push" json:"Push"`
 	CrawlerHeaders    []string      `yaml:"crawler_headers" json:"CrawlerHeaders"`        // 爬虫协议头列表
 	UseDefaultHeaders bool          `yaml:"use_default_headers" json:"UseDefaultHeaders"` // 是否使用默认爬虫协议头
 }
@@ -225,6 +226,19 @@ type PreheatConfig struct {
 	Concurrency     int    `yaml:"concurrency" json:"Concurrency"`
 	DefaultPriority int    `yaml:"default_priority" json:"DefaultPriority"`
 	MaxDepth        int    `yaml:"max_depth" json:"MaxDepth"` // 爬取深度
+}
+
+// PushConfig 搜索引擎推送配置
+type PushConfig struct {
+	Enabled         bool   `yaml:"enabled" json:"Enabled"`
+	BaiduAPI        string `yaml:"baidu_api" json:"BaiduAPI"`
+	BaiduToken      string `yaml:"baidu_token" json:"BaiduToken"`
+	BingAPI         string `yaml:"bing_api" json:"BingAPI"`
+	BingToken       string `yaml:"bing_token" json:"BingToken"`
+	BaiduDailyLimit int    `yaml:"baidu_daily_limit" json:"BaiduDailyLimit"`
+	BingDailyLimit  int    `yaml:"bing_daily_limit" json:"BingDailyLimit"`
+	PushDomain      string `yaml:"push_domain" json:"PushDomain"`
+	Schedule        string `yaml:"schedule" json:"Schedule"`
 }
 
 // RoutingConfig 路由配置
@@ -602,6 +616,17 @@ func defaultConfig() *Config {
 				Concurrency:     5,
 				DefaultPriority: 0,
 				MaxDepth:        3, // 默认爬取深度为3
+			},
+			Push: PushConfig{
+				Enabled:         false,
+				BaiduAPI:        "http://data.zz.baidu.com/urls",
+				BaiduToken:      "",
+				BingAPI:         "https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl",
+				BingToken:       "",
+				BaiduDailyLimit: 1000,
+				BingDailyLimit:  1000,
+				PushDomain:      "",
+				Schedule:        "0 1 * * *", // 每天凌晨1点执行
 			},
 		},
 		Routing: RoutingConfig{

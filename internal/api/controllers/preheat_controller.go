@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -35,10 +36,31 @@ func NewPreheatController(
 
 // GetPreheatSites 获取静态网站列表
 func (c *PreheatController) GetPreheatSites(ctx *gin.Context) {
+	// 获取配置中的所有站点
+	var sites []gin.H
+	for _, site := range c.cfg.Sites {
+		// 为每个站点构建完整的域名
+		var domain string
+		if len(site.Domains) > 0 {
+			domain = site.Domains[0]
+		} else {
+			domain = "localhost"
+		}
+
+		// 构建站点信息
+		sites = append(sites, gin.H{
+			"id":      site.ID,
+			"name":    site.Name,
+			"domain":  domain,
+			"Domains": site.Domains,
+			"enabled": true,
+		})
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
-		"data":    []gin.H{},
+		"data":    sites,
 	})
 }
 
@@ -49,25 +71,104 @@ func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 
 	if siteId == "" {
 		// 获取所有站点的统计数据
+		var allStats []gin.H
+
+		for _, site := range c.cfg.Sites {
+			// 初始化统计数据
+			urlCount := int64(0)
+			cacheCount := int64(0)
+			totalCacheSize := int64(0)
+			browserPoolSize := int64(0)
+
+			// 从引擎获取浏览器池大小
+			engine, exists := c.prerenderManager.GetEngine(site.Name)
+			if exists {
+				browserPoolSize = int64(engine.GetConfig().PoolSize)
+			}
+
+			// 检查Redis客户端是否可用
+			if c.redisClient != nil {
+				// 从Redis获取URL总数，使用站点Name作为siteName
+				urlCount, _ = c.redisClient.GetURLCount(site.Name)
+
+				// 从Redis获取缓存数
+				cacheCount, _ = c.redisClient.GetCacheCount(site.Name)
+
+				// 直接计算总缓存大小
+				totalCacheSize = cacheCount * 1024 * 1024 // 假设平均每个缓存1MB
+			}
+
+			// 构建站点统计信息
+			allStats = append(allStats, gin.H{
+				"siteId":          site.ID,
+				"siteName":        site.Name,
+				"urlCount":        urlCount,
+				"cacheCount":      cacheCount,
+				"totalCacheSize":  totalCacheSize,
+				"browserPoolSize": browserPoolSize,
+			})
+		}
+
 		ctx.JSON(http.StatusOK, gin.H{
 			"code":    200,
 			"message": "success",
-			"data":    []gin.H{},
+			"data":    allStats,
 		})
 		return
 	}
 
 	// 获取指定站点的统计数据
-	// 简化实现，直接返回空统计数据
+	// 首先根据siteId查找对应的站点配置
+	var siteConfig *config.SiteConfig
+	for _, site := range c.cfg.Sites {
+		if site.ID == siteId {
+			siteConfig = &site
+			break
+		}
+	}
+
+	if siteConfig == nil {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"code":    http.StatusNotFound,
+			"message": fmt.Sprintf("Site with ID '%s' not found", siteId),
+		})
+		return
+	}
+
+	// 初始化统计数据
+	urlCount := int64(0)
+	cacheCount := int64(0)
+	totalCacheSize := int64(0)
+	browserPoolSize := int64(0)
+
+	// 从引擎获取浏览器池大小，使用站点Name作为siteName
+	engine, exists := c.prerenderManager.GetEngine(siteConfig.Name)
+	if exists {
+		browserPoolSize = int64(engine.GetConfig().PoolSize)
+	}
+
+	// 检查Redis客户端是否可用
+	if c.redisClient != nil {
+		// 从Redis获取URL总数，使用站点Name作为siteName
+		urlCount, _ = c.redisClient.GetURLCount(siteConfig.Name)
+
+		// 从Redis获取缓存数
+		cacheCount, _ = c.redisClient.GetCacheCount(siteConfig.Name)
+
+		// 直接计算总缓存大小
+		totalCacheSize = cacheCount * 1024 * 1024 // 假设平均每个缓存1MB
+	}
+
+	// 返回实际统计数据
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
 		"data": gin.H{
 			"siteId":          siteId,
-			"urlCount":        0,
-			"cacheCount":      0,
-			"totalCacheSize":  0,
-			"browserPoolSize": 0,
+			"urlCount":        urlCount,
+			"cacheCount":      cacheCount,
+			"totalCacheSize":  totalCacheSize,
+			"browserPoolSize": browserPoolSize,
 		},
 	})
 }
@@ -138,7 +239,8 @@ func (c *PreheatController) TriggerPreheat(ctx *gin.Context) {
 	}
 
 	// 调用引擎的触发预热方法，传递正确的baseURL和Domain
-	if err := engine.TriggerPreheatWithURL(baseURL, domain); err != nil {
+	_, err := engine.TriggerPreheatWithURL(baseURL, domain)
+	if err != nil {
 		// 检查错误类型，返回更友好的错误信息
 		if strings.Contains(err.Error(), "preheat is already running") {
 			ctx.JSON(http.StatusConflict, gin.H{
@@ -223,13 +325,32 @@ func (c *PreheatController) GetPreheatUrls(ctx *gin.Context) {
 		pageSize = 20
 	}
 
+	// 获取站点配置
+	var siteConfig *config.SiteConfig
+	var siteName string
+	for _, site := range c.cfg.Sites {
+		if site.ID == siteId {
+			siteConfig = &site
+			siteName = site.Name
+			break
+		}
+	}
+
+	if siteConfig == nil {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"code":    http.StatusNotFound,
+			"message": fmt.Sprintf("Site with ID '%s' not found", siteId),
+		})
+		return
+	}
+
 	var urls []string
 	var total int64
 
 	// 检查Redis客户端是否可用
 	if c.redisClient != nil {
-		// 从Redis获取URL列表
-		allUrls, err := c.redisClient.GetURLs(siteId)
+		// 从Redis获取URL列表，使用站点Name作为siteName
+		allUrls, err := c.redisClient.GetURLs(siteName)
 		if err == nil {
 			urls = allUrls
 			total = int64(len(allUrls))
@@ -248,10 +369,71 @@ func (c *PreheatController) GetPreheatUrls(ctx *gin.Context) {
 		pageUrls = urls[start:end]
 	}
 
+	// 构建完整的站点域名（使用站点配置的域名，不是推送配置的域名）
+	var siteDomain string
+	var baseURL string
+	if siteConfig != nil && len(siteConfig.Domains) > 0 {
+		// 使用站点配置的第一个域名
+		siteDomain = siteConfig.Domains[0]
+		// 构建基础URL，包含域名和端口
+		if siteConfig.Port != 80 {
+			baseURL = fmt.Sprintf("http://%s:%d", siteDomain, siteConfig.Port)
+		} else {
+			baseURL = fmt.Sprintf("http://%s", siteDomain)
+		}
+	} else {
+		// 默认使用站点Name作为域名
+		siteDomain = siteName
+		baseURL = fmt.Sprintf("http://%s", siteDomain)
+	}
+
 	// 转换为前端需要的格式
 	var list []gin.H
-	for _, url := range pageUrls {
-		list = append(list, gin.H{"url": url})
+	for _, route := range pageUrls {
+		// 检查路由是否已经是完整URL
+		var fullURL string
+		if strings.HasPrefix(route, "http://") || strings.HasPrefix(route, "https://") {
+			// 如果已经是完整URL，直接使用
+			fullURL = route
+		} else {
+			// 确保路由以/开头
+			normalizedRoute := route
+			if !strings.HasPrefix(normalizedRoute, "/") {
+				normalizedRoute = "/" + normalizedRoute
+			}
+
+			// 构建完整URL，确保包含完整的域名和路径
+			fullURL = baseURL + normalizedRoute
+		}
+
+		// 获取URL的预热状态
+		var updatedAt string
+		if c.redisClient != nil {
+			// 使用站点Name作为siteName，路由作为URL
+			urlStatus, err := c.redisClient.GetURLPreheatStatus(siteName, route)
+			if err == nil {
+				updatedAt = urlStatus["updated_at"]
+			}
+		}
+
+		// 转换更新时间为可读格式
+		if updatedAt != "" {
+			if ts, err := strconv.ParseInt(updatedAt, 10, 64); err == nil {
+				updatedAt = fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d",
+					time.Unix(ts, 0).Year(),
+					time.Unix(ts, 0).Month(),
+					time.Unix(ts, 0).Day(),
+					time.Unix(ts, 0).Hour(),
+					time.Unix(ts, 0).Minute(),
+					time.Unix(ts, 0).Second())
+			}
+		}
+
+		// 将完整URL添加到列表中，移除status和cacheSize字段
+		list = append(list, gin.H{
+			"url":       fullURL,
+			"updatedAt": updatedAt,
+		})
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{

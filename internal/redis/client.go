@@ -2,8 +2,10 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -193,6 +195,70 @@ func (c *Client) IsPreheatRunning(siteName string) (bool, error) {
 	return val == "true", nil
 }
 
+// CreatePreheatTask 创建预热任务并返回任务ID
+func (c *Client) CreatePreheatTask(siteName string) (string, error) {
+	taskID := fmt.Sprintf("%s:%d", siteName, time.Now().UnixNano())
+	key := fmt.Sprintf("prerender:%s:task:%s", siteName, taskID)
+	
+	// 初始化任务状态
+	err := c.client.HSet(c.ctx, key, map[string]interface{}{
+		"site_name":   siteName,
+		"task_id":     taskID,
+		"status":      "running",
+		"total_urls":  0,
+		"processed":   0,
+		"success":     0,
+		"failed":      0,
+		"created_at":  time.Now().Unix(),
+		"updated_at":  time.Now().Unix(),
+	}).Err()
+	
+	if err != nil {
+		return "", err
+	}
+	
+	// 设置任务超时时间（24小时）
+	c.client.Expire(c.ctx, key, 24*time.Hour)
+	
+	// 更新当前运行的任务ID
+	c.client.Set(c.ctx, fmt.Sprintf("prerender:%s:current_task", siteName), taskID, 0)
+	
+	return taskID, nil
+}
+
+// UpdatePreheatTaskProgress 更新预热任务进度
+func (c *Client) UpdatePreheatTaskProgress(siteName, taskID string, total, processed, success, failed int64) error {
+	key := fmt.Sprintf("prerender:%s:task:%s", siteName, taskID)
+	return c.client.HSet(c.ctx, key, map[string]interface{}{
+		"total_urls": total,
+		"processed":  processed,
+		"success":    success,
+		"failed":     failed,
+		"updated_at": time.Now().Unix(),
+	}).Err()
+}
+
+// SetPreheatTaskStatus 设置预热任务状态
+func (c *Client) SetPreheatTaskStatus(siteName, taskID, status string) error {
+	key := fmt.Sprintf("prerender:%s:task:%s", siteName, taskID)
+	return c.client.HSet(c.ctx, key, map[string]interface{}{
+		"status":     status,
+		"updated_at": time.Now().Unix(),
+	}).Err()
+}
+
+// GetPreheatTaskStatus 获取预热任务状态
+func (c *Client) GetPreheatTaskStatus(siteName, taskID string) (map[string]string, error) {
+	key := fmt.Sprintf("prerender:%s:task:%s", siteName, taskID)
+	return c.client.HGetAll(c.ctx, key).Result()
+}
+
+// GetCurrentPreheatTask 获取当前运行的预热任务ID
+func (c *Client) GetCurrentPreheatTask(siteName string) (string, error) {
+	key := fmt.Sprintf("prerender:%s:current_task", siteName)
+	return c.client.Get(c.ctx, key).Result()
+}
+
 // GetUser 获取用户信息
 func (c *Client) GetUser(userID string) (map[string]string, error) {
 	key := "user:" + userID
@@ -233,4 +299,251 @@ func (c *Client) SaveUser(userID, username, password string) error {
 
 	// 创建用户名到用户ID的映射
 	return c.client.Set(c.ctx, "username:"+username, userID, 0).Err()
+}
+
+// SetPushTask 保存推送任务
+func (c *Client) SetPushTask(siteName string, task interface{}) error {
+	key := fmt.Sprintf("prerender:%s:push:task", siteName)
+	data, err := json.Marshal(task)
+	if err != nil {
+		return err
+	}
+	return c.client.Set(c.ctx, key, data, 0).Err()
+}
+
+// GetPushTask 获取推送任务
+func (c *Client) GetPushTask(siteName string, taskID string) (map[string]string, error) {
+	key := fmt.Sprintf("prerender:%s:push:task:%s", siteName, taskID)
+	return c.client.HGetAll(c.ctx, key).Result()
+}
+
+// IncrPushStats 增加推送统计
+func (c *Client) IncrPushStats(siteName string, success, failed int) error {
+	key := fmt.Sprintf("prerender:%s:push:stats", siteName)
+	pipe := c.client.Pipeline()
+	pipe.HIncrBy(c.ctx, key, "total", int64(success+failed))
+	pipe.HIncrBy(c.ctx, key, "success", int64(success))
+	pipe.HIncrBy(c.ctx, key, "failed", int64(failed))
+	_, err := pipe.Exec(c.ctx)
+	return err
+}
+
+// SetURLPushStatus 设置URL的推送状态
+func (c *Client) SetURLPushStatus(siteName, url, status string) error {
+	key := fmt.Sprintf("prerender:%s:push:status", siteName)
+	return c.client.HSet(c.ctx, key, url, status).Err()
+}
+
+// GetURLPushStatus 获取URL的推送状态
+func (c *Client) GetURLPushStatus(siteName, url string) (string, error) {
+	key := fmt.Sprintf("prerender:%s:push:status", siteName)
+	return c.client.HGet(c.ctx, key, url).Result()
+}
+
+// GetAllURLPushStatuses 获取站点所有URL的推送状态
+func (c *Client) GetAllURLPushStatuses(siteName string) (map[string]string, error) {
+	key := fmt.Sprintf("prerender:%s:push:status", siteName)
+	return c.client.HGetAll(c.ctx, key).Result()
+}
+
+// GetURLPushStats 获取站点的URL推送统计
+func (c *Client) GetURLPushStats(siteName string) (map[string]int64, error) {
+	// 获取所有URL
+	allURLs, err := c.GetURLs(siteName)
+	if err != nil {
+		return nil, err
+	}
+	
+	// 获取所有已推送的URL状态
+	pushedURLs, err := c.GetAllURLPushStatuses(siteName)
+	if err != nil {
+		return nil, err
+	}
+	
+	// 计算统计数据
+	stats := map[string]int64{
+		"total_urls":    int64(len(allURLs)),
+		"pushed_urls":   int64(len(pushedURLs)),
+		"not_pushed_urls": int64(len(allURLs) - len(pushedURLs)),
+	}
+	
+	return stats, nil
+}
+
+// GetPushStats 获取推送统计
+func (c *Client) GetPushStats(siteName string) (map[string]interface{}, error) {
+	key := fmt.Sprintf("prerender:%s:push:stats", siteName)
+	stats, err := c.client.HGetAll(c.ctx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为数字类型
+	result := make(map[string]interface{})
+	for k, v := range stats {
+		val, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			result[k] = v
+		} else {
+			result[k] = val
+		}
+	}
+
+	// 添加默认值
+	if _, exists := result["total"]; !exists {
+		result["total"] = 0
+	}
+	if _, exists := result["success"]; !exists {
+		result["success"] = 0
+	}
+	if _, exists := result["failed"]; !exists {
+		result["failed"] = 0
+	}
+
+	// 获取URL推送统计
+	urlStats, err := c.GetURLPushStats(siteName)
+	if err == nil {
+		result["total_urls"] = urlStats["total_urls"]
+		result["pushed_urls"] = urlStats["pushed_urls"]
+		result["not_pushed_urls"] = urlStats["not_pushed_urls"]
+	}
+
+	return result, nil
+}
+
+// GetLastPushDate 获取最后推送日期
+// 从Redis中获取指定站点的最后推送日期
+//
+// 参数:
+//   siteName: 站点名称
+//
+// 返回值:
+//   string: 最后推送日期，格式为YYYY-MM-DD
+//   error: 错误信息
+func (c *Client) GetLastPushDate(siteName string) (string, error) {
+	// 构建Redis键
+	key := fmt.Sprintf("prerender:%s:push:meta", siteName)
+
+	// 获取最后推送日期
+	lastPushDate, err := c.client.HGet(c.ctx, key, "last_push_date").Result()
+	if err == redis.Nil {
+		return "", nil
+	} else if err != nil {
+		return "", fmt.Errorf("failed to get last push date: %v", err)
+	}
+
+	return lastPushDate, nil
+}
+
+// SetLastPushDate 设置最后推送日期
+// 将指定站点的最后推送日期保存到Redis
+//
+// 参数:
+//   siteName: 站点名称
+//   date: 最后推送日期，格式为YYYY-MM-DD
+//
+// 返回值:
+//   error: 错误信息
+func (c *Client) SetLastPushDate(siteName string, date string) error {
+	// 构建Redis键
+	key := fmt.Sprintf("prerender:%s:push:meta", siteName)
+
+	// 设置最后推送日期
+	_, err := c.client.HSet(c.ctx, key, "last_push_date", date).Result()
+	if err != nil {
+		return fmt.Errorf("failed to set last push date: %v", err)
+	}
+
+	return nil
+}
+
+// GetPushOffset 获取推送偏移量
+// 从Redis中获取指定站点的推送偏移量
+//
+// 参数:
+//   siteName: 站点名称
+//
+// 返回值:
+//   int: 推送偏移量
+//   error: 错误信息
+func (c *Client) GetPushOffset(siteName string) (int, error) {
+	// 构建Redis键
+	key := fmt.Sprintf("prerender:%s:push:meta", siteName)
+
+	// 获取推送偏移量
+	offsetStr, err := c.client.HGet(c.ctx, key, "push_offset").Result()
+	if err == redis.Nil {
+		return 0, nil
+	} else if err != nil {
+		return 0, fmt.Errorf("failed to get push offset: %v", err)
+	}
+
+	// 转换为整数
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse push offset: %v", err)
+	}
+
+	return offset, nil
+}
+
+// SetPushOffset 设置推送偏移量
+// 将指定站点的推送偏移量保存到Redis
+//
+// 参数:
+//   siteName: 站点名称
+//   offset: 推送偏移量
+//
+// 返回值:
+//   error: 错误信息
+func (c *Client) SetPushOffset(siteName string, offset int) error {
+	// 构建Redis键
+	key := fmt.Sprintf("prerender:%s:push:meta", siteName)
+
+	// 设置推送偏移量
+	_, err := c.client.HSet(c.ctx, key, "push_offset", strconv.Itoa(offset)).Result()
+	if err != nil {
+		return fmt.Errorf("failed to set push offset: %v", err)
+	}
+
+	return nil
+}
+
+// AddPushLog 添加推送日志
+func (c *Client) AddPushLog(siteName string, log interface{}) error {
+	// 使用List存储日志，最新的日志在前面
+	key := fmt.Sprintf("prerender:%s:push:logs", siteName)
+	data, err := json.Marshal(log)
+	if err != nil {
+		return err
+	}
+	// 添加到列表开头
+	if err := c.client.LPush(c.ctx, key, data).Err(); err != nil {
+		return err
+	}
+	// 只保留最近1000条日志
+	return c.client.LTrim(c.ctx, key, 0, 999).Err()
+}
+
+// GetPushLogs 获取推送日志
+func (c *Client) GetPushLogs(siteName string, limit, offset int) ([]interface{}, error) {
+	key := fmt.Sprintf("prerender:%s:push:logs", siteName)
+	// 获取指定范围的日志
+	logs, err := c.client.LRange(c.ctx, key, int64(offset), int64(offset+limit-1)).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	// 解析日志
+	result := make([]interface{}, len(logs))
+	for i, log := range logs {
+		var data interface{}
+		if err := json.Unmarshal([]byte(log), &data); err != nil {
+			result[i] = log
+		} else {
+			result[i] = data
+		}
+	}
+
+	return result, nil
 }

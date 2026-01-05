@@ -91,6 +91,22 @@ func (p *PreheatWorker) Start() error {
 		return fmt.Errorf("no URLs found for site %s", p.siteName)
 	}
 
+	// 获取当前任务ID
+	taskID, err := p.redisClient.GetCurrentPreheatTask(p.siteName)
+	if err != nil {
+		// 如果获取任务ID失败，继续执行，但不更新进度
+		taskID = ""
+	}
+
+	// 初始化进度统计
+	var ( 
+		total       = int64(len(urls))
+		processed   int64 = 0
+		success     int64 = 0
+		failed      int64 = 0
+		progressMux sync.Mutex
+	)
+
 	// 并发执行预热任务
 	for _, url := range urls {
 		// 检查上下文是否已取消
@@ -107,9 +123,27 @@ func (p *PreheatWorker) Start() error {
 			defer func() {
 				<-p.semaphore
 				p.wg.Done()
+				
+				// 更新进度
+				progressMux.Lock()
+				processed++
+				if taskID != "" {
+					p.redisClient.UpdatePreheatTaskProgress(p.siteName, taskID, total, processed, success, failed)
+				}
+				progressMux.Unlock()
 			}()
 
-			p.preheatURL(url)
+			// 预热URL
+			status := p.preheatURL(url)
+			
+			// 更新成功/失败计数
+			progressMux.Lock()
+			if status {
+				success++
+			} else {
+				failed++
+			}
+			progressMux.Unlock()
 		}(url)
 	}
 
@@ -124,12 +158,12 @@ func (p *PreheatWorker) Stop() {
 	p.cancel()
 }
 
-// PreheatURL 预热单个URL
-func (p *PreheatWorker) preheatURL(url string) {
+// PreheatURL 预热单个URL，返回是否成功
+func (p *PreheatWorker) preheatURL(url string) bool {
 	// 检查上下文是否已取消
 	select {
 	case <-p.ctx.Done():
-		return
+		return false
 	default:
 	}
 
@@ -144,7 +178,7 @@ func (p *PreheatWorker) preheatURL(url string) {
 	if err != nil {
 		fmt.Printf("Failed to create request for %s: %v\n", url, err)
 		p.redisClient.SetURLPreheatStatus(p.siteName, url, "failed", 0)
-		return
+		return false
 	}
 
 	// 设置请求头
@@ -163,7 +197,7 @@ func (p *PreheatWorker) preheatURL(url string) {
 	if err != nil {
 		fmt.Printf("Failed to preheat %s: %v\n", url, err)
 		p.redisClient.SetURLPreheatStatus(p.siteName, url, "failed", 0)
-		return
+		return false
 	}
 	defer resp.Body.Close()
 
@@ -172,14 +206,14 @@ func (p *PreheatWorker) preheatURL(url string) {
 	if err != nil {
 		fmt.Printf("Failed to read response for %s: %v\n", url, err)
 		p.redisClient.SetURLPreheatStatus(p.siteName, url, "failed", 0)
-		return
+		return false
 	}
 
 	// 检查响应状态码
 	if resp.StatusCode != http.StatusOK {
 		fmt.Printf("Preheat failed for %s: status code %d\n", url, resp.StatusCode)
 		p.redisClient.SetURLPreheatStatus(p.siteName, url, "failed", 0)
-		return
+		return false
 	}
 
 	// 记录预热成功
@@ -189,6 +223,7 @@ func (p *PreheatWorker) preheatURL(url string) {
 	}
 
 	fmt.Printf("Successfully preheated URL: %s (size: %d bytes)\n", url, cacheSize)
+	return true
 }
 
 // PreheatURLs 预热指定的URL列表

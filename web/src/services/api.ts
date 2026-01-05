@@ -183,6 +183,16 @@ export const crawlerApi = {
   getStats: (params: { site?: string; startTime: string; endTime: string; granularity: string }) => api.get('/crawler/stats', { params }),
 }
 
+// 推送API
+export const pushApi = {
+  getStats: (siteId?: string) => api.get('/push/stats', { params: siteId ? { siteId } : {} }),
+  getLogs: (siteId?: string, page: number = 1, pageSize: number = 20) => api.get('/push/logs', { params: { siteId, page, pageSize } }),
+  triggerPush: (siteId: string) => api.post('/push/trigger', { siteId }),
+  getConfig: (siteId: string) => api.get('/push/config', { params: { siteId } }),
+  updateConfig: (siteId: string, config: any) => api.post('/push/config', { siteId, config }),
+  getSites: () => api.get('/push/sites'),
+}
+
 // 系统API
 export const systemApi = {
   health: () => api.get('/health'),

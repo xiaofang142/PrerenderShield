@@ -92,12 +92,7 @@ func main() {
 	// 4. 渲染预热引擎管理器
 	prerenderManager := prerender.NewEngineManager()
 
-	// 5. 定时任务调度器初始化
-	schedulerInstance := scheduler.NewScheduler(prerenderManager, redisClient)
-	schedulerInstance.Start()
-	defer schedulerInstance.Stop()
-
-	// 6. 爬虫日志管理器
+	// 5. 爬虫日志管理器
 	crawlerLogManager := logging.NewCrawlerLogManager(cfg.Cache.RedisURL)
 
 	// 7. 为每个站点创建并启动引擎
@@ -154,6 +149,11 @@ func main() {
 	// 记录站点数量
 	logging.DefaultLogger.Info("Initialized %d sites", len(cfg.Sites))
 
+	// 5. 定时任务调度器初始化
+	schedulerInstance := scheduler.NewScheduler(prerenderManager, redisClient)
+	schedulerInstance.Start()
+	defer schedulerInstance.Stop()
+
 	// 8. 初始化监控模块
 	monitor := monitoring.NewMonitor(monitoring.Config{
 		Enabled:           true,
@@ -180,10 +180,10 @@ func main() {
 		log.Printf("站点服务器启动成功: %s (%s:%d)", site.Name, cfg.Server.Address, site.Port)
 	}
 
-	// 12. 初始化Gin路由
+	// 13. 初始化Gin路由
 	ginRouter := gin.Default()
 
-	// 13. 初始化API路由器
+	// 14. 初始化API路由器
 	apiRouter := routes.NewRouter(
 		userManager,
 		jwtManager,

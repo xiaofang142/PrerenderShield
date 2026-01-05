@@ -17,6 +17,7 @@ import (
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/monitoring"
 	"prerender-shield/internal/prerender"
+	"prerender-shield/internal/prerender/push"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/scheduler"
 	sitehandler "prerender-shield/internal/site-handler"
@@ -37,6 +38,7 @@ type Router struct {
 	monitor          *monitoring.Monitor
 	crawlerLogMgr    *logging.CrawlerLogManager
 	cfg              *config.Config
+	pushManager      *push.PushManager
 }
 
 // NewRouter 创建API路由器实例
@@ -53,6 +55,9 @@ func NewRouter(
 	crawlerLogMgr *logging.CrawlerLogManager,
 	cfg *config.Config,
 ) *Router {
+	// 创建推送管理器
+	pushManager := push.NewPushManager(cfg, redisClient)
+
 	return &Router{
 		userManager:      userManager,
 		jwtManager:       jwtManager,
@@ -65,6 +70,7 @@ func NewRouter(
 		monitor:          monitor,
 		crawlerLogMgr:    crawlerLogMgr,
 		cfg:              cfg,
+		pushManager:      pushManager,
 	}
 }
 
@@ -117,7 +123,9 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 	firewallController := controllers.NewFirewallController()
 	crawlerController := controllers.NewCrawlerController(r.crawlerLogMgr)
 	preheatController := controllers.NewPreheatController(r.prerenderManager, r.redisClient, r.cfg)
+	pushController := controllers.NewPushController(r.pushManager, r.redisClient, r.cfg)
 	sitesController := controllers.NewSitesController(r.configManager, r.siteServerMgr, r.siteHandler, r.redisClient, r.monitor, r.crawlerLogMgr, r.cfg)
+	systemController := controllers.NewSystemController()
 
 	// 注册API路由
 	apiGroup := ginRouter.Group("/api/v1")
@@ -134,6 +142,10 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 			// 用户退出登录
 			authGroup.POST("/logout", authController.Logout)
 		}
+
+		// 系统相关API - 不需要JWT验证
+		apiGroup.GET("/health", systemController.Health)
+		apiGroup.GET("/version", systemController.Version)
 
 		// 需要JWT验证的API组
 		protectedGroup := apiGroup.Group("/")
@@ -162,6 +174,14 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 			protectedGroup.GET("/preheat/urls", preheatController.GetPreheatUrls)
 			protectedGroup.GET("/preheat/task/status", preheatController.GetPreheatTaskStatus)
 			protectedGroup.GET("/preheat/crawler-headers", preheatController.GetCrawlerHeaders)
+
+			// 推送API
+			protectedGroup.GET("/push/sites", pushController.GetSites)
+			protectedGroup.GET("/push/stats", pushController.GetPushStats)
+			protectedGroup.GET("/push/logs", pushController.GetPushLogs)
+			protectedGroup.POST("/push/trigger", pushController.TriggerPush)
+			protectedGroup.GET("/push/config", pushController.GetPushConfig)
+			protectedGroup.POST("/push/config", pushController.UpdatePushConfig)
 
 			// 站点管理API
 			sitesGroup := protectedGroup.Group("/sites")

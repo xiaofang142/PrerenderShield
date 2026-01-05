@@ -44,32 +44,7 @@ const Preheat: React.FC = () => {
       title: '站点名称',
       dataIndex: 'siteName',
       key: 'siteName',
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: string) => {
-        const statusMap: { [key: string]: { text: string; color: string } } = {
-          'cached': { text: '已缓存', color: '#52c41a' },
-          'failed': { text: '失败', color: '#f5222d' },
-          'pending': { text: '待处理', color: '#faad14' },
-        }
-        const config = statusMap[status] || { text: '未知', color: '#8c8c8c' }
-        return <span style={{ color: config.color }}>{config.text}</span>
-      }
-    },
-    {
-      title: '缓存大小',
-      dataIndex: 'cacheSize',
-      key: 'cacheSize',
-      render: (size: string) => {
-        if (!size) return '-'
-        const sizeNum = parseInt(size)
-        if (sizeNum < 1024) return `${sizeNum} B`
-        if (sizeNum < 1024 * 1024) return `${(sizeNum / 1024).toFixed(2)} KB`
-        return `${(sizeNum / (1024 * 1024)).toFixed(2)} MB`
-      }
+      render: () => selectedSiteName || '-'
     },
     {
       title: '更新时间',
@@ -80,29 +55,6 @@ const Preheat: React.FC = () => {
         const date = new Date(parseInt(time) * 1000)
         return date.toLocaleString()
       }
-    },
-    {
-      title: '操作',
-      key: 'action',
-      render: (_: any, record: any) => (
-        <Space size="middle">
-          <Button
-            type="link"
-            icon={<PlayCircleOutlined />}
-            onClick={() => handleSinglePreheat(record.url)}
-          >
-            重新预热
-          </Button>
-          <Button
-            type="link"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => handleRemoveURL(record.url)}
-          >
-            删除
-          </Button>
-        </Space>
-      ),
     },
   ]
 

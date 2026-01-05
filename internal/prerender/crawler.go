@@ -81,8 +81,11 @@ func (c *Crawler) Start() error {
 	// 标记起始URL为已访问
 	c.markVisited(c.baseURL)
 
-	// 添加到Redis
-	if err := c.redisClient.AddURL(c.siteName, c.baseURL); err != nil {
+	// 提取初始URL的路由部分
+	initialRoute := c.extractRoute(c.baseURL)
+
+	// 添加到Redis，只存储路由部分
+	if err := c.redisClient.AddURL(c.siteName, initialRoute); err != nil {
 		return fmt.Errorf("failed to add initial URL to redis: %v", err)
 	}
 
@@ -186,9 +189,12 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 		// 标记为已访问
 		c.markVisited(link)
 
-		// 添加到Redis
-		if err := c.redisClient.AddURL(c.siteName, link); err != nil {
-			fmt.Printf("Failed to add URL to redis %s: %v\n", link, err)
+		// 提取URL的路由部分（去除域名）
+		route := c.extractRoute(link)
+		
+		// 添加到Redis，只存储路由部分
+		if err := c.redisClient.AddURL(c.siteName, route); err != nil {
+			fmt.Printf("Failed to add URL to redis %s: %v\n", route, err)
 			continue
 		}
 
@@ -203,7 +209,7 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 			c.crawl(link, depth+1)
 		}(link, depth)
 	}
-}
+} // 闭合for循环
 
 // extractLinks 从页面中提取所有链接
 func (c *Crawler) extractLinks(page *rod.Page) ([]string, error) {
@@ -340,6 +346,30 @@ func (c *Crawler) isValidURL(urlStr string) bool {
 	}
 
 	return true
+}
+
+// extractRoute 从URL中提取路由部分（去除域名）
+func (c *Crawler) extractRoute(urlStr string) string {
+	parsed, err := url.Parse(urlStr)
+	if err != nil {
+		return urlStr
+	}
+	
+	// 保留路由部分，包括path、rawquery和fragment
+	route := parsed.EscapedPath()
+	if parsed.RawQuery != "" {
+		route += "?" + parsed.RawQuery
+	}
+	if parsed.Fragment != "" {
+		route += "#" + parsed.Fragment
+	}
+	
+	// 确保路由以/开头
+	if !strings.HasPrefix(route, "/") {
+		route = "/" + route
+	}
+	
+	return route
 }
 
 // isVisited 检查URL是否已访问
