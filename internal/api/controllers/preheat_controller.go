@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -80,19 +79,19 @@ func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 			totalCacheSize := int64(0)
 			browserPoolSize := int64(0)
 
-			// 从引擎获取浏览器池大小
-			engine, exists := c.prerenderManager.GetEngine(site.Name)
+			// 从引擎获取浏览器池大小，使用站点ID作为siteName
+			engine, exists := c.prerenderManager.GetEngine(site.ID)
 			if exists {
 				browserPoolSize = int64(engine.GetConfig().PoolSize)
 			}
 
 			// 检查Redis客户端是否可用
 			if c.redisClient != nil {
-				// 从Redis获取URL总数，使用站点Name作为siteName
-				urlCount, _ = c.redisClient.GetURLCount(site.Name)
+				// 从Redis获取URL总数，使用站点ID作为siteName
+				urlCount, _ = c.redisClient.GetURLCount(site.ID)
 
 				// 从Redis获取缓存数
-				cacheCount, _ = c.redisClient.GetCacheCount(site.Name)
+				cacheCount, _ = c.redisClient.GetCacheCount(site.ID)
 
 				// 直接计算总缓存大小
 				totalCacheSize = cacheCount * 1024 * 1024 // 假设平均每个缓存1MB
@@ -141,19 +140,19 @@ func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 	totalCacheSize := int64(0)
 	browserPoolSize := int64(0)
 
-	// 从引擎获取浏览器池大小，使用站点Name作为siteName
-	engine, exists := c.prerenderManager.GetEngine(siteConfig.Name)
+	// 从引擎获取浏览器池大小，使用站点ID作为siteName
+	engine, exists := c.prerenderManager.GetEngine(siteId)
 	if exists {
 		browserPoolSize = int64(engine.GetConfig().PoolSize)
 	}
 
 	// 检查Redis客户端是否可用
 	if c.redisClient != nil {
-		// 从Redis获取URL总数，使用站点Name作为siteName
-		urlCount, _ = c.redisClient.GetURLCount(siteConfig.Name)
+		// 从Redis获取URL总数，使用站点ID作为siteName
+		urlCount, _ = c.redisClient.GetURLCount(siteId)
 
 		// 从Redis获取缓存数
-		cacheCount, _ = c.redisClient.GetCacheCount(siteConfig.Name)
+		cacheCount, _ = c.redisClient.GetCacheCount(siteId)
 
 		// 直接计算总缓存大小
 		totalCacheSize = cacheCount * 1024 * 1024 // 假设平均每个缓存1MB
@@ -284,7 +283,7 @@ func (c *PreheatController) PreheatURLs(ctx *gin.Context) {
 	}
 
 	// 检查站点是否存在
-	_, exists := c.prerenderManager.GetEngine(req.SiteId)
+	engine, exists := c.prerenderManager.GetEngine(req.SiteId)
 	if !exists {
 		ctx.JSON(http.StatusNotFound, gin.H{
 			"code":    http.StatusNotFound,
@@ -295,8 +294,14 @@ func (c *PreheatController) PreheatURLs(ctx *gin.Context) {
 
 	// 调用引擎的预热方法
 	for _, url := range req.URLs {
-		// 这里简化处理，实际应该调用引擎的预热方法
-		fmt.Printf("触发URL预热: 站点 %s, URL %s\n", req.SiteId, url)
+		// 使用预热管理器来预热单个URL
+		if err := engine.GetPreheatManager().TriggerPreheatForURL(url); err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"code":    http.StatusInternalServerError,
+				"message": fmt.Sprintf("URL预热失败: %v", err),
+			})
+			return
+		}
 	}
 
 	// 返回成功响应
@@ -327,11 +332,9 @@ func (c *PreheatController) GetPreheatUrls(ctx *gin.Context) {
 
 	// 获取站点配置
 	var siteConfig *config.SiteConfig
-	var siteName string
 	for _, site := range c.cfg.Sites {
 		if site.ID == siteId {
 			siteConfig = &site
-			siteName = site.Name
 			break
 		}
 	}
@@ -349,8 +352,8 @@ func (c *PreheatController) GetPreheatUrls(ctx *gin.Context) {
 
 	// 检查Redis客户端是否可用
 	if c.redisClient != nil {
-		// 从Redis获取URL列表，使用站点Name作为siteName
-		allUrls, err := c.redisClient.GetURLs(siteName)
+		// 从Redis获取URL列表，使用站点ID作为siteName
+		allUrls, err := c.redisClient.GetURLs(siteId)
 		if err == nil {
 			urls = allUrls
 			total = int64(len(allUrls))
@@ -382,8 +385,8 @@ func (c *PreheatController) GetPreheatUrls(ctx *gin.Context) {
 			baseURL = fmt.Sprintf("http://%s", siteDomain)
 		}
 	} else {
-		// 默认使用站点Name作为域名
-		siteDomain = siteName
+		// 默认使用站点ID作为域名
+		siteDomain = siteId
 		baseURL = fmt.Sprintf("http://%s", siteDomain)
 	}
 
@@ -409,24 +412,18 @@ func (c *PreheatController) GetPreheatUrls(ctx *gin.Context) {
 		// 获取URL的预热状态
 		var updatedAt string
 		if c.redisClient != nil {
-			// 使用站点Name作为siteName，路由作为URL
-			urlStatus, err := c.redisClient.GetURLPreheatStatus(siteName, route)
+			// 使用站点ID作为siteName，路由作为URL
+			urlStatus, err := c.redisClient.GetURLPreheatStatus(siteId, route)
 			if err == nil {
 				updatedAt = urlStatus["updated_at"]
 			}
 		}
 
-		// 转换更新时间为可读格式
-		if updatedAt != "" {
-			if ts, err := strconv.ParseInt(updatedAt, 10, 64); err == nil {
-				updatedAt = fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d",
-					time.Unix(ts, 0).Year(),
-					time.Unix(ts, 0).Month(),
-					time.Unix(ts, 0).Day(),
-					time.Unix(ts, 0).Hour(),
-					time.Unix(ts, 0).Minute(),
-					time.Unix(ts, 0).Second())
-			}
+		// 保持原始时间戳格式，不进行格式化
+		// 前端会将时间戳转换为可读格式
+		if updatedAt == "" {
+			// 为没有更新时间的URL设置默认值
+			updatedAt = "-"
 		}
 
 		// 将完整URL添加到列表中，移除status和cacheSize字段

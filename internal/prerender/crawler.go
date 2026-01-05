@@ -88,6 +88,12 @@ func (c *Crawler) Start() error {
 	if err := c.redisClient.AddURL(c.siteName, initialRoute); err != nil {
 		return fmt.Errorf("failed to add initial URL to redis: %v", err)
 	}
+	
+	// 设置初始URL的初始状态和更新时间
+	if err := c.redisClient.SetURLPreheatStatus(c.siteName, initialRoute, "pending", 0); err != nil {
+		// 记录错误但不中断爬取
+		fmt.Printf("Failed to set initial URL preheat status %s: %v\n", initialRoute, err)
+	}
 
 	// 开始递归爬取
 	c.wg.Add(1)
@@ -196,6 +202,12 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 		if err := c.redisClient.AddURL(c.siteName, route); err != nil {
 			fmt.Printf("Failed to add URL to redis %s: %v\n", route, err)
 			continue
+		}
+		
+		// 设置URL的初始状态和更新时间
+		if err := c.redisClient.SetURLPreheatStatus(c.siteName, route, "pending", 0); err != nil {
+			fmt.Printf("Failed to set URL preheat status %s: %v\n", route, err)
+			// 不中断流程，继续处理
 		}
 
 		// 递归爬取，使用信号量控制并发
