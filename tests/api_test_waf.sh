@@ -44,12 +44,9 @@ UPDATE_RESP=$(curl -s -X PUT "$BASE_URL/sites/$SITE_ID/waf" \
         "default_action": "block",
         "block_message": "Blocked by Test Script"
     },
-    "rate_limit": {
-        "enabled": true,
-        "requests": 50,
-        "window": 60,
-        "ban_time": 300
-    }
+    "rate_limit_count": 50,
+    "rate_limit_window": 60,
+    "custom_block_page": "<html>Blocked</html>"
   }')
 echo "Update Response: $UPDATE_RESP"
 echo ""

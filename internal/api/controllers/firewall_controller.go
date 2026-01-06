@@ -61,6 +61,7 @@ func (c *FirewallController) UpdateWafConfig(ctx *gin.Context) {
 	}
 
 	var req struct {
+		Enabled          bool     `json:"enabled"`
 		RateLimitCount   int      `json:"rate_limit_count"`
 		RateLimitWindow  int      `json:"rate_limit_window"`
 		BlockedCountries []string `json:"blocked_countries"`
@@ -85,33 +86,49 @@ func (c *FirewallController) UpdateWafConfig(ctx *gin.Context) {
 		config = &models.WafConfig{
 			SiteID: siteID,
 		}
-		if err := c.wafRepo.CreateWafConfig(config); err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create WAF config"})
-			return
-		}
+		// Create immediately to ensure ID is generated if needed, 
+		// but UpdateWafConfig below will save it anyway.
 	}
 
 	// 2. Update fields
+	config.Enabled = req.Enabled
 	config.RateLimitCount = req.RateLimitCount
 	config.RateLimitWindow = req.RateLimitWindow
 	config.CustomBlockPage = req.CustomBlockPage
+
+	// Update Relations
+	// Blocked Countries
+	var blockedCountries []models.BlockedCountry
+	for _, code := range req.BlockedCountries {
+		blockedCountries = append(blockedCountries, models.BlockedCountry{
+			CountryCode: code,
+			WafConfigID: config.ID,
+		})
+	}
+	config.BlockedCountries = blockedCountries
+
+	// Whitelist IPs
+	var whitelistIPs []models.IPWhitelist
+	for _, ip := range req.WhitelistIPs {
+		whitelistIPs = append(whitelistIPs, models.IPWhitelist{
+			IPAddress:   ip,
+			WafConfigID: config.ID,
+		})
+	}
+	config.IPWhitelist = whitelistIPs
+
+	// Blacklist IPs
+	var blacklistIPs []models.IPBlacklist
+	for _, ip := range req.BlacklistIPs {
+		blacklistIPs = append(blacklistIPs, models.IPBlacklist{
+			IPAddress:   ip,
+			WafConfigID: config.ID,
+		})
+	}
+	config.IPBlacklist = blacklistIPs
 	
 	if err := c.wafRepo.UpdateWafConfig(config); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update WAF config"})
-		return
-	}
-
-	// 3. Update relations
-	if err := c.wafRepo.UpdateBlockedCountries(config.ID, req.BlockedCountries); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update blocked countries"})
-		return
-	}
-	if err := c.wafRepo.UpdateIPWhitelist(config.ID, req.WhitelistIPs); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update whitelist IPs"})
-		return
-	}
-	if err := c.wafRepo.UpdateIPBlacklist(config.ID, req.BlacklistIPs); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update blacklist IPs"})
 		return
 	}
 

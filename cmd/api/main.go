@@ -16,7 +16,6 @@ import (
 	"prerender-shield/internal/api/routes"
 	"prerender-shield/internal/auth"
 	"prerender-shield/internal/config"
-	"prerender-shield/internal/db"
 	"prerender-shield/internal/firewall"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/monitoring"
@@ -62,20 +61,14 @@ func main() {
 	})
 
 	// 6. 初始化各模块
-	// 0. 初始化数据库
-	if err := db.InitDB(cfg); err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
-	}
-
-	// 0.1 初始化WAF仓库
-	wafRepo := repository.NewWafRepository()
-
 	// 1. Redis客户端初始化
 	redisClient, err := redis.NewClient(cfg.Cache.RedisURL)
 	if err != nil {
 		log.Fatalf("Failed to initialize Redis client: %v", err)
-		// Redis不可用，系统直接退出
 	}
+
+	// 0.1 初始化WAF仓库
+	wafRepo := repository.NewWafRepository(redisClient)
 
 	// 注入Redis客户端到配置管理器
 	configManager.SetRedisClient(redisClient)

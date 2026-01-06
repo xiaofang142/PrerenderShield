@@ -1,51 +1,91 @@
 package repository
 
 import (
-	"errors"
-	"prerender-shield/internal/db"
-	"prerender-shield/internal/models"
+	"encoding/json"
+	"fmt"
+	"time"
 
-	"gorm.io/gorm"
+	"prerender-shield/internal/models"
+	redisPkg "prerender-shield/internal/redis"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
 )
 
 type SiteRepository struct {
-	db *gorm.DB
+	client *redisPkg.Client
 }
 
-func NewSiteRepository() *SiteRepository {
+func NewSiteRepository(client *redisPkg.Client) *SiteRepository {
 	return &SiteRepository{
-		db: db.GetDB(),
+		client: client,
 	}
 }
 
 func (r *SiteRepository) GetSiteByID(id string) (*models.Site, error) {
-	var site models.Site
-	err := r.db.Where("id = ?", id).First(&site).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	ctx := r.client.Context()
+	key := fmt.Sprintf("site:%s", id)
+
+	data, err := r.client.GetRawClient().Get(ctx, key).Result()
+	if err == redis.Nil {
 		return nil, nil
+	} else if err != nil {
+		return nil, err
 	}
-	return &site, err
+
+	var site models.Site
+	if err := json.Unmarshal([]byte(data), &site); err != nil {
+		return nil, err
+	}
+
+	return &site, nil
 }
 
 func (r *SiteRepository) CreateSite(site *models.Site) error {
-	return r.db.Create(site).Error
+	if site.ID == "" {
+		site.ID = uuid.New().String()
+	}
+	now := time.Now()
+	if site.CreatedAt.IsZero() {
+		site.CreatedAt = now
+	}
+	site.UpdatedAt = now
+
+	return r.saveSite(site)
 }
 
 func (r *SiteRepository) UpdateSite(site *models.Site) error {
-	return r.db.Save(site).Error
+	site.UpdatedAt = time.Now()
+	return r.saveSite(site)
+}
+
+func (r *SiteRepository) saveSite(site *models.Site) error {
+	ctx := r.client.Context()
+	key := fmt.Sprintf("site:%s", site.ID)
+
+	data, err := json.Marshal(site)
+	if err != nil {
+		return err
+	}
+
+	return r.client.GetRawClient().Set(ctx, key, data, 0).Err()
 }
 
 // SyncSite ensures the site exists in the database (upsert)
 func (r *SiteRepository) SyncSite(site *models.Site) error {
-	var existing models.Site
-	err := r.db.Where("id = ?", site.ID).First(&existing).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return r.CreateSite(site)
-	} else if err != nil {
+	existing, err := r.GetSiteByID(site.ID)
+	if err != nil {
 		return err
 	}
-	// Update fields if needed
+
+	if existing == nil {
+		return r.CreateSite(site)
+	}
+
+	// Update fields
 	existing.Name = site.Name
 	existing.Domain = site.Domain
-	return r.db.Save(&existing).Error
+	existing.UpdatedAt = time.Now()
+
+	return r.saveSite(existing)
 }
