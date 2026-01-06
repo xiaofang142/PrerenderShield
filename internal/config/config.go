@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/redis"
 	"strconv"
@@ -343,6 +344,14 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 	// 获取二进制文件所在目录
 	appDir := filepath.Dir(exePath)
+
+	// 如果是在 go run 模式下运行（可执行文件在临时目录），使用当前工作目录
+	// 这确保了在开发环境下重启后静态资源路径不变
+	if strings.Contains(exePath, "/var/folders") || strings.Contains(exePath, "/tmp") || strings.Contains(exePath, "T\\go-build") {
+		if wd, err := os.Getwd(); err == nil {
+			appDir = wd
+		}
+	}
 
 	// 处理静态目录
 	if !filepath.IsAbs(cfg.Dirs.StaticDir) {

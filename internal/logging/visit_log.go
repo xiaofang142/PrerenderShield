@@ -96,7 +96,7 @@ func (vlm *VisitLogManager) RecordVisitLog(visitLog VisitLog) {
 	if visitLog.IP != "" {
 		// 模拟GeoIP解析
 		if visitLog.IP == "127.0.0.1" || visitLog.IP == "::1" || visitLog.IP == "localhost" {
-			visitLog.Country = "CN"
+			visitLog.Country = "China"
 			visitLog.City = "Local"
 			visitLog.Latitude = 39.9042
 			visitLog.Longitude = 116.4074

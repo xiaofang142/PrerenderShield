@@ -1453,30 +1453,30 @@ const Sites: React.FC = () => {
       const values = await wafConfigForm.validateFields();
       console.log('WAF form values:', values);
       
-      // 构造WAF配置数据
-      const configData = {
-          enabled: values.firewall?.enabled || false,
-          rules_path: values.firewall?.rulesPath || '/etc/prerender-shield/rules',
-          action: {
-            default_action: values.firewall?.action?.defaultAction || 'block',
-            block_message: values.firewall?.action?.blockMessage || 'Request blocked by firewall'
-          },
-          geoip: {
-            enabled: values.firewall?.geoip?.enabled || false,
-            allow_list: values.firewall?.geoip?.allowList || [],
-            block_list: values.firewall?.geoip?.blockList || []
-          },
-          rate_limit: {
-            enabled: values.firewall?.rateLimit?.enabled || false,
-            requests: parseInt(values.firewall?.rateLimit?.requests) || 100,
-            window: parseInt(values.firewall?.rateLimit?.window) || 60,
-            ban_time: parseInt(values.firewall?.rateLimit?.banTime) || 3600
-          },
-          blacklist: values.firewall?.blacklist || [],
-          whitelist: values.firewall?.whitelist || []
-      };
-      
-      // 显示加载状态
+          // 构造WAF配置数据
+          const configData = {
+              enabled: values.firewall?.enabled || false,
+              rules_path: values.firewall?.rulesPath || '/etc/prerender-shield/rules',
+              action: {
+                default_action: values.firewall?.action?.defaultAction || 'block',
+                block_message: values.firewall?.action?.blockMessage || 'Request blocked by firewall'
+              },
+              geoip: {
+                enabled: values.firewall?.geoip?.enabled || false,
+                allow_list: values.firewall?.geoip?.allowList || [],
+                block_list: values.firewall?.geoip?.blockList || []
+              },
+              rate_limit: {
+                enabled: values.firewall?.rateLimit?.enabled || false,
+                requests: parseInt(values.firewall?.rateLimit?.requests) || 100,
+                window: parseInt(values.firewall?.rateLimit?.window) || 60,
+                ban_time: parseInt(values.firewall?.rateLimit?.banTime) || 3600
+              },
+              blacklist: values.firewall?.blacklist || [],
+              whitelist: values.firewall?.whitelist || []
+          };
+          
+          // 显示加载状态
       Modal.confirm({
         title: '正在保存WAF配置',
         content: '请稍候...',
@@ -1944,12 +1944,12 @@ const Sites: React.FC = () => {
             {selectedRowKeys.length > 0 && (
                 <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>批量删除</Button>
             )}
-            <Button danger onClick={handleDeleteAll} disabled={fileList.length === 0}>一键删除全部</Button>
+            <Button danger onClick={handleDeleteAll} disabled={!fileList || fileList.length === 0}>一键删除全部</Button>
           </Space>
         </div>
         
         <Table
-          dataSource={fileList}
+          dataSource={fileList || []}
           rowKey="key"
           pagination={false}
           rowSelection={{

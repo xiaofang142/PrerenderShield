@@ -12,10 +12,11 @@ import (
 	"prerender-shield/internal/models"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/repository"
+	"prerender-shield/internal/services"
 )
 
 // WafMiddleware implements the Web Application Firewall logic
-func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, redisClient *redis.Client) gin.HandlerFunc {
+func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, redisClient *redis.Client, geoIP services.GeoIPResolver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !site.Firewall.Enabled {
 			c.Next()
@@ -47,8 +48,10 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 			}
 			// Use a goroutine to avoid blocking the response
 			go func() {
-				if err := wafRepo.CreateAccessLog(&log); err != nil {
-					fmt.Printf("Failed to create access log: %v\n", err)
+				if wafRepo != nil {
+					if err := wafRepo.CreateAccessLog(&log); err != nil {
+						fmt.Printf("Failed to create access log: %v\n", err)
+					}
 				}
 			}()
 
@@ -78,16 +81,33 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 			}
 		}
 
-		// 3. GeoIP Check (Placeholder for now, requires DB)
-		if site.Firewall.GeoIPConfig.Enabled {
-			// TODO: Implement GeoIP lookup
-			// country := geoip.Lookup(clientIP)
-			// for _, blockedCountry := range site.Firewall.GeoIPConfig.BlockList {
-			// 	if country == blockedCountry {
-			// 		block("Country is blocked: " + country, "geoip")
-			// 		return
-			// 	}
-			// }
+		// 3. GeoIP Check
+		if site.Firewall.GeoIPConfig.Enabled && geoIP != nil {
+			countryCode, err := geoIP.LookupCountryISO(clientIP)
+			if err == nil && countryCode != "" {
+				// Check BlockList
+				for _, blockedCode := range site.Firewall.GeoIPConfig.BlockList {
+					if blockedCode == countryCode {
+						block("Country is blocked: "+countryCode, "geoip_block")
+						return
+					}
+				}
+
+				// Check AllowList (only if configured)
+				if len(site.Firewall.GeoIPConfig.AllowList) > 0 {
+					allowed := false
+					for _, allowedCode := range site.Firewall.GeoIPConfig.AllowList {
+						if allowedCode == countryCode {
+							allowed = true
+							break
+						}
+					}
+					if !allowed {
+						block("Country not in allow list: "+countryCode, "geoip_allow")
+						return
+					}
+				}
+			}
 		}
 
 		// 4. Rate Limiting

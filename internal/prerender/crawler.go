@@ -6,13 +6,15 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"time"
 
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/redis"
 
-	"github.com/go-rod/rod"
+	"golang.org/x/net/html"
 )
+
+// FetcherFunc 定义获取页面内容的函数类型
+type FetcherFunc func(url string) (string, error)
 
 // Crawler 链接爬取器
 type Crawler struct {
@@ -29,6 +31,7 @@ type Crawler struct {
 	semaphore    chan struct{}
 	ctx          context.Context
 	cancel       context.CancelFunc
+	fetcher      FetcherFunc // 用于获取页面内容的函数
 }
 
 // CrawlerConfig 爬取器配置
@@ -39,6 +42,7 @@ type CrawlerConfig struct {
 	MaxDepth    int
 	Concurrency int
 	RedisClient *redis.Client
+	Fetcher     FetcherFunc // 必须提供
 }
 
 // NewCrawler 创建新的链接爬取器
@@ -69,11 +73,17 @@ func NewCrawler(config CrawlerConfig) *Crawler {
 		semaphore:   make(chan struct{}, concurrency),
 		ctx:         ctx,
 		cancel:      cancel,
+		fetcher:     config.Fetcher,
 	}
 }
 
 // Start 开始爬取
 func (c *Crawler) Start() error {
+	// 如果没有提供Fetcher，报错
+	if c.fetcher == nil {
+		return fmt.Errorf("fetcher is required for crawler")
+	}
+
 	// 清空之前的URL记录
 	if err := c.redisClient.ClearURLs(c.siteName); err != nil {
 		return fmt.Errorf("failed to clear previous URLs: %v", err)
@@ -93,7 +103,7 @@ func (c *Crawler) Start() error {
 	// 设置初始URL的初始状态和更新时间
 	if err := c.redisClient.SetURLPreheatStatus(c.siteName, initialRoute, "pending", 0); err != nil {
 		// 记录错误但不中断爬取
-		fmt.Printf("Failed to set initial URL preheat status %s: %v\n", initialRoute, err)
+		logging.DefaultLogger.Warn("Failed to set initial URL preheat status %s: %v", initialRoute, err)
 	}
 
 	// 开始递归爬取
@@ -133,61 +143,19 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 		return
 	}
 
-	// 获取浏览器实例
-	logging.DefaultLogger.Debug("Creating browser instance for %s", urlStr)
-	browser := rod.New()
-	if err := browser.Connect(); err != nil {
-		logging.DefaultLogger.Error("Failed to connect to browser for %s: %v", urlStr, err)
-		return
-	}
-	defer func() {
-		if err := browser.Close(); err != nil {
-			logging.DefaultLogger.Warn("Failed to close browser for %s: %v", urlStr, err)
-		}
-	}()
-
-	// 创建页面
-	page := browser.MustPage()
-
-	// 导航到URL
-	logging.DefaultLogger.Debug("Navigating to %s (depth: %d)", urlStr, depth)
-	if err := page.Navigate(urlStr); err != nil {
-		logging.DefaultLogger.Error("Failed to navigate to %s: %v", urlStr, err)
-		return
-	}
-
-	// 等待页面加载完成，支持hash模式和history模式
-	logging.DefaultLogger.Debug("Waiting for page load %s", urlStr)
-	// 对于hash模式，WaitLoad可能不会触发，所以我们先尝试WaitLoad
-	if err := page.WaitLoad(); err != nil {
-		// 如果WaitLoad失败，尝试等待网络空闲状态
-		logging.DefaultLogger.Warn("WaitLoad failed for %s, trying to wait for network idle: %v", urlStr, err)
-		// 使用简单的等待策略，适用于hash模式
-		time.Sleep(2 * time.Second)
-	} else {
-		// 对于成功的WaitLoad，也额外等待一小段时间确保JavaScript渲染完成
-		time.Sleep(1 * time.Second)
-	}
-
-	// 额外等待一小段时间，确保JavaScript框架有足够时间渲染页面内容
-	time.Sleep(1 * time.Second)
-
-	// 获取页面内容，检查是否能正确获取
-	html, err := page.HTML()
+	// 使用Fetcher获取页面内容
+	logging.DefaultLogger.Debug("Fetching %s (depth: %d)", urlStr, depth)
+	
+	htmlContent, err := c.fetcher(urlStr)
 	if err != nil {
-		logging.DefaultLogger.Error("Failed to get page HTML %s: %v", urlStr, err)
-	} else {
-		logging.DefaultLogger.Debug("Page HTML length: %d", len(html))
-		// 简单检查页面是否包含<a>标签
-		if strings.Contains(html, "<a ") {
-			logging.DefaultLogger.Debug("Page contains <a> tags")
-		} else {
-			logging.DefaultLogger.Debug("Page does NOT contain <a> tags")
-		}
+		logging.DefaultLogger.Error("Failed to fetch %s: %v", urlStr, err)
+		return
 	}
+
+	logging.DefaultLogger.Debug("Page HTML length: %d", len(htmlContent))
 
 	// 提取所有链接
-	links, err := c.extractLinks(page)
+	links, err := c.extractLinks(htmlContent)
 	if err != nil {
 		logging.DefaultLogger.Error("Failed to extract links from %s: %v", urlStr, err)
 		return
@@ -241,29 +209,37 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 	}
 }
 
-// extractLinks 从页面中提取所有链接
-func (c *Crawler) extractLinks(page *rod.Page) ([]string, error) {
-	// 查找所有<a>标签
-	elements, err := page.Elements("a")
+// extractLinks 从HTML内容中提取所有链接
+func (c *Crawler) extractLinks(htmlContent string) ([]string, error) {
+	doc, err := html.Parse(strings.NewReader(htmlContent))
 	if err != nil {
 		return nil, err
 	}
 
 	var links []string
-
-	for _, elem := range elements {
-		// 获取href属性
-		href, err := elem.Attribute("href")
-		if err != nil {
-			continue
+	var f func(*html.Node)
+	f = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "a" {
+			for _, a := range n.Attr {
+				if a.Key == "href" {
+					if a.Val != "" {
+						links = append(links, a.Val)
+					}
+					break
+				}
+			}
 		}
-
-		if href == nil || *href == "" {
-			continue
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			f(c)
 		}
+	}
+	f(doc)
 
+	// 处理链接
+	var validLinks []string
+	for _, href := range links {
 		// 直接使用原始href值，不进行resolveURL处理，以保留完整的hash信息
-		fullURL := *href
+		fullURL := href
 
 		// 如果是相对路径，解析为绝对URL
 		if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
@@ -291,14 +267,13 @@ func (c *Crawler) extractLinks(page *rod.Page) ([]string, error) {
 			continue
 		}
 
-		// 添加到链接列表
-		links = append(links, fullURL)
+		validLinks = append(validLinks, fullURL)
 	}
 
 	// 自定义去重逻辑
-	uniqueLinks := make([]string, 0, len(links))
+	uniqueLinks := make([]string, 0, len(validLinks))
 	seen := make(map[string]bool)
-	for _, link := range links {
+	for _, link := range validLinks {
 		if !seen[link] {
 			seen[link] = true
 			uniqueLinks = append(uniqueLinks, link)

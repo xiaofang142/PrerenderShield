@@ -207,6 +207,24 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 			MaxDepth:    pm.config.Preheat.MaxDepth,
 			Concurrency: 3, // 降低爬虫并发度，减少资源消耗
 			RedisClient: pm.redisClient,
+			Fetcher: func(url string) (string, error) {
+				// Use a short timeout for crawler requests
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+				defer cancel()
+
+				// Use default options for crawler
+				res, err := pm.engine.Render(ctx, url, RenderOptions{
+					Timeout:   20,
+					WaitUntil: "networkidle0",
+				})
+				if err != nil {
+					return "", err
+				}
+				if !res.Result.Success {
+					return "", fmt.Errorf("render failed: %s", res.Result.Error)
+				}
+				return res.Result.HTML, nil
+			},
 		}
 
 		// 创建爬虫实例并保存到 pm.crawler
@@ -1454,13 +1472,20 @@ func (e *Engine) processTask(browser *Browser, task *RenderTask) {
 
 		switch task.Options.WaitUntil {
 		case "networkidle0":
-			// 等待网络空闲（0个网络连接）
-			time.Sleep(baseWaitTime + 1*time.Second)
+			// 等待网络空闲（0个网络连接），使用rod的WaitIdle机制
+			// WaitIdle 默认等待 500ms 内没有新的网络请求
+			// 我们给它一个稍长的超时时间来检测空闲
+			if err := page.WaitIdle(time.Minute); err != nil {
+				// 如果WaitIdle超时或失败，回退到Sleep策略
+				logging.DefaultLogger.Warn("WaitIdle failed for %s: %v, fallback to sleep", task.URL, err)
+				time.Sleep(baseWaitTime + 1*time.Second)
+			}
 		case "networkidle2":
-			// 等待网络空闲（最多2个网络连接）
+			// rod没有内置networkidle2，我们简单模拟：等待一段时间
 			time.Sleep(baseWaitTime)
 		case "domcontentloaded":
 			// 已经通过page.WaitLoad()等待了DOM内容加载
+			// 对于SPA，可能还需要一点时间让框架挂载
 			time.Sleep(500 * time.Millisecond)
 		case "load":
 			// 已经通过page.WaitLoad()等待了页面加载

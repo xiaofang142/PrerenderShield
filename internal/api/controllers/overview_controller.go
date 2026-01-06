@@ -96,6 +96,18 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	globeData := make([]gin.H, 0)
 	countryMap := make(map[string]int64)
 
+	// 国家名称标准化映射
+	countryNameMap := map[string]string{
+		"CN": "China",
+		"US": "United States",
+		"UK": "United Kingdom",
+		"RU": "Russia",
+		"KP": "Korea",
+		"KR": "Korea",
+		"JP": "Japan",
+		// 可以根据需要添加更多映射
+	}
+
 	for _, item := range geoStats {
 		globeData = append(globeData, gin.H{
 			"lat":   item["lat"],
@@ -103,6 +115,10 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 			"count": item["count"],
 		})
 		if country, ok := item["country"].(string); ok && country != "" {
+			// 标准化国家名称
+			if normalized, exists := countryNameMap[country]; exists {
+				country = normalized
+			}
 			countryMap[country] += item["count"].(int64)
 		}
 	}

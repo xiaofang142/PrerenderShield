@@ -120,7 +120,7 @@ func main() {
 	visitLogManager := logging.NewVisitLogManager(cfg.Cache.RedisURL)
 
 	// 6.1 GeoIP服务
-	geoIPService := services.NewGeoIPService()
+	geoIPService := services.NewGeoIPService("")
 
 	// 6.2 日志处理器
 	logProcessor := services.NewLogProcessor(crawlerLogManager, visitLogManager, geoIPService, configManager, redisClient.GetRawClient())
@@ -196,7 +196,7 @@ func main() {
 	siteServerManager := siteserver.NewManager(monitor)
 
 	// 10. 初始化站点处理器
-	siteHandler := sitehandler.NewHandler(prerenderManager, wafRepo, redisClient)
+	siteHandler := sitehandler.NewHandler(prerenderManager, wafRepo, redisClient, geoIPService)
 
 	// 11. 为每个站点启动服务器
 	for _, site := range cfg.Sites {

@@ -77,6 +77,15 @@ const Overview: React.FC = () => {
 
   const [isMapLoaded, setIsMapLoaded] = useState(false)
 
+  // 国家名称映射
+  const countryNameMap: Record<string, string> = {
+    'CN': 'China',
+    'US': 'United States',
+    'UK': 'United Kingdom',
+    'RU': 'Russia',
+    // Add more if needed
+  };
+
   // 2D地图配置
   const map2DOption: echarts.EChartsOption = {
     tooltip: {
