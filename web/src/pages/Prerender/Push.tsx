@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, Button, Table, Select, message, Modal, Spin } from 'antd'
-import { ReloadOutlined, UploadOutlined, PlayCircleOutlined, BarChartOutlined } from '@ant-design/icons'
+import { Card, Row, Col, Statistic, Button, Table, Select, message } from 'antd'
+import { ReloadOutlined, UploadOutlined, BarChartOutlined } from '@ant-design/icons'
 import { sitesApi, pushApi } from '../../services/api'
 
 const { Option } = Select
@@ -16,12 +16,9 @@ const Push: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [logList, setLogList] = useState<any[]>([])
   const [logLoading, setLogLoading] = useState(false)
-  const [pushModalVisible, setPushModalVisible] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [total, setTotal] = useState(0)
-  const [isPushing, setIsPushing] = useState(false)
-  const [pushProgress, setPushProgress] = useState(0)
 
   // 日志表格列配置
   const columns = [
@@ -171,51 +168,11 @@ const Push: React.FC = () => {
     message.success('统计数据已刷新')
   }
 
-  // 触发站点推送
-  const handleTriggerPush = async () => {
-    if (!selectedSiteId) {
-      message.warning('请先选择站点')
-      return
-    }
-
-    try {
-      setIsPushing(true)
-      const res = await pushApi.triggerPush(selectedSiteId)
-      if (res.code === 200) {
-        message.success('推送任务已触发，正在执行中')
-        // 开始轮询进度（这里简化处理，实际可以通过WebSocket或定期查询）
-        let progress = 0
-        const interval = setInterval(() => {
-          progress += 10
-          setPushProgress(progress)
-          if (progress >= 100) {
-            clearInterval(interval)
-            setIsPushing(false)
-            setPushProgress(0)
-            fetchStats()
-            fetchLogs(currentPage, pageSize)
-          }
-        }, 1000)
-        setPushModalVisible(true)
-      }
-    } catch (error) {
-      console.error('Failed to trigger push:', error)
-      message.error('触发推送失败')
-    }
-  }
-
   // 处理分页变化
   const handlePageChange = (page: number, size: number) => {
     setCurrentPage(page)
     setPageSize(size)
     fetchLogs(page, size)
-  }
-
-  // 关闭推送弹窗
-  const handleClosePushModal = () => {
-    setPushModalVisible(false)
-    setIsPushing(false)
-    setPushProgress(0)
   }
 
   return (
@@ -279,13 +236,6 @@ const Push: React.FC = () => {
             />
           </Col>
         </Row>
-        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-          <Col span={8}>
-            <Button type="primary" icon={<PlayCircleOutlined />} onClick={handleTriggerPush} loading={isPushing}>
-              手动触发推送
-            </Button>
-          </Col>
-        </Row>
       </Card>
       
       {/* 推送日志列表 */}
@@ -306,33 +256,6 @@ const Push: React.FC = () => {
           }}
         />
       </Card>
-      
-      {/* 推送进度弹窗 */}
-      <Modal
-        title="推送进度"
-        open={pushModalVisible}
-        onCancel={handleClosePushModal}
-        footer={null}
-        closable={false}
-      >
-        <div style={{ textAlign: 'center', padding: '20px 0' }}>
-          <Spin tip="正在推送中..." spinning={isPushing} size="large">
-            <div style={{ marginBottom: 20 }}>
-              <Statistic
-                title="推送进度"
-                value={pushProgress}
-                suffix="%"
-                valueStyle={{ color: '#1890ff' }}
-              />
-            </div>
-            <div style={{ marginTop: 20 }}>
-              <Button type="primary" onClick={handleClosePushModal} disabled={isPushing}>
-                关闭
-              </Button>
-            </div>
-          </Spin>
-        </div>
-      </Modal>
     </div>
   )
 }

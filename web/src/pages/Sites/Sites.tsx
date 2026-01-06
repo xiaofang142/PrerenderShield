@@ -1530,33 +1530,7 @@ const Sites: React.FC = () => {
             }}
           </Form.Item>
 
-          <Divider orientation="left">防火墙配置</Divider>
-          <Form.Item name={['firewall', 'enabled']} label="启用防火墙" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item
-            noStyle
-            shouldUpdate={(prevValues, currentValues) => prevValues.firewall?.enabled !== currentValues.firewall?.enabled}
-          >
-             {({ getFieldValue }) => {
-               const enabled = getFieldValue(['firewall', 'enabled']);
-               return enabled ? (
-                 <>
-                   <Form.Item name={['firewall', 'action', 'defaultAction']} label="默认动作">
-                     <Select>
-                       <Option value="allow">允许</Option>
-                       <Option value="block">拒绝</Option>
-                     </Select>
-                   </Form.Item>
-                 </>
-               ) : null;
-             }}
-          </Form.Item>
-
-          <Divider orientation="left">渲染预热配置</Divider>
-          <Form.Item name={['prerender', 'enabled']} label="启用渲染预热" valuePropName="checked">
-            <Switch />
-          </Form.Item>
+          {/* Firewall and Prerender configurations removed from here as they have dedicated configuration buttons */}
           
         </Form>
       </Modal>
@@ -1591,13 +1565,16 @@ const Sites: React.FC = () => {
           <Form.Item name={['preheat', 'enabled']} label="启用预热" valuePropName="checked">
             <Switch />
           </Form.Item>
-          <Form.Item name={['preheat', 'sitemapURL']} label="Sitemap URL">
-            <Input placeholder="https://example.com/sitemap.xml" />
-          </Form.Item>
           
           <Divider orientation="left">爬虫设置</Divider>
-          <Form.Item name="crawlerHeaders" label="爬虫User-Agent列表">
-             <Select mode="tags" style={{ width: '100%' }} tokenSeparators={[',', '\n']} />
+          <Form.Item name="crawlerHeaders" label="爬虫User-Agent列表" extra="支持输入自定义User-Agent，回车确认">
+             <Select 
+               mode="tags" 
+               style={{ width: '100%' }} 
+               tokenSeparators={[',', '\n']}
+               options={getDefaultCrawlerHeaders().map(ua => ({ label: ua, value: ua }))}
+               placeholder="请选择或输入常见的爬虫协议头"
+             />
           </Form.Item>
         </Form>
       </Modal>
@@ -1615,17 +1592,26 @@ const Sites: React.FC = () => {
           <Form.Item name="enabled" label="启用推送" valuePropName="checked">
             <Switch />
           </Form.Item>
+          <Divider orientation="left">百度推送</Divider>
           <Form.Item name="baiduAPI" label="百度推送API">
             <Input />
           </Form.Item>
           <Form.Item name="baiduToken" label="百度推送Token">
             <Input />
           </Form.Item>
+          <Form.Item name="baiduDailyLimit" label="百度每日限制提交数量" tooltip="百度站长平台每日配额">
+            <Input type="number" />
+          </Form.Item>
+          
+          <Divider orientation="left">必应推送</Divider>
           <Form.Item name="bingAPI" label="Bing推送API">
             <Input />
           </Form.Item>
           <Form.Item name="bingToken" label="Bing推送Token">
             <Input />
+          </Form.Item>
+          <Form.Item name="bingDailyLimit" label="必应每日限制提交数量" tooltip="必应站长平台每日配额">
+            <Input type="number" />
           </Form.Item>
         </Form>
       </Modal>
