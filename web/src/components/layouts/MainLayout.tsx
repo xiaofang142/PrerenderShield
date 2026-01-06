@@ -4,6 +4,7 @@ import { MenuUnfoldOutlined, MenuFoldOutlined, DashboardOutlined, SecurityScanOu
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useTranslation } from 'react-i18next'
+import { systemApi } from '../../services/api'
 
 const { Header, Sider, Content } = Layout
 
@@ -13,6 +14,25 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation()
   const navigate = useNavigate()
   const { logout, username } = useAuth()
+  const [appInfo, setAppInfo] = React.useState<{ version: string, official_url: string }>({ version: '', official_url: '' })
+
+  React.useEffect(() => {
+    const fetchVersion = async () => {
+      try {
+        const res = await systemApi.version()
+        if (res.data) {
+          setAppInfo({
+            version: res.data.version || '1.0.0',
+            official_url: res.data.official_url || '#'
+          })
+        }
+      } catch (error) {
+        console.error('Failed to fetch version info:', error)
+      }
+    }
+    fetchVersion()
+  }, [])
+
 
   // 退出登录处理函数
   const handleLogout = () => {
@@ -48,6 +68,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           borderRight: '1px solid #e8e8e8',
         }}
       >
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* Logo区域 - 雷池风格 */}
         <div 
           className="logo" 
@@ -68,6 +89,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           {collapsed ? 'PS' : 'PrerenderShield'}
         </div>
         
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
         {/* 菜单 - 纯白主题 */}
         <Menu 
           theme="light" 
@@ -122,6 +144,32 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
           ]}
         />
+        
+        {/* 底部版本信息 */}
+        {!collapsed && (
+          <div style={{ 
+            padding: '16px 0', 
+            textAlign: 'center', 
+            borderTop: '1px solid #f0f0f0',
+            backgroundColor: '#fff'
+          }}>
+            <div style={{ fontSize: '12px', color: '#999', marginBottom: '4px' }}>
+              {appInfo.version ? `v${appInfo.version}` : ''}
+            </div>
+            <div>
+              <a 
+                href={appInfo.official_url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style={{ fontSize: '12px', color: '#2f855a', textDecoration: 'none' }}
+              >
+                {t('system.visitOfficial')}
+              </a>
+            </div>
+          </div>
+        )}
+        </div>
+        </div>
       </Sider>
       
       {/* 主内容区域 */}

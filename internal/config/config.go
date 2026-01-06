@@ -164,8 +164,16 @@ type Config struct {
 	Storage StorageConfig `yaml:"storage"`
 	// 监控配置
 	Monitoring MonitoringConfig `yaml:"monitoring"`
+	// 应用配置
+	App AppConfig `yaml:"app"`
 	// 站点列表
 	Sites []SiteConfig `yaml:"sites"`
+}
+
+// AppConfig 应用全局配置
+type AppConfig struct {
+	Version     string `yaml:"version" json:"version"`
+	OfficialURL string `yaml:"official_url" json:"official_url"`
 }
 
 // ServerConfig 服务器配置
@@ -875,6 +883,10 @@ func defaultConfig() *Config {
 		Monitoring: MonitoringConfig{
 			Enabled:           true,
 			PrometheusAddress: ":9090",
+		},
+		App: AppConfig{
+			Version:     "1.0.1",
+			OfficialURL: "https://prerender.websitetool.cn",
 		},
 		Sites: []SiteConfig{defaultSite},
 	}

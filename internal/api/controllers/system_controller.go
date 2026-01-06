@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	appConfig "prerender-shield/internal/config"
 	"prerender-shield/internal/redis"
 	"time"
 
@@ -49,12 +50,14 @@ func (c *SystemController) Health(ctx *gin.Context) {
 
 // Version 版本信息接口
 func (c *SystemController) Version(ctx *gin.Context) {
+	cfg := appConfig.GetInstance().GetConfig()
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
 		"data": gin.H{
-			"version": "1.0.0",
-			"name":    "prerender-shield",
+			"version":      cfg.App.Version,
+			"official_url": cfg.App.OfficialURL,
+			"name":         "prerender-shield",
 		},
 	})
 }
