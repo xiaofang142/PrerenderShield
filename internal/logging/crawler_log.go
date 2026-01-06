@@ -31,6 +31,7 @@ type CrawlerLog struct {
 	
 	// GeoIP fields
 	Country     string  `json:"country,omitempty"`
+	CountryCode string  `json:"country_code,omitempty"`
 	City        string  `json:"city,omitempty"`
 	Latitude    float64 `json:"latitude,omitempty"`
 	Longitude   float64 `json:"longitude,omitempty"`

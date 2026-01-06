@@ -10,6 +10,7 @@ import (
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/monitoring"
 	"prerender-shield/internal/repository"
+	"prerender-shield/internal/utils/country"
 )
 
 // OverviewController 概览控制器
@@ -96,30 +97,24 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	globeData := make([]gin.H, 0)
 	countryMap := make(map[string]int64)
 
-	// 国家名称标准化映射
-	countryNameMap := map[string]string{
-		"CN": "China",
-		"US": "United States",
-		"UK": "United Kingdom",
-		"RU": "Russia",
-		"KP": "Korea",
-		"KR": "Korea",
-		"JP": "Japan",
-		// 可以根据需要添加更多映射
-	}
-
 	for _, item := range geoStats {
 		globeData = append(globeData, gin.H{
 			"lat":   item["lat"],
 			"lng":   item["lng"],
 			"count": item["count"],
 		})
-		if country, ok := item["country"].(string); ok && country != "" {
-			// 标准化国家名称
-			if normalized, exists := countryNameMap[country]; exists {
-				country = normalized
-			}
-			countryMap[country] += item["count"].(int64)
+		
+		var countryName string
+		// 优先使用 CountryCode 进行映射
+		if code, ok := item["country_code"].(string); ok && code != "" {
+			countryName = country.GetCountryName(code)
+		} else if name, ok := item["country"].(string); ok && name != "" {
+			// 回退到使用 Country Name
+			countryName = country.GetCountryName(name)
+		}
+
+		if countryName != "" {
+			countryMap[countryName] += item["count"].(int64)
 		}
 	}
 

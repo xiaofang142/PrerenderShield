@@ -27,9 +27,10 @@ type VisitLog struct {
 	Referer  string    `json:"referer"`
 
 	// GeoIP fields
-	Country   string  `json:"country,omitempty"`
-	City      string  `json:"city,omitempty"`
-	Latitude  float64 `json:"latitude,omitempty"`
+	Country     string  `json:"country,omitempty"`
+	CountryCode string  `json:"country_code,omitempty"` // ISO 3166-1 alpha-2
+	City        string  `json:"city,omitempty"`
+	Latitude    float64 `json:"latitude,omitempty"`
 	Longitude float64 `json:"longitude,omitempty"`
 	Washed    bool    `json:"washed"` // 是否已清洗
 }
@@ -511,11 +512,12 @@ func (vlm *VisitLogManager) GetVisitStats(site string, startTime, endTime time.T
 				geoKey := fmt.Sprintf("%.2f,%.2f", l.Latitude, l.Longitude)
 				if _, ok := geoStats[geoKey]; !ok {
 					geoStats[geoKey] = map[string]interface{}{
-						"lat":     l.Latitude,
-						"lng":     l.Longitude,
-						"count":   int64(0),
-						"city":    l.City,
-						"country": l.Country,
+						"lat":          l.Latitude,
+						"lng":          l.Longitude,
+						"count":        int64(0),
+						"city":         l.City,
+						"country":      l.Country,
+						"country_code": l.CountryCode,
 					}
 				}
 				geoStats[geoKey]["count"] = geoStats[geoKey]["count"].(int64) + 1

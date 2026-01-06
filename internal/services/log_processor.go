@@ -69,16 +69,17 @@ func (p *LogProcessor) processCrawlerLogs() {
 			oldLog := *logEntry
 			if location != nil {
 				logEntry.Country = location.Country
+				logEntry.CountryCode = location.CountryCode
 				logEntry.City = location.City
 				logEntry.Latitude = location.Latitude
 				logEntry.Longitude = location.Longitude
 			}
 			logEntry.Washed = true
-			
+
 			if err := p.crawlerLogMgr.UpdateLog(oldLog, *logEntry); err != nil {
 				logging.DefaultLogger.Error("Failed to update crawler log: %v", err)
 			}
-			
+
 			if location != nil {
 				p.checkAndBan(logEntry.Site, ip, location.CountryCode)
 			}
@@ -107,16 +108,17 @@ func (p *LogProcessor) processVisitLogs() {
 			oldLog := *logEntry
 			if location != nil {
 				logEntry.Country = location.Country
+				logEntry.CountryCode = location.CountryCode
 				logEntry.City = location.City
 				logEntry.Latitude = location.Latitude
 				logEntry.Longitude = location.Longitude
 			}
 			logEntry.Washed = true
-			
+
 			if err := p.visitLogMgr.UpdateLog(oldLog, *logEntry); err != nil {
 				logging.DefaultLogger.Error("Failed to update visit log: %v", err)
 			}
-			
+
 			if location != nil {
 				p.checkAndBan(logEntry.Site, ip, location.CountryCode)
 			}
@@ -133,11 +135,11 @@ func (p *LogProcessor) checkAndBan(siteID, ip, countryCode string) {
 			break
 		}
 	}
-	
+
 	if siteConfig == nil {
 		return
 	}
-	
+
 	for _, blocked := range siteConfig.Firewall.GeoIPConfig.BlockList {
 		if strings.EqualFold(blocked, countryCode) {
 			p.addToBlacklist(siteID, ip)
