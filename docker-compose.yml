@@ -2,7 +2,8 @@ version: '3.8'
 
 services:
   prerender-shield:
-    build: .
+    # 使用最新的预构建镜像，而不是本地构建
+    image: your-org/prerender-shield:latest
     container_name: prerender-shield
     restart: unless-stopped
     ports:
@@ -11,7 +12,6 @@ services:
     volumes:
       - ./data:/app/data
       - ./configs:/app/configs
-      - ./web/dist:/app/web/dist
       - ./certs:/app/certs
     environment:
       - CONFIG_PATH=/app/configs/config.yml
