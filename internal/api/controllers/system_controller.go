@@ -81,9 +81,10 @@ func (c *SystemController) GetSystemConfig(ctx *gin.Context) {
 	// 如果没有配置，返回默认值
 	if len(config) == 0 {
 		config = map[string]string{
-			"max_users":          "1",
-			"allow_registration": "false",
-			"maintenance_mode":   "false",
+			"access_log_retention_days":  "7",
+			"access_log_max_size":        "128",
+			"crawler_log_retention_days": "7",
+			"crawler_log_max_size":       "128",
 		}
 	}
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Form, InputNumber, Switch, Button, message, Spin, Typography, Divider } from 'antd'
+import { Card, Form, InputNumber, Button, message, Spin, Typography, Divider, Row, Col } from 'antd'
 import { SaveOutlined, SettingOutlined } from '@ant-design/icons'
 import { systemApi } from '../../services/api'
 
@@ -19,12 +19,12 @@ const SystemConfig: React.FC = () => {
     try {
       const response = await systemApi.getConfig()
       if (response.code === 200) {
-        // Convert string values to appropriate types for the form
         const config = response.data
         form.setFieldsValue({
-          max_users: parseInt(config.max_users || '1'),
-          allow_registration: config.allow_registration === 'true',
-          maintenance_mode: config.maintenance_mode === 'true',
+          access_log_retention_days: parseInt(config.access_log_retention_days || '7'),
+          access_log_max_size: parseInt(config.access_log_max_size || '128'),
+          crawler_log_retention_days: parseInt(config.crawler_log_retention_days || '7'),
+          crawler_log_max_size: parseInt(config.crawler_log_max_size || '128'),
         })
       }
     } catch (error) {
@@ -38,11 +38,11 @@ const SystemConfig: React.FC = () => {
   const handleSave = async (values: any) => {
     setSaving(true)
     try {
-      // Convert values back to strings for the API
       const config = {
-        max_users: values.max_users.toString(),
-        allow_registration: values.allow_registration.toString(),
-        maintenance_mode: values.maintenance_mode.toString(),
+        access_log_retention_days: values.access_log_retention_days.toString(),
+        access_log_max_size: values.access_log_max_size.toString(),
+        crawler_log_retention_days: values.crawler_log_retention_days.toString(),
+        crawler_log_max_size: values.crawler_log_max_size.toString(),
       }
 
       const response = await systemApi.updateConfig(config)
@@ -84,42 +84,60 @@ const SystemConfig: React.FC = () => {
             layout="vertical"
             onFinish={handleSave}
             initialValues={{
-              max_users: 1,
-              allow_registration: false,
-              maintenance_mode: false,
+              access_log_retention_days: 7,
+              access_log_max_size: 128,
+              crawler_log_retention_days: 7,
+              crawler_log_max_size: 128,
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
               <SettingOutlined style={{ fontSize: 20, color: '#2f855a', marginRight: 8 }} />
-              <Title level={4} style={{ margin: 0 }}>基础配置</Title>
+              <Title level={4} style={{ margin: 0 }}>日志保留策略</Title>
             </div>
             <Divider style={{ margin: '12px 0 24px' }} />
 
-            <Form.Item
-              name="max_users"
-              label="最大用户数"
-              help="系统允许注册的最大管理员数量（当前架构建议保持为 1）"
-            >
-              <InputNumber min={1} max={100} style={{ width: 200 }} />
-            </Form.Item>
+            <Row gutter={24}>
+              <Col span={12}>
+                <Card title="访问日志 (Access Logs)" bordered={true} size="small">
+                  <Form.Item
+                    name="access_log_retention_days"
+                    label="保留天数"
+                    help="超过该天数的访问日志将被自动删除"
+                  >
+                    <InputNumber min={1} max={365} addonAfter="天" style={{ width: '100%' }} />
+                  </Form.Item>
 
-            <Form.Item
-              name="allow_registration"
-              label="允许注册"
-              valuePropName="checked"
-              help="是否允许新用户注册（建议仅在初始化时开启）"
-            >
-              <Switch />
-            </Form.Item>
+                  <Form.Item
+                    name="access_log_max_size"
+                    label="最大占用空间"
+                    help="当日志总大小超过该值时，将自动删除最早的日志"
+                  >
+                    <InputNumber min={1} max={10240} addonAfter="MB" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Card>
+              </Col>
+              
+              <Col span={12}>
+                <Card title="爬虫日志 (Crawler Logs)" bordered={true} size="small">
+                  <Form.Item
+                    name="crawler_log_retention_days"
+                    label="保留天数"
+                    help="超过该天数的爬虫日志将被自动删除"
+                  >
+                    <InputNumber min={1} max={365} addonAfter="天" style={{ width: '100%' }} />
+                  </Form.Item>
 
-            <Form.Item
-              name="maintenance_mode"
-              label="维护模式"
-              valuePropName="checked"
-              help="开启后，除管理员外的所有访问将被拦截并显示维护页面"
-            >
-              <Switch checkedChildren="开启" unCheckedChildren="关闭" />
-            </Form.Item>
+                  <Form.Item
+                    name="crawler_log_max_size"
+                    label="最大占用空间"
+                    help="当日志总大小超过该值时，将自动删除最早的日志"
+                  >
+                    <InputNumber min={1} max={10240} addonAfter="MB" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Card>
+              </Col>
+            </Row>
+
           </Form>
         </Card>
       </Spin>

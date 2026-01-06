@@ -1,59 +1,23 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, Button, Table, Modal, Input, message, Select } from 'antd'
-import { SecurityScanOutlined, ReloadOutlined, PlayCircleOutlined } from '@ant-design/icons'
+import { Card, Row, Col, Button, Table, message, Select, Tag, Space, Tooltip } from 'antd'
+import { ReloadOutlined, StopOutlined, CheckCircleOutlined, GlobalOutlined, ClockCircleOutlined } from '@ant-design/icons'
 import { firewallApi, sitesApi } from '../../services/api'
+import dayjs from 'dayjs'
 
-const { Search } = Input
 const { Option } = Select
 
 const Firewall: React.FC = () => {
   const [sites, setSites] = useState<any[]>([])
   const [selectedSite, setSelectedSite] = useState<string>('')
-  const [status, setStatus] = useState({
-    enabled: false,
-    defaultAction: 'block',
-    blockMessage: 'Request blocked by firewall',
-  })
-  const [rules, setRules] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [scanModalVisible, setScanModalVisible] = useState(false)
-  const [scanUrl, setScanUrl] = useState('')
-  const [scanLoading, setScanLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
+  
+  // Attack Logs State
+  const [logs, setLogs] = useState<any[]>([])
+  const [total, setTotal] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
-  // 表格列配置
-  const columns = [
-    {
-      title: '规则ID',
-      dataIndex: 'id',
-      key: 'id',
-    },
-    {
-      title: '名称',
-      dataIndex: 'name',
-      key: 'name',
-    },
-    {
-      title: '分类',
-      dataIndex: 'category',
-      key: 'category',
-    },
-    {
-      title: '模式',
-      dataIndex: 'pattern',
-      key: 'pattern',
-    },
-    {
-      title: '严重程度',
-      dataIndex: 'severity',
-      key: 'severity',
-      render: (text: string) => {
-        const color = text === 'high' ? '#f5222d' : text === 'medium' ? '#faad14' : '#52c41a'
-        return <span style={{ color }}>{text}</span>
-      },
-    },
-  ]
-
-  // 获取站点列表
+  // Fetch Sites
   const fetchSites = async () => {
     try {
       const res = await sitesApi.getSites()
@@ -69,169 +33,200 @@ const Firewall: React.FC = () => {
     }
   }
 
-  // 获取防火墙状态
-  const fetchStatus = async () => {
+  // Fetch Attack Logs
+  const fetchLogs = async (page = 1) => {
     if (!selectedSite) return
     
     try {
       setLoading(true)
-      const res = await firewallApi.getWafConfig(selectedSite)
+      const res = await firewallApi.getAttackLogs({
+        site_id: selectedSite,
+        page: page,
+        limit: pageSize
+      })
       
       if (res.code === 200) {
-        const config = res.data
-        setStatus({
-          enabled: config.enabled,
-          defaultAction: config.mode === 'block' ? 'block' : 'allow',
-          blockMessage: 'Request blocked by firewall',
-        })
-        setRules(config.rules || [])
+        setLogs(res.data.logs || [])
+        setTotal(res.data.total || 0)
+        setCurrentPage(page)
       }
     } catch (error) {
-      console.error('Failed to fetch firewall data:', error)
-      message.error('获取防火墙数据失败')
+      console.error('Failed to fetch attack logs:', error)
+      message.error('获取攻击记录失败')
     } finally {
       setLoading(false)
     }
   }
 
-  // 初始化数据
+  // Handle Add to Whitelist
+  const handleAddToWhitelist = async (ip: string) => {
+    try {
+      const res = await firewallApi.addToWhitelist(selectedSite, ip)
+      if (res.code === 200) {
+        message.success(`已将 IP ${ip} 加入白名单`)
+      } else {
+        message.error(res.message || '操作失败')
+      }
+    } catch (error) {
+      message.error('操作失败')
+    }
+  }
+
+  // Handle Add to Blacklist
+  const handleAddToBlacklist = async (ip: string) => {
+    try {
+      const res = await firewallApi.addToBlacklist(selectedSite, ip)
+      if (res.code === 200) {
+        message.success(`已将 IP ${ip} 加入黑名单`)
+      } else {
+        message.error(res.message || '操作失败')
+      }
+    } catch (error) {
+      message.error('操作失败')
+    }
+  }
+
+  // Initialize
   useEffect(() => {
     fetchSites()
   }, [])
 
-  // 当选择的站点变化时，重新获取状态
+  // On Site Change
   useEffect(() => {
     if (selectedSite) {
-      fetchStatus()
+      fetchLogs(1)
     }
   }, [selectedSite])
 
-  // 触发扫描
-  const handleScan = async () => {
-    if (!selectedSite) {
-      message.warning('请选择站点')
-      return
+  // Table Columns
+  const columns = [
+    {
+      title: 'IP地址',
+      dataIndex: 'ip_address',
+      key: 'ip_address',
+      render: (text: string) => <Tag color="blue">{text}</Tag>
+    },
+    {
+      title: '地理位置',
+      key: 'location',
+      render: (_: any, record: any) => (
+        <Space>
+          <GlobalOutlined />
+          <span>{record.country || '未知'} {record.city}</span>
+        </Space>
+      )
+    },
+    {
+      title: '攻击时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      render: (text: string) => (
+        <Space>
+          <ClockCircleOutlined />
+          <span>{dayjs(text).format('YYYY-MM-DD HH:mm:ss')}</span>
+        </Space>
+      )
+    },
+    {
+      title: '拦截原因',
+      key: 'reason',
+      render: (_: any, record: any) => (
+        <span>{record.reason || record.rule_id || 'Unknown'}</span>
+      )
+    },
+    {
+      title: '操作',
+      key: 'action',
+      render: (_: any, record: any) => (
+        <Space>
+          <Tooltip title="加入白名单">
+            <Button 
+              type="link" 
+              size="small" 
+              icon={<CheckCircleOutlined />} 
+              onClick={() => handleAddToWhitelist(record.ip_address)}
+              style={{ color: '#52c41a' }}
+            >
+              白名单
+            </Button>
+          </Tooltip>
+          <Tooltip title="加入黑名单">
+            <Button 
+              type="link" 
+              size="small" 
+              icon={<StopOutlined />} 
+              danger
+              onClick={() => handleAddToBlacklist(record.ip_address)}
+            >
+              黑名单
+            </Button>
+          </Tooltip>
+        </Space>
+      )
     }
-    
-    if (!scanUrl) {
-      message.warning('请输入要扫描的URL')
-      return
-    }
-
-    try {
-      setScanLoading(true)
-      const res = await firewallApi.scan({ site: selectedSite, url: scanUrl })
-      if (res.code === 200) {
-        message.success('扫描已触发')
-        setScanModalVisible(false)
-        setScanUrl('')
-      } else {
-        message.error('扫描触发失败')
-      }
-    } catch (error) {
-      console.error('Failed to trigger scan:', error)
-      message.error('扫描触发失败')
-    } finally {
-      setScanLoading(false)
-    }
-  }
+  ]
 
   return (
     <div>
-      <h1 className="page-title">防火墙</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div>
+          <h1 className="page-title" style={{ margin: 0 }}>防火墙拦截记录</h1>
+          <div style={{ color: '#666', marginTop: 8 }}>
+            查看被防火墙拦截的恶意请求记录
+          </div>
+        </div>
+      </div>
       
-      {/* 站点选择器 */}
+      {/* Site Selector */}
       <Card className="card" style={{ marginBottom: 16 }}>
         <Row align="middle">
-          <Col span={8}>
-            <label style={{ marginRight: 8 }}>选择站点：</label>
-            <Select
-              value={selectedSite}
-              onChange={setSelectedSite}
-              style={{ width: 200 }}
-              loading={sites.length === 0}
-            >
-              {sites.map((site) => (
-                <Option key={site.name} value={site.name}>
-                  {site.name} ({site.domain})
-                </Option>
-              ))}
-            </Select>
+          <Col span={12}>
+            <Space>
+              <label>选择站点：</label>
+              <Select
+                value={selectedSite}
+                onChange={setSelectedSite}
+                style={{ width: 250 }}
+                loading={sites.length === 0}
+                placeholder="请选择站点"
+              >
+                {sites.map((site) => (
+                  <Option key={site.name} value={site.name}>
+                    {site.name} ({site.domain})
+                  </Option>
+                ))}
+              </Select>
+            </Space>
           </Col>
-          <Col span={8}>
-            <Button type="primary" icon={<ReloadOutlined />} onClick={fetchStatus} loading={loading}>
-              刷新状态
+          <Col span={12} style={{ textAlign: 'right' }}>
+            <Button type="primary" icon={<ReloadOutlined />} onClick={() => fetchLogs(currentPage)} loading={loading}>
+              刷新列表
             </Button>
           </Col>
         </Row>
       </Card>
       
-      {/* 防火墙状态卡片 */}
-      <Card className="card">
-        <Row gutter={[16, 16]}>
-          <Col span={6}>
-            <Statistic
-              title="防火墙状态"
-              value={status.enabled ? '已启用' : '已禁用'}
-              prefix={<SecurityScanOutlined />}
-              valueStyle={{ color: status.enabled ? '#52c41a' : '#faad14' }}
-            />
-          </Col>
-          <Col span={12}>
-            <Statistic
-              title="默认动作"
-              value={status.defaultAction}
-              valueStyle={{ color: status.defaultAction === 'block' ? '#f5222d' : '#52c41a' }}
-            />
-          </Col>
-          <Col span={6}>
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              onClick={() => setScanModalVisible(true)}
-            >
-              手动扫描
-            </Button>
-          </Col>
-        </Row>
-      </Card>
-
-      {/* 规则列表 */}
-      <Card className="card" title="防火墙规则">
+      {/* Attack Log List */}
+      <Card className="card" title="攻击记录列表">
         <Table
           columns={columns}
-          dataSource={rules}
-          rowKey="id"
+          dataSource={logs}
+          rowKey={(record) => record.id || Math.random().toString()}
           loading={loading}
-          pagination={{ pageSize: 10 }}
+          pagination={{
+            current: currentPage,
+            pageSize: pageSize,
+            total: total,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total) => `共 ${total} 条记录`,
+            onChange: (page, size) => {
+              setPageSize(size)
+              fetchLogs(page)
+            }
+          }}
         />
       </Card>
-
-      {/* 扫描模态框 */}
-      <Modal
-        title="手动扫描"
-        open={scanModalVisible}
-        onOk={handleScan}
-        onCancel={() => setScanModalVisible(false)}
-        confirmLoading={scanLoading}
-        okText="开始扫描"
-        cancelText="取消"
-      >
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', marginBottom: 8 }}>URL地址：</label>
-          <Search
-            placeholder="请输入要扫描的URL"
-            allowClear
-            value={scanUrl}
-            onChange={(e) => setScanUrl(e.target.value)}
-            onPressEnter={handleScan}
-            style={{ width: '100%' }}
-          />
-        </div>
-        <p style={{ color: '#666', fontSize: 12 }}>
-          注意：扫描可能需要一段时间，请耐心等待
-        </p>
-      </Modal>
     </div>
   )
 }

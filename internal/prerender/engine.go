@@ -112,6 +112,7 @@ type PreheatManager struct {
 	crawler       *Crawler
 	preheatWorker *PreheatWorker
 	isRunning     bool
+	currentTaskID string
 	mutex         sync.Mutex
 }
 
@@ -122,6 +123,7 @@ func NewPreheatManager(engine *Engine, redisClient *redis.Client) *PreheatManage
 		engine:      engine,
 		redisClient: redisClient,
 		isRunning:   false,
+		currentTaskID: "",
 	}
 }
 
@@ -135,34 +137,62 @@ func (pm *PreheatManager) TriggerPreheat() (string, error) {
 func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string, error) {
 	pm.mutex.Lock()
 	if pm.isRunning {
-		pm.mutex.Unlock()
-		return "", fmt.Errorf("preheat is already running")
+		logging.DefaultLogger.Info("Preheat already running, stopping previous task to restart...")
+		// 如果正在运行，停止之前的任务
+		if pm.crawler != nil {
+			pm.crawler.Stop()
+		}
+		// 标记为停止，但不要重置 currentTaskID，直到我们分配新的
+		pm.isRunning = false
 	}
+	
 	pm.isRunning = true
+	// 生成新的任务ID，这会使旧的goroutine（如果还在运行）失效（不会更新isRunning状态）
+	pm.currentTaskID = fmt.Sprintf("preheat-%d", time.Now().UnixNano())
+	taskID := pm.currentTaskID
 	pm.mutex.Unlock()
 
 	// 检查Redis客户端是否可用
 	if pm.redisClient == nil {
 		pm.mutex.Lock()
 		pm.isRunning = false
+		pm.currentTaskID = ""
 		pm.mutex.Unlock()
 		return "", fmt.Errorf("redis client is not available, preheat cannot be triggered")
 	}
 
-	// 创建预热任务
-	taskID, err := pm.redisClient.CreatePreheatTask(pm.engine.SiteName)
+	// 创建预热任务 (Redis)
+	// 注意：这里我们使用生成的taskID或者让Redis创建。
+	// 原有逻辑是 pm.redisClient.CreatePreheatTask(pm.engine.SiteName) 返回 taskID。
+	// 为了保持Redis中的TaskID和我们内部的一致性，我们可以修改 CreatePreheatTask 或者 忽略内部生成的ID，
+	// 但是我们需要 currentTaskID 来控制并发。
+	// 实际上，Redis中的TaskID是用于记录进度的。
+	// 我们可以让 Redis 创建 TaskID，然后我们也用这个 ID 作为 currentTaskID。
+	
+	redisTaskID, err := pm.redisClient.CreatePreheatTask(pm.engine.SiteName)
 	if err != nil {
 		pm.mutex.Lock()
 		pm.isRunning = false
+		pm.currentTaskID = ""
 		pm.mutex.Unlock()
 		return "", fmt.Errorf("failed to create preheat task: %v", err)
 	}
+	
+	// 更新 currentTaskID 为 Redis 返回的 ID
+	pm.mutex.Lock()
+	pm.currentTaskID = redisTaskID
+	taskID = redisTaskID
+	pm.mutex.Unlock()
 
 	// 异步执行预热流程，包括爬虫和渲染
 	go func() {
 		defer func() {
 			pm.mutex.Lock()
-			pm.isRunning = false
+			// 只有当 currentTaskID 匹配时，才重置 isRunning
+			if pm.currentTaskID == taskID {
+				pm.isRunning = false
+				pm.currentTaskID = ""
+			}
 			pm.mutex.Unlock()
 		}()
 
@@ -179,15 +209,36 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 			RedisClient: pm.redisClient,
 		}
 
-		// 创建爬虫实例
+		// 创建爬虫实例并保存到 pm.crawler
 		crawler := NewCrawler(crawlerConfig)
+		pm.mutex.Lock()
+		// 如果在创建过程中已经被停止/替换（currentTaskID变了），则终止
+		if pm.currentTaskID != taskID {
+			pm.mutex.Unlock()
+			return
+		}
+		pm.crawler = crawler
+		pm.mutex.Unlock()
 
 		// 同步执行爬虫，确保先完成URL爬取
 		if err := crawler.Start(); err != nil {
+			// 检查是否是因为上下文取消
+			if strings.Contains(err.Error(), "context canceled") {
+				logging.DefaultLogger.Info("Crawler canceled for site: %s", pm.engine.SiteName)
+				return
+			}
 			pm.redisClient.SetPreheatTaskStatus(pm.engine.SiteName, taskID, "failed")
 			logging.DefaultLogger.Error("Failed to crawl URLs: %v", err)
 			return
 		}
+		
+		// 再次检查任务是否已被取消
+		pm.mutex.Lock()
+		if pm.currentTaskID != taskID {
+			pm.mutex.Unlock()
+			return
+		}
+		pm.mutex.Unlock()
 
 		// 2. 获取所有URL后执行预热
 		urls, err := pm.redisClient.GetURLs(pm.engine.SiteName)
@@ -231,9 +282,9 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 
 		// 并发执行渲染预热
 		for _, url := range urls {
-			// 检查预热是否已被停止
+			// 检查预热是否已被停止或替换
 			pm.mutex.Lock()
-			if !pm.isRunning {
+			if !pm.isRunning || pm.currentTaskID != taskID {
 				pm.mutex.Unlock()
 				break
 			}
@@ -432,6 +483,7 @@ func (pm *PreheatManager) Stop() {
 	}
 
 	pm.isRunning = false
+	pm.currentTaskID = ""
 }
 
 // NewEngine 创建新的渲染预热引擎

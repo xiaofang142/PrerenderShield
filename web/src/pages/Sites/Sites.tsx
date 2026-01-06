@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Card, Table, Button, Modal, Form, Input, Switch, Select, Row, Col, Statistic, Upload, Typography, Space, message, Divider } from 'antd'
+import { Card, Table, Button, Modal, Form, Input, Switch, Select, Row, Col, Statistic, Upload, Typography, Space, message, Divider, Checkbox, Empty } from 'antd'
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, UploadOutlined, 
   UnorderedListOutlined, CloudUploadOutlined, FolderOpenOutlined, 
   FolderOutlined, FileOutlined, FolderOutlined as NewFolderOutlined, FileAddOutlined, UpOutlined, 
   DownloadOutlined, UnorderedListOutlined as ExtractOutlined, ReloadOutlined,
-  SecurityScanOutlined
+  SecurityScanOutlined, SearchOutlined
 } from '@ant-design/icons'
 import { sitesApi } from '../../services/api'
 import type { UploadProps } from 'antd'
+import { COUNTRIES } from '../../constants/countries'
 
 const { Option } = Select
 
 const Sites: React.FC = () => {
-  const navigate = useNavigate();
   // 使用useMessage hook来获取message实例，支持主题配置
   const [messageApi, contextHolder] = message.useMessage();
   const [sites, setSites] = useState<any[]>([])
@@ -22,6 +21,12 @@ const Sites: React.FC = () => {
   const [visible, setVisible] = useState(false)
   const [editingSite, setEditingSite] = useState<any>(null)
   const [form] = Form.useForm()
+  
+  // 国家选择器状态
+  const [countrySelectorVisible, setCountrySelectorVisible] = useState(false)
+  const [countrySelectorTarget, setCountrySelectorTarget] = useState<'allowList' | 'blockList'>('allowList')
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([])
+  const [countrySearchKeyword, setCountrySearchKeyword] = useState('')
   
   // 静态资源管理状态
   const [staticResModalVisible, setStaticResModalVisible] = useState(false)
@@ -43,6 +48,13 @@ const Sites: React.FC = () => {
   const [editingPushSite, setEditingPushSite] = useState<any>(null)
   const [pushConfigForm] = Form.useForm()
   
+  // WAF配置模态框状态
+  const [wafConfigModalVisible, setWafConfigModalVisible] = useState(false)
+  const [editingWafSite, setEditingWafSite] = useState<any>(null)
+  const [wafConfigForm] = Form.useForm()
+  
+  // 静态资源管理选中的行
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
 
   // 表格列配置
   const columns = [
@@ -181,7 +193,7 @@ const Sites: React.FC = () => {
               <Button
                 type="link"
                 icon={<SecurityScanOutlined />}
-                onClick={() => navigate(`/sites/${record.id}/waf`)}
+                onClick={() => handleWafConfig(record)}
                 style={{ marginRight: 8, whiteSpace: 'nowrap' }}
               >
                 WAF配置
@@ -598,6 +610,7 @@ const Sites: React.FC = () => {
       const response = await sitesApi.getFileList(finalSiteId, path)
       if (response.code === 200) {
         setFileList(response.data)
+        setSelectedRowKeys([])
       } else {
         messageApi.error('获取文件列表失败')
       }
@@ -722,10 +735,90 @@ const Sites: React.FC = () => {
 
 
 
+  // 批量删除
+  const handleBatchDelete = async () => {
+    if (!currentSite || selectedRowKeys.length === 0) return;
+    
+    Modal.confirm({
+      title: '批量删除确认',
+      content: `确定要删除选中的 ${selectedRowKeys.length} 个文件/目录吗？`,
+      okText: '确定',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          // 构建路径列表
+          const pathsToDelete = selectedRowKeys.map(key => {
+             const record = fileList.find(f => f.key === key);
+             const fileName = record ? record.name : key.toString().replace(/\/$/, '');
+             return (currentPath === '/' ? '' : currentPath) + '/' + fileName;
+          });
+
+          await sitesApi.batchDeleteStaticResources(currentSite.id, pathsToDelete);
+          messageApi.success('批量删除成功');
+          setSelectedRowKeys([]); // 清空选择
+          loadFileList(currentPath); // 刷新列表
+        } catch (error: any) {
+          console.error('Batch delete failed:', error);
+          messageApi.error('批量删除失败: ' + (error.message || '未知错误'));
+        }
+      },
+    });
+  };
+  
+  // 清空目录
+  const handleDeleteAll = async () => {
+    if (!currentSite) return;
+    if (fileList.length === 0) {
+        messageApi.info('当前目录为空');
+        return;
+    }
+
+    Modal.confirm({
+      title: '清空目录确认',
+      content: '确定要删除当前目录下的所有文件和子目录吗？此操作不可恢复！',
+      okText: '确定删除全部',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+         try {
+             const pathsToDelete = fileList.map(file => {
+                 return (currentPath === '/' ? '' : currentPath) + '/' + file.name;
+             });
+             
+             await sitesApi.batchDeleteStaticResources(currentSite.id, pathsToDelete);
+             messageApi.success('清空目录成功');
+             setSelectedRowKeys([]);
+             loadFileList(currentPath);
+         } catch (error: any) {
+             console.error('Delete all failed:', error);
+             messageApi.error('清空目录失败: ' + (error.message || '未知错误'));
+         }
+      }
+    });
+  }
+
   // 删除文件/目录
   const handleFileDelete = (file: any) => {
-    message.success(`${file.name} 删除成功`)
-    setFileList(prev => prev.filter(f => f.key !== file.key))
+    if (!currentSite) return;
+    Modal.confirm({
+      title: '删除确认',
+      content: `确定要删除 ${file.type === 'dir' ? '目录' : '文件'} "${file.name}" 吗？`,
+      okText: '确定',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const fullPath = (currentPath === '/' ? '' : currentPath) + '/' + file.name;
+          await sitesApi.deleteStaticResources(currentSite.id, fullPath);
+          messageApi.success(`${file.name} 删除成功`);
+          loadFileList(currentPath);
+        } catch (error: any) {
+          console.error('Delete file failed:', error);
+          messageApi.error('删除失败: ' + (error.message || '未知错误'));
+        }
+      }
+    });
   }
 
 
@@ -824,21 +917,21 @@ const Sites: React.FC = () => {
       // 合并配置：优先使用Redis中的配置，如果没有则使用站点默认配置
       const mergedConfig = {
         // 基础配置
-        enabled: redisConfig.enabled === '1' || site.prerender?.enabled || false,
+        enabled: redisConfig.enabled !== undefined ? (redisConfig.enabled === '1' || redisConfig.enabled === true || redisConfig.enabled === 'true') : (site.prerender?.enabled || false),
         poolSize: parseInt(redisConfig.pool_size) || site.prerender?.poolSize || 5,
         minPoolSize: parseInt(redisConfig.min_pool_size) || site.prerender?.minPoolSize || 2,
         maxPoolSize: parseInt(redisConfig.max_pool_size) || site.prerender?.maxPoolSize || 20,
         timeout: parseInt(redisConfig.timeout) || site.prerender?.timeout || 30,
         cacheTTL: parseInt(redisConfig.cache_ttl) || site.prerender?.cacheTTL || 3600,
         idleTimeout: parseInt(redisConfig.idle_timeout) || site.prerender?.idleTimeout || 300,
-        dynamicScaling: redisConfig.dynamic_scaling === '1' || site.prerender?.dynamicScaling !== false,
+        dynamicScaling: redisConfig.dynamic_scaling !== undefined ? (redisConfig.dynamic_scaling === '1' || redisConfig.dynamic_scaling === true || redisConfig.dynamic_scaling === 'true') : (site.prerender?.dynamicScaling !== false),
         scalingFactor: parseFloat(redisConfig.scaling_factor) || site.prerender?.scalingFactor || 0.5,
         scalingInterval: parseInt(redisConfig.scaling_interval) || site.prerender?.scalingInterval || 60,
-        useDefaultHeaders: redisConfig.use_default_headers === '1' || site.prerender?.useDefaultHeaders || false,
+        useDefaultHeaders: redisConfig.use_default_headers !== undefined ? (redisConfig.use_default_headers === '1' || redisConfig.use_default_headers === true || redisConfig.use_default_headers === 'true') : (site.prerender?.useDefaultHeaders || false),
         
         // 预热配置
         preheat: {
-          enabled: redisConfig.preheat_enabled === '1' || site.prerender?.preheat?.enabled || false,
+          enabled: redisConfig.preheat_enabled !== undefined ? (redisConfig.preheat_enabled === '1' || redisConfig.preheat_enabled === true || redisConfig.preheat_enabled === 'true') : (site.prerender?.preheat?.enabled || false),
           sitemapURL: redisConfig.preheat_sitemap_url || site.prerender?.preheat?.sitemapURL || '',
           schedule: redisConfig.preheat_schedule || site.prerender?.preheat?.schedule || '0 0 * * *',
           concurrency: parseInt(redisConfig.preheat_concurrency) || site.prerender?.preheat?.concurrency || 5,
@@ -847,7 +940,7 @@ const Sites: React.FC = () => {
         },
         
         // 爬虫头配置
-        crawlerHeaders: site.prerender?.crawlerHeaders?.join('\n') || getDefaultCrawlerHeaders().join('\n')
+        crawlerHeaders: site.prerender?.crawlerHeaders || getDefaultCrawlerHeaders()
       };
       
       console.log('Merged prerender config:', mergedConfig);
@@ -868,7 +961,7 @@ const Sites: React.FC = () => {
         scalingFactor: site.prerender?.scalingFactor || 0.5,
         scalingInterval: site.prerender?.scalingInterval || 60,
         useDefaultHeaders: site.prerender?.useDefaultHeaders || false,
-        crawlerHeaders: site.prerender?.crawlerHeaders?.join('\n') || getDefaultCrawlerHeaders().join('\n'),
+        crawlerHeaders: site.prerender?.crawlerHeaders || getDefaultCrawlerHeaders(),
         preheat: {
           enabled: site.prerender?.preheat?.enabled || false,
           sitemapURL: site.prerender?.preheat?.sitemapURL || '',
@@ -969,7 +1062,7 @@ const Sites: React.FC = () => {
       
       // 合并配置：优先使用Redis中的配置，如果没有则使用站点默认配置
       const mergedConfig = {
-        enabled: redisConfig.enabled === '1' || site.prerender?.push?.enabled || false,
+        enabled: redisConfig.enabled !== undefined ? (redisConfig.enabled === '1' || redisConfig.enabled === true || redisConfig.enabled === 'true') : (site.prerender?.push?.enabled || false),
         baiduAPI: redisConfig.baidu_api || site.prerender?.push?.baiduAPI || 'http://data.zz.baidu.com/urls',
         baiduToken: redisConfig.baidu_token || site.prerender?.push?.baiduToken || '',
         baiduDailyLimit: parseInt(redisConfig.baidu_daily_limit) || site.prerender?.push?.baiduDailyLimit || 1000,
@@ -1029,24 +1122,24 @@ const Sites: React.FC = () => {
           target_url: values.mode === 'redirect' ? (values.redirect?.url || "") : ""
         },
         firewall: {
-          enabled: values.firewall.enabled || false,
-          rules_path: values.firewall.rulesPath || '/etc/prerender-shield/rules',
+          enabled: values.firewall?.enabled || false,
+          rules_path: values.firewall?.rulesPath || '/etc/prerender-shield/rules',
           action: {
-            default_action: values.firewall.action?.defaultAction || 'block',
-            block_message: values.firewall.action?.blockMessage || 'Request blocked by firewall'
+            default_action: values.firewall?.action?.defaultAction || 'block',
+            block_message: values.firewall?.action?.blockMessage || 'Request blocked by firewall'
           },
           // 地理位置访问控制配置
           geoip: {
-            enabled: values.firewall.geoip?.enabled || false,
-            allow_list: values.firewall.geoip?.allowList ? values.firewall.geoip.allowList.split(',').map((s: string) => s.trim()) : [],
-            block_list: values.firewall.geoip?.blockList ? values.firewall.geoip.blockList.split(',').map((s: string) => s.trim()) : []
+            enabled: values.firewall?.geoip?.enabled || false,
+            allow_list: values.firewall?.geoip?.allowList ? values.firewall.geoip.allowList.split(',').map((s: string) => s.trim()) : [],
+            block_list: values.firewall?.geoip?.blockList ? values.firewall.geoip.blockList.split(',').map((s: string) => s.trim()) : []
           },
           // 频率限制配置
           rate_limit: {
-            enabled: values.firewall.rate_limit?.enabled || false,
-            requests: values.firewall.rate_limit?.requests || 100,
-            window: values.firewall.rate_limit?.window || 60,
-            ban_time: values.firewall.rate_limit?.ban_time || 3600
+            enabled: values.firewall?.rate_limit?.enabled || false,
+            requests: values.firewall?.rate_limit?.requests || 100,
+            window: values.firewall?.rate_limit?.window || 60,
+            ban_time: values.firewall?.rate_limit?.ban_time || 3600
           }
         },
         // 网页防篡改配置
@@ -1056,24 +1149,24 @@ const Sites: React.FC = () => {
           hash_algorithm: values.file_integrity?.hash_algorithm || 'sha256'
         },
         prerender: {
-          enabled: values.prerender.enabled || false,
-          pool_size: values.prerender.poolSize || 5,
-          min_pool_size: values.prerender.minPoolSize || 2,
-          max_pool_size: values.prerender.maxPoolSize || 20,
-          timeout: values.prerender.timeout || 30,
-          cache_ttl: values.prerender.cacheTTL || 3600,
-          idle_timeout: values.prerender.idleTimeout || 300,
-          dynamic_scaling: values.prerender.dynamicScaling || true,
-          scaling_factor: values.prerender.scalingFactor || 0.5,
-          scaling_interval: values.prerender.scalingInterval || 60,
-          use_default_headers: values.prerender.useDefaultHeaders || false,
-          crawler_headers: values.prerender.crawlerHeaders || [],
+          enabled: values.prerender?.enabled || false,
+          pool_size: values.prerender?.poolSize || 5,
+          min_pool_size: values.prerender?.minPoolSize || 2,
+          max_pool_size: values.prerender?.maxPoolSize || 20,
+          timeout: values.prerender?.timeout || 30,
+          cache_ttl: values.prerender?.cacheTTL || 3600,
+          idle_timeout: values.prerender?.idleTimeout || 300,
+          dynamic_scaling: values.prerender?.dynamicScaling || true,
+          scaling_factor: values.prerender?.scalingFactor || 0.5,
+          scaling_interval: values.prerender?.scalingInterval || 60,
+          use_default_headers: values.prerender?.useDefaultHeaders || false,
+          crawler_headers: values.prerender?.crawlerHeaders || [],
           preheat: {
-            enabled: values.prerender.preheat?.enabled || false,
-            sitemap_url: values.prerender.preheat?.sitemapURL || '',
-            schedule: values.prerender.preheat?.schedule || '0 0 * * *',
-            concurrency: values.prerender.preheat?.concurrency || 5,
-            default_priority: values.prerender.preheat?.defaultPriority || 0
+            enabled: values.prerender?.preheat?.enabled || false,
+            sitemap_url: values.prerender?.preheat?.sitemapURL || '',
+            schedule: values.prerender?.preheat?.schedule || '0 0 * * *',
+            concurrency: values.prerender?.preheat?.concurrency || 5,
+            default_priority: values.prerender?.preheat?.defaultPriority || 0
           }
         },
         routing: {
@@ -1142,78 +1235,28 @@ const Sites: React.FC = () => {
         ? values.crawlerHeaders.split('\n').filter((header: string) => header.trim() !== '')
         : (values.crawlerHeaders || []);
       
-      // 转换表单数据格式，确保与后端API期望的结构匹配
-      const siteData = {
-        name: editingPrerenderSite.name,
-        domain: editingPrerenderSite.domain,
-        domains: editingPrerenderSite.domains || [editingPrerenderSite.domain],
-        port: editingPrerenderSite.port || 80,
-        mode: editingPrerenderSite.mode || 'proxy',
-        // 保留原有的其他配置
-        proxy: {
-          enabled: editingPrerenderSite.proxy?.enabled || false,
-          target_url: editingPrerenderSite.proxy?.targetURL || "",
-          type: "direct"
-        },
-        redirect: {
-          enabled: editingPrerenderSite.redirect?.enabled || false,
-          status_code: editingPrerenderSite.redirect?.code || 302,
-          target_url: editingPrerenderSite.redirect?.url || ""
-        },
-        firewall: {
-          enabled: editingPrerenderSite.firewall?.enabled || false,
-          rules_path: editingPrerenderSite.firewall?.rulesPath || '/etc/prerender-shield/rules',
-          action: {
-            default_action: editingPrerenderSite.firewall?.action?.defaultAction || 'block',
-            block_message: editingPrerenderSite.firewall?.action?.blockMessage || 'Request blocked by firewall'
-          },
-          geoip: {
-            enabled: editingPrerenderSite.firewall?.geoip?.enabled || false,
-            allow_list: editingPrerenderSite.firewall?.geoip?.allowList || [],
-            block_list: editingPrerenderSite.firewall?.geoip?.blockList || []
-          },
-          rate_limit: {
-            enabled: editingPrerenderSite.firewall?.rateLimit?.enabled || false,
-            requests: editingPrerenderSite.firewall?.rateLimit?.requests || 100,
-            window: editingPrerenderSite.firewall?.rateLimit?.window || 60,
-            ban_time: editingPrerenderSite.firewall?.rateLimit?.banTime || 3600
-          }
-        },
-        // 网页防篡改配置
-        file_integrity: {
-          enabled: editingPrerenderSite.fileIntegrity?.enabled || false,
-          check_interval: editingPrerenderSite.fileIntegrity?.checkInterval || 300,
-          hash_algorithm: editingPrerenderSite.fileIntegrity?.hashAlgorithm || 'sha256'
-        },
-        prerender: {
+      // 构造预渲染配置数据
+      const configData = {
           enabled: values.enabled || false,
-          pool_size: values.poolSize || 5,
-          min_pool_size: values.minPoolSize || 2,
-          max_pool_size: values.maxPoolSize || 20,
-          timeout: values.timeout || 30,
-          cache_ttl: values.cacheTTL || 3600,
-          idle_timeout: values.idleTimeout || 300,
-          dynamic_scaling: values.dynamicScaling || true,
-          scaling_factor: values.scalingFactor || 0.5,
-          scaling_interval: values.scalingInterval || 60,
+          pool_size: parseInt(values.poolSize) || 5,
+          min_pool_size: parseInt(values.minPoolSize) || 2,
+          max_pool_size: parseInt(values.maxPoolSize) || 20,
+          timeout: parseInt(values.timeout) || 30,
+          cache_ttl: parseInt(values.cacheTTL) || 3600,
+          idle_timeout: parseInt(values.idleTimeout) || 300,
+          dynamic_scaling: values.dynamicScaling !== false,
+          scaling_factor: parseFloat(values.scalingFactor) || 0.5,
+          scaling_interval: parseInt(values.scalingInterval) || 60,
           use_default_headers: values.useDefaultHeaders || false,
-          crawler_headers: crawlerHeadersArray, // 使用下划线分隔式命名，与后端JSON标签一致
+          crawler_headers: crawlerHeadersArray,
           preheat: {
             enabled: values.preheat?.enabled || false,
-            max_depth: values.preheat?.maxDepth || 1
-          },
-          push: {
-            enabled: editingPrerenderSite.prerender.push?.enabled || false,
-            baidu_api: editingPrerenderSite.prerender.push?.baiduAPI || 'http://data.zz.baidu.com/urls',
-            baidu_token: editingPrerenderSite.prerender.push?.baiduToken || '',
-            baidu_daily_limit: editingPrerenderSite.prerender.push?.baiduDailyLimit || editingPrerenderSite.prerender.push?.dailyLimit || 1000,
-            bing_api: editingPrerenderSite.prerender.push?.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
-            bing_token: editingPrerenderSite.prerender.push?.bingToken || '',
-            bing_daily_limit: editingPrerenderSite.prerender.push?.bingDailyLimit || editingPrerenderSite.prerender.push?.dailyLimit || 1000,
-            push_domain: editingPrerenderSite.prerender.push?.pushDomain || '',
-            schedule: editingPrerenderSite.prerender.push?.schedule || '0 1 * * *'
+            sitemap_url: values.preheat?.sitemapURL || '',
+            schedule: values.preheat?.schedule || '0 0 * * *',
+            concurrency: parseInt(values.preheat?.concurrency) || 5,
+            default_priority: parseInt(values.preheat?.defaultPriority) || 0,
+            max_depth: parseInt(values.preheat?.maxDepth) || 1
           }
-        }
       };
       
       // 显示加载状态
@@ -1228,17 +1271,17 @@ const Sites: React.FC = () => {
       });
       
       // 更新站点配置
-      const res = await sitesApi.updateSite(editingPrerenderSite.id, siteData);
+      const res = await sitesApi.updatePrerenderConfig(editingPrerenderSite.id, configData);
       
       // 关闭加载状态
       Modal.destroyAll();
       
       if (res.code === 200) {
-        messageApi.success('更新渲染预热配置成功');
+        messageApi.success('更新预渲染配置成功');
         setPrerenderConfigModalVisible(false);
         fetchSites(); // 刷新站点列表
       } else {
-        messageApi.error(res.message || '更新渲染预热配置失败');
+        messageApi.error(res.message || '更新预渲染配置失败');
       }
     } catch (error: any) {
       // 关闭加载状态
@@ -1260,81 +1303,17 @@ const Sites: React.FC = () => {
     try {
       const values = await pushConfigForm.validateFields();
       
-      // 转换表单数据格式，确保与后端API期望的结构匹配
-      const siteData = {
-        name: editingPushSite.name,
-        domain: editingPushSite.domain,
-        domains: editingPushSite.domains || [editingPushSite.domain],
-        port: editingPushSite.port || 80,
-        mode: editingPushSite.mode || 'proxy',
-        // 保留原有的其他配置
-        proxy: {
-          enabled: editingPushSite.proxy?.enabled || false,
-          target_url: editingPushSite.proxy?.targetURL || "",
-          type: "direct"
-        },
-        redirect: {
-          enabled: editingPushSite.redirect?.enabled || false,
-          status_code: editingPushSite.redirect?.code || 302,
-          target_url: editingPushSite.redirect?.url || ""
-        },
-        firewall: {
-          enabled: editingPushSite.firewall?.enabled || false,
-          rules_path: editingPushSite.firewall?.rulesPath || '/etc/prerender-shield/rules',
-          action: {
-            default_action: editingPushSite.firewall?.action?.defaultAction || 'block',
-            block_message: editingPushSite.firewall?.action?.blockMessage || 'Request blocked by firewall'
-          },
-          geoip: {
-            enabled: editingPushSite.firewall?.geoip?.enabled || false,
-            allow_list: editingPushSite.firewall?.geoip?.allowList || [],
-            block_list: editingPushSite.firewall?.geoip?.blockList || []
-          },
-          rate_limit: {
-            enabled: editingPushSite.firewall?.rateLimit?.enabled || false,
-            requests: editingPushSite.firewall?.rateLimit?.requests || 100,
-            window: editingPushSite.firewall?.rateLimit?.window || 60,
-            ban_time: editingPushSite.firewall?.rateLimit?.banTime || 3600
-          }
-        },
-        // 网页防篡改配置
-        file_integrity: {
-          enabled: editingPushSite.fileIntegrity?.enabled || false,
-          check_interval: editingPushSite.fileIntegrity?.checkInterval || 300,
-          hash_algorithm: editingPushSite.fileIntegrity?.hashAlgorithm || 'sha256'
-        },
-        prerender: {
-          enabled: editingPushSite.prerender.enabled || false,
-          pool_size: editingPushSite.prerender.poolSize || 5,
-          min_pool_size: editingPushSite.prerender.minPoolSize || 2,
-          max_pool_size: editingPushSite.prerender.maxPoolSize || 20,
-          timeout: editingPushSite.prerender.timeout || 30,
-          cache_ttl: editingPushSite.prerender.cacheTTL || 3600,
-          idle_timeout: editingPushSite.prerender.idleTimeout || 300,
-          dynamic_scaling: editingPushSite.prerender.dynamicScaling || true,
-          scaling_factor: editingPushSite.prerender.scalingFactor || 0.5,
-          scaling_interval: editingPushSite.prerender.scalingInterval || 60,
-          use_default_headers: editingPushSite.prerender.useDefaultHeaders || false,
-          crawler_headers: editingPushSite.prerender.crawlerHeaders || [],
-          preheat: {
-            enabled: editingPushSite.prerender.preheat?.enabled || false,
-            sitemap_url: editingPushSite.prerender.preheat?.sitemapURL || '',
-            schedule: editingPushSite.prerender.preheat?.schedule || '0 0 * * *',
-            concurrency: editingPushSite.prerender.preheat?.concurrency || 5,
-            default_priority: editingPushSite.prerender.preheat?.defaultPriority || 0
-          },
-          push: {
-            enabled: values.enabled || false,
-            baidu_api: values.baiduAPI || 'http://data.zz.baidu.com/urls',
-            baidu_token: values.baiduToken || '',
-            baidu_daily_limit: values.baiduDailyLimit || 1000,
-            bing_api: values.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
-            bing_token: values.bingToken || '',
-            bing_daily_limit: values.bingDailyLimit || 1000,
-            push_domain: values.pushDomain || '',
-            schedule: values.schedule || '0 1 * * *'
-          }
-        }
+      // 构造推送配置数据
+      const configData = {
+          enabled: values.enabled || false,
+          baidu_api: values.baiduAPI || 'http://data.zz.baidu.com/urls',
+          baidu_token: values.baiduToken || '',
+          baidu_daily_limit: parseInt(values.baiduDailyLimit) || 1000,
+          bing_api: values.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
+          bing_token: values.bingToken || '',
+          bing_daily_limit: parseInt(values.bingDailyLimit) || 1000,
+          push_domain: values.pushDomain || '',
+          schedule: values.schedule || '0 1 * * *'
       };
       
       // 显示加载状态
@@ -1349,7 +1328,7 @@ const Sites: React.FC = () => {
       });
       
       // 更新站点配置
-      const res = await sitesApi.updateSite(editingPushSite.id, siteData);
+      const res = await sitesApi.updatePushConfig(editingPushSite.id, configData);
       
       // 关闭加载状态
       Modal.destroyAll();
@@ -1375,6 +1354,219 @@ const Sites: React.FC = () => {
       console.error('Push config submission error:', error);
     }
   }
+
+  // 处理WAF配置
+  const handleWafConfig = async (site: any) => {
+    // 打开WAF配置模态框
+    setEditingWafSite(site)
+    
+    try {
+      // 从Redis获取已保存的防火墙配置
+      let redisConfig: any = {};
+      try {
+        const res = await sitesApi.getSiteConfig(site.id, 'waf');
+        if (res.code === 200 && res.data) {
+          redisConfig = res.data;
+        }
+      } catch (err) {
+        console.warn('Failed to fetch WAF config from Redis, falling back to site config', err);
+      }
+      
+      // 准备表单初始值
+      const wafConfig = {
+        // 防火墙基础配置
+        firewall: {
+          enabled: redisConfig.firewall_enabled !== undefined ? (redisConfig.firewall_enabled === true || redisConfig.firewall_enabled === 'true') : (site.firewall?.enabled || false),
+          rulesPath: site.firewall?.rulesPath || '/etc/prerender-shield/rules',
+          action: {
+            defaultAction: redisConfig.default_action || site.firewall?.action?.defaultAction || 'block',
+            blockMessage: redisConfig.block_message || site.firewall?.action?.blockMessage || 'Request blocked by firewall'
+          },
+          // 地理位置访问控制配置
+          geoip: {
+            enabled: redisConfig.geoip_enabled !== undefined ? (redisConfig.geoip_enabled === true || redisConfig.geoip_enabled === 'true') : (site.firewall?.geoip?.enabled || false),
+            allowList: site.firewall?.geoip?.allowList || [],
+            blockList: redisConfig.geoip_block_list ? (typeof redisConfig.geoip_block_list === 'string' ? redisConfig.geoip_block_list.split(',').filter(Boolean) : redisConfig.geoip_block_list) : (site.firewall?.geoip?.blockList || [])
+          },
+          // 频率限制配置
+          rateLimit: {
+            enabled: redisConfig.ratelimit_enabled !== undefined ? (redisConfig.ratelimit_enabled === true || redisConfig.ratelimit_enabled === 'true') : (site.firewall?.rate_limit?.enabled || false),
+            requests: parseInt(redisConfig.ratelimit_requests) || site.firewall?.rate_limit?.requests || 100,
+            window: parseInt(redisConfig.ratelimit_window) || site.firewall?.rate_limit?.window || 60,
+            banTime: parseInt(redisConfig.ratelimit_ban_time) || site.firewall?.rate_limit?.ban_time || 3600
+          },
+          // IP黑白名单
+          whitelist: redisConfig.whitelist ? (typeof redisConfig.whitelist === 'string' ? redisConfig.whitelist.split(',').filter(Boolean) : redisConfig.whitelist) : (site.firewall?.whitelist || []),
+          blacklist: redisConfig.blacklist ? (typeof redisConfig.blacklist === 'string' ? redisConfig.blacklist.split(',').filter(Boolean) : redisConfig.blacklist) : (site.firewall?.blacklist || [])
+        },
+        // 网页防篡改配置
+        fileIntegrity: {
+          enabled: site.file_integrity?.enabled || false,
+          checkInterval: site.file_integrity?.check_interval || 300,
+          hashAlgorithm: site.file_integrity?.hash_algorithm || 'sha256'
+        }
+      };
+      
+      console.log('WAF config initial values:', wafConfig);
+      wafConfigForm.setFieldsValue(wafConfig);
+      
+    } catch (error) {
+      console.error('Failed to load WAF config:', error);
+      // 如果出错，使用默认配置
+      const defaultConfig = {
+        firewall: {
+          enabled: false,
+          rulesPath: '/etc/prerender-shield/rules',
+          action: {
+            defaultAction: 'block',
+            blockMessage: 'Request blocked by firewall'
+          },
+          geoip: {
+            enabled: false,
+            allowList: [],
+            blockList: []
+          },
+          rateLimit: {
+            enabled: false,
+            requests: 100,
+            window: 60,
+            banTime: 3600
+          }
+        },
+        fileIntegrity: {
+          enabled: false,
+          checkInterval: 300,
+          hashAlgorithm: 'sha256'
+        }
+      };
+      wafConfigForm.setFieldsValue(defaultConfig);
+    }
+    
+    setWafConfigModalVisible(true);
+  }
+
+  // 处理WAF配置表单提交
+  const handleWafConfigSubmit = async () => {
+    try {
+      const values = await wafConfigForm.validateFields();
+      console.log('WAF form values:', values);
+      
+      // 构造WAF配置数据
+      const configData = {
+          enabled: values.firewall?.enabled || false,
+          rules_path: values.firewall?.rulesPath || '/etc/prerender-shield/rules',
+          action: {
+            default_action: values.firewall?.action?.defaultAction || 'block',
+            block_message: values.firewall?.action?.blockMessage || 'Request blocked by firewall'
+          },
+          geoip: {
+            enabled: values.firewall?.geoip?.enabled || false,
+            allow_list: values.firewall?.geoip?.allowList || [],
+            block_list: values.firewall?.geoip?.blockList || []
+          },
+          rate_limit: {
+            enabled: values.firewall?.rateLimit?.enabled || false,
+            requests: parseInt(values.firewall?.rateLimit?.requests) || 100,
+            window: parseInt(values.firewall?.rateLimit?.window) || 60,
+            ban_time: parseInt(values.firewall?.rateLimit?.banTime) || 3600
+          },
+          blacklist: values.firewall?.blacklist || [],
+          whitelist: values.firewall?.whitelist || []
+      };
+      
+      // 显示加载状态
+      Modal.confirm({
+        title: '正在保存WAF配置',
+        content: '请稍候...',
+        okButtonProps: { disabled: true },
+        cancelButtonProps: { disabled: true },
+        closable: false,
+        keyboard: false,
+        centered: true,
+      });
+      
+      // 更新站点配置
+      const res = await sitesApi.updateFirewallConfig(editingWafSite.id, configData);
+      
+      // 关闭加载状态
+      Modal.destroyAll();
+      
+      if (res.code === 200) {
+        messageApi.success('更新WAF配置成功');
+        setWafConfigModalVisible(false);
+        fetchSites(); // 刷新站点列表
+      } else {
+        messageApi.error(res.message || '更新WAF配置失败');
+      }
+    } catch (error: any) {
+      // 关闭加载状态
+      Modal.destroyAll();
+      
+      // 处理表单验证错误
+      if (error.errorFields) {
+        messageApi.error('表单验证失败，请检查输入');
+      } else {
+        // 处理网络错误或其他错误
+        messageApi.error('表单提交失败：' + (error.message || '未知错误'));
+      }
+      console.error('WAF config submission error:', error);
+    }
+  }
+
+  // 打开国家选择器
+  const handleOpenCountrySelector = (target: 'allowList' | 'blockList') => {
+    setCountrySelectorTarget(target)
+    setCountrySearchKeyword('')
+    
+    // 从表单获取当前选中的国家
+    const formValues = wafConfigForm.getFieldsValue()
+    const currentList = formValues.firewall?.geoip?.[target] || []
+    
+    // 确保是数组
+    const currentArray = Array.isArray(currentList) ? currentList : []
+    setSelectedCountries(currentArray)
+    
+    setCountrySelectorVisible(true)
+  }
+
+  // 确认国家选择
+  const handleCountrySelectorOk = () => {
+    // 更新表单字段
+    const fieldPath = ['firewall', 'geoip', countrySelectorTarget]
+    wafConfigForm.setFieldValue(fieldPath, selectedCountries)
+    
+    setCountrySelectorVisible(false)
+  }
+
+  // 全选/取消全选国家
+  const handleToggleSelectAllCountries = (e: any) => {
+    if (e.target.checked) {
+      // 全选当前过滤后的国家
+      const filteredCodes = filteredCountries.map(c => c.code)
+      // 合并已选和新选，去重
+      const newSelected = Array.from(new Set([...selectedCountries, ...filteredCodes]))
+      setSelectedCountries(newSelected)
+    } else {
+      // 取消全选当前过滤后的国家
+      const filteredCodes = new Set(filteredCountries.map(c => c.code))
+      const newSelected = selectedCountries.filter(code => !filteredCodes.has(code))
+      setSelectedCountries(newSelected)
+    }
+  }
+
+  // 过滤国家列表
+  const filteredCountries = COUNTRIES.filter(country => 
+    country.name.toLowerCase().includes(countrySearchKeyword.toLowerCase()) || 
+    country.cnName.includes(countrySearchKeyword) ||
+    country.code.toLowerCase().includes(countrySearchKeyword.toLowerCase())
+  )
+
+  // 检查当前过滤列表是否已全选
+  const isAllFilteredSelected = filteredCountries.length > 0 && 
+    filteredCountries.every(c => selectedCountries.includes(c.code))
+  
+  // 检查当前过滤列表是否部分选中
+  const isFilteredIndeterminate = filteredCountries.some(c => selectedCountries.includes(c.code)) && !isAllFilteredSelected
 
 
 
@@ -1616,6 +1808,114 @@ const Sites: React.FC = () => {
         </Form>
       </Modal>
 
+      {/* WAF配置弹窗 */}
+      <Modal
+        title="WAF配置"
+        open={wafConfigModalVisible}
+        onOk={handleWafConfigSubmit}
+        onCancel={() => setWafConfigModalVisible(false)}
+        width={800}
+      >
+        <Form form={wafConfigForm} layout="vertical">
+          <Divider orientation="left">防火墙基础设置</Divider>
+          <Form.Item name={['firewall', 'enabled']} label="启用防火墙" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item name={['firewall', 'rulesPath']} label="规则路径">
+            <Input placeholder="/etc/prerender-shield/rules" />
+          </Form.Item>
+          <Form.Item name={['firewall', 'action', 'defaultAction']} label="默认动作">
+            <Select>
+              <Option value="allow">允许</Option>
+              <Option value="block">拦截</Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name={['firewall', 'action', 'blockMessage']} label="拦截消息">
+            <Input />
+          </Form.Item>
+
+          <Divider orientation="left">地理位置访问控制</Divider>
+          <Form.Item name={['firewall', 'geoip', 'enabled']} label="启用GeoIP" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item name={['firewall', 'geoip', 'allowList']} label="允许国家列表">
+             <div onClick={() => handleOpenCountrySelector('allowList')}>
+               <Select 
+                 mode="tags" 
+                 placeholder="点击选择国家" 
+                 style={{ width: '100%', cursor: 'pointer' }}
+                 open={false}
+                 tokenSeparators={[',']} 
+                 showSearch={false}
+               />
+             </div>
+          </Form.Item>
+          <Form.Item name={['firewall', 'geoip', 'blockList']} label="禁止国家列表">
+             <div onClick={() => handleOpenCountrySelector('blockList')}>
+               <Select 
+                 mode="tags" 
+                 placeholder="点击选择国家" 
+                 style={{ width: '100%', cursor: 'pointer' }}
+                 open={false}
+                 tokenSeparators={[',']} 
+                 showSearch={false}
+               />
+             </div>
+          </Form.Item>
+
+          <Divider orientation="left">频率限制</Divider>
+          <Form.Item name={['firewall', 'rateLimit', 'enabled']} label="启用频率限制" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name={['firewall', 'rateLimit', 'requests']} label="请求数限制">
+                <Input type="number" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name={['firewall', 'rateLimit', 'window']} label="时间窗口(秒)">
+                <Input type="number" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name={['firewall', 'rateLimit', 'banTime']} label="封禁时间(秒)">
+                <Input type="number" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Divider orientation="left">IP黑白名单</Divider>
+          <Form.Item name={['firewall', 'whitelist']} label="白名单IP列表" extra="一行一个IP，支持CIDR格式 (例如: 192.168.1.0/24)">
+            <Select mode="tags" style={{ width: '100%' }} tokenSeparators={[',', '\n']} placeholder="请输入IP并回车" />
+          </Form.Item>
+          <Form.Item name={['firewall', 'blacklist']} label="黑名单IP列表" extra="一行一个IP，支持CIDR格式">
+            <Select mode="tags" style={{ width: '100%' }} tokenSeparators={[',', '\n']} placeholder="请输入IP并回车" />
+          </Form.Item>
+
+          <Divider orientation="left">网页防篡改</Divider>
+          <Form.Item name={['fileIntegrity', 'enabled']} label="启用防篡改" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name={['fileIntegrity', 'checkInterval']} label="检查间隔(秒)">
+                <Input type="number" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name={['fileIntegrity', 'hashAlgorithm']} label="哈希算法">
+                <Select>
+                  <Option value="md5">MD5</Option>
+                  <Option value="sha1">SHA1</Option>
+                  <Option value="sha256">SHA256</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Modal>
+
       {/* 静态资源管理弹窗 */}
       <Modal
         title={`静态资源管理 - ${currentSite?.name || ''}`}
@@ -1639,6 +1939,10 @@ const Sites: React.FC = () => {
             >
               <Button icon={<UploadOutlined />}>上传文件</Button>
             </Upload>
+            {selectedRowKeys.length > 0 && (
+                <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>批量删除</Button>
+            )}
+            <Button danger onClick={handleDeleteAll} disabled={fileList.length === 0}>一键删除全部</Button>
           </Space>
         </div>
         
@@ -1646,6 +1950,10 @@ const Sites: React.FC = () => {
           dataSource={fileList}
           rowKey="key"
           pagination={false}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: (newSelectedRowKeys) => setSelectedRowKeys(newSelectedRowKeys),
+          }}
           columns={[
             {
               title: '名称',
@@ -1717,6 +2025,57 @@ const Sites: React.FC = () => {
           value={newFileName} 
           onChange={e => setNewFileName(e.target.value)} 
         />
+      </Modal>
+
+      {/* 国家选择器弹窗 */}
+      <Modal
+        title={`选择国家 - ${countrySelectorTarget === 'allowList' ? '允许列表' : '禁止列表'}`}
+        open={countrySelectorVisible}
+        onOk={handleCountrySelectorOk}
+        onCancel={() => setCountrySelectorVisible(false)}
+        width={700}
+        bodyStyle={{ maxHeight: '600px', overflowY: 'auto' }}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Input 
+            prefix={<SearchOutlined />} 
+            placeholder="搜索国家 (代码、英文名或中文名)" 
+            value={countrySearchKeyword}
+            onChange={e => setCountrySearchKeyword(e.target.value)}
+            allowClear
+            style={{ marginBottom: 12 }}
+          />
+          <div style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+            <Checkbox 
+              checked={isAllFilteredSelected} 
+              indeterminate={isFilteredIndeterminate}
+              onChange={handleToggleSelectAllCountries}
+              disabled={filteredCountries.length === 0}
+            >
+              全选当前列表 ({selectedCountries.length} 已选)
+            </Checkbox>
+          </div>
+        </div>
+        
+        {filteredCountries.length > 0 ? (
+          <Checkbox.Group 
+            style={{ width: '100%' }} 
+            value={selectedCountries} 
+            onChange={(list) => setSelectedCountries(list as string[])}
+          >
+            <Row gutter={[8, 8]}>
+              {filteredCountries.map(country => (
+                <Col span={6} key={country.code}>
+                  <Checkbox value={country.code} style={{ width: '100%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} title={`${country.cnName} (${country.code})`}>
+                    {country.cnName} <Typography.Text type="secondary">({country.code})</Typography.Text>
+                  </Checkbox>
+                </Col>
+              ))}
+            </Row>
+          </Checkbox.Group>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未找到匹配的国家" />
+        )}
       </Modal>
 
       </div>

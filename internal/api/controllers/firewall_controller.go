@@ -173,3 +173,86 @@ func (c *FirewallController) GetAccessLogs(ctx *gin.Context) {
 		},
 	})
 }
+
+// GetAttackLogs returns attack logs
+func (c *FirewallController) GetAttackLogs(ctx *gin.Context) {
+	siteID := ctx.Query("site_id")
+	pageStr := ctx.DefaultQuery("page", "1")
+	limitStr := ctx.DefaultQuery("limit", "20")
+
+	page, _ := strconv.Atoi(pageStr)
+	limit, _ := strconv.Atoi(limitStr)
+
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 20
+	}
+
+	logs, total, err := c.wafRepo.GetAttackLogs(siteID, page, limit)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get attack logs"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"logs":  logs,
+			"total": total,
+			"page":  page,
+			"limit": limit,
+		},
+	})
+}
+
+// AddToWhitelist adds an IP to the whitelist
+func (c *FirewallController) AddToWhitelist(ctx *gin.Context) {
+	var req struct {
+		SiteID string `json:"site_id"`
+		IP     string `json:"ip"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.SiteID == "" || req.IP == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Site ID and IP are required"})
+		return
+	}
+
+	if err := c.wafRepo.AddIPToWhitelist(req.SiteID, req.IP); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add to whitelist"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// AddToBlacklist adds an IP to the blacklist
+func (c *FirewallController) AddToBlacklist(ctx *gin.Context) {
+	var req struct {
+		SiteID string `json:"site_id"`
+		IP     string `json:"ip"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.SiteID == "" || req.IP == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Site ID and IP are required"})
+		return
+	}
+
+	if err := c.wafRepo.AddIPToBlacklist(req.SiteID, req.IP); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add to blacklist"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"success": true})
+}

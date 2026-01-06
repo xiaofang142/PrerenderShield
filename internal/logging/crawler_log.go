@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -266,19 +267,101 @@ func (clm *CrawlerLogManager) startCleanupTask() {
 
 // cleanupOldLogs 清理旧日志（超过15天）
 func (clm *CrawlerLogManager) cleanupOldLogs() {
-	// 计算15天前的时间
-	fifteenDaysAgo := time.Now().AddDate(0, 0, -15)
-	fifteenDaysAgoStr := fifteenDaysAgo.Format("2006-01-02")
-
-	// 清理所有站点的旧日志
-	// 注意：这里需要根据实际情况调整，可能需要遍历所有站点
-	// 暂时清理总日志集合
-	totalKey := fmt.Sprintf("crawler_logs:all:%s", fifteenDaysAgoStr)
-	if err := clm.redisClient.Del(clm.ctx, totalKey).Err(); err != nil {
-		log.Printf("清理旧日志失败: %v", err)
+	// 1. 获取配置
+	config, err := clm.redisClient.HGetAll(clm.ctx, "config:system").Result()
+	if err != nil {
+		log.Printf("Failed to get system config for log cleanup: %v", err)
+		return
 	}
 
-	log.Printf("清理了 %s 的旧日志", fifteenDaysAgoStr)
+	retentionDays := 7
+	if val, ok := config["crawler_log_retention_days"]; ok {
+		if days, err := strconv.Atoi(val); err == nil && days > 0 {
+			retentionDays = days
+		}
+	}
+
+	maxSizeMB := 128
+	if val, ok := config["crawler_log_max_size"]; ok {
+		if size, err := strconv.Atoi(val); err == nil && size > 0 {
+			maxSizeMB = size
+		}
+	}
+
+	// 2. 按天数清理
+	// 扫描所有爬虫日志key
+	// Pattern: crawler_logs:all:*
+	iter := clm.redisClient.Scan(clm.ctx, 0, "crawler_logs:all:*", 0).Iterator()
+	var allLogKeys []string
+	for iter.Next(clm.ctx) {
+		allLogKeys = append(allLogKeys, iter.Val())
+	}
+
+	for _, key := range allLogKeys {
+		// key format: crawler_logs:all:2023-01-01
+		parts := strings.Split(key, ":")
+		if len(parts) < 3 {
+			continue
+		}
+		dateStr := parts[len(parts)-1]
+		logDate, err := time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			continue
+		}
+
+		// 检查是否超过保留天数
+		if time.Since(logDate).Hours() > float64(retentionDays*24) {
+			// 删除总日志
+			clm.redisClient.Del(clm.ctx, key)
+			log.Printf("Deleted old crawler log: %s", key)
+
+			// 删除该日期的所有站点日志
+			// Pattern: crawler_logs:*:dateStr
+			siteLogIter := clm.redisClient.Scan(clm.ctx, 0, fmt.Sprintf("crawler_logs:*:%s", dateStr), 0).Iterator()
+			for siteLogIter.Next(clm.ctx) {
+				clm.redisClient.Del(clm.ctx, siteLogIter.Val())
+			}
+		}
+	}
+
+	// 3. 按大小清理
+	// 获取最近保留天数内的所有日志key，按时间倒序排列（最新的在前）
+	var validLogKeys []string
+	for i := 0; i < retentionDays; i++ {
+		dateStr := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
+		key := fmt.Sprintf("crawler_logs:all:%s", dateStr)
+		validLogKeys = append(validLogKeys, key)
+	}
+
+	currentSize := int64(0)
+	maxSizeBytes := int64(maxSizeMB) * 1024 * 1024
+
+	for _, key := range validLogKeys {
+		// 获取key的内存占用
+		usage, err := clm.redisClient.MemoryUsage(clm.ctx, key).Result()
+		if err != nil {
+			continue
+		}
+
+		// 如果累加大小超过限制，删除该日志及更早的日志
+		if currentSize+usage > maxSizeBytes {
+			// 删除总日志
+			clm.redisClient.Del(clm.ctx, key)
+			
+			// Extract date from key
+			parts := strings.Split(key, ":")
+			if len(parts) > 0 {
+				dateStr := parts[len(parts)-1]
+				siteLogIter := clm.redisClient.Scan(clm.ctx, 0, fmt.Sprintf("crawler_logs:*:%s", dateStr), 0).Iterator()
+				for siteLogIter.Next(clm.ctx) {
+					clm.redisClient.Del(clm.ctx, siteLogIter.Val())
+				}
+				log.Printf("Deleted crawler log due to size limit: %s", key)
+			}
+		} else {
+			currentSize += usage
+		}
+	}
 }
 
 // GetCrawlerLogs 获取爬虫访问日志

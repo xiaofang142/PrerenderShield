@@ -68,6 +68,30 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	// 获取地理位置统计数据
 	geoStats, _ := c.visitLogMgr.GetVisitStats("", time.Now().Add(-24*time.Hour), time.Now())
 
+	// 获取PV/UV/IP统计数据
+	pv, uv, ip := c.visitLogMgr.GetAccessStats(time.Now(), time.Now())
+
+	// 获取流量趋势数据
+	trafficData := c.visitLogMgr.GetTrafficTrend(time.Now(), time.Now())
+	
+	// 简单的流量趋势补充：爬虫和拦截请求（按比例分配或者简单的平均，因为暂时没有小时级的爬虫/拦截统计）
+	// TODO: 实现小时级的爬虫和拦截统计
+	crawlerTotal := int64(stats["crawlerRequests"].(float64))
+	blockedTotal := blockedRequests
+	
+	// 将总数分配到各个时间段（平滑分配，仅作为展示）
+	// 注意：这是一个临时的展示策略，直到我们有真实的时间序列数据
+	if len(trafficData) > 0 {
+		avgCrawler := crawlerTotal / int64(len(trafficData))
+		avgBlocked := blockedTotal / int64(len(trafficData))
+		for i := range trafficData {
+			// 如果该时段有总请求，则显示爬虫和拦截（但不超过总请求）
+			// 这里仅仅是简单的模拟分布，真实数据需要 CrawlerLogManager 支持 GetTrafficTrend
+			trafficData[i].CrawlerRequests = avgCrawler
+			trafficData[i].BlockedRequests = avgBlocked
+		}
+	}
+
 	// 处理Globe数据和国家数据
 	globeData := make([]gin.H, 0)
 	countryMap := make(map[string]int64)
@@ -95,8 +119,8 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 		"message": "success",
 		"data": gin.H{
 			"totalRequests":    totalRequests,
-			"crawlerRequests":  int64(stats["crawlerRequests"].(float64)),
-			"blockedRequests":  blockedRequests,
+			"crawlerRequests":  crawlerTotal,
+			"blockedRequests":  blockedTotal,
 			"cacheHitRate":     float64(int(stats["cacheHitRate"].(float64)*100)) / 100, // 保留两位小数
 			"activeBrowsers":   int(stats["activeBrowsers"].(float64)),
 			"activeSites":      activeSites,
@@ -108,18 +132,11 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 				"mapData":     mapData,
 				"globeData":   globeData,
 			},
-			"trafficData": []gin.H{
-				{"time": "00:00", "totalRequests": int(totalRequests) / 6, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 6, "blockedRequests": int(blockedRequests) / 6},
-				{"time": "04:00", "totalRequests": int(totalRequests) / 8, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 8, "blockedRequests": int(blockedRequests) / 8},
-				{"time": "08:00", "totalRequests": int(totalRequests) / 5, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 5, "blockedRequests": int(blockedRequests) / 5},
-				{"time": "12:00", "totalRequests": int(totalRequests) / 3, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 3, "blockedRequests": int(blockedRequests) / 3},
-				{"time": "16:00", "totalRequests": int(totalRequests) / 2, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 2, "blockedRequests": int(blockedRequests) / 2},
-				{"time": "20:00", "totalRequests": int(totalRequests) / 4, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 4, "blockedRequests": int(blockedRequests) / 4},
-			},
+			"trafficData": trafficData,
 			"accessStats": gin.H{
-				"pv": int(totalRequests) * 50,
-				"uv": 100 + int(totalRequests)/100,
-				"ip": 50 + int(totalRequests)/50,
+				"pv": pv,
+				"uv": uv,
+				"ip": ip,
 			},
 		},
 	})

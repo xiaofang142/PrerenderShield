@@ -44,6 +44,9 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 
 			// 访问日志API
 			protectedGroup.GET("/logs", controllers.FirewallController.GetAccessLogs)
+			protectedGroup.GET("/firewall/attacks", controllers.FirewallController.GetAttackLogs)
+			protectedGroup.POST("/firewall/whitelist", controllers.FirewallController.AddToWhitelist)
+			protectedGroup.POST("/firewall/blacklist", controllers.FirewallController.AddToBlacklist)
 
 			// 爬虫日志API
 			protectedGroup.GET("/crawler/logs", controllers.CrawlerController.GetCrawlerLogs)
@@ -82,6 +85,11 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 				sitesGroup.GET("/:id/waf", controllers.FirewallController.GetWafConfig)
 				sitesGroup.PUT("/:id/waf", controllers.FirewallController.UpdateWafConfig)
 
+				// Independent Config Updates
+				sitesGroup.PUT("/:id/prerender", controllers.SitesController.UpdateSitePrerenderConfig)
+				sitesGroup.PUT("/:id/push", controllers.SitesController.UpdateSitePushConfig)
+				sitesGroup.PUT("/:id/firewall", controllers.SitesController.UpdateSiteFirewallConfig)
+
 				// 添加站点
 				sitesGroup.POST("", controllers.SitesController.AddSite)
 
@@ -103,6 +111,9 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 
 				// 删除静态资源文件
 				sitesGroup.DELETE("/:id/static", controllers.SitesController.DeleteStaticFile)
+				
+				// 批量删除静态资源文件
+				sitesGroup.POST("/:id/static/batch-delete", controllers.SitesController.BatchDeleteStaticFiles)
 	
 		}
 		}

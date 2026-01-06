@@ -74,7 +74,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             {
               key: '/firewall',
               icon: <SecurityScanOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/firewall" style={{ color: '#333333' }}>防火墙</Link>
+              label: <Link to="/firewall" style={{ color: '#333333' }}>WAF预览</Link>
             },
             {
               key: '/prerender/preheat',

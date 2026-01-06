@@ -125,6 +125,9 @@ export const firewallApi = {
   updateWafConfig: (siteId: string, config: any) => api.put(`/sites/${siteId}/waf`, config),
   getAccessLogs: (params: { site_id?: string; page?: number; limit?: number }) => api.get('/logs', { params }),
   // 为了兼容Firewall.tsx增加的方法
+  getAttackLogs: (params: { site_id: string; page: number; limit: number }) => api.get('/firewall/attacks', { params }),
+  addToWhitelist: (siteId: string, ip: string) => api.post(`/firewall/whitelist`, { site_id: siteId, ip }),
+  addToBlacklist: (siteId: string, ip: string) => api.post(`/firewall/blacklist`, { site_id: siteId, ip }),
   getStatus: (siteId: string) => api.get(`/sites/${siteId}/waf`),
   getRules: (siteId: string) => api.get(`/sites/${siteId}/waf`), // 规则包含在配置中
   scan: (data: { site: string; url: string }) => api.post(`/sites/${data.site}/scan`, data),
@@ -164,6 +167,9 @@ export const sitesApi = {
   getSiteConfig: (id: string, type: 'prerender' | 'push' | 'waf') => api.get(`/sites/${id}/config`, { params: { type } }),
   addSite: (site: any) => api.post('/sites', site),
   updateSite: (id: string, site: any) => api.put(`/sites/${id}`, site),
+  updatePrerenderConfig: (id: string, config: any) => api.put(`/sites/${id}/prerender`, config),
+  updatePushConfig: (id: string, config: any) => api.put(`/sites/${id}/push`, config),
+  updateFirewallConfig: (id: string, config: any) => api.put(`/sites/${id}/firewall`, config),
   deleteSite: (id: string) => api.delete(`/sites/${id}`),
   // 静态资源管理API
   getFileList: (siteId: string, path: string) => api.get(`/sites/${siteId}/static`, { params: { path } }),
@@ -180,6 +186,7 @@ export const sitesApi = {
     return api.post(`/sites/${siteId}/static/extract`, formData)
   },
   deleteStaticResources: (siteId: string, path: string) => api.delete(`/sites/${siteId}/static`, { params: { path } }),
+  batchDeleteStaticResources: (siteId: string, paths: string[]) => api.post(`/sites/${siteId}/static/batch-delete`, { paths }),
 }
 
 // 爬虫日志API

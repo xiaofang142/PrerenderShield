@@ -70,22 +70,22 @@ func (r *WafRepository) saveWafConfig(config *models.WafConfig) error {
 // UpdateBlockedCountries replaces the list of blocked countries
 func (r *WafRepository) UpdateBlockedCountries(wafConfigID string, countries []string) error {
 	// In the Redis implementation, we store the full config including lists in one JSON key for simplicity,
-	// or we could use separate sets. 
-	// However, since UpdateWafConfig saves the whole object, this method might be redundant 
+	// or we could use separate sets.
+	// However, since UpdateWafConfig saves the whole object, this method might be redundant
 	// or needs to fetch, update, and save.
 	// Given the previous implementation expected a separate update, we should fetch the siteID from wafConfigID first?
 	// Actually, the previous SQL model had normalized tables. In Redis, embedding is easier.
-	// But `wafConfigID` is just an ID. We need `SiteID`. 
+	// But `wafConfigID` is just an ID. We need `SiteID`.
 	// Assuming `models.WafConfig` has `SiteID`.
-	
-	// Issue: We only have `wafConfigID`. 
+
+	// Issue: We only have `wafConfigID`.
 	// Workaround: In Redis version, `wafConfigID` might be same as `SiteID` or we maintain a mapping.
 	// But let's assume the caller has the SiteID context or we change the signature.
 	// Since I can't easily change all callers right now, I will try to implement it if possible.
 	// But wait, `WafConfig` model has `SiteID`.
 	// For now, let's assume we handle this in the Controller by updating the whole config object.
 	// If this method is called independently, it's tricky without SiteID.
-	
+
 	// Let's check `models.WafConfig`.
 	return nil // Placeholder, callers should use UpdateWafConfig with full object
 }
@@ -129,6 +129,106 @@ func (r *WafRepository) GetAccessLogs(siteID string, page, limit int) ([]models.
 	return logs, total, nil
 }
 
+// GetAttackLogs retrieves attack logs (blocked requests)
+func (r *WafRepository) GetAttackLogs(siteID string, page, limit int) ([]models.AccessLog, int64, error) {
+	ctx := r.client.Context()
+	key := fmt.Sprintf("waf:attacks:%s", siteID)
+
+	start := int64((page - 1) * limit)
+	end := start + int64(limit) - 1
+
+	total, err := r.client.GetRawClient().LLen(ctx, key).Result()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rawLogs, err := r.client.GetRawClient().LRange(ctx, key, start, end).Result()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var logs []models.AccessLog
+	for _, raw := range rawLogs {
+		var log models.AccessLog
+		if err := json.Unmarshal([]byte(raw), &log); err == nil {
+			logs = append(logs, log)
+		}
+	}
+
+	return logs, total, nil
+}
+
+// AddIPToWhitelist adds an IP to the whitelist
+func (r *WafRepository) AddIPToWhitelist(siteID, ip string) error {
+	config, err := r.GetWafConfigBySiteID(siteID)
+	if err != nil {
+		return err
+	}
+	if config == nil {
+		config = &models.WafConfig{SiteID: siteID}
+	}
+
+	// Check if already exists
+	for _, item := range config.IPWhitelist {
+		if item.IPAddress == ip {
+			return nil
+		}
+	}
+
+	config.IPWhitelist = append(config.IPWhitelist, models.IPWhitelist{
+		IPAddress:   ip,
+		WafConfigID: config.ID,
+		// ID will be generated if using DB, but here using Redis JSON
+	})
+
+	// Remove from blacklist if present
+	var newBlacklist []models.IPBlacklist
+	for _, item := range config.IPBlacklist {
+		if item.IPAddress != ip {
+			newBlacklist = append(newBlacklist, item)
+		}
+	}
+	config.IPBlacklist = newBlacklist
+
+	return r.UpdateWafConfig(config)
+}
+
+// AddIPToBlacklist adds an IP to the blacklist
+func (r *WafRepository) AddIPToBlacklist(siteID, ip string) error {
+	config, err := r.GetWafConfigBySiteID(siteID)
+	if err != nil {
+		return err
+	}
+	if config == nil {
+		config = &models.WafConfig{SiteID: siteID}
+	}
+
+	// Check if already exists
+	for _, item := range config.IPBlacklist {
+		if item.IPAddress == ip {
+			return nil
+		}
+	}
+
+	config.IPBlacklist = append(config.IPBlacklist, models.IPBlacklist{
+		IPAddress:   ip,
+		WafConfigID: config.ID,
+		Reason:      "Manual Block",
+		CreatedAt:   time.Now(),
+	})
+
+	// Remove from whitelist if present
+	var newWhitelist []models.IPWhitelist
+	for _, item := range config.IPWhitelist {
+		if item.IPAddress != ip {
+			newWhitelist = append(newWhitelist, item)
+		}
+	}
+	config.IPWhitelist = newWhitelist
+
+	return r.UpdateWafConfig(config)
+}
+
 // CreateAccessLog creates a new access log entry
 func (r *WafRepository) CreateAccessLog(log *models.AccessLog) error {
 	ctx := r.client.Context()
@@ -146,6 +246,18 @@ func (r *WafRepository) CreateAccessLog(log *models.AccessLog) error {
 
 	// Trim list to keep size manageable (e.g., 10000 logs)
 	r.client.GetRawClient().LTrim(ctx, key, 0, 9999)
+
+	// If action is block, also add to attack logs list
+	if log.Action == "block" {
+		attackKey := fmt.Sprintf("waf:attacks:%s", log.SiteID)
+		if err := r.client.GetRawClient().LPush(ctx, attackKey, data).Err(); err != nil {
+			// Log error but don't fail the main log
+			fmt.Printf("Failed to push attack log: %v\n", err)
+		} else {
+			// Trim attack logs (keep 10000)
+			r.client.GetRawClient().LTrim(ctx, attackKey, 0, 9999)
+		}
+	}
 
 	// Update stats
 	r.incrementStats(log)
@@ -182,11 +294,11 @@ type WafStats struct {
 // GetGlobalStats returns global WAF statistics for a given duration
 func (r *WafRepository) GetGlobalStats(startTime, endTime string) (*WafStats, error) {
 	ctx := r.client.Context()
-	
+
 	// For simplicity in Redis without time-series, we return the global counters.
 	// Note: accurate time-range filtering is hard with simple counters.
 	// We will return total accumulated stats.
-	
+
 	total, _ := r.client.GetRawClient().Get(ctx, "waf:stats:global:total").Int64()
 	blocked, _ := r.client.GetRawClient().Get(ctx, "waf:stats:global:blocked").Int64()
 
@@ -200,7 +312,7 @@ func (r *WafRepository) GetGlobalStats(startTime, endTime string) (*WafStats, er
 // GetTrafficStats returns traffic statistics grouped by time
 func (r *WafRepository) GetTrafficStats(startTime, endTime string) ([]map[string]interface{}, error) {
 	ctx := r.client.Context()
-	
+
 	// Parse times
 	start, err := time.Parse(time.RFC3339, startTime)
 	if err != nil {
@@ -230,7 +342,7 @@ func (r *WafRepository) GetTrafficStats(startTime, endTime string) ([]map[string
 			"blockedRequests": blocked,
 		})
 	}
-	
+
 	// Sort by time just in case
 	sort.Slice(data, func(i, j int) bool {
 		return data[i]["time"].(string) < data[j]["time"].(string)
@@ -238,4 +350,3 @@ func (r *WafRepository) GetTrafficStats(startTime, endTime string) ([]map[string
 
 	return data, nil
 }
-
