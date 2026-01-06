@@ -10,10 +10,12 @@ import {
 import { sitesApi } from '../../services/api'
 import type { UploadProps } from 'antd'
 import { COUNTRIES } from '../../constants/countries'
+import { useTranslation } from 'react-i18next'
 
 const { Option } = Select
 
 const Sites: React.FC = () => {
+  const { t } = useTranslation()
   // 使用useMessage hook来获取message实例，支持主题配置
   const [messageApi, contextHolder] = message.useMessage();
   const [sites, setSites] = useState<any[]>([])
@@ -59,7 +61,7 @@ const Sites: React.FC = () => {
   // 表格列配置
   const columns = [
     {
-      title: '站点名称',
+      title: t('sites.columns.name'),
       dataIndex: 'name',
       key: 'name',
       width: 150,
@@ -73,7 +75,7 @@ const Sites: React.FC = () => {
       }),
     },
     {
-      title: '域名',
+      title: t('sites.columns.domain'),
       dataIndex: 'domain',
       key: 'domain',
       width: 150,
@@ -87,7 +89,7 @@ const Sites: React.FC = () => {
       }),
     },
     {
-      title: '端口',
+      title: t('sites.columns.port'),
       dataIndex: 'port',
       key: 'port',
       width: 80,
@@ -99,7 +101,7 @@ const Sites: React.FC = () => {
       }),
     },
     {
-      title: '站点模式',
+      title: t('sites.columns.mode'),
       dataIndex: 'mode',
       key: 'mode',
       width: 120,
@@ -118,7 +120,7 @@ const Sites: React.FC = () => {
       }),
     },
     {
-      title: '渲染预热状态',
+      title: t('sites.columns.prerenderStatus'),
       dataIndex: 'prerenderEnabled',
       key: 'prerenderEnabled',
       width: 120,
@@ -135,7 +137,7 @@ const Sites: React.FC = () => {
       }),
     },
     {
-      title: '防火墙状态',
+      title: t('sites.columns.firewallStatus'),
       dataIndex: 'firewallEnabled',
       key: 'firewallEnabled',
       width: 120,
@@ -150,7 +152,7 @@ const Sites: React.FC = () => {
       }),
     },
     {
-      title: '操作',
+      title: t('common.actions'),
       key: 'action',
       width: 400,
       fixed: 'right' as const,
@@ -162,7 +164,7 @@ const Sites: React.FC = () => {
             onClick={() => handleView(record)}
             style={{ marginRight: 8, whiteSpace: 'nowrap' }}
           >
-            查看
+            {t('common.view')}
           </Button>
           <Button
             type="link"
@@ -170,7 +172,7 @@ const Sites: React.FC = () => {
             onClick={() => handleEdit(record)}
             style={{ marginRight: 8, whiteSpace: 'nowrap' }}
           >
-            编辑
+            {t('common.edit')}
           </Button>
           {record.mode === 'static' && (
             <>
@@ -180,7 +182,7 @@ const Sites: React.FC = () => {
                 onClick={() => handleStaticResources(record)}
                 style={{ marginRight: 8, whiteSpace: 'nowrap' }}
               >
-                静态资源
+                {t('sites.staticManage')}
               </Button>
               <Button
                 type="link"
@@ -188,7 +190,7 @@ const Sites: React.FC = () => {
                 onClick={() => handlePrerenderConfig(record)}
                 style={{ marginRight: 8, whiteSpace: 'nowrap' }}
               >
-                渲染预热
+                {t('sites.prerenderConfig')}
               </Button>
               <Button
                 type="link"
@@ -196,7 +198,7 @@ const Sites: React.FC = () => {
                 onClick={() => handleWafConfig(record)}
                 style={{ marginRight: 8, whiteSpace: 'nowrap' }}
               >
-                WAF配置
+                {t('sites.wafConfig')}
               </Button>
               <Button
                 type="link"
@@ -204,7 +206,7 @@ const Sites: React.FC = () => {
                 onClick={() => handlePushConfig(record)}
                 style={{ marginRight: 8, whiteSpace: 'nowrap' }}
               >
-                推送配置
+                {t('sites.pushConfig')}
               </Button>
             </>
           )}

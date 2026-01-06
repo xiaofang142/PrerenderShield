@@ -1,0 +1,90 @@
+{
+  "common": {
+    "loading": "加载中...",
+    "success": "操作成功",
+    "error": "操作失败",
+    "confirm": "确认",
+    "cancel": "取消",
+    "delete": "删除",
+    "edit": "编辑",
+    "add": "添加",
+    "save": "保存",
+    "search": "搜索",
+    "reset": "重置",
+    "actions": "操作",
+    "view": "查看",
+    "download": "下载",
+    "upload": "上传",
+    "extract": "解压",
+    "batchDelete": "批量删除",
+    "deleteAll": "一键删除全部",
+    "ok": "确定"
+  },
+  "menu": {
+    "overview": "概览",
+    "sites": "站点管理",
+    "firewall": "防火墙",
+    "logs": "日志",
+    "crawler": "爬虫日志",
+    "monitor": "系统监控",
+    "settings": "系统设置"
+  },
+  "overview": {
+    "totalRequests": "总请求数",
+    "crawlerRequests": "爬虫请求",
+    "blockedRequests": "拦截请求",
+    "cacheHitRate": "缓存命中率",
+    "activeBrowsers": "活跃浏览器",
+    "activeSites": "活跃站点",
+    "prerenderEnabled": "预渲染服务",
+    "firewallEnabled": "防火墙服务",
+    "trafficTrend": "流量趋势",
+    "accessStats": "访问统计",
+    "geoDistribution": "全球访问分布",
+    "countryRank": "国家访问排行"
+  },
+  "sites": {
+    "title": "站点管理",
+    "addSite": "添加站点",
+    "reload": "重新加载",
+    "totalSites": "总站点数",
+    "prerenderEnabledSites": "启用预渲染的站点",
+    "firewallEnabledSites": "启用防火墙的站点",
+    "columns": {
+      "name": "站点名称",
+      "domain": "域名",
+      "port": "端口",
+      "mode": "站点模式",
+      "prerenderStatus": "渲染预热状态",
+      "firewallStatus": "防火墙状态"
+    },
+    "staticManage": "静态资源管理",
+    "wafConfig": "WAF配置",
+    "pushConfig": "推送配置",
+    "prerenderConfig": "预热配置"
+  },
+  "login": {
+    "welcome": "欢迎登录后台管理系统",
+    "username": "用户名",
+    "password": "密码",
+    "loginBtn": "登录",
+    "setupBtn": "设置并登录",
+    "successTitle": "登录成功",
+    "successContent": "您已成功登录系统，即将跳转到首页",
+    "failedTitle": "登录失败",
+    "failedDefault": "登录失败",
+    "failedNetwork": "网络错误，请检查网络连接",
+    "failedRetry": "登录失败，请稍后重试",
+    "inputUsername": "请输入用户名!",
+    "usernameMin": "用户名长度不能少于3个字符!",
+    "usernameMax": "用户名长度不能超过20个字符!",
+    "inputPassword": "请输入密码!",
+    "passwordMin": "密码长度不能少于6个字符!",
+    "passwordMax": "密码长度不能超过20个字符!",
+    "firstRun": {
+      "title": "首次访问提示",
+      "desc1": "当前是首次访问系统，您设置的账号密码将是后续登录使用的凭证。",
+      "desc2": "注意：首次设置的账号密码不可修改，请妥善保管！"
+    }
+  }
+}

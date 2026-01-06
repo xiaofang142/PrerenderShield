@@ -32,15 +32,18 @@ type Client struct {
 // 2. URL格式: redis://[password@]host:port/db
 //
 // 参数:
-//   redisURL: Redis连接URL
+//
+//	redisURL: Redis连接URL
 //
 // 返回值:
-//   *Client: 创建的Redis客户端实例
-//   error: 如果创建失败，返回错误信息
+//
+//	*Client: 创建的Redis客户端实例
+//	error: 如果创建失败，返回错误信息
 //
 // 示例:
-//   client, err := redis.NewClient("localhost:6379")
-//   client, err := redis.NewClient("redis://password@localhost:6379/0")
+//
+//	client, err := redis.NewClient("localhost:6379")
+//	client, err := redis.NewClient("redis://password@localhost:6379/0")
 func NewClient(redisURL string) (*Client, error) {
 	// 直接创建Redis客户端选项，不使用ParseURL
 	opt := &redis.Options{}
@@ -106,49 +109,49 @@ func (c *Client) Close() error {
 }
 
 // AddURL 添加URL到站点的URL集合
-func (c *Client) AddURL(siteName, url string) error {
-	key := fmt.Sprintf("prerender:%s:urls", siteName)
+func (c *Client) AddURL(siteID, url string) error {
+	key := fmt.Sprintf("prerender:%s:urls", siteID)
 	return c.client.SAdd(c.ctx, key, url).Err()
 }
 
 // RemoveURL 从站点的URL集合中移除URL
-func (c *Client) RemoveURL(siteName, url string) error {
-	key := fmt.Sprintf("prerender:%s:urls", siteName)
+func (c *Client) RemoveURL(siteID, url string) error {
+	key := fmt.Sprintf("prerender:%s:urls", siteID)
 	return c.client.SRem(c.ctx, key, url).Err()
 }
 
 // GetURLs 获取站点的所有URL
-func (c *Client) GetURLs(siteName string) ([]string, error) {
-	key := fmt.Sprintf("prerender:%s:urls", siteName)
+func (c *Client) GetURLs(siteID string) ([]string, error) {
+	key := fmt.Sprintf("prerender:%s:urls", siteID)
 	urls, err := c.client.SMembers(c.ctx, key).Result()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get URLs for site %s: %v", siteName, err)
+		return nil, fmt.Errorf("failed to get URLs for site %s: %v", siteID, err)
 	}
 	return urls, nil
 }
 
 // GetURLCount 获取站点的URL数量
-func (c *Client) GetURLCount(siteName string) (int64, error) {
-	key := fmt.Sprintf("prerender:%s:urls", siteName)
+func (c *Client) GetURLCount(siteID string) (int64, error) {
+	key := fmt.Sprintf("prerender:%s:urls", siteID)
 	count, err := c.client.SCard(c.ctx, key).Result()
 	if err != nil {
-		return 0, fmt.Errorf("failed to get URL count for site %s: %v", siteName, err)
+		return 0, fmt.Errorf("failed to get URL count for site %s: %v", siteID, err)
 	}
 	return count, nil
 }
 
 // ClearURLs 清空站点的所有URL
-func (c *Client) ClearURLs(siteName string) error {
-	key := fmt.Sprintf("prerender:%s:urls", siteName)
+func (c *Client) ClearURLs(siteID string) error {
+	key := fmt.Sprintf("prerender:%s:urls", siteID)
 	if err := c.client.Del(c.ctx, key).Err(); err != nil {
-		return fmt.Errorf("failed to clear URLs for site %s: %v", siteName, err)
+		return fmt.Errorf("failed to clear URLs for site %s: %v", siteID, err)
 	}
 	return nil
 }
 
 // SetURLPreheatStatus 设置URL的预热状态
-func (c *Client) SetURLPreheatStatus(siteName, url, status string, cacheSize int64) error {
-	key := fmt.Sprintf("prerender:%s:url:%s", siteName, url)
+func (c *Client) SetURLPreheatStatus(siteID, url, status string, cacheSize int64) error {
+	key := fmt.Sprintf("prerender:%s:url:%s", siteID, url)
 	return c.client.HSet(c.ctx, key, map[string]interface{}{
 		"status":     status,
 		"cache_size": cacheSize,
@@ -157,15 +160,15 @@ func (c *Client) SetURLPreheatStatus(siteName, url, status string, cacheSize int
 }
 
 // GetURLPreheatStatus 获取URL的预热状态
-func (c *Client) GetURLPreheatStatus(siteName, url string) (map[string]string, error) {
-	key := fmt.Sprintf("prerender:%s:url:%s", siteName, url)
+func (c *Client) GetURLPreheatStatus(siteID, url string) (map[string]string, error) {
+	key := fmt.Sprintf("prerender:%s:url:%s", siteID, url)
 	return c.client.HGetAll(c.ctx, key).Result()
 }
 
 // SetSiteStats 设置站点的统计数据
-func (c *Client) SetSiteStats(siteName string, stats map[string]interface{}) error {
-	key := fmt.Sprintf("prerender:%s:stats", siteName)
-	
+func (c *Client) SetSiteStats(siteID string, stats map[string]interface{}) error {
+	key := fmt.Sprintf("prerender:%s:stats", siteID)
+
 	// 将map转换为键值对切片，并确保所有值都是基本类型
 	var values []interface{}
 	for k, v := range stats {
@@ -186,7 +189,7 @@ func (c *Client) SetSiteStats(siteName string, stats map[string]interface{}) err
 			values = append(values, k, val)
 		}
 	}
-	
+
 	// 使用键值对切片调用HSet
 	if len(values) > 0 {
 		return c.client.HSet(c.ctx, key, values...).Err()
@@ -195,15 +198,15 @@ func (c *Client) SetSiteStats(siteName string, stats map[string]interface{}) err
 }
 
 // GetSiteStats 获取站点的统计数据
-func (c *Client) GetSiteStats(siteName string) (map[string]string, error) {
-	key := fmt.Sprintf("prerender:%s:stats", siteName)
+func (c *Client) GetSiteStats(siteID string) (map[string]string, error) {
+	key := fmt.Sprintf("prerender:%s:stats", siteID)
 	return c.client.HGetAll(c.ctx, key).Result()
 }
 
 // GetCacheCount 获取站点的缓存数量
-func (c *Client) GetCacheCount(siteName string) (int64, error) {
+func (c *Client) GetCacheCount(siteID string) (int64, error) {
 	// 使用SCAN命令统计所有状态为cached的URL数量
-	keyPrefix := fmt.Sprintf("prerender:%s:url:", siteName)
+	keyPrefix := fmt.Sprintf("prerender:%s:url:", siteID)
 	count := int64(0)
 
 	iter := c.client.Scan(c.ctx, 0, keyPrefix+"*", 0).Iterator()
@@ -222,36 +225,36 @@ func (c *Client) GetCacheCount(siteName string) (int64, error) {
 }
 
 // ClearCache 清除站点的所有缓存
-func (c *Client) ClearCache(siteName string) (int64, error) {
-	// 使用SCAN命令遍历所有以"prerender:{siteName}:url:"为前缀的键
-	keyPrefix := fmt.Sprintf("prerender:%s:url:", siteName)
+func (c *Client) ClearCache(siteID string) (int64, error) {
+	// 使用SCAN命令遍历所有以"prerender:{siteID}:url:"为前缀的键
+	keyPrefix := fmt.Sprintf("prerender:%s:url:", siteID)
 	count := int64(0)
 
 	iter := c.client.Scan(c.ctx, 0, keyPrefix+"*", 100).Iterator() // 使用100作为每次扫描的数量限制
 	for iter.Next(c.ctx) {
 		// 删除该URL的预热状态，实现清除缓存
 		if err := c.client.Del(c.ctx, iter.Val()).Err(); err != nil {
-			return count, fmt.Errorf("failed to delete cache key %s for site %s: %v", iter.Val(), siteName, err)
+			return count, fmt.Errorf("failed to delete cache key %s for site %s: %v", iter.Val(), siteID, err)
 		}
 		count++
 	}
 
 	if err := iter.Err(); err != nil {
-		return count, fmt.Errorf("failed to scan cache keys for site %s: %v", siteName, err)
+		return count, fmt.Errorf("failed to scan cache keys for site %s: %v", siteID, err)
 	}
 
 	return count, nil
 }
 
 // SetPreheatRunning 设置预热任务运行状态
-func (c *Client) SetPreheatRunning(siteName string, running bool) error {
-	key := fmt.Sprintf("prerender:%s:status", siteName)
+func (c *Client) SetPreheatRunning(siteID string, running bool) error {
+	key := fmt.Sprintf("prerender:%s:status", siteID)
 	return c.client.Set(c.ctx, key, running, 0).Err()
 }
 
 // IsPreheatRunning 检查预热任务是否正在运行
-func (c *Client) IsPreheatRunning(siteName string) (bool, error) {
-	key := fmt.Sprintf("prerender:%s:status", siteName)
+func (c *Client) IsPreheatRunning(siteID string) (bool, error) {
+	key := fmt.Sprintf("prerender:%s:status", siteID)
 	val, err := c.client.Get(c.ctx, key).Result()
 	if err == redis.Nil {
 		return false, nil
@@ -262,39 +265,39 @@ func (c *Client) IsPreheatRunning(siteName string) (bool, error) {
 }
 
 // CreatePreheatTask 创建预热任务并返回任务ID
-func (c *Client) CreatePreheatTask(siteName string) (string, error) {
-	taskID := fmt.Sprintf("%s:%d", siteName, time.Now().UnixNano())
-	key := fmt.Sprintf("prerender:%s:task:%s", siteName, taskID)
-	
+func (c *Client) CreatePreheatTask(siteID string) (string, error) {
+	taskID := fmt.Sprintf("%s:%d", siteID, time.Now().UnixNano())
+	key := fmt.Sprintf("prerender:%s:task:%s", siteID, taskID)
+
 	// 初始化任务状态
 	err := c.client.HSet(c.ctx, key, map[string]interface{}{
-		"site_name":   siteName,
-		"task_id":     taskID,
-		"status":      "running",
-		"total_urls":  0,
-		"processed":   0,
-		"success":     0,
-		"failed":      0,
-		"created_at":  time.Now().Unix(),
-		"updated_at":  time.Now().Unix(),
+		"site_name":  siteID, // Use ID as site identifier
+		"task_id":    taskID,
+		"status":     "running",
+		"total_urls": 0,
+		"processed":  0,
+		"success":    0,
+		"failed":     0,
+		"created_at": time.Now().Unix(),
+		"updated_at": time.Now().Unix(),
 	}).Err()
-	
+
 	if err != nil {
 		return "", err
 	}
-	
+
 	// 设置任务超时时间（24小时）
 	c.client.Expire(c.ctx, key, 24*time.Hour)
-	
+
 	// 更新当前运行的任务ID
-	c.client.Set(c.ctx, fmt.Sprintf("prerender:%s:current_task", siteName), taskID, 0)
-	
+	c.client.Set(c.ctx, fmt.Sprintf("prerender:%s:current_task", siteID), taskID, 0)
+
 	return taskID, nil
 }
 
 // UpdatePreheatTaskProgress 更新预热任务进度
-func (c *Client) UpdatePreheatTaskProgress(siteName, taskID string, total, processed, success, failed int64) error {
-	key := fmt.Sprintf("prerender:%s:task:%s", siteName, taskID)
+func (c *Client) UpdatePreheatTaskProgress(siteID, taskID string, total, processed, success, failed int64) error {
+	key := fmt.Sprintf("prerender:%s:task:%s", siteID, taskID)
 	return c.client.HSet(c.ctx, key, map[string]interface{}{
 		"total_urls": total,
 		"processed":  processed,
@@ -305,8 +308,8 @@ func (c *Client) UpdatePreheatTaskProgress(siteName, taskID string, total, proce
 }
 
 // SetPreheatTaskStatus 设置预热任务状态
-func (c *Client) SetPreheatTaskStatus(siteName, taskID, status string) error {
-	key := fmt.Sprintf("prerender:%s:task:%s", siteName, taskID)
+func (c *Client) SetPreheatTaskStatus(siteID, taskID, status string) error {
+	key := fmt.Sprintf("prerender:%s:task:%s", siteID, taskID)
 	return c.client.HSet(c.ctx, key, map[string]interface{}{
 		"status":     status,
 		"updated_at": time.Now().Unix(),
@@ -314,14 +317,14 @@ func (c *Client) SetPreheatTaskStatus(siteName, taskID, status string) error {
 }
 
 // GetPreheatTaskStatus 获取预热任务状态
-func (c *Client) GetPreheatTaskStatus(siteName, taskID string) (map[string]string, error) {
-	key := fmt.Sprintf("prerender:%s:task:%s", siteName, taskID)
+func (c *Client) GetPreheatTaskStatus(siteID, taskID string) (map[string]string, error) {
+	key := fmt.Sprintf("prerender:%s:task:%s", siteID, taskID)
 	return c.client.HGetAll(c.ctx, key).Result()
 }
 
 // GetCurrentPreheatTask 获取当前运行的预热任务ID
-func (c *Client) GetCurrentPreheatTask(siteName string) (string, error) {
-	key := fmt.Sprintf("prerender:%s:current_task", siteName)
+func (c *Client) GetCurrentPreheatTask(siteID string) (string, error) {
+	key := fmt.Sprintf("prerender:%s:current_task", siteID)
 	return c.client.Get(c.ctx, key).Result()
 }
 
@@ -368,8 +371,8 @@ func (c *Client) SaveUser(userID, username, password string) error {
 }
 
 // SetPushTask 保存推送任务
-func (c *Client) SetPushTask(siteName string, task interface{}) error {
-	key := fmt.Sprintf("prerender:%s:push:task", siteName)
+func (c *Client) SetPushTask(siteID string, task interface{}) error {
+	key := fmt.Sprintf("prerender:%s:push:task", siteID)
 	data, err := json.Marshal(task)
 	if err != nil {
 		return err
@@ -378,14 +381,14 @@ func (c *Client) SetPushTask(siteName string, task interface{}) error {
 }
 
 // GetPushTask 获取推送任务
-func (c *Client) GetPushTask(siteName string, taskID string) (map[string]string, error) {
-	key := fmt.Sprintf("prerender:%s:push:task:%s", siteName, taskID)
+func (c *Client) GetPushTask(siteID string, taskID string) (map[string]string, error) {
+	key := fmt.Sprintf("prerender:%s:push:task:%s", siteID, taskID)
 	return c.client.HGetAll(c.ctx, key).Result()
 }
 
 // IncrPushStats 增加推送统计
-func (c *Client) IncrPushStats(siteName string, success, failed int) error {
-	key := fmt.Sprintf("prerender:%s:push:stats", siteName)
+func (c *Client) IncrPushStats(siteID string, success, failed int) error {
+	key := fmt.Sprintf("prerender:%s:push:stats", siteID)
 	pipe := c.client.Pipeline()
 	pipe.HIncrBy(c.ctx, key, "total", int64(success+failed))
 	pipe.HIncrBy(c.ctx, key, "success", int64(success))
@@ -395,54 +398,54 @@ func (c *Client) IncrPushStats(siteName string, success, failed int) error {
 }
 
 // SetURLPushStatus 设置URL的推送状态
-func (c *Client) SetURLPushStatus(siteName, url, status string) error {
-	key := fmt.Sprintf("prerender:%s:push:status", siteName)
+func (c *Client) SetURLPushStatus(siteID, url, status string) error {
+	key := fmt.Sprintf("prerender:%s:push:status", siteID)
 	return c.client.HSet(c.ctx, key, url, status).Err()
 }
 
 // GetURLPushStatus 获取URL的推送状态
-func (c *Client) GetURLPushStatus(siteName, url string) (string, error) {
-	key := fmt.Sprintf("prerender:%s:push:status", siteName)
+func (c *Client) GetURLPushStatus(siteID, url string) (string, error) {
+	key := fmt.Sprintf("prerender:%s:push:status", siteID)
 	return c.client.HGet(c.ctx, key, url).Result()
 }
 
 // GetAllURLPushStatuses 获取站点所有URL的推送状态
-func (c *Client) GetAllURLPushStatuses(siteName string) (map[string]string, error) {
-	key := fmt.Sprintf("prerender:%s:push:status", siteName)
+func (c *Client) GetAllURLPushStatuses(siteID string) (map[string]string, error) {
+	key := fmt.Sprintf("prerender:%s:push:status", siteID)
 	return c.client.HGetAll(c.ctx, key).Result()
 }
 
 // GetURLPushStats 获取站点的URL推送统计
-func (c *Client) GetURLPushStats(siteName string) (map[string]int64, error) {
+func (c *Client) GetURLPushStats(siteID string) (map[string]int64, error) {
 	// 获取所有URL
-	allURLs, err := c.GetURLs(siteName)
+	allURLs, err := c.GetURLs(siteID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 获取所有已推送的URL状态
-	pushedURLs, err := c.GetAllURLPushStatuses(siteName)
+	pushedURLs, err := c.GetAllURLPushStatuses(siteID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 计算统计数据
 	stats := map[string]int64{
-		"total_urls":    int64(len(allURLs)),
-		"pushed_urls":   int64(len(pushedURLs)),
+		"total_urls":      int64(len(allURLs)),
+		"pushed_urls":     int64(len(pushedURLs)),
 		"not_pushed_urls": int64(len(allURLs) - len(pushedURLs)),
 	}
-	
+
 	return stats, nil
 }
 
 // GetPushStats 获取推送统计
-func (c *Client) GetPushStats(siteName string) (map[string]interface{}, error) {
-	key := fmt.Sprintf("prerender:%s:push:stats", siteName)
+func (c *Client) GetPushStats(siteID string) (map[string]interface{}, error) {
+	key := fmt.Sprintf("prerender:%s:push:stats", siteID)
 	stats, err := c.client.HGetAll(c.ctx, key).Result()
 	if err != nil {
 		// 提供更详细的错误信息
-		return nil, fmt.Errorf("failed to get push stats for site %s: %v", siteName, err)
+		return nil, fmt.Errorf("failed to get push stats for site %s: %v", siteID, err)
 	}
 
 	// 转换为数字类型
@@ -470,10 +473,10 @@ func (c *Client) GetPushStats(siteName string) (map[string]interface{}, error) {
 	}
 
 	// 获取URL推送统计，即使失败也不影响主功能
-	urlStats, err := c.GetURLPushStats(siteName)
+	urlStats, err := c.GetURLPushStats(siteID)
 	if err != nil {
 		// 记录错误，但不中断处理
-		logging.DefaultLogger.Warn("Failed to get URL push stats for site %s: %v", siteName, err)
+		logging.DefaultLogger.Warn("Failed to get URL push stats for site %s: %v", siteID, err)
 		// 使用默认值
 		result["total_urls"] = 0
 		result["pushed_urls"] = 0
@@ -491,14 +494,16 @@ func (c *Client) GetPushStats(siteName string) (map[string]interface{}, error) {
 // 从Redis中获取指定站点的最后推送日期
 //
 // 参数:
-//   siteName: 站点名称
+//
+//	siteID: 站点ID
 //
 // 返回值:
-//   string: 最后推送日期，格式为YYYY-MM-DD
-//   error: 错误信息
-func (c *Client) GetLastPushDate(siteName string) (string, error) {
+//
+//	string: 最后推送日期，格式为YYYY-MM-DD
+//	error: 错误信息
+func (c *Client) GetLastPushDate(siteID string) (string, error) {
 	// 构建Redis键
-	key := fmt.Sprintf("prerender:%s:push:meta", siteName)
+	key := fmt.Sprintf("prerender:%s:push:meta", siteID)
 
 	// 获取最后推送日期
 	lastPushDate, err := c.client.HGet(c.ctx, key, "last_push_date").Result()
@@ -515,14 +520,16 @@ func (c *Client) GetLastPushDate(siteName string) (string, error) {
 // 将指定站点的最后推送日期保存到Redis
 //
 // 参数:
-//   siteName: 站点名称
-//   date: 最后推送日期，格式为YYYY-MM-DD
+//
+//	siteID: 站点ID
+//	date: 最后推送日期，格式为YYYY-MM-DD
 //
 // 返回值:
-//   error: 错误信息
-func (c *Client) SetLastPushDate(siteName string, date string) error {
+//
+//	error: 错误信息
+func (c *Client) SetLastPushDate(siteID string, date string) error {
 	// 构建Redis键
-	key := fmt.Sprintf("prerender:%s:push:meta", siteName)
+	key := fmt.Sprintf("prerender:%s:push:meta", siteID)
 
 	// 设置最后推送日期
 	_, err := c.client.HSet(c.ctx, key, "last_push_date", date).Result()
@@ -537,14 +544,16 @@ func (c *Client) SetLastPushDate(siteName string, date string) error {
 // 从Redis中获取指定站点的推送偏移量
 //
 // 参数:
-//   siteName: 站点名称
+//
+//	siteID: 站点ID
 //
 // 返回值:
-//   int: 推送偏移量
-//   error: 错误信息
-func (c *Client) GetPushOffset(siteName string) (int, error) {
+//
+//	int: 推送偏移量
+//	error: 错误信息
+func (c *Client) GetPushOffset(siteID string) (int, error) {
 	// 构建Redis键
-	key := fmt.Sprintf("prerender:%s:push:meta", siteName)
+	key := fmt.Sprintf("prerender:%s:push:meta", siteID)
 
 	// 获取推送偏移量
 	offsetStr, err := c.client.HGet(c.ctx, key, "push_offset").Result()
@@ -567,14 +576,16 @@ func (c *Client) GetPushOffset(siteName string) (int, error) {
 // 将指定站点的推送偏移量保存到Redis
 //
 // 参数:
-//   siteName: 站点名称
-//   offset: 推送偏移量
+//
+//	siteID: 站点ID
+//	offset: 推送偏移量
 //
 // 返回值:
-//   error: 错误信息
-func (c *Client) SetPushOffset(siteName string, offset int) error {
+//
+//	error: 错误信息
+func (c *Client) SetPushOffset(siteID string, offset int) error {
 	// 构建Redis键
-	key := fmt.Sprintf("prerender:%s:push:meta", siteName)
+	key := fmt.Sprintf("prerender:%s:push:meta", siteID)
 
 	// 设置推送偏移量
 	_, err := c.client.HSet(c.ctx, key, "push_offset", strconv.Itoa(offset)).Result()
@@ -586,9 +597,9 @@ func (c *Client) SetPushOffset(siteName string, offset int) error {
 }
 
 // AddPushLog 添加推送日志
-func (c *Client) AddPushLog(siteName string, log interface{}) error {
+func (c *Client) AddPushLog(siteID string, log interface{}) error {
 	// 使用List存储日志，最新的日志在前面
-	key := fmt.Sprintf("prerender:%s:push:logs", siteName)
+	key := fmt.Sprintf("prerender:%s:push:logs", siteID)
 	data, err := json.Marshal(log)
 	if err != nil {
 		return err
@@ -606,15 +617,15 @@ func (c *Client) AddPushLog(siteName string, log interface{}) error {
 }
 
 // IncrDailyPushCount 增加每日推送计数
-func (c *Client) IncrDailyPushCount(siteName string, count int) error {
+func (c *Client) IncrDailyPushCount(siteID string, count int) error {
 	today := time.Now().Format("2006-01-02")
-	key := fmt.Sprintf("prerender:%s:push:daily:%s", siteName, today)
+	key := fmt.Sprintf("prerender:%s:push:daily:%s", siteID, today)
 	return c.client.IncrBy(c.ctx, key, int64(count)).Err()
 }
 
 // GetDailyPushCount 获取每日推送计数
-func (c *Client) GetDailyPushCount(siteName string, date string) (int64, error) {
-	key := fmt.Sprintf("prerender:%s:push:daily:%s", siteName, date)
+func (c *Client) GetDailyPushCount(siteID string, date string) (int64, error) {
+	key := fmt.Sprintf("prerender:%s:push:daily:%s", siteID, date)
 	strVal, err := c.client.Get(c.ctx, key).Result()
 	if err != nil {
 		if err == redis.Nil {
@@ -626,13 +637,13 @@ func (c *Client) GetDailyPushCount(siteName string, date string) (int64, error) 
 }
 
 // GetLast15DaysPushCount 获取最近15天的推送计数
-func (c *Client) GetLast15DaysPushCount(siteName string) (map[string]int64, error) {
+func (c *Client) GetLast15DaysPushCount(siteID string) (map[string]int64, error) {
 	result := make(map[string]int64)
-	
+
 	// 获取最近15天的日期
 	for i := 14; i >= 0; i-- {
 		date := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
-		count, err := c.GetDailyPushCount(siteName, date)
+		count, err := c.GetDailyPushCount(siteID, date)
 		if err != nil && err != redis.Nil {
 			return nil, err
 		}
@@ -642,13 +653,13 @@ func (c *Client) GetLast15DaysPushCount(siteName string) (map[string]int64, erro
 			result[date] = count
 		}
 	}
-	
+
 	return result, nil
 }
 
 // GetPushStatsWithURLCounts 获取包含URL计数的推送统计
-func (c *Client) GetPushStatsWithURLCounts(siteName string) (map[string]interface{}, error) {
-	key := fmt.Sprintf("prerender:%s:push:stats", siteName)
+func (c *Client) GetPushStatsWithURLCounts(siteID string) (map[string]interface{}, error) {
+	key := fmt.Sprintf("prerender:%s:push:stats", siteID)
 	stats, err := c.client.HGetAll(c.ctx, key).Result()
 	if err != nil {
 		return nil, err
@@ -677,17 +688,17 @@ func (c *Client) GetPushStatsWithURLCounts(siteName string) (map[string]interfac
 	}
 
 	// 获取所有URL
-	allURLs, err := c.GetURLs(siteName)
+	allURLs, err := c.GetURLs(siteID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 获取所有已推送的URL状态
-	pushedURLs, err := c.GetAllURLPushStatuses(siteName)
+	pushedURLs, err := c.GetAllURLPushStatuses(siteID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 添加URL计数
 	totalURLs := int64(len(allURLs))
 	pushed := int64(len(pushedURLs))
@@ -699,8 +710,8 @@ func (c *Client) GetPushStatsWithURLCounts(siteName string) (map[string]interfac
 }
 
 // GetPushLogs 获取推送日志
-func (c *Client) GetPushLogs(siteName string, limit, offset int) ([]interface{}, error) {
-	key := fmt.Sprintf("prerender:%s:push:logs", siteName)
+func (c *Client) GetPushLogs(siteID string, limit, offset int) ([]interface{}, error) {
+	key := fmt.Sprintf("prerender:%s:push:logs", siteID)
 	// 获取指定范围的日志
 	logs, err := c.client.LRange(c.ctx, key, int64(offset), int64(offset+limit-1)).Result()
 	if err != nil {
@@ -725,7 +736,7 @@ func (c *Client) GetPushLogs(siteName string, limit, offset int) ([]interface{},
 func (c *Client) DeleteSiteData(siteID string) error {
 	// 使用Scan查找并删除相关key
 	var keys []string
-	
+
 	// Pattern 1: prerender:{siteID}:*
 	iter := c.client.Scan(c.ctx, 0, fmt.Sprintf("prerender:%s:*", siteID), 0).Iterator()
 	for iter.Next(c.ctx) {
@@ -734,7 +745,7 @@ func (c *Client) DeleteSiteData(siteID string) error {
 	if err := iter.Err(); err != nil {
 		return err
 	}
-	
+
 	// Pattern 2: prerender:{siteID}_* (for the config keys I added)
 	iter2 := c.client.Scan(c.ctx, 0, fmt.Sprintf("prerender:%s_*", siteID), 0).Iterator()
 	for iter2.Next(c.ctx) {

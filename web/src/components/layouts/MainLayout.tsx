@@ -1,12 +1,14 @@
 import React from 'react'
-import { Layout, Menu, Button, message } from 'antd'
-import { MenuUnfoldOutlined, MenuFoldOutlined, DashboardOutlined, SecurityScanOutlined, CodeOutlined, BarChartOutlined, FileTextOutlined, BugOutlined, LogoutOutlined, CloudUploadOutlined, SettingOutlined } from '@ant-design/icons'
+import { Layout, Menu, Button, message, Dropdown, Space } from 'antd'
+import { MenuUnfoldOutlined, MenuFoldOutlined, DashboardOutlined, SecurityScanOutlined, CodeOutlined, BarChartOutlined, FileTextOutlined, BugOutlined, LogoutOutlined, CloudUploadOutlined, SettingOutlined, GlobalOutlined } from '@ant-design/icons'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { useTranslation } from 'react-i18next'
 
 const { Header, Sider, Content } = Layout
 
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { t, i18n } = useTranslation()
   const [collapsed, setCollapsed] = React.useState(false)
   const location = useLocation()
   const navigate = useNavigate()
@@ -15,8 +17,23 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // 退出登录处理函数
   const handleLogout = () => {
     logout()
-    message.success('退出登录成功')
+    message.success(t('common.success'))
     navigate('/login')
+  }
+
+  // 语言切换菜单项
+  const langItems = [
+    { key: 'zh', label: '简体中文' },
+    { key: 'en', label: 'English' },
+    { key: 'ar', label: 'العربية' },
+    { key: 'fr', label: 'Français' },
+    { key: 'ru', label: 'Русский' },
+    { key: 'es', label: 'Español' },
+  ]
+
+  const handleLangChange = (key: string) => {
+    i18n.changeLanguage(key)
+    message.success(t('common.success'))
   }
 
   return (
@@ -64,43 +81,43 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             {
               key: '/',
               icon: <DashboardOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/" style={{ color: '#333333' }}>概览</Link>
+              label: <Link to="/" style={{ color: '#333333' }}>{t('menu.overview')}</Link>
             },
             {
               key: '/sites',
               icon: <FileTextOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/sites" style={{ color: '#333333' }}>站点管理</Link>
+              label: <Link to="/sites" style={{ color: '#333333' }}>{t('menu.sites')}</Link>
             },
             {
               key: '/firewall',
               icon: <SecurityScanOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/firewall" style={{ color: '#333333' }}>WAF预览</Link>
+              label: <Link to="/firewall" style={{ color: '#333333' }}>{t('menu.firewall')}</Link>
             },
             {
               key: '/prerender/preheat',
               icon: <CodeOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/prerender/preheat" style={{ color: '#333333' }}>渲染预热</Link>
+              label: <Link to="/prerender/preheat" style={{ color: '#333333' }}>{t('sites.prerenderConfig')}</Link>
             },
             {
               key: '/prerender/push',
               icon: <CloudUploadOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/prerender/push" style={{ color: '#333333' }}>推送管理</Link>
+              label: <Link to="/prerender/push" style={{ color: '#333333' }}>{t('sites.pushConfig')}</Link>
             },
 
             {
               key: '/monitoring',
               icon: <BarChartOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/monitoring" style={{ color: '#333333' }}>监控警告</Link>
+              label: <Link to="/monitoring" style={{ color: '#333333' }}>{t('menu.monitor')}</Link>
             },
             {
               key: '/crawler',
               icon: <BugOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/crawler" style={{ color: '#333333' }}>爬虫访问</Link>
+              label: <Link to="/crawler" style={{ color: '#333333' }}>{t('menu.crawler')}</Link>
             },
             {
               key: '/system',
               icon: <SettingOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/system" style={{ color: '#333333' }}>系统设置</Link>
+              label: <Link to="/system" style={{ color: '#333333' }}>{t('menu.settings')}</Link>
             },
 
           ]}
@@ -134,6 +151,19 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           
           {/* 右侧用户信息 */}
           <div style={{ marginRight: 16, color: '#333333', display: 'flex', alignItems: 'center' }}>
+            {/* 语言切换 */}
+            <Dropdown 
+              menu={{ 
+                items: langItems, 
+                onClick: ({ key }) => handleLangChange(key) 
+              }} 
+              placement="bottomRight"
+            >
+              <Button type="text" icon={<GlobalOutlined />} style={{ marginRight: 16 }}>
+                {langItems.find(i => i.key === (i18n.language.split('-')[0]))?.label || 'Language'}
+              </Button>
+            </Dropdown>
+
             <span style={{ marginRight: 16 }}>{username || '管理员'}</span>
             <Button 
               type="text" 
@@ -141,7 +171,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               onClick={handleLogout}
               style={{ marginRight: 8 }}
             >
-              退出登录
+              {t('common.cancel')}
             </Button>
             <div 
               style={{

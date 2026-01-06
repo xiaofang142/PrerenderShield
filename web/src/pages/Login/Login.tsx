@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Form, Input, Button, Typography, Modal, message, Alert } from 'antd'
-import { LoginOutlined, LockOutlined, InfoCircleOutlined } from '@ant-design/icons'
+import { Card, Form, Input, Button, Typography, Modal, message, Alert, Dropdown } from 'antd'
+import { LoginOutlined, LockOutlined, InfoCircleOutlined, GlobalOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
+import { useTranslation } from 'react-i18next'
 
 const { Title, Paragraph } = Typography
 
 const Login: React.FC = () => {
+  const { t, i18n } = useTranslation()
   const [loading, setLoading] = useState(false)
   // Modal状态
   const [modalVisible, setModalVisible] = useState(false)
@@ -19,6 +21,21 @@ const Login: React.FC = () => {
   const [checkingFirstRun, setCheckingFirstRun] = useState(true)
   const navigate = useNavigate()
   const { login: authLogin } = useAuth()
+
+  // 语言切换菜单项
+  const langItems = [
+    { key: 'zh', label: '简体中文' },
+    { key: 'en', label: 'English' },
+    { key: 'ar', label: 'العربية' },
+    { key: 'fr', label: 'Français' },
+    { key: 'ru', label: 'Русский' },
+    { key: 'es', label: 'Español' },
+  ]
+
+  const handleLangChange = (key: string) => {
+    i18n.changeLanguage(key)
+    message.success(t('common.success'))
+  }
 
   // 显示提示Modal
   const showModal = (type: 'success' | 'error' | 'info', title: string, content: string) => {
@@ -37,7 +54,7 @@ const Login: React.FC = () => {
           setIsFirstRun(response.data.isFirstRun)
         }
       } catch (error) {
-        console.error('检查首次运行状态失败:', error)
+        console.error('Check first run status failed:', error)
       } finally {
         setCheckingFirstRun(false)
       }
@@ -55,28 +72,28 @@ const Login: React.FC = () => {
         // 保存token并更新全局状态
         authLogin(response.data.token, response.data.username)
         // 显示成功提示
-        showModal('success', '登录成功', '您已成功登录系统，即将跳转到首页')
+        showModal('success', t('login.successTitle'), t('login.successContent'))
         // 延迟跳转到首页
         setTimeout(() => {
           navigate('/')
         }, 1500)
       } else {
         // API返回错误，显示错误信息
-        showModal('error', '登录失败', response.message || '登录失败')
+        showModal('error', t('login.failedTitle'), response.message || t('login.failedDefault'))
       }
     } catch (error: any) {
       // 网络错误或其他错误
-      console.error('登录错误:', error)
+      console.error('Login error:', error)
       if (error.response) {
         // 服务器返回了错误响应
-        const errorMsg = error.response.data?.message || '用户名或密码错误'
-        showModal('error', '登录失败', errorMsg)
+        const errorMsg = error.response.data?.message || t('login.failedDefault')
+        showModal('error', t('login.failedTitle'), errorMsg)
       } else if (error.request) {
         // 请求已发出，但没有收到响应
-        showModal('error', '网络错误', '网络错误，请检查网络连接')
+        showModal('error', t('login.failedNetwork'), t('login.failedNetwork'))
       } else {
         // 请求配置错误
-        showModal('error', '登录失败', '登录失败，请稍后重试')
+        showModal('error', t('login.failedTitle'), t('login.failedRetry'))
       }
     } finally {
       setLoading(false)
@@ -89,8 +106,24 @@ const Login: React.FC = () => {
       justifyContent: 'center',
       alignItems: 'center',
       minHeight: '100vh',
-      background: '#f0f2f5'
+      background: '#f0f2f5',
+      position: 'relative'
     }}>
+      {/* 语言切换按钮 */}
+      <div style={{ position: 'absolute', top: 20, right: 20 }}>
+        <Dropdown 
+          menu={{ 
+            items: langItems, 
+            onClick: ({ key }) => handleLangChange(key) 
+          }} 
+          placement="bottomRight"
+        >
+          <Button icon={<GlobalOutlined />}>
+            {langItems.find(i => i.key === (i18n.language.split('-')[0]))?.label || 'Language'}
+          </Button>
+        </Dropdown>
+      </div>
+
       <Card 
         style={{
           width: 400,
@@ -101,7 +134,7 @@ const Login: React.FC = () => {
           <div style={{ textAlign: 'center' }}>
             <Title level={3} style={{ margin: 0, color: '#2f855a' }}>PrerenderShield</Title>
             <Paragraph style={{ margin: '8px 0 0 0', color: '#666' }}>
-              欢迎登录后台管理系统
+              {t('login.welcome')}
             </Paragraph>
           </div>
         }
@@ -111,13 +144,13 @@ const Login: React.FC = () => {
             message={
               <div style={{ display: 'flex', alignItems: 'center' }}>
                 <InfoCircleOutlined style={{ marginRight: 8, color: '#faad14' }} />
-                <span>首次访问提示</span>
+                <span>{t('login.firstRun.title')}</span>
               </div>
             }
             description={
               <div>
-                <p>当前是首次访问系统，您设置的账号密码将是后续登录使用的凭证。</p>
-                <p style={{ color: '#ff4d4f', fontWeight: 'bold' }}>注意：首次设置的账号密码不可修改，请妥善保管！</p>
+                <p>{t('login.firstRun.desc1')}</p>
+                <p style={{ color: '#ff4d4f', fontWeight: 'bold' }}>{t('login.firstRun.desc2')}</p>
               </div>
             }
             type="warning"
@@ -130,36 +163,36 @@ const Login: React.FC = () => {
           initialValues={{ remember: true }}
           onFinish={handleLogin}
           onFinishFailed={(errorInfo) => {
-            console.log('表单验证失败:', errorInfo);
-            message.error('请输入用户名和密码');
+            console.log('Form validation failed:', errorInfo);
+            message.error(t('login.inputUsername'));
           }}
         >
           <Form.Item
             name="username"
             rules={[
-              { required: true, message: '请输入用户名!' },
-              { min: 3, message: '用户名长度不能少于3个字符!' },
-              { max: 20, message: '用户名长度不能超过20个字符!' }
+              { required: true, message: t('login.inputUsername') },
+              { min: 3, message: t('login.usernameMin') },
+              { max: 20, message: t('login.usernameMax') }
             ]}
           >
             <Input 
               prefix={<LoginOutlined style={{ color: 'rgba(0,0,0,.25)' }} />} 
-              placeholder="用户名"
+              placeholder={t('login.username')}
               size="large"
             />
           </Form.Item>
           <Form.Item
             name="password"
             rules={[
-              { required: true, message: '请输入密码!' },
-              { min: 6, message: '密码长度不能少于6个字符!' },
-              { max: 20, message: '密码长度不能超过20个字符!' }
+              { required: true, message: t('login.inputPassword') },
+              { min: 6, message: t('login.passwordMin') },
+              { max: 20, message: t('login.passwordMax') }
             ]}
           >
             <Input
               prefix={<LockOutlined style={{ color: 'rgba(0,0,0,.25)' }} />}
               type="password"
-              placeholder="密码"
+              placeholder={t('login.password')}
               size="large"
             />
           </Form.Item>
@@ -171,7 +204,7 @@ const Login: React.FC = () => {
               size="large"
               loading={loading}
             >
-              {isFirstRun ? '设置并登录' : '登录'}
+              {isFirstRun ? t('login.setupBtn') : t('login.loginBtn')}
             </Button>
           </Form.Item>
         </Form>
@@ -184,7 +217,7 @@ const Login: React.FC = () => {
         onCancel={() => setModalVisible(false)}
         footer={[
           <Button key="ok" type="primary" onClick={() => setModalVisible(false)}>
-            确定
+            {t('common.ok')}
           </Button>
         ]}
         className={`modal-${modalType}`}

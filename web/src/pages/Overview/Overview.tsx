@@ -3,6 +3,7 @@ import { Card, Row, Col, Statistic, Spin, Select, Tag } from 'antd'
 import * as echarts from 'echarts'
 import BaseChart from '../../components/charts/BaseChart'
 import { overviewApi } from '../../services/api'
+import { useTranslation } from 'react-i18next'
 
 const { Option } = Select
 
@@ -40,6 +41,7 @@ interface OverviewStats {
 }
 
 const Overview: React.FC = () => {
+  const { t } = useTranslation()
   const [mapType, setMapType] = useState<string>('2d') // 地图类型：2d, 3d, bar，默认使用2D地图
   const [stats, setStats] = useState<OverviewStats>({
     totalRequests: 0,
@@ -275,24 +277,24 @@ const Overview: React.FC = () => {
   }, [])
 
   return (
-    <Spin spinning={loading} tip="加载中...">
+    <Spin spinning={loading} tip={t('common.loading')}>
       <div>
-        <h1 className="page-title">概览</h1>
+        <h1 className="page-title">{t('menu.overview')}</h1>
         
         {/* 全球访问分布 */}
         <Card className="card" style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0 }}>全球访问分布</h3>
+            <h3 style={{ margin: 0 }}>{t('overview.geoDistribution')}</h3>
             <div>
-              <span style={{ marginRight: 8 }}>地图类型：</span>
+              <span style={{ marginRight: 8 }}>{t('common.view')}：</span>
               <Select
                 value={mapType}
                 onChange={setMapType}
                 style={{ width: 120 }}
                 size="small"
               >
-                <Option value="2d">2D地图</Option>
-                <Option value="bar">柱状图</Option>
+                <Option value="2d">2D Map</Option>
+                <Option value="bar">Bar Chart</Option>
               </Select>
             </div>
           </div>
@@ -301,32 +303,32 @@ const Overview: React.FC = () => {
           <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
             <Col span={4}>
               <Card variant="outlined" bodyStyle={{ padding: '12px' }}>
-                <Statistic title="PV (访问量)" value={stats.accessStats?.pv || accessStats.pv} valueStyle={{ color: '#1890ff', fontSize: '18px' }} />
+                <Statistic title="PV" value={stats.accessStats?.pv || accessStats.pv} valueStyle={{ color: '#1890ff', fontSize: '18px' }} />
               </Card>
             </Col>
             <Col span={4}>
               <Card variant="outlined" bodyStyle={{ padding: '12px' }}>
-                <Statistic title="UV (独立访客)" value={stats.accessStats?.uv || accessStats.uv} valueStyle={{ color: '#52c41a', fontSize: '18px' }} />
+                <Statistic title="UV" value={stats.accessStats?.uv || accessStats.uv} valueStyle={{ color: '#52c41a', fontSize: '18px' }} />
               </Card>
             </Col>
             <Col span={4}>
               <Card variant="outlined" bodyStyle={{ padding: '12px' }}>
-                <Statistic title="IP (独立IP)" value={stats.accessStats?.ip || accessStats.ip} valueStyle={{ color: '#faad14', fontSize: '18px' }} />
+                <Statistic title="IP" value={stats.accessStats?.ip || accessStats.ip} valueStyle={{ color: '#faad14', fontSize: '18px' }} />
               </Card>
             </Col>
             <Col span={4}>
               <Card variant="outlined" bodyStyle={{ padding: '12px' }}>
-                <Statistic title="请求总数" value={stats.totalRequests} valueStyle={{ color: '#1890ff', fontSize: '18px' }} />
+                <Statistic title={t('overview.totalRequests')} value={stats.totalRequests} valueStyle={{ color: '#1890ff', fontSize: '18px' }} />
               </Card>
             </Col>
             <Col span={4}>
               <Card variant="outlined" bodyStyle={{ padding: '12px' }}>
-                <Statistic title="爬虫请求总数" value={stats.crawlerRequests} valueStyle={{ color: '#52c41a', fontSize: '18px' }} />
+                <Statistic title={t('overview.crawlerRequests')} value={stats.crawlerRequests} valueStyle={{ color: '#52c41a', fontSize: '18px' }} />
               </Card>
             </Col>
             <Col span={4}>
               <Card variant="outlined" bodyStyle={{ padding: '12px' }}>
-                <Statistic title="攻击拦截总数" value={stats.blockedRequests} valueStyle={{ color: '#ff4d4f', fontSize: '18px' }} />
+                <Statistic title={t('overview.blockedRequests')} value={stats.blockedRequests} valueStyle={{ color: '#ff4d4f', fontSize: '18px' }} />
               </Card>
             </Col>
           </Row>
@@ -338,13 +340,13 @@ const Overview: React.FC = () => {
                   <BaseChart option={mapType === '2d' ? mapSeriesOption : barOption} />
                 ) : (
                   <div style={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                    <Spin tip="正在加载地图数据..." />
+                    <Spin tip={t('common.loading')} />
                   </div>
                 )}
               </div>
             </Col>
             <Col span={8}>
-              <Card title="国家访问排行" variant="outlined">
+              <Card title={t('overview.countryRank')} variant="outlined">
                 <div style={{ maxHeight: 400, overflowY: 'auto' }}>
                   {(stats.geoData?.countryData || accessStats.countryData).length > 0 ? (
                     (stats.geoData?.countryData || accessStats.countryData).map((item: any, index: number) => (
@@ -364,7 +366,7 @@ const Overview: React.FC = () => {
                     ))
                   ) : (
                     <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                      暂无访问数据
+                      {t('common.loading')}
                     </div>
                   )}
                 </div>

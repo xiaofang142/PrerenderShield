@@ -1,6 +1,12 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
+import enUS from 'antd/locale/en_US'
+import arEG from 'antd/locale/ar_EG'
+import frFR from 'antd/locale/fr_FR'
+import ruRU from 'antd/locale/ru_RU'
+import esES from 'antd/locale/es_ES'
+import { useTranslation } from 'react-i18next'
 
 // Import Auth Context
 import { AuthProvider } from './context/AuthContext'
@@ -27,6 +33,29 @@ import Dashboard from './pages/Dashboard'
 import MainLayout from './components/layouts/MainLayout'
 
 function App() {
+  const { i18n } = useTranslation()
+
+  // 根据当前语言获取 Ant Design 语言包
+  const getAntdLocale = () => {
+    switch (i18n.language) {
+      case 'zh':
+      case 'zh-CN':
+        return zhCN
+      case 'en':
+        return enUS
+      case 'ar':
+        return arEG
+      case 'fr':
+        return frFR
+      case 'ru':
+        return ruRU
+      case 'es':
+        return esES
+      default:
+        return zhCN
+    }
+  }
+
   // 自定义主题配置，参考雷池设计风格
   const theme = {
     token: {
@@ -63,7 +92,7 @@ function App() {
   }
 
   return (
-    <ConfigProvider locale={zhCN} theme={theme}>
+    <ConfigProvider locale={getAntdLocale()} theme={theme}>
       <AuthProvider>
         <Router>
           <Routes>

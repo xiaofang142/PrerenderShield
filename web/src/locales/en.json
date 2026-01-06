@@ -1,0 +1,90 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "success": "Operation Successful",
+    "error": "Operation Failed",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "save": "Save",
+    "search": "Search",
+    "reset": "Reset",
+    "actions": "Actions",
+    "view": "View",
+    "download": "Download",
+    "upload": "Upload",
+    "extract": "Extract",
+    "batchDelete": "Batch Delete",
+    "deleteAll": "Delete All",
+    "ok": "OK"
+  },
+  "menu": {
+    "overview": "Overview",
+    "sites": "Sites",
+    "firewall": "Firewall",
+    "logs": "Logs",
+    "crawler": "Crawler Logs",
+    "monitor": "Monitor",
+    "settings": "Settings"
+  },
+  "overview": {
+    "totalRequests": "Total Requests",
+    "crawlerRequests": "Crawler Requests",
+    "blockedRequests": "Blocked Requests",
+    "cacheHitRate": "Cache Hit Rate",
+    "activeBrowsers": "Active Browsers",
+    "activeSites": "Active Sites",
+    "prerenderEnabled": "Prerender Service",
+    "firewallEnabled": "Firewall Service",
+    "trafficTrend": "Traffic Trend",
+    "accessStats": "Access Stats",
+    "geoDistribution": "Global Distribution",
+    "countryRank": "Country Rank"
+  },
+  "sites": {
+    "title": "Site Management",
+    "addSite": "Add Site",
+    "reload": "Reload",
+    "totalSites": "Total Sites",
+    "prerenderEnabledSites": "Prerender Enabled",
+    "firewallEnabledSites": "Firewall Enabled",
+    "columns": {
+      "name": "Site Name",
+      "domain": "Domain",
+      "port": "Port",
+      "mode": "Mode",
+      "prerenderStatus": "Prerender Status",
+      "firewallStatus": "Firewall Status"
+    },
+    "staticManage": "Static Files",
+    "wafConfig": "WAF Config",
+    "pushConfig": "Push Config",
+    "prerenderConfig": "Prerender Config"
+  },
+  "login": {
+    "welcome": "Welcome to Admin System",
+    "username": "Username",
+    "password": "Password",
+    "loginBtn": "Login",
+    "setupBtn": "Setup & Login",
+    "successTitle": "Login Successful",
+    "successContent": "You have successfully logged in, redirecting to home page...",
+    "failedTitle": "Login Failed",
+    "failedDefault": "Login failed",
+    "failedNetwork": "Network error, please check your connection",
+    "failedRetry": "Login failed, please try again later",
+    "inputUsername": "Please input your username!",
+    "usernameMin": "Username must be at least 3 characters!",
+    "usernameMax": "Username cannot be longer than 20 characters!",
+    "inputPassword": "Please input your password!",
+    "passwordMin": "Password must be at least 6 characters!",
+    "passwordMax": "Password cannot be longer than 20 characters!",
+    "firstRun": {
+      "title": "Initial Setup",
+      "desc1": "This is the first time you are accessing the system. The username and password you set now will be used for future logins.",
+      "desc2": "Note: The initial username and password cannot be changed, please keep them safe!"
+    }
+  }
+}
