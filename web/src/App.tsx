@@ -1,4 +1,3 @@
-import React from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
@@ -21,6 +20,8 @@ import Logs from './pages/Logs/Logs'
 import Sites from './pages/Sites/Sites'
 import Crawler from './pages/Crawler/Crawler'
 import SystemConfig from './pages/System/SystemConfig'
+import WAFSettings from './pages/WAFSettings'
+import Dashboard from './pages/Dashboard'
 
 // Import layout
 import MainLayout from './components/layouts/MainLayout'
@@ -86,6 +87,26 @@ function App() {
                 <PrivateRoute>
                   <MainLayout>
                     <Sites />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/sites/:id/waf" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <WAFSettings />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/dashboard" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <Dashboard />
                   </MainLayout>
                 </PrivateRoute>
               } 

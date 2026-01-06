@@ -41,11 +41,9 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 
 			// 监控API
 			protectedGroup.GET("/monitoring/stats", controllers.MonitoringController.GetStats)
-			// 防火墙API
-			protectedGroup.GET("/firewall/status", controllers.FirewallController.GetFirewallStatus)
 
-			// 防火墙规则API
-			protectedGroup.GET("/firewall/rules", controllers.FirewallController.GetFirewallRules)
+			// 访问日志API
+			protectedGroup.GET("/logs", controllers.FirewallController.GetAccessLogs)
 
 			// 爬虫日志API
 			protectedGroup.GET("/crawler/logs", controllers.CrawlerController.GetCrawlerLogs)
@@ -79,6 +77,10 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 
 				// 获取站点的Redis配置（预渲染或推送配置）
 				sitesGroup.GET("/:id/config", controllers.SitesController.GetSiteConfig)
+
+				// WAF Configuration
+				sitesGroup.GET("/:id/waf", controllers.FirewallController.GetWafConfig)
+				sitesGroup.PUT("/:id/waf", controllers.FirewallController.UpdateWafConfig)
 
 				// 添加站点
 				sitesGroup.POST("", controllers.SitesController.AddSite)

@@ -121,9 +121,13 @@ export const overviewApi = {
 
 // 防火墙API
 export const firewallApi = {
-  getStatus: (site?: string) => api.get('/firewall/status', { params: site ? { site } : {} }),
-  getRules: (site?: string) => api.get('/firewall/rules', { params: site ? { site } : {} }),
-  scan: (data: { site?: string; url: string }) => api.post('/firewall/scan', data),
+  getWafConfig: (siteId: string) => api.get(`/sites/${siteId}/waf`),
+  updateWafConfig: (siteId: string, config: any) => api.put(`/sites/${siteId}/waf`, config),
+  getAccessLogs: (params: { site_id?: string; page?: number; limit?: number }) => api.get('/logs', { params }),
+  // 为了兼容Firewall.tsx增加的方法
+  getStatus: (siteId: string) => api.get(`/sites/${siteId}/waf`),
+  getRules: (siteId: string) => api.get(`/sites/${siteId}/waf`), // 规则包含在配置中
+  scan: (data: { site: string; url: string }) => api.post(`/sites/${data.site}/scan`, data),
 }
 
 // 渲染预热API

@@ -14,7 +14,7 @@ const Firewall: React.FC = () => {
     defaultAction: 'block',
     blockMessage: 'Request blocked by firewall',
   })
-  const [rules, setRules] = useState([])
+  const [rules, setRules] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [scanModalVisible, setScanModalVisible] = useState(false)
   const [scanUrl, setScanUrl] = useState('')
@@ -75,19 +75,16 @@ const Firewall: React.FC = () => {
     
     try {
       setLoading(true)
-      const [statusRes, rulesRes] = await Promise.all([
-        firewallApi.getStatus(selectedSite),
-        firewallApi.getRules(selectedSite),
-      ])
+      const res = await firewallApi.getWafConfig(selectedSite)
       
-      if (statusRes.code === 200) {
-        // 处理单站点数据结构
-        const statusData = typeof statusRes.data === 'object' && statusRes.data.enabled !== undefined ? statusRes.data : statusRes.data[selectedSite]
-        setStatus(statusData)
-      }
-      
-      if (rulesRes.code === 200) {
-        setRules(rulesRes.data)
+      if (res.code === 200) {
+        const config = res.data
+        setStatus({
+          enabled: config.enabled,
+          defaultAction: config.mode === 'block' ? 'block' : 'allow',
+          blockMessage: 'Request blocked by firewall',
+        })
+        setRules(config.rules || [])
       }
     } catch (error) {
       console.error('Failed to fetch firewall data:', error)

@@ -14,8 +14,11 @@ import (
 
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/logging"
+	"prerender-shield/internal/middleware"
 	"prerender-shield/internal/monitoring"
 	"prerender-shield/internal/prerender"
+	"prerender-shield/internal/redis"
+	"prerender-shield/internal/repository"
 )
 
 // Handler 站点处理器，负责处理站点的HTTP请求
@@ -23,9 +26,12 @@ import (
 //
 // 字段:
 //   prerenderManager: 渲染预热引擎管理器，用于处理爬虫请求的渲染
-
+//   wafRepo: WAF仓库，用于记录WAF日志
+//   redisClient: Redis客户端，用于限流
 type Handler struct {
 	prerenderManager *prerender.EngineManager
+	wafRepo          *repository.WafRepository
+	redisClient      *redis.Client
 }
 
 // NewHandler 创建站点处理器实例
@@ -33,6 +39,8 @@ type Handler struct {
 // 参数:
 //
 //	prerenderManager: 渲染预热引擎管理器，用于处理爬虫请求的渲染
+//	wafRepo: WAF仓库
+//	redisClient: Redis客户端
 //
 // 返回值:
 //
@@ -40,10 +48,12 @@ type Handler struct {
 //
 // 示例:
 //
-//	handler := sitehandler.NewHandler(prerenderManager)
-func NewHandler(prerenderManager *prerender.EngineManager) *Handler {
+//	handler := sitehandler.NewHandler(prerenderManager, wafRepo, redisClient)
+func NewHandler(prerenderManager *prerender.EngineManager, wafRepo *repository.WafRepository, redisClient *redis.Client) *Handler {
 	return &Handler{
 		prerenderManager: prerenderManager,
+		wafRepo:          wafRepo,
+		redisClient:      redisClient,
 	}
 }
 
@@ -68,6 +78,9 @@ func NewHandler(prerenderManager *prerender.EngineManager) *Handler {
 func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *logging.CrawlerLogManager, visitLogManager *logging.VisitLogManager, monitor *monitoring.Monitor, staticDir string) http.Handler {
 	// 创建站点级别的Gin路由器
 	siteRouter := gin.Default()
+
+	// WAF中间件 - 最先执行，保护后续处理
+	siteRouter.Use(middleware.WafMiddleware(site, h.wafRepo, h.redisClient))
 
 	// 爬虫检测中间件 - 第一个执行，确保爬虫请求得到正确处理
 	siteRouter.Use(func(c *gin.Context) {

@@ -32,14 +32,14 @@ const Monitoring: React.FC = () => {
   })
 
   // 图表配置
-  const cpuChartOption = {
+  const cpuChartOption: echarts.EChartsOption = {
     tooltip: {
       trigger: 'item' as const,
     },
     series: [
       {
         name: 'CPU使用率',
-        type: 'gauge',
+        type: 'gauge' as const,
         detail: { formatter: '{value}%' },
         data: [{ value: stats.cpuUsage, name: 'CPU' }],
         axisLine: {
@@ -55,14 +55,14 @@ const Monitoring: React.FC = () => {
     ],
   }
 
-  const memoryChartOption = {
+  const memoryChartOption: echarts.EChartsOption = {
     tooltip: {
       trigger: 'item' as const,
     },
     series: [
       {
         name: '内存使用率',
-        type: 'gauge',
+        type: 'gauge' as const,
         detail: { formatter: '{value}%' },
         data: [{ value: stats.memoryUsage, name: '内存' }],
         axisLine: {
@@ -78,14 +78,14 @@ const Monitoring: React.FC = () => {
     ],
   }
 
-  const diskChartOption = {
+  const diskChartOption: echarts.EChartsOption = {
     tooltip: {
       trigger: 'item' as const,
     },
     series: [
       {
         name: '磁盘使用率',
-        type: 'gauge',
+        type: 'gauge' as const,
         detail: { formatter: '{value}%' },
         data: [{ value: stats.diskUsage, name: '磁盘' }],
         axisLine: {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, Button, Table, Select, Space, message, Modal, Spin } from 'antd'
+import { Card, Row, Col, Statistic, Button, Table, Select, message, Modal, Spin } from 'antd'
 import { ReloadOutlined, UploadOutlined, PlayCircleOutlined, BarChartOutlined } from '@ant-design/icons'
 import { sitesApi, pushApi } from '../../services/api'
 
@@ -8,7 +8,6 @@ const { Option } = Select
 const Push: React.FC = () => {
   const [sites, setSites] = useState<any[]>([])
   const [selectedSiteId, setSelectedSiteId] = useState<string>('')
-  const [selectedSiteName, setSelectedSiteName] = useState<string>('')
   const [stats, setStats] = useState({
     total: 0,
     success: 0,
@@ -103,7 +102,6 @@ const Push: React.FC = () => {
         setSites(res.data)
         if (res.data.length > 0 && !selectedSiteId) {
           setSelectedSiteId(res.data[0].id)
-          setSelectedSiteName(res.data[0].name || res.data[0].Name || '')
         }
       }
     } catch (error) {
@@ -232,9 +230,7 @@ const Push: React.FC = () => {
             <Select
               value={selectedSiteId}
               onChange={(value) => {
-                const site = sites.find((s: any) => s.id === value)
                 setSelectedSiteId(value)
-                setSelectedSiteName(site?.name || site?.Name || '')
               }}
               style={{ width: 200 }}
               loading={loading}

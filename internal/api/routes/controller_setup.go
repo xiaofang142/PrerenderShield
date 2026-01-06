@@ -9,6 +9,7 @@ import (
 	"prerender-shield/internal/prerender"
 	"prerender-shield/internal/prerender/push"
 	"prerender-shield/internal/redis"
+	"prerender-shield/internal/repository"
 	"prerender-shield/internal/scheduler"
 	sitehandler "prerender-shield/internal/site-handler"
 	siteserver "prerender-shield/internal/site-server"
@@ -40,6 +41,7 @@ func SetupControllers(
 	monitor *monitoring.Monitor,
 	crawlerLogMgr *logging.CrawlerLogManager,
 	visitLogMgr *logging.VisitLogManager,
+	wafRepo *repository.WafRepository,
 	cfg *config.Config,
 ) *Controllers {
 	// 创建推送管理器
@@ -48,9 +50,9 @@ func SetupControllers(
 	// 创建控制器实例
 	return &Controllers{
 		AuthController:       controllers.NewAuthController(userManager, jwtManager),
-		OverviewController:   controllers.NewOverviewController(cfg, monitor, visitLogMgr),
+		OverviewController:   controllers.NewOverviewController(cfg, monitor, visitLogMgr, wafRepo),
 		MonitoringController: controllers.NewMonitoringController(monitor),
-		FirewallController:   controllers.NewFirewallController(),
+		FirewallController:   controllers.NewFirewallController(wafRepo),
 		CrawlerController:    controllers.NewCrawlerController(crawlerLogMgr),
 		PreheatController:    controllers.NewPreheatController(prerenderManager, redisClient, cfg),
 		PushController:       controllers.NewPushController(pushManager, redisClient, cfg),

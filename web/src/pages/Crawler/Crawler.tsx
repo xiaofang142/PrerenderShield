@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, Spin, Select, Table, DatePicker, Radio, Tabs } from 'antd'
-import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons'
+import { Card, Row, Col, Statistic, Spin, Select, Table, Radio, Tabs } from 'antd'
+import { ArrowUpOutlined } from '@ant-design/icons'
 import BaseChart from '../../components/charts/BaseChart'
 import { crawlerApi, sitesApi } from '../../services/api'
 import dayjs from 'dayjs'
+import * as echarts from 'echarts'
 
 const { Option } = Select
-const { RangePicker } = DatePicker
 const { TabPane } = Tabs
 
 const Crawler: React.FC = () => {
@@ -161,7 +161,7 @@ const Crawler: React.FC = () => {
           }
         }
       ]
-    };
+    } as echarts.EChartsOption;
   }, [stats]); // 当stats变化时重新计算图表配置
 
   // 获取站点列表

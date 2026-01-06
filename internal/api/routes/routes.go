@@ -9,6 +9,7 @@ import (
 	"prerender-shield/internal/monitoring"
 	"prerender-shield/internal/prerender"
 	"prerender-shield/internal/redis"
+	"prerender-shield/internal/repository"
 	"prerender-shield/internal/scheduler"
 	sitehandler "prerender-shield/internal/site-handler"
 	siteserver "prerender-shield/internal/site-server"
@@ -27,6 +28,7 @@ type Router struct {
 	monitor          *monitoring.Monitor
 	crawlerLogMgr    *logging.CrawlerLogManager
 	visitLogMgr      *logging.VisitLogManager
+	wafRepo          *repository.WafRepository
 	cfg              *config.Config
 }
 
@@ -43,6 +45,7 @@ func NewRouter(
 	monitor *monitoring.Monitor,
 	crawlerLogMgr *logging.CrawlerLogManager,
 	visitLogMgr *logging.VisitLogManager,
+	wafRepo *repository.WafRepository,
 	cfg *config.Config,
 ) *Router {
 	return &Router{
@@ -57,6 +60,7 @@ func NewRouter(
 		monitor:          monitor,
 		crawlerLogMgr:    crawlerLogMgr,
 		visitLogMgr:      visitLogMgr,
+		wafRepo:          wafRepo,
 		cfg:              cfg,
 	}
 }
@@ -82,6 +86,7 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 		r.monitor,
 		r.crawlerLogMgr,
 		r.visitLogMgr,
+		r.wafRepo,
 		r.cfg,
 	)
 

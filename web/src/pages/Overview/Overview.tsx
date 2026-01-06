@@ -39,7 +39,7 @@ const Overview: React.FC = () => {
     diskUsage: 0,
     requestsPerSecond: 0,
   })
-  const [accessStats, setAccessStats] = useState({
+  const [accessStats] = useState({
     pv: 74100,
     uv: 192,
     ip: 294,
@@ -117,7 +117,7 @@ const Overview: React.FC = () => {
   }
 
   // 请求趋势图表配置
-  const chartOption = {
+  const chartOption: echarts.EChartsOption = {
     tooltip: {
       trigger: 'axis',
       axisPointer: {
@@ -178,7 +178,7 @@ const Overview: React.FC = () => {
   }
 
   // 2D地图配置
-  const map2DOption = {
+  const map2DOption: echarts.EChartsOption = {
     tooltip: {
       trigger: 'item',
       formatter: '{b}: {c} ({d}%)'
@@ -233,7 +233,7 @@ const Overview: React.FC = () => {
   }
 
   // 3D地图配置
-  const map3DOption = {
+  const map3DOption: any = {
     tooltip: {
       trigger: 'item',
       formatter: '{b}: {c} ({d}%)'
@@ -289,7 +289,7 @@ const Overview: React.FC = () => {
   }
 
   // 柱状图配置（作为备选）
-  const barOption = {
+  const barOption: echarts.EChartsOption = {
     tooltip: {
       trigger: 'axis',
       axisPointer: {
@@ -343,7 +343,7 @@ const Overview: React.FC = () => {
   }
 
   // PV趋势图表配置
-  const pvTrendOption = {
+  const pvTrendOption: echarts.EChartsOption = {
     xAxis: {
       type: 'category',
       data: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'],
@@ -396,7 +396,7 @@ const Overview: React.FC = () => {
   }
 
   // UV趋势图表配置
-  const uvTrendOption = {
+  const uvTrendOption: echarts.EChartsOption = {
     xAxis: {
       type: 'category',
       data: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'],
@@ -449,7 +449,7 @@ const Overview: React.FC = () => {
   }
 
   // IP趋势图表配置
-  const ipTrendOption = {
+  const ipTrendOption: echarts.EChartsOption = {
     xAxis: {
       type: 'category',
       data: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'],

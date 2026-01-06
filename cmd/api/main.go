@@ -16,11 +16,13 @@ import (
 	"prerender-shield/internal/api/routes"
 	"prerender-shield/internal/auth"
 	"prerender-shield/internal/config"
+	"prerender-shield/internal/db"
 	"prerender-shield/internal/firewall"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/monitoring"
 	"prerender-shield/internal/prerender"
 	"prerender-shield/internal/redis"
+	"prerender-shield/internal/repository"
 	"prerender-shield/internal/scheduler"
 	"prerender-shield/internal/services"
 	sitehandler "prerender-shield/internal/site-handler"
@@ -60,6 +62,14 @@ func main() {
 	})
 
 	// 6. 初始化各模块
+	// 0. 初始化数据库
+	if err := db.InitDB(cfg); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	// 0.1 初始化WAF仓库
+	wafRepo := repository.NewWafRepository()
+
 	// 1. Redis客户端初始化
 	redisClient, err := redis.NewClient(cfg.Cache.RedisURL)
 	if err != nil {
@@ -193,7 +203,7 @@ func main() {
 	siteServerManager := siteserver.NewManager(monitor)
 
 	// 10. 初始化站点处理器
-	siteHandler := sitehandler.NewHandler(prerenderManager)
+	siteHandler := sitehandler.NewHandler(prerenderManager, wafRepo, redisClient)
 
 	// 11. 为每个站点启动服务器
 	for _, site := range cfg.Sites {
@@ -220,6 +230,7 @@ func main() {
 		monitor,
 		crawlerLogManager,
 		visitLogManager,
+		wafRepo,
 		cfg,
 	)
 

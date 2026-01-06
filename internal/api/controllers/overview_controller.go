@@ -9,6 +9,7 @@ import (
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/monitoring"
+	"prerender-shield/internal/repository"
 )
 
 // OverviewController 概览控制器
@@ -16,14 +17,16 @@ type OverviewController struct {
 	cfg         *config.Config
 	monitor     *monitoring.Monitor
 	visitLogMgr *logging.VisitLogManager
+	wafRepo     *repository.WafRepository
 }
 
 // NewOverviewController 创建概览控制器实例
-func NewOverviewController(cfg *config.Config, monitor *monitoring.Monitor, visitLogMgr *logging.VisitLogManager) *OverviewController {
+func NewOverviewController(cfg *config.Config, monitor *monitoring.Monitor, visitLogMgr *logging.VisitLogManager, wafRepo *repository.WafRepository) *OverviewController {
 	return &OverviewController{
 		cfg:         cfg,
 		monitor:     monitor,
 		visitLogMgr: visitLogMgr,
+		wafRepo:     wafRepo,
 	}
 }
 
@@ -43,6 +46,20 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 
 	// 获取真实监控数据
 	stats := c.monitor.GetStats()
+
+	// 获取WAF统计数据 (最近24小时)
+	endTime := time.Now()
+	startTime := endTime.Add(-24 * time.Hour)
+	wafStats, err := c.wafRepo.GetGlobalStats(startTime.Format("2006-01-02 15:04:05"), endTime.Format("2006-01-02 15:04:05"))
+	
+	totalRequests := int64(stats["totalRequests"].(float64))
+	blockedRequests := int64(stats["blockedRequests"].(float64))
+	
+	// 如果WAF stats可用，优先使用 DB 中的数据
+	if err == nil && wafStats != nil {
+		totalRequests = wafStats.TotalRequests
+		blockedRequests = wafStats.BlockedRequests
+	}
 
 	// 获取站点统计数据
 	activeSites := len(c.cfg.Sites)
@@ -77,9 +94,9 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 		"code":    200,
 		"message": "success",
 		"data": gin.H{
-			"totalRequests":    int64(stats["totalRequests"].(float64)),
+			"totalRequests":    totalRequests,
 			"crawlerRequests":  int64(stats["crawlerRequests"].(float64)),
-			"blockedRequests":  int64(stats["blockedRequests"].(float64)),
+			"blockedRequests":  blockedRequests,
 			"cacheHitRate":     float64(int(stats["cacheHitRate"].(float64)*100)) / 100, // 保留两位小数
 			"activeBrowsers":   int(stats["activeBrowsers"].(float64)),
 			"activeSites":      activeSites,
@@ -92,17 +109,17 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 				"globeData":   globeData,
 			},
 			"trafficData": []gin.H{
-				{"time": "00:00", "totalRequests": int(stats["totalRequests"].(float64)) / 6, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 6, "blockedRequests": int(stats["blockedRequests"].(float64)) / 6},
-				{"time": "04:00", "totalRequests": int(stats["totalRequests"].(float64)) / 8, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 8, "blockedRequests": int(stats["blockedRequests"].(float64)) / 8},
-				{"time": "08:00", "totalRequests": int(stats["totalRequests"].(float64)) / 5, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 5, "blockedRequests": int(stats["blockedRequests"].(float64)) / 5},
-				{"time": "12:00", "totalRequests": int(stats["totalRequests"].(float64)) / 3, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 3, "blockedRequests": int(stats["blockedRequests"].(float64)) / 3},
-				{"time": "16:00", "totalRequests": int(stats["totalRequests"].(float64)) / 2, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 2, "blockedRequests": int(stats["blockedRequests"].(float64)) / 2},
-				{"time": "20:00", "totalRequests": int(stats["totalRequests"].(float64)) / 4, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 4, "blockedRequests": int(stats["blockedRequests"].(float64)) / 4},
+				{"time": "00:00", "totalRequests": int(totalRequests) / 6, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 6, "blockedRequests": int(blockedRequests) / 6},
+				{"time": "04:00", "totalRequests": int(totalRequests) / 8, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 8, "blockedRequests": int(blockedRequests) / 8},
+				{"time": "08:00", "totalRequests": int(totalRequests) / 5, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 5, "blockedRequests": int(blockedRequests) / 5},
+				{"time": "12:00", "totalRequests": int(totalRequests) / 3, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 3, "blockedRequests": int(blockedRequests) / 3},
+				{"time": "16:00", "totalRequests": int(totalRequests) / 2, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 2, "blockedRequests": int(blockedRequests) / 2},
+				{"time": "20:00", "totalRequests": int(totalRequests) / 4, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 4, "blockedRequests": int(blockedRequests) / 4},
 			},
 			"accessStats": gin.H{
-				"pv": int(stats["totalRequests"].(float64)) * 50,
-				"uv": 100 + int(stats["totalRequests"].(float64))/100,
-				"ip": 50 + int(stats["totalRequests"].(float64))/50,
+				"pv": int(totalRequests) * 50,
+				"uv": 100 + int(totalRequests)/100,
+				"ip": 50 + int(totalRequests)/50,
 			},
 		},
 	})

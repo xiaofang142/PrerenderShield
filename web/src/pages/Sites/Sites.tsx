@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Table, Button, Modal, Form, Input, Switch, Select, Row, Col, Statistic, Upload, Typography, Space, message, Divider, Tabs, Radio } from 'antd'
+import { useNavigate } from 'react-router-dom'
+import { Card, Table, Button, Modal, Form, Input, Switch, Select, Row, Col, Statistic, Upload, Typography, Space, message, Divider } from 'antd'
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, UploadOutlined, 
   UnorderedListOutlined, CloudUploadOutlined, FolderOpenOutlined, 
@@ -13,12 +14,12 @@ import type { UploadProps } from 'antd'
 const { Option } = Select
 
 const Sites: React.FC = () => {
+  const navigate = useNavigate();
   // 使用useMessage hook来获取message实例，支持主题配置
   const [messageApi, contextHolder] = message.useMessage();
   const [sites, setSites] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [visible, setVisible] = useState(false)
-  const [uploadModalVisible, setUploadModalVisible] = useState(false)
   const [editingSite, setEditingSite] = useState<any>(null)
   const [form] = Form.useForm()
   
@@ -42,11 +43,6 @@ const Sites: React.FC = () => {
   const [editingPushSite, setEditingPushSite] = useState<any>(null)
   const [pushConfigForm] = Form.useForm()
   
-  // WAF配置模态框状态
-  const [wafConfigModalVisible, setWafConfigModalVisible] = useState(false)
-  const [editingWAFSite, setEditingWAFSite] = useState<any>(null)
-  const [wafConfigForm] = Form.useForm()
-
 
   // 表格列配置
   const columns = [
@@ -185,7 +181,7 @@ const Sites: React.FC = () => {
               <Button
                 type="link"
                 icon={<SecurityScanOutlined />}
-                onClick={() => handleWAFConfig(record)}
+                onClick={() => navigate(`/sites/${record.id}/waf`)}
                 style={{ marginRight: 8, whiteSpace: 'nowrap' }}
               >
                 WAF配置
@@ -1007,55 +1003,6 @@ const Sites: React.FC = () => {
     setPushConfigModalVisible(true);
   }
 
-  // 处理WAF配置
-  const handleWAFConfig = async (site: any) => {
-    setEditingWAFSite(site)
-    try {
-      const configResponse = await sitesApi.getSiteConfig(site.id, 'waf');
-      let redisConfig: any = {};
-      if (configResponse.code === 200 && configResponse.data) {
-        redisConfig = configResponse.data;
-      }
-      
-      const mergedConfig = {
-        enabled: redisConfig.firewall_enabled === '1' || site.firewall?.enabled || false,
-        defaultAction: redisConfig.default_action || site.firewall?.action?.defaultAction || 'block',
-        blockMessage: redisConfig.block_message || site.firewall?.action?.blockMessage || 'Access Denied by WAF',
-        geoip: {
-            enabled: redisConfig.geoip_enabled === '1' || site.firewall?.geoip?.enabled || false,
-            blockList: redisConfig.geoip_block_list ? redisConfig.geoip_block_list.split(',').filter(Boolean) : (site.firewall?.geoip?.blockList || []),
-        },
-        ratelimit: {
-            enabled: redisConfig.ratelimit_enabled === '1' || site.firewall?.rateLimit?.enabled || false,
-            rate: parseInt(redisConfig.ratelimit_rate) || site.firewall?.rateLimit?.rate || 100,
-            burst: parseInt(redisConfig.ratelimit_burst) || site.firewall?.rateLimit?.burst || 20,
-        },
-        blacklist: redisConfig.blacklist ? redisConfig.blacklist.split(',').filter(Boolean) : (site.firewall?.blacklist || []),
-        whitelist: redisConfig.whitelist ? redisConfig.whitelist.split(',').filter(Boolean) : (site.firewall?.whitelist || []),
-      };
-      
-      wafConfigForm.setFieldsValue(mergedConfig);
-    } catch (error) {
-      console.error('Failed to load WAF config from Redis:', error);
-      wafConfigForm.setFieldsValue({
-        enabled: site.firewall?.enabled || false,
-        defaultAction: site.firewall?.action?.defaultAction || 'block',
-        blockMessage: site.firewall?.action?.blockMessage || 'Access Denied by WAF',
-        geoip: {
-            enabled: site.firewall?.geoip?.enabled || false,
-            blockList: site.firewall?.geoip?.blockList || [],
-        },
-        ratelimit: {
-            enabled: site.firewall?.rateLimit?.enabled || false,
-            rate: site.firewall?.rateLimit?.rate || 100,
-            burst: site.firewall?.rateLimit?.burst || 20,
-        },
-        blacklist: site.firewall?.blacklist || [],
-        whitelist: site.firewall?.whitelist || [],
-      });
-    }
-    setWafConfigModalVisible(true);
-  }
 
   // 处理表单提交
   const handleSubmit = async () => {
@@ -1431,72 +1378,6 @@ const Sites: React.FC = () => {
 
 
 
-  // 处理WAF配置表单提交
-  const handleWAFConfigSubmit = async () => {
-    try {
-      const values = await wafConfigForm.validateFields();
-      // 构造更新数据
-      const siteData = {
-        name: editingWAFSite.name,
-        domain: editingWAFSite.domain,
-        domains: editingWAFSite.domains || [editingWAFSite.domain],
-        port: editingWAFSite.port || 80,
-        mode: editingWAFSite.mode || 'proxy',
-        // 保留其他配置
-        proxy: editingWAFSite.proxy || {},
-        redirect: editingWAFSite.redirect || {},
-        prerender: editingWAFSite.prerender || {},
-        file_integrity: editingWAFSite.file_integrity || {},
-        // 更新WAF配置
-        firewall: {
-            enabled: values.enabled,
-            rules_path: editingWAFSite.firewall?.rulesPath || '/etc/prerender-shield/rules',
-            action: {
-                default_action: values.defaultAction,
-                block_message: values.blockMessage
-            },
-            geoip: {
-                enabled: values.geoip?.enabled || false,
-                allow_list: [], // 暂不使用白名单
-                block_list: values.geoip?.blockList || []
-            },
-            rate_limit: {
-                enabled: values.ratelimit?.enabled || false,
-                requests: values.ratelimit?.rate || 100,
-                window: values.ratelimit?.window || 60,
-                ban_time: values.ratelimit?.ban_time || 3600
-            },
-            blacklist: values.blacklist || [],
-            whitelist: values.whitelist || []
-        }
-      };
-
-      Modal.confirm({
-        title: '正在保存WAF配置',
-        content: '请稍候...',
-        okButtonProps: { disabled: true },
-        cancelButtonProps: { disabled: true },
-        closable: false,
-        keyboard: false,
-        centered: true,
-      });
-
-      const res = await sitesApi.updateSite(editingWAFSite.id, siteData);
-      Modal.destroyAll();
-
-      if (res.code === 200) {
-        messageApi.success('WAF配置更新成功');
-        setWafConfigModalVisible(false);
-        fetchSites();
-      } else {
-        messageApi.error(res.message || 'WAF配置更新失败');
-      }
-    } catch (error: any) {
-      Modal.destroyAll();
-      console.error('WAF config submission error:', error);
-      messageApi.error('配置提交失败');
-    }
-  }
 
   return (
     <>
@@ -1721,154 +1602,6 @@ const Sites: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* WAF配置弹窗 */}
-      <Modal
-        title="WAF 防火墙配置"
-        open={wafConfigModalVisible}
-        onOk={handleWAFConfigSubmit}
-        onCancel={() => setWafConfigModalVisible(false)}
-        width={800}
-      >
-        <Form form={wafConfigForm} layout="vertical">
-            <Tabs defaultActiveKey="1" items={[
-                {
-                    key: '1',
-                    label: '基础防护 & 频率限制',
-                    children: (
-                        <>
-                            <Form.Item name="enabled" label="启用防火墙" valuePropName="checked">
-                                <Switch />
-                            </Form.Item>
-                            
-                            <Divider orientation="left">请求频率限制 (Rate Limit)</Divider>
-                            <Form.Item name={['ratelimit', 'enabled']} label="启用频率限制" valuePropName="checked">
-                                <Switch />
-                            </Form.Item>
-                            <Row gutter={16}>
-                                <Col span={8}>
-                                    <Form.Item name={['ratelimit', 'rate']} label="限制请求数" help="周期内允许的最大请求次数">
-                                        <Input type="number" suffix="次" />
-                                    </Form.Item>
-                                </Col>
-                                <Col span={8}>
-                                    <Form.Item name={['ratelimit', 'window']} label="统计周期" help="统计请求的时间窗口">
-                                        <Input type="number" suffix="秒" />
-                                    </Form.Item>
-                                </Col>
-                                <Col span={8}>
-                                    <Form.Item name={['ratelimit', 'ban_time']} label="封禁时间" help="触发限制后的封禁时长">
-                                        <Input type="number" suffix="秒" />
-                                    </Form.Item>
-                                </Col>
-                            </Row>
-                        </>
-                    )
-                },
-                {
-                    key: '2',
-                    label: '访问控制 (GeoIP & 黑白名单)',
-                    children: (
-                        <>
-                            <Divider orientation="left">区域封禁 (GeoIP)</Divider>
-                            <Form.Item name={['geoip', 'enabled']} label="启用区域封禁" valuePropName="checked">
-                                <Switch />
-                            </Form.Item>
-                            <Form.Item label="禁止访问的国家/地区">
-                                <div style={{ marginBottom: 8 }}>
-                                    <Space>
-                                        <Button size="small" onClick={() => {
-                                            // 常用国家代码列表
-                                            const allCountries = ['CN', 'US', 'JP', 'KR', 'GB', 'DE', 'FR', 'RU', 'BR', 'IN', 'CA', 'AU'];
-                                            wafConfigForm.setFieldsValue({
-                                                geoip: {
-                                                    ...wafConfigForm.getFieldValue('geoip'),
-                                                    blockList: allCountries
-                                                }
-                                            });
-                                        }}>全选(常用)</Button>
-                                        <Button size="small" onClick={() => {
-                                            wafConfigForm.setFieldsValue({
-                                                geoip: {
-                                                    ...wafConfigForm.getFieldValue('geoip'),
-                                                    blockList: []
-                                                }
-                                            });
-                                        }}>清空</Button>
-                                    </Space>
-                                </div>
-                                <Form.Item name={['geoip', 'blockList']} noStyle>
-                                    <Select mode="tags" placeholder="输入国家代码，如 CN, US, JP" style={{ width: '100%' }} tokenSeparators={[',', ' ']} />
-                                </Form.Item>
-                            </Form.Item>
-                            
-                            <Divider orientation="left">黑白名单</Divider>
-                            <Form.Item name="blacklist" label="黑名单 IP (每行一个或逗号分隔)">
-                                <Select mode="tags" placeholder="输入IP地址" style={{ width: '100%' }} tokenSeparators={[',', '\n']} />
-                            </Form.Item>
-                            <Form.Item name="whitelist" label="白名单 IP (每行一个或逗号分隔)">
-                                <Select mode="tags" placeholder="输入IP地址" style={{ width: '100%' }} tokenSeparators={[',', '\n']} />
-                            </Form.Item>
-                        </>
-                    )
-                },
-                {
-                    key: '3',
-                    label: '拦截动作 & 页面',
-                    children: (
-                        <>
-                            <Form.Item name="defaultAction" label="默认动作">
-                                <Radio.Group>
-                                    <Radio value="allow">允许 (Allow)</Radio>
-                                    <Radio value="block">拦截 (Block)</Radio>
-                                </Radio.Group>
-                            </Form.Item>
-                            
-                            <Form.Item name="blockMessage" label="默认拦截提示信息">
-                                <Input.TextArea rows={2} />
-                            </Form.Item>
-                            
-                            <Divider orientation="left">自定义拦截页面</Divider>
-                            <div style={{ marginBottom: 16 }}>
-                                <p>您可以上传自定义的HTML文件作为拦截页面。文件名为 <code>waf_block.html</code>。</p>
-                                <Upload 
-                                    customRequest={(options) => {
-                                        const { onSuccess, onError, file } = options;
-                                        // 复用上传逻辑，但强制文件名为 waf_block.html，路径为根目录
-                                        // 注意：File对象是只读的，不能直接修改name。
-                                        // 我们需要在后端处理，或者在前端创建一个新的Blob。
-                                        // 简单起见，我们上传到根目录，并在上传成功后提示用户。
-                                        
-                                        if (!editingWAFSite) return;
-                                        
-                                        // 强制文件名为 waf_block.html
-                                        const newFile = new File([file as any], "waf_block.html", { type: "text/html" });
-                                        
-                                        sitesApi.uploadFile(editingWAFSite.id, newFile, "/", () => {})
-                                        .then(res => {
-                                            if(res.code === 200) {
-                                                messageApi.success("自定义拦截页面上传成功");
-                                                if(onSuccess) onSuccess("ok");
-                                            } else {
-                                                messageApi.error("上传失败");
-                                                if(onError) onError(new Error("Upload failed"));
-                                            }
-                                        })
-                                        .catch(err => {
-                                            messageApi.error("上传出错");
-                                            if(onError) onError(err);
-                                        });
-                                    }}
-                                    showUploadList={false}
-                                >
-                                    <Button icon={<UploadOutlined />}>上传自定义拦截页面 (waf_block.html)</Button>
-                                </Upload>
-                            </div>
-                        </>
-                    )
-                }
-            ]} />
-        </Form>
-      </Modal>
 
       {/* 推送配置弹窗 */}
       <Modal
