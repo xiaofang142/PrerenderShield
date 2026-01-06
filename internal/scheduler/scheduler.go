@@ -151,21 +151,21 @@ func (s *Scheduler) createTask(siteName string, config config.PrerenderConfig) {
 	}
 
 	// 为推送任务创建定时任务
-	if config.Push.Enabled && config.Push.Hour >= 0 && config.Push.Hour <= 24 {
+	if config.Push.Enabled {
 		// 创建推送任务函数
 		pushTaskFunc := func() {
 			s.executePush(siteName)
 		}
 		
-		// 使用Hour字段创建cron表达式 (每天指定小时推送)
-		cronExpr := fmt.Sprintf("0 0 %d * * *", config.Push.Hour)
+		// 固定每天早上8点推送
+		cronExpr := "0 0 8 * * *"
 		
 		// 添加到cron调度器
 		_, err := s.cron.AddFunc(cronExpr, pushTaskFunc)
 		if err != nil {
 			fmt.Printf("Failed to add push cron task for site %s: %v\n", siteName, err)
 		} else {
-			fmt.Printf("Created push cron task for site %s with hour: %d\n", siteName, config.Push.Hour)
+			fmt.Printf("Created push cron task for site %s with schedule: %s\n", siteName, cronExpr)
 		}
 	}
 }

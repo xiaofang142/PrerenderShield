@@ -244,7 +244,6 @@ type PushConfig struct {
 	BaiduDailyLimit int    `yaml:"baidu_daily_limit" json:"baidu_daily_limit"`
 	BingDailyLimit  int    `yaml:"bing_daily_limit" json:"bing_daily_limit"`
 	PushDomain      string `yaml:"push_domain" json:"push_domain"`
-	Hour            int    `yaml:"hour" json:"hour"` // 每日推送时间（0-24）
 }
 
 // RoutingConfig 路由配置
@@ -269,8 +268,7 @@ type CacheConfig struct {
 
 // StorageConfig 存储配置
 type StorageConfig struct {
-	Type        string `yaml:"type"`
-	PostgresURL string `yaml:"postgres_url"`
+	Type string `yaml:"type"`
 }
 
 // MonitoringConfig 监控配置
@@ -832,7 +830,6 @@ func defaultConfig() *Config {
 				BaiduDailyLimit: 1000,
 				BingDailyLimit:  1000,
 				PushDomain:      "",
-				Hour:            1, // 每天凌晨1点执行
 			},
 		},
 		Routing: RoutingConfig{
@@ -864,8 +861,7 @@ func defaultConfig() *Config {
 			MemorySize: 1000,
 		},
 		Storage: StorageConfig{
-			Type:        "postgres",
-			PostgresURL: "postgres://prerender:prerender@localhost:5432/prerender?sslmode=disable",
+			Type: "redis",
 		},
 		Monitoring: MonitoringConfig{
 			Enabled:           true,
@@ -913,7 +909,6 @@ func loadFromEnv(cfg *Config) {
 
 	// 存储配置
 	cfg.Storage.Type = getEnv("STORAGE_TYPE", cfg.Storage.Type)
-	cfg.Storage.PostgresURL = getEnv("STORAGE_POSTGRES_URL", cfg.Storage.PostgresURL)
 
 	// 监控配置
 	cfg.Monitoring.Enabled = getEnvAsBool("MONITORING_ENABLED", cfg.Monitoring.Enabled)
