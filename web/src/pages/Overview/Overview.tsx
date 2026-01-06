@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Card, Row, Col, Statistic, Spin, Select, Table, Tabs, Tag } from 'antd'
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons'
+import * as echarts from 'echarts'
 import BaseChart from '../../components/charts/BaseChart'
 import { overviewApi, monitoringApi, sitesApi } from '../../services/api'
 
@@ -22,7 +23,8 @@ const Overview: React.FC = () => {
     prerenderEnabled: false,
     geoData: {
       countryData: [],
-      mapData: []
+      mapData: [],
+      globeData: []
     },
     trafficData: [],
     accessStats: {
@@ -535,6 +537,14 @@ const Overview: React.FC = () => {
   }
 
   useEffect(() => {
+    // 注册地图
+    fetch('https://cdn.jsdelivr.net/npm/echarts@4.9.0/map/json/world.json')
+      .then(response => response.json())
+      .then(mapJson => {
+        echarts.registerMap('world', mapJson)
+      })
+      .catch(e => console.error('Failed to load world map', e))
+
     fetchSites()
     fetchData()
     // 每30秒刷新一次数据
@@ -584,7 +594,6 @@ const Overview: React.FC = () => {
                 size="small"
               >
                 <Option value="2d">2D地图</Option>
-                <Option value="3d">3D地图</Option>
                 <Option value="bar">柱状图</Option>
               </Select>
             </div>

@@ -90,6 +90,11 @@ func NewClient(redisURL string) (*Client, error) {
 	}, nil
 }
 
+// Context 获取上下文
+func (c *Client) Context() context.Context {
+	return c.ctx
+}
+
 // GetRawClient 获取原始Redis客户端实例
 func (c *Client) GetRawClient() *redis.Client {
 	return c.client
@@ -160,7 +165,33 @@ func (c *Client) GetURLPreheatStatus(siteName, url string) (map[string]string, e
 // SetSiteStats 设置站点的统计数据
 func (c *Client) SetSiteStats(siteName string, stats map[string]interface{}) error {
 	key := fmt.Sprintf("prerender:%s:stats", siteName)
-	return c.client.HSet(c.ctx, key, stats).Err()
+	
+	// 将map转换为键值对切片，并确保所有值都是基本类型
+	var values []interface{}
+	for k, v := range stats {
+		// 根据值的类型进行转换
+		switch val := v.(type) {
+		case bool:
+			// 将bool转换为0或1
+			if val {
+				values = append(values, k, 1)
+			} else {
+				values = append(values, k, 0)
+			}
+		case map[string]interface{}:
+			// 跳过嵌套map，避免序列化问题
+			continue
+		default:
+			// 其他基本类型直接使用
+			values = append(values, k, val)
+		}
+	}
+	
+	// 使用键值对切片调用HSet
+	if len(values) > 0 {
+		return c.client.HSet(c.ctx, key, values...).Err()
+	}
+	return nil
 }
 
 // GetSiteStats 获取站点的统计数据
@@ -688,4 +719,87 @@ func (c *Client) GetPushLogs(siteName string, limit, offset int) ([]interface{},
 	}
 
 	return result, nil
+}
+
+// DeleteSiteData 删除站点的所有Redis数据
+func (c *Client) DeleteSiteData(siteID string) error {
+	// 使用Scan查找并删除相关key
+	var keys []string
+	
+	// Pattern 1: prerender:{siteID}:*
+	iter := c.client.Scan(c.ctx, 0, fmt.Sprintf("prerender:%s:*", siteID), 0).Iterator()
+	for iter.Next(c.ctx) {
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		return err
+	}
+	
+	// Pattern 2: prerender:{siteID}_* (for the config keys I added)
+	iter2 := c.client.Scan(c.ctx, 0, fmt.Sprintf("prerender:%s_*", siteID), 0).Iterator()
+	for iter2.Next(c.ctx) {
+		keys = append(keys, iter2.Val())
+	}
+	if err := iter2.Err(); err != nil {
+		return err
+	}
+
+	if len(keys) > 0 {
+		return c.client.Del(c.ctx, keys...).Err()
+	}
+	return nil
+}
+
+// === 会话管理 ===
+
+// SaveSession 保存会话
+func (c *Client) SaveSession(sessionID, userID string, expiration time.Duration) error {
+	key := fmt.Sprintf("session:%s", sessionID)
+	// 使用Hash存储更多会话信息
+	err := c.client.HSet(c.ctx, key, map[string]interface{}{
+		"user_id":    userID,
+		"created_at": time.Now().Unix(),
+		"expires_at": time.Now().Add(expiration).Unix(),
+	}).Err()
+	if err != nil {
+		return err
+	}
+	// 设置过期时间
+	return c.client.Expire(c.ctx, key, expiration).Err()
+}
+
+// GetSession 获取会话信息
+func (c *Client) GetSession(sessionID string) (map[string]string, error) {
+	key := fmt.Sprintf("session:%s", sessionID)
+	return c.client.HGetAll(c.ctx, key).Result()
+}
+
+// DeleteSession 删除会话
+func (c *Client) DeleteSession(sessionID string) error {
+	key := fmt.Sprintf("session:%s", sessionID)
+	return c.client.Del(c.ctx, key).Err()
+}
+
+// CheckSessionExists 检查会话是否存在
+func (c *Client) CheckSessionExists(sessionID string) (bool, error) {
+	key := fmt.Sprintf("session:%s", sessionID)
+	val, err := c.client.Exists(c.ctx, key).Result()
+	if err != nil {
+		return false, err
+	}
+	return val > 0, nil
+}
+
+// === 系统配置管理 ===
+
+// SaveSystemConfig 保存系统配置
+func (c *Client) SaveSystemConfig(config map[string]interface{}) error {
+	key := "config:system"
+	return c.client.HSet(c.ctx, key, config).Err()
+}
+
+// GetSystemConfig 获取系统配置
+func (c *Client) GetSystemConfig() (map[string]string, error) {
+	key := "config:system"
+	return c.client.HGetAll(c.ctx, key).Result()
 }

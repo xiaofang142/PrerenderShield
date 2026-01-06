@@ -39,6 +39,7 @@ func SetupControllers(
 	siteHandler *sitehandler.Handler,
 	monitor *monitoring.Monitor,
 	crawlerLogMgr *logging.CrawlerLogManager,
+	visitLogMgr *logging.VisitLogManager,
 	cfg *config.Config,
 ) *Controllers {
 	// 创建推送管理器
@@ -47,13 +48,13 @@ func SetupControllers(
 	// 创建控制器实例
 	return &Controllers{
 		AuthController:       controllers.NewAuthController(userManager, jwtManager),
-		OverviewController:   controllers.NewOverviewController(cfg, monitor),
+		OverviewController:   controllers.NewOverviewController(cfg, monitor, visitLogMgr),
 		MonitoringController: controllers.NewMonitoringController(monitor),
 		FirewallController:   controllers.NewFirewallController(),
 		CrawlerController:    controllers.NewCrawlerController(crawlerLogMgr),
 		PreheatController:    controllers.NewPreheatController(prerenderManager, redisClient, cfg),
 		PushController:       controllers.NewPushController(pushManager, redisClient, cfg),
-		SitesController:      controllers.NewSitesController(configManager, siteServerMgr, siteHandler, redisClient, monitor, crawlerLogMgr, cfg),
-		SystemController:     controllers.NewSystemController(),
+		SitesController:      controllers.NewSitesController(configManager, siteServerMgr, siteHandler, redisClient, monitor, crawlerLogMgr, visitLogMgr, cfg),
+		SystemController:     controllers.NewSystemController(redisClient),
 	}
 }

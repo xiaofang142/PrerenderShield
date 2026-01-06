@@ -63,9 +63,9 @@ func NewHandler(prerenderManager *prerender.EngineManager) *Handler {
 //
 // 示例:
 //
-//	httpHandler := handler.CreateSiteHandler(siteConfig, crawlerLogManager, monitor, "/static")
+//	httpHandler := handler.CreateSiteHandler(siteConfig, crawlerLogManager, visitLogManager, monitor, "/static")
 //	http.ListenAndServe(":8080", httpHandler)
-func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *logging.CrawlerLogManager, monitor *monitoring.Monitor, staticDir string) http.Handler {
+func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *logging.CrawlerLogManager, visitLogManager *logging.VisitLogManager, monitor *monitoring.Monitor, staticDir string) http.Handler {
 	// 创建站点级别的Gin路由器
 	siteRouter := gin.Default()
 
@@ -154,7 +154,7 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 
 			// 记录爬虫访问日志
 			crawlerLog := logging.CrawlerLog{
-				Site:       site.Name,
+				Site:       site.ID,
 				IP:         logging.GetClientIP(c.Request),
 				Time:       time.Now(),
 				HitCache:   resultWithCache.HitCache, // 使用实际的缓存命中状态
@@ -183,6 +183,23 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 	// 非爬虫请求处理中间件
 	siteRouter.Use(func(c *gin.Context) {
 		startTime := time.Now()
+
+		// 记录正常访问日志
+		defer func() {
+			visitLog := logging.VisitLog{
+				Site:     site.ID,
+				IP:       logging.GetClientIP(c.Request),
+				Time:     startTime,
+				Method:   c.Request.Method,
+				URL:      c.Request.URL.String(),
+				Status:   c.Writer.Status(),
+				UA:       c.Request.UserAgent(),
+				Duration: time.Since(startTime).Seconds(),
+				Referer:  c.Request.Referer(),
+				Washed:   false,
+			}
+			visitLogManager.RecordVisitLog(visitLog)
+		}()
 
 		// 根据站点模式处理请求
 		switch site.Mode {

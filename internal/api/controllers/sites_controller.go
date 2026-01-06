@@ -30,6 +30,7 @@ type SitesController struct {
 	redisClient   *redis.Client
 	monitor       *monitoring.Monitor
 	crawlerLogMgr *logging.CrawlerLogManager
+	visitLogMgr   *logging.VisitLogManager
 	cfg           *config.Config
 }
 
@@ -41,6 +42,7 @@ func NewSitesController(
 	redisClient *redis.Client,
 	monitor *monitoring.Monitor,
 	crawlerLogMgr *logging.CrawlerLogManager,
+	visitLogMgr *logging.VisitLogManager,
 	cfg *config.Config,
 ) *SitesController {
 	return &SitesController{
@@ -50,6 +52,7 @@ func NewSitesController(
 		redisClient:   redisClient,
 		monitor:       monitor,
 		crawlerLogMgr: crawlerLogMgr,
+		visitLogMgr:   visitLogMgr,
 		cfg:           cfg,
 	}
 }
@@ -83,6 +86,59 @@ func (c *SitesController) GetSite(ctx *gin.Context) {
 	ctx.JSON(http.StatusNotFound, gin.H{
 		"code":    404,
 		"message": "Site not found",
+	})
+}
+
+// GetSiteConfig 获取站点的Redis配置（包括预渲染和推送配置）
+func (c *SitesController) GetSiteConfig(ctx *gin.Context) {
+	id := ctx.Param("id")
+	configType := ctx.Query("type") // prerender 或 push
+	
+	if c.redisClient == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Redis client not available",
+		})
+		return
+	}
+	
+	var configKey string
+	switch configType {
+	case "prerender":
+		configKey = id + "_prerender"
+	case "push":
+		configKey = id + "_push"
+	case "waf":
+		configKey = id + "_waf"
+	default:
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "Invalid config type. Use 'prerender' or 'push'",
+		})
+		return
+	}
+	
+	config, err := c.redisClient.GetSiteStats(configKey)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Failed to get site config from Redis",
+		})
+		return
+	}
+	
+	if len(config) == 0 {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"code":    404,
+			"message": "Site config not found in Redis",
+		})
+		return
+	}
+	
+	ctx.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "success",
+		"data":    config,
 	})
 }
 
@@ -134,10 +190,76 @@ func (c *SitesController) AddSite(ctx *gin.Context) {
 	}
 
 	// 启动新站点的服务器实例
-	siteHandler := c.siteHandler.CreateSiteHandler(site, c.crawlerLogMgr, c.monitor, c.cfg.Dirs.StaticDir)
+	siteHandler := c.siteHandler.CreateSiteHandler(site, c.crawlerLogMgr, c.visitLogMgr, c.monitor, c.cfg.Dirs.StaticDir)
 
 	// 启动站点服务器
 	c.siteServerMgr.StartSiteServer(site, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.crawlerLogMgr, siteHandler)
+
+	// 保存站点配置到Redis
+	if c.redisClient != nil {
+		// 保存站点统计信息
+		stats := map[string]interface{}{
+			"name":   site.Name,
+			"domain": site.Domains[0],
+			"port":   site.Port,
+			"mode":   site.Mode,
+		}
+		if err := c.redisClient.SetSiteStats(site.ID, stats); err != nil {
+			logging.DefaultLogger.Warn("Failed to save site stats to Redis: %v", err)
+		}
+
+		// 保存预渲染配置（扁平化结构，不使用嵌套map）
+		preheatConfig := map[string]interface{}{
+			"enabled":             site.Prerender.Enabled,
+			"pool_size":           site.Prerender.PoolSize,
+			"min_pool_size":       site.Prerender.MinPoolSize,
+			"max_pool_size":       site.Prerender.MaxPoolSize,
+			"timeout":             site.Prerender.Timeout,
+			"cache_ttl":           site.Prerender.CacheTTL,
+			"idle_timeout":        site.Prerender.IdleTimeout,
+			"preheat_enabled":     site.Prerender.Preheat.Enabled,
+			"preheat_sitemap_url": site.Prerender.Preheat.SitemapURL,
+			"preheat_schedule":    site.Prerender.Preheat.Schedule,
+			"preheat_concurrency": site.Prerender.Preheat.Concurrency,
+			"preheat_max_depth":   site.Prerender.Preheat.MaxDepth,
+		}
+		if err := c.redisClient.SetSiteStats(site.ID+"_prerender", preheatConfig); err != nil {
+			logging.DefaultLogger.Warn("Failed to save prerender config to Redis: %v", err)
+		}
+
+		// 保存推送配置
+		pushConfig := map[string]interface{}{
+			"enabled":           site.Prerender.Push.Enabled,
+			"baidu_api":         site.Prerender.Push.BaiduAPI,
+			"baidu_token":       site.Prerender.Push.BaiduToken,
+			"bing_api":          site.Prerender.Push.BingAPI,
+			"bing_token":        site.Prerender.Push.BingToken,
+			"baidu_daily_limit": site.Prerender.Push.BaiduDailyLimit,
+			"bing_daily_limit":  site.Prerender.Push.BingDailyLimit,
+			"push_domain":       site.Prerender.Push.PushDomain,
+		}
+		if err := c.redisClient.SetSiteStats(site.ID+"_push", pushConfig); err != nil {
+			logging.DefaultLogger.Warn("Failed to save push config to Redis: %v", err)
+		}
+
+		// 保存WAF配置
+		wafConfig := map[string]interface{}{
+			"firewall_enabled":    site.Firewall.Enabled,
+			"default_action":      site.Firewall.ActionConfig.DefaultAction,
+			"block_message":       site.Firewall.ActionConfig.BlockMessage,
+			"geoip_enabled":       site.Firewall.GeoIPConfig.Enabled,
+			"geoip_block_list":    strings.Join(site.Firewall.GeoIPConfig.BlockList, ","),
+			"ratelimit_enabled":   site.Firewall.RateLimitConfig.Enabled,
+			"ratelimit_requests":  site.Firewall.RateLimitConfig.Requests,
+			"ratelimit_window":    site.Firewall.RateLimitConfig.Window,
+			"ratelimit_ban_time":  site.Firewall.RateLimitConfig.BanTime,
+			"blacklist":           strings.Join(site.Firewall.Blacklist, ","),
+			"whitelist":           strings.Join(site.Firewall.Whitelist, ","),
+		}
+		if err := c.redisClient.SetSiteStats(site.ID+"_waf", wafConfig); err != nil {
+			logging.DefaultLogger.Warn("Failed to save WAF config to Redis: %v", err)
+		}
+	}
 
 	// 记录系统日志
 	logging.DefaultLogger.LogAdminAction(
@@ -251,10 +373,78 @@ func (c *SitesController) UpdateSite(ctx *gin.Context) {
 	}
 
 	// 启动新的站点服务器
-	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.crawlerLogMgr, c.monitor, c.cfg.Dirs.StaticDir)
+	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.crawlerLogMgr, c.visitLogMgr, c.monitor, c.cfg.Dirs.StaticDir)
 
 	// 启动站点服务器
 	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.crawlerLogMgr, siteHandler)
+
+	// 保存站点配置到Redis
+	if c.redisClient != nil {
+		// 保存站点统计信息
+		stats := map[string]interface{}{
+			"name":   updatedSite.Name,
+			"domain": updatedSite.Domains[0],
+			"port":   updatedSite.Port,
+			"mode":   updatedSite.Mode,
+		}
+		if err := c.redisClient.SetSiteStats(updatedSite.ID, stats); err != nil {
+			logging.DefaultLogger.Warn("Failed to save site stats to Redis: %v", err)
+		}
+
+		// 保存预渲染配置（扁平化结构，不使用嵌套map）
+		preheatConfig := map[string]interface{}{
+			"enabled":             updatedSite.Prerender.Enabled,
+			"pool_size":           updatedSite.Prerender.PoolSize,
+			"min_pool_size":       updatedSite.Prerender.MinPoolSize,
+			"max_pool_size":       updatedSite.Prerender.MaxPoolSize,
+			"timeout":             updatedSite.Prerender.Timeout,
+			"cache_ttl":           updatedSite.Prerender.CacheTTL,
+			"idle_timeout":        updatedSite.Prerender.IdleTimeout,
+			"preheat_enabled":     updatedSite.Prerender.Preheat.Enabled,
+			"preheat_sitemap_url": updatedSite.Prerender.Preheat.SitemapURL,
+			"preheat_schedule":    updatedSite.Prerender.Preheat.Schedule,
+			"preheat_concurrency": updatedSite.Prerender.Preheat.Concurrency,
+			"preheat_max_depth":   updatedSite.Prerender.Preheat.MaxDepth,
+		}
+		if err := c.redisClient.SetSiteStats(updatedSite.ID+"_prerender", preheatConfig); err != nil {
+			logging.DefaultLogger.Error("Failed to save prerender config to Redis: %v", err)
+		} else {
+			logging.DefaultLogger.Info("Pre-render config saved to Redis successfully")
+		}
+
+		// 保存推送配置
+		pushConfig := map[string]interface{}{
+			"enabled":           updatedSite.Prerender.Push.Enabled,
+			"baidu_api":         updatedSite.Prerender.Push.BaiduAPI,
+			"baidu_token":       updatedSite.Prerender.Push.BaiduToken,
+			"bing_api":          updatedSite.Prerender.Push.BingAPI,
+			"bing_token":        updatedSite.Prerender.Push.BingToken,
+			"baidu_daily_limit": updatedSite.Prerender.Push.BaiduDailyLimit,
+			"bing_daily_limit":  updatedSite.Prerender.Push.BingDailyLimit,
+			"push_domain":       updatedSite.Prerender.Push.PushDomain,
+		}
+		if err := c.redisClient.SetSiteStats(updatedSite.ID+"_push", pushConfig); err != nil {
+			logging.DefaultLogger.Warn("Failed to save push config to Redis: %v", err)
+		}
+
+		// 保存WAF配置
+		wafConfig := map[string]interface{}{
+			"firewall_enabled":    updatedSite.Firewall.Enabled,
+			"default_action":      updatedSite.Firewall.ActionConfig.DefaultAction,
+			"block_message":       updatedSite.Firewall.ActionConfig.BlockMessage,
+			"geoip_enabled":       updatedSite.Firewall.GeoIPConfig.Enabled,
+			"geoip_block_list":    strings.Join(updatedSite.Firewall.GeoIPConfig.BlockList, ","),
+			"ratelimit_enabled":   updatedSite.Firewall.RateLimitConfig.Enabled,
+			"ratelimit_requests":  updatedSite.Firewall.RateLimitConfig.Requests,
+			"ratelimit_window":    updatedSite.Firewall.RateLimitConfig.Window,
+			"ratelimit_ban_time":  updatedSite.Firewall.RateLimitConfig.BanTime,
+			"blacklist":           strings.Join(updatedSite.Firewall.Blacklist, ","),
+			"whitelist":           strings.Join(updatedSite.Firewall.Whitelist, ","),
+		}
+		if err := c.redisClient.SetSiteStats(updatedSite.ID+"_waf", wafConfig); err != nil {
+			logging.DefaultLogger.Warn("Failed to save WAF config to Redis: %v", err)
+		}
+	}
 
 	// 记录系统日志
 	logging.DefaultLogger.LogAdminAction(
@@ -293,6 +483,15 @@ func (c *SitesController) DeleteSite(ctx *gin.Context) {
 		if site.ID == id {
 			// 停止站点服务器
 			c.siteServerMgr.StopSiteServer(site.ID)
+
+			// 删除Redis中的站点数据
+			if c.redisClient != nil {
+				if err := c.redisClient.DeleteSiteData(site.ID); err != nil {
+					logging.DefaultLogger.Warn("Failed to delete site data from Redis for site %s: %v", site.Name, err)
+				} else {
+					logging.DefaultLogger.Info("Deleted site data from Redis for site %s", site.Name)
+				}
+			}
 
 			// 删除站点的静态资源目录
 			staticDir := filepath.Join(c.cfg.Dirs.StaticDir, site.ID)

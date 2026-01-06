@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"prerender-shield/internal/logging"
+	"prerender-shield/internal/redis"
 	"strconv"
 	"sync"
 	"time"
@@ -41,6 +42,7 @@ type ConfigManager struct {
 	lastModified   time.Time
 	watcherRunning bool
 	closeChan      chan struct{}
+	redisClient    *redis.Client
 }
 
 var (
@@ -179,6 +181,8 @@ type FirewallConfig struct {
 	ActionConfig    ActionConfig    `yaml:"action" json:"action"`
 	GeoIPConfig     GeoIPConfig     `yaml:"geoip" json:"geoip"`
 	RateLimitConfig RateLimitConfig `yaml:"rate_limit" json:"rate_limit"`
+	Blacklist       []string        `yaml:"blacklist" json:"blacklist"`
+	Whitelist       []string        `yaml:"whitelist" json:"whitelist"`
 }
 
 // GeoIPConfig 地理位置访问控制配置
@@ -435,14 +439,92 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 	return nil
 }
 
-// SaveConfig 保存配置到文件
-func (cm *ConfigManager) SaveConfig() error {
+// SetRedisClient 设置Redis客户端
+func (cm *ConfigManager) SetRedisClient(client *redis.Client) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	cm.redisClient = client
+}
+
+// SaveSitesToRedis 保存站点配置到Redis
+func (cm *ConfigManager) SaveSitesToRedis() error {
+	if cm.redisClient == nil {
+		return fmt.Errorf("redis client is not set")
+	}
+
+	// 序列化站点配置
+	data, err := yaml.Marshal(cm.config.Sites)
+	if err != nil {
+		return err
+	}
+
+	// 保存到Redis
+	// 使用 GetRawClient 获取原始客户端进行操作
+	err = cm.redisClient.GetRawClient().Set(cm.redisClient.Context(), "prerender:config:sites", data, 0).Err()
+	if err != nil {
+		return err
+	}
+
+	logging.DefaultLogger.Info("Sites configuration saved to Redis")
+	return nil
+}
+
+// LoadSitesFromRedis 从Redis加载站点配置
+func (cm *ConfigManager) LoadSitesFromRedis() error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
-	if cm.configPath == "" {
-		return nil // 没有配置文件路径，无法保存
+	if cm.redisClient == nil {
+		return fmt.Errorf("redis client is not set")
 	}
+
+	// 从Redis获取配置
+	data, err := cm.redisClient.GetRawClient().Get(cm.redisClient.Context(), "prerender:config:sites").Bytes()
+	if err != nil {
+		// 如果key不存在，说明是首次运行或没有Redis配置
+		return err
+	}
+
+	// 反序列化配置
+	var sites []SiteConfig
+	if err := yaml.Unmarshal(data, &sites); err != nil {
+		return err
+	}
+
+	// 更新配置
+	cm.config.Sites = sites
+	logging.DefaultLogger.Info("Sites configuration loaded from Redis: %d sites", len(sites))
+	return nil
+}
+
+// SaveConfig 保存配置到文件和Redis
+func (cm *ConfigManager) SaveConfig() error {
+	cm.mutex.Lock()
+	// 注意：SaveSitesToRedis 内部也需要加锁，这里需要小心死锁
+	// 但是 SaveSitesToRedis 的实现中已经加了锁，所以我们不能在这里调用它
+	// 我们需要提取保存逻辑或者在 SaveConfig 中直接操作
+	defer cm.mutex.Unlock()
+	
+	// 1. 保存到 Redis (如果可用)
+	if cm.redisClient != nil {
+		data, err := yaml.Marshal(cm.config.Sites)
+		if err == nil {
+			// 使用 context.Background() 避免依赖
+			ctx := cm.redisClient.Context()
+			if err := cm.redisClient.GetRawClient().Set(ctx, "prerender:config:sites", data, 0).Err(); err != nil {
+				logging.DefaultLogger.Error("Failed to save sites to Redis: %v", err)
+			} else {
+				logging.DefaultLogger.Info("Sites configuration saved to Redis")
+			}
+		} else {
+			logging.DefaultLogger.Error("Failed to marshal sites config: %v", err)
+		}
+	}
+
+	if cm.configPath == "" {
+		return nil // 没有配置文件路径，无法保存到文件
+	}
+    // ... continues with file saving logic ...
 
 	// 验证配置
 	if err := cm.ValidateConfig(cm.config); err != nil {
@@ -808,7 +890,25 @@ func loadFromEnv(cfg *Config) {
 
 	// 缓存配置
 	cfg.Cache.Type = getEnv("CACHE_TYPE", cfg.Cache.Type)
-	cfg.Cache.RedisURL = getEnv("CACHE_REDIS_URL", cfg.Cache.RedisURL)
+	
+	// 支持细粒度的Redis环境变量
+	redisHost := getEnv("REDIS_HOST", "")
+	if redisHost != "" {
+		redisPort := getEnv("REDIS_PORT", "6379")
+		redisPassword := getEnv("REDIS_PASSWORD", "")
+		redisDB := getEnv("REDIS_DB", "0")
+		
+		authPart := ""
+		if redisPassword != "" {
+			authPart = fmt.Sprintf(":%s@", redisPassword)
+		}
+		
+		cfg.Cache.RedisURL = fmt.Sprintf("redis://%s%s:%s/%s", authPart, redisHost, redisPort, redisDB)
+	} else {
+		// 回退到 CACHE_REDIS_URL
+		cfg.Cache.RedisURL = getEnv("CACHE_REDIS_URL", cfg.Cache.RedisURL)
+	}
+	
 	cfg.Cache.MemorySize = getEnvAsInt("CACHE_MEMORY_SIZE", cfg.Cache.MemorySize)
 
 	// 存储配置

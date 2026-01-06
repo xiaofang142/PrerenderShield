@@ -94,7 +94,17 @@ func (c *AuthController) Login(ctx *gin.Context) {
 
 // Logout 用户退出登录
 func (c *AuthController) Logout(ctx *gin.Context) {
-	// JWT是无状态的，退出登录只需要前端清除token即可
+	// 获取Authorization头
+	authHeader := ctx.GetHeader("Authorization")
+	if authHeader != "" && len(authHeader) > 7 {
+		token := authHeader[7:] // 去掉 "Bearer "
+		// 撤销令牌
+		if err := c.jwtManager.RevokeToken(token); err != nil {
+			// 记录错误但仍返回成功，因为用户意图是退出
+			// logging.DefaultLogger.Warn("Failed to revoke token: %v", err)
+		}
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "Logout successful",

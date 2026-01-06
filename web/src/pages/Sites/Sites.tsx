@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Table, Button, Modal, Form, Input, Switch, Select, Row, Col, Statistic, Upload, Typography, Space, message, Divider } from 'antd'
+import { Card, Table, Button, Modal, Form, Input, Switch, Select, Row, Col, Statistic, Upload, Typography, Space, message, Divider, Tabs, Radio } from 'antd'
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, UploadOutlined, 
   UnorderedListOutlined, CloudUploadOutlined, FolderOpenOutlined, 
   FolderOutlined, FileOutlined, FolderOutlined as NewFolderOutlined, FileAddOutlined, UpOutlined, 
-  DownloadOutlined, UnorderedListOutlined as ExtractOutlined, ReloadOutlined
+  DownloadOutlined, UnorderedListOutlined as ExtractOutlined, ReloadOutlined,
+  SecurityScanOutlined
 } from '@ant-design/icons'
 import { sitesApi } from '../../services/api'
 import type { UploadProps } from 'antd'
@@ -40,6 +41,11 @@ const Sites: React.FC = () => {
   const [pushConfigModalVisible, setPushConfigModalVisible] = useState(false)
   const [editingPushSite, setEditingPushSite] = useState<any>(null)
   const [pushConfigForm] = Form.useForm()
+  
+  // WAF配置模态框状态
+  const [wafConfigModalVisible, setWafConfigModalVisible] = useState(false)
+  const [editingWAFSite, setEditingWAFSite] = useState<any>(null)
+  const [wafConfigForm] = Form.useForm()
 
 
   // 表格列配置
@@ -178,6 +184,14 @@ const Sites: React.FC = () => {
               </Button>
               <Button
                 type="link"
+                icon={<SecurityScanOutlined />}
+                onClick={() => handleWAFConfig(record)}
+                style={{ marginRight: 8, whiteSpace: 'nowrap' }}
+              >
+                WAF配置
+              </Button>
+              <Button
+                type="link"
                 icon={<CloudUploadOutlined />}
                 onClick={() => handlePushConfig(record)}
                 style={{ marginRight: 8, whiteSpace: 'nowrap' }}
@@ -228,38 +242,48 @@ const Sites: React.FC = () => {
           domains: site.domains || [],
           port: site.port || 80,
           mode: site.mode || 'proxy',
-          firewallEnabled: Boolean(site.firewall?.Enabled),
-          prerenderEnabled: Boolean(site.prerender?.Enabled),
+          firewallEnabled: Boolean(site.firewall?.enabled),
+          prerenderEnabled: Boolean(site.prerender?.enabled),
+          
+          // 映射完整的配置对象，确保编辑时表单能回填数据
+          proxy: site.proxy || {},
+          redirect: site.redirect || {},
+          firewall: site.firewall || {},
+          file_integrity: site.file_integrity || {},
+          routing: site.routing || {},
+          
           // 映射完整的渲染预热配置对象
           prerender: {
-            enabled: site.prerender?.Enabled || false,
-            poolSize: site.prerender?.PoolSize || 5,
-            minPoolSize: site.prerender?.MinPoolSize || 2,
-            maxPoolSize: site.prerender?.MaxPoolSize || 20,
-            timeout: site.prerender?.Timeout || 30,
-            cacheTTL: site.prerender?.CacheTTL || 3600,
-            idleTimeout: site.prerender?.IdleTimeout || 300,
-            dynamicScaling: site.prerender?.DynamicScaling !== false,
-            scalingFactor: site.prerender?.ScalingFactor || 0.5,
-            scalingInterval: site.prerender?.ScalingInterval || 60,
-            useDefaultHeaders: site.prerender?.UseDefaultHeaders || false,
-            crawlerHeaders: site.prerender?.CrawlerHeaders || [],
+            enabled: site.prerender?.enabled || false,
+            poolSize: site.prerender?.pool_size || site.prerender?.poolSize || 5,
+            minPoolSize: site.prerender?.min_pool_size || site.prerender?.minPoolSize || 2,
+            maxPoolSize: site.prerender?.max_pool_size || site.prerender?.maxPoolSize || 20,
+            timeout: site.prerender?.timeout || 30,
+            cacheTTL: site.prerender?.cache_ttl || site.prerender?.cacheTTL || 3600,
+            idleTimeout: site.prerender?.idle_timeout || site.prerender?.idleTimeout || 300,
+            dynamicScaling: site.prerender?.dynamic_scaling !== false && site.prerender?.dynamicScaling !== false,
+            scalingFactor: site.prerender?.scaling_factor || site.prerender?.scalingFactor || 0.5,
+            scalingInterval: site.prerender?.scaling_interval || site.prerender?.scalingInterval || 60,
+            useDefaultHeaders: site.prerender?.use_default_headers || site.prerender?.useDefaultHeaders || false,
+            crawlerHeaders: site.prerender?.crawler_headers || site.prerender?.crawlerHeaders || [],
             preheat: {
-              enabled: site.prerender?.Preheat?.Enabled || false,
-              sitemapURL: site.prerender?.Preheat?.SitemapURL || '',
-              schedule: site.prerender?.Preheat?.Schedule || '0 0 * * *',
-              concurrency: site.prerender?.Preheat?.Concurrency || 5,
-              defaultPriority: site.prerender?.Preheat?.DefaultPriority || 0
+              enabled: site.prerender?.preheat?.enabled || false,
+              sitemapURL: site.prerender?.preheat?.sitemap_url || site.prerender?.preheat?.sitemapURL || '',
+              schedule: site.prerender?.preheat?.schedule || '0 0 * * *',
+              concurrency: site.prerender?.preheat?.concurrency || 5,
+              defaultPriority: site.prerender?.preheat?.default_priority || site.prerender?.preheat?.defaultPriority || 0,
+              maxDepth: site.prerender?.preheat?.max_depth || site.prerender?.preheat?.maxDepth || 3
             },
             push: {
-              enabled: site.prerender?.Push?.Enabled || false,
-              baiduAPI: site.prerender?.Push?.BaiduAPI || 'http://data.zz.baidu.com/urls',
-              baiduToken: site.prerender?.Push?.BaiduToken || '',
-              bingAPI: site.prerender?.Push?.BingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
-              bingToken: site.prerender?.Push?.BingToken || '',
-              dailyLimit: site.prerender?.Push?.DailyLimit || 1000,
-              pushDomain: site.prerender?.Push?.PushDomain || '',
-              schedule: site.prerender?.Push?.Schedule || '0 1 * * *'
+              enabled: site.prerender?.push?.enabled || false,
+              baiduAPI: site.prerender?.push?.baidu_api || site.prerender?.push?.baiduAPI || 'http://data.zz.baidu.com/urls',
+              baiduToken: site.prerender?.push?.baidu_token || site.prerender?.push?.baiduToken || '',
+              bingAPI: site.prerender?.push?.bing_api || site.prerender?.push?.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
+              bingToken: site.prerender?.push?.bing_token || site.prerender?.push?.bingToken || '',
+              baiduDailyLimit: site.prerender?.push?.baidu_daily_limit || site.prerender?.push?.baiduDailyLimit || 1000,
+              bingDailyLimit: site.prerender?.push?.bing_daily_limit || site.prerender?.push?.bingDailyLimit || 1000,
+              pushDomain: site.prerender?.push?.push_domain || site.prerender?.push?.pushDomain || '',
+              schedule: site.prerender?.push?.schedule || '0 1 * * *'
             }
           }
         }));
@@ -302,9 +326,75 @@ const Sites: React.FC = () => {
     setEditingSite(site)
     if (site) {
       // 创建一个新对象，将端口转换为string类型，解决Input组件type="number"期望string类型的问题
+      // 同时将后端返回的下划线命名转换为前端表单期望的驼峰命名
       const siteWithStringPort = {
         ...site,
-        port: String(site.port)
+        port: String(site.port),
+        // 转换firewall配置
+        firewall: {
+          ...site.firewall,
+          action: {
+            ...site.firewall?.action,
+            defaultAction: site.firewall?.action?.default_action || 'block',
+            blockMessage: site.firewall?.action?.block_message || 'Request blocked by firewall'
+          },
+          geoip: {
+            ...site.firewall?.geoip,
+            allowList: site.firewall?.geoip?.allow_list || [],
+            blockList: site.firewall?.geoip?.block_list || []
+          },
+          rate_limit: site.firewall?.rate_limit ? {
+            ...site.firewall.rate_limit,
+            requests: site.firewall.rate_limit.requests || 100,
+            window: site.firewall.rate_limit.window || 60,
+            ban_time: site.firewall.rate_limit.ban_time || 3600
+          } : {
+            enabled: false,
+            requests: 100,
+            window: 60,
+            ban_time: 3600
+          }
+        },
+        // 转换file_integrity配置
+        file_integrity: site.file_integrity ? {
+          ...site.file_integrity,
+          check_interval: site.file_integrity.check_interval || 300,
+          hash_algorithm: site.file_integrity.hash_algorithm || 'sha256'
+        } : {
+          enabled: false,
+          check_interval: 300,
+          hash_algorithm: 'sha256'
+        },
+        // 转换prerender配置
+        prerender: {
+          ...site.prerender,
+          poolSize: site.prerender?.pool_size || 5,
+          minPoolSize: site.prerender?.min_pool_size || 2,
+          maxPoolSize: site.prerender?.max_pool_size || 20,
+          cacheTTL: site.prerender?.cache_ttl || 3600,
+          idleTimeout: site.prerender?.idle_timeout || 300,
+          dynamicScaling: site.prerender?.dynamic_scaling !== false,
+          scalingFactor: site.prerender?.scaling_factor || 0.5,
+          scalingInterval: site.prerender?.scaling_interval || 60,
+          useDefaultHeaders: site.prerender?.use_default_headers || false,
+          crawlerHeaders: site.prerender?.crawler_headers || [],
+          preheat: {
+            ...site.prerender?.preheat,
+            sitemapURL: site.prerender?.preheat?.sitemap_url || '',
+            defaultPriority: site.prerender?.preheat?.default_priority || 0,
+            maxDepth: site.prerender?.preheat?.max_depth || 3
+          },
+          push: {
+            ...site.prerender?.push,
+            baiduAPI: site.prerender?.push?.baidu_api || 'http://data.zz.baidu.com/urls',
+            baiduToken: site.prerender?.push?.baidu_token || '',
+            baiduDailyLimit: site.prerender?.push?.baidu_daily_limit || 1000,
+            bingAPI: site.prerender?.push?.bing_api || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
+            bingToken: site.prerender?.push?.bing_token || '',
+            bingDailyLimit: site.prerender?.push?.bing_daily_limit || 1000,
+            pushDomain: site.prerender?.push?.push_domain || ''
+          }
+        }
       };
       form.setFieldsValue(siteWithStringPort)
     } else {
@@ -721,12 +811,86 @@ const Sites: React.FC = () => {
   }
   
   // 跳转到渲染预热配置页面
-  const handlePrerenderConfig = (site: any) => {
+  const handlePrerenderConfig = async (site: any) => {
     // 打开预渲染配置模态框
     setEditingPrerenderSite(site)
     
-    // 常见爬虫头列表
-    const commonCrawlerHeaders = [
+    try {
+      // 从Redis获取已保存的预渲染配置
+      const configResponse = await sitesApi.getSiteConfig(site.id, 'prerender');
+      console.log('Redis prerender config:', configResponse);
+      
+      let redisConfig: any = {};
+      if (configResponse.code === 200 && configResponse.data) {
+        redisConfig = configResponse.data;
+      }
+      
+      // 合并配置：优先使用Redis中的配置，如果没有则使用站点默认配置
+      const mergedConfig = {
+        // 基础配置
+        enabled: redisConfig.enabled === '1' || site.prerender?.enabled || false,
+        poolSize: parseInt(redisConfig.pool_size) || site.prerender?.poolSize || 5,
+        minPoolSize: parseInt(redisConfig.min_pool_size) || site.prerender?.minPoolSize || 2,
+        maxPoolSize: parseInt(redisConfig.max_pool_size) || site.prerender?.maxPoolSize || 20,
+        timeout: parseInt(redisConfig.timeout) || site.prerender?.timeout || 30,
+        cacheTTL: parseInt(redisConfig.cache_ttl) || site.prerender?.cacheTTL || 3600,
+        idleTimeout: parseInt(redisConfig.idle_timeout) || site.prerender?.idleTimeout || 300,
+        dynamicScaling: redisConfig.dynamic_scaling === '1' || site.prerender?.dynamicScaling !== false,
+        scalingFactor: parseFloat(redisConfig.scaling_factor) || site.prerender?.scalingFactor || 0.5,
+        scalingInterval: parseInt(redisConfig.scaling_interval) || site.prerender?.scalingInterval || 60,
+        useDefaultHeaders: redisConfig.use_default_headers === '1' || site.prerender?.useDefaultHeaders || false,
+        
+        // 预热配置
+        preheat: {
+          enabled: redisConfig.preheat_enabled === '1' || site.prerender?.preheat?.enabled || false,
+          sitemapURL: redisConfig.preheat_sitemap_url || site.prerender?.preheat?.sitemapURL || '',
+          schedule: redisConfig.preheat_schedule || site.prerender?.preheat?.schedule || '0 0 * * *',
+          concurrency: parseInt(redisConfig.preheat_concurrency) || site.prerender?.preheat?.concurrency || 5,
+          defaultPriority: parseInt(redisConfig.preheat_default_priority) || site.prerender?.preheat?.defaultPriority || 0,
+          maxDepth: parseInt(redisConfig.preheat_max_depth) || site.prerender?.preheat?.maxDepth || 3
+        },
+        
+        // 爬虫头配置
+        crawlerHeaders: site.prerender?.crawlerHeaders?.join('\n') || getDefaultCrawlerHeaders().join('\n')
+      };
+      
+      console.log('Merged prerender config:', mergedConfig);
+      prerenderConfigForm.setFieldsValue(mergedConfig);
+      
+    } catch (error) {
+      console.error('Failed to load prerender config from Redis:', error);
+      // 如果获取Redis配置失败，使用站点默认配置
+      const defaultConfig = {
+        enabled: site.prerender?.enabled || false,
+        poolSize: site.prerender?.poolSize || 5,
+        minPoolSize: site.prerender?.minPoolSize || 2,
+        maxPoolSize: site.prerender?.maxPoolSize || 20,
+        timeout: site.prerender?.timeout || 30,
+        cacheTTL: site.prerender?.cacheTTL || 3600,
+        idleTimeout: site.prerender?.idleTimeout || 300,
+        dynamicScaling: site.prerender?.dynamicScaling !== false,
+        scalingFactor: site.prerender?.scalingFactor || 0.5,
+        scalingInterval: site.prerender?.scalingInterval || 60,
+        useDefaultHeaders: site.prerender?.useDefaultHeaders || false,
+        crawlerHeaders: site.prerender?.crawlerHeaders?.join('\n') || getDefaultCrawlerHeaders().join('\n'),
+        preheat: {
+          enabled: site.prerender?.preheat?.enabled || false,
+          sitemapURL: site.prerender?.preheat?.sitemapURL || '',
+          schedule: site.prerender?.preheat?.schedule || '0 0 * * *',
+          concurrency: site.prerender?.preheat?.concurrency || 5,
+          defaultPriority: site.prerender?.preheat?.defaultPriority || 0,
+          maxDepth: site.prerender?.preheat?.maxDepth || 3
+        }
+      };
+      prerenderConfigForm.setFieldsValue(defaultConfig);
+    }
+    
+    setPrerenderConfigModalVisible(true);
+  }
+  
+  // 获取默认爬虫头列表
+  const getDefaultCrawlerHeaders = () => {
+    return [
       'Googlebot',
       'Bingbot',
       'Slurp',
@@ -790,63 +954,107 @@ const Sites: React.FC = () => {
       'YandexNews',
       'YandexCatalog'
     ];
-    
-    // 设置表单初始值
-    // 处理爬虫头字段，同时支持下划线分隔和驼峰式命名，确保兼容性
-    let rawCrawlerHeaders = [];
-    if (Array.isArray(site.prerender.crawler_headers)) {
-      rawCrawlerHeaders = site.prerender.crawler_headers;
-    } else if (Array.isArray(site.prerender.crawlerHeaders)) {
-      rawCrawlerHeaders = site.prerender.crawlerHeaders;
-    } else if (site.prerender.crawler_headers) {
-      rawCrawlerHeaders = [site.prerender.crawler_headers];
-    } else if (site.prerender.crawlerHeaders) {
-      rawCrawlerHeaders = [site.prerender.crawlerHeaders];
-    } else {
-      rawCrawlerHeaders = commonCrawlerHeaders;
-    }
-    
-    const crawlerHeaders = rawCrawlerHeaders.join('\n');
-    
-    prerenderConfigForm.setFieldsValue({
-      ...site.prerender,
-      crawlerHeaders: crawlerHeaders,
-      preheat: site.prerender.preheat || {
-        enabled: false
-      },
-      push: site.prerender.push || {
-        enabled: false,
-        baiduAPI: 'http://data.zz.baidu.com/urls',
-        baiduToken: '',
-        bingAPI: 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
-        bingToken: '',
-        dailyLimit: 1000,
-        pushDomain: '',
-        schedule: '0 1 * * *'
-      }
-    })
-    setPrerenderConfigModalVisible(true)
   }
   
   // 处理推送配置
-  const handlePushConfig = (site: any) => {
+  const handlePushConfig = async (site: any) => {
     // 打开推送配置模态框
     setEditingPushSite(site)
-    // 设置表单初始值
-    pushConfigForm.setFieldsValue({
-      ...site.prerender.push || {
-        enabled: false,
-        baiduAPI: 'http://data.zz.baidu.com/urls',
-        baiduToken: '',
-        baiduDailyLimit: site.prerender.push?.dailyLimit || 1000,
-        bingAPI: 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
-        bingToken: '',
-        bingDailyLimit: site.prerender.push?.dailyLimit || 1000,
-        pushDomain: '',
-        schedule: '0 1 * * *'
+    
+    try {
+      // 从Redis获取已保存的推送配置
+      const configResponse = await sitesApi.getSiteConfig(site.id, 'push');
+      console.log('Redis push config:', configResponse);
+      
+      let redisConfig: any = {};
+      if (configResponse.code === 200 && configResponse.data) {
+        redisConfig = configResponse.data;
       }
-    })
-    setPushConfigModalVisible(true)
+      
+      // 合并配置：优先使用Redis中的配置，如果没有则使用站点默认配置
+      const mergedConfig = {
+        enabled: redisConfig.enabled === '1' || site.prerender?.push?.enabled || false,
+        baiduAPI: redisConfig.baidu_api || site.prerender?.push?.baiduAPI || 'http://data.zz.baidu.com/urls',
+        baiduToken: redisConfig.baidu_token || site.prerender?.push?.baiduToken || '',
+        baiduDailyLimit: parseInt(redisConfig.baidu_daily_limit) || site.prerender?.push?.baiduDailyLimit || 1000,
+        bingAPI: redisConfig.bing_api || site.prerender?.push?.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
+        bingToken: redisConfig.bing_token || site.prerender?.push?.bingToken || '',
+        bingDailyLimit: parseInt(redisConfig.bing_daily_limit) || site.prerender?.push?.bingDailyLimit || 1000,
+        pushDomain: redisConfig.push_domain || site.prerender?.push?.pushDomain || '',
+        schedule: redisConfig.schedule || site.prerender?.push?.schedule || '0 1 * * *'
+      };
+      
+      console.log('Merged push config:', mergedConfig);
+      pushConfigForm.setFieldsValue(mergedConfig);
+      
+    } catch (error) {
+      console.error('Failed to load push config from Redis:', error);
+      // 如果获取Redis配置失败，使用站点默认配置
+      const defaultConfig = {
+        enabled: site.prerender?.push?.enabled || false,
+        baiduAPI: site.prerender?.push?.baiduAPI || 'http://data.zz.baidu.com/urls',
+        baiduToken: site.prerender?.push?.baiduToken || '',
+        baiduDailyLimit: site.prerender?.push?.baiduDailyLimit || 1000,
+        bingAPI: site.prerender?.push?.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
+        bingToken: site.prerender?.push?.bingToken || '',
+        bingDailyLimit: site.prerender?.push?.bingDailyLimit || 1000,
+        pushDomain: site.prerender?.push?.pushDomain || '',
+        schedule: site.prerender?.push?.schedule || '0 1 * * *'
+      };
+      pushConfigForm.setFieldsValue(defaultConfig);
+    }
+    
+    setPushConfigModalVisible(true);
+  }
+
+  // 处理WAF配置
+  const handleWAFConfig = async (site: any) => {
+    setEditingWAFSite(site)
+    try {
+      const configResponse = await sitesApi.getSiteConfig(site.id, 'waf');
+      let redisConfig: any = {};
+      if (configResponse.code === 200 && configResponse.data) {
+        redisConfig = configResponse.data;
+      }
+      
+      const mergedConfig = {
+        enabled: redisConfig.firewall_enabled === '1' || site.firewall?.enabled || false,
+        defaultAction: redisConfig.default_action || site.firewall?.action?.defaultAction || 'block',
+        blockMessage: redisConfig.block_message || site.firewall?.action?.blockMessage || 'Access Denied by WAF',
+        geoip: {
+            enabled: redisConfig.geoip_enabled === '1' || site.firewall?.geoip?.enabled || false,
+            blockList: redisConfig.geoip_block_list ? redisConfig.geoip_block_list.split(',').filter(Boolean) : (site.firewall?.geoip?.blockList || []),
+        },
+        ratelimit: {
+            enabled: redisConfig.ratelimit_enabled === '1' || site.firewall?.rateLimit?.enabled || false,
+            rate: parseInt(redisConfig.ratelimit_rate) || site.firewall?.rateLimit?.rate || 100,
+            burst: parseInt(redisConfig.ratelimit_burst) || site.firewall?.rateLimit?.burst || 20,
+        },
+        blacklist: redisConfig.blacklist ? redisConfig.blacklist.split(',').filter(Boolean) : (site.firewall?.blacklist || []),
+        whitelist: redisConfig.whitelist ? redisConfig.whitelist.split(',').filter(Boolean) : (site.firewall?.whitelist || []),
+      };
+      
+      wafConfigForm.setFieldsValue(mergedConfig);
+    } catch (error) {
+      console.error('Failed to load WAF config from Redis:', error);
+      wafConfigForm.setFieldsValue({
+        enabled: site.firewall?.enabled || false,
+        defaultAction: site.firewall?.action?.defaultAction || 'block',
+        blockMessage: site.firewall?.action?.blockMessage || 'Access Denied by WAF',
+        geoip: {
+            enabled: site.firewall?.geoip?.enabled || false,
+            blockList: site.firewall?.geoip?.blockList || [],
+        },
+        ratelimit: {
+            enabled: site.firewall?.rateLimit?.enabled || false,
+            rate: site.firewall?.rateLimit?.rate || 100,
+            burst: site.firewall?.rateLimit?.burst || 20,
+        },
+        blacklist: site.firewall?.blacklist || [],
+        whitelist: site.firewall?.whitelist || [],
+      });
+    }
+    setWafConfigModalVisible(true);
   }
 
   // 处理表单提交
@@ -856,11 +1064,11 @@ const Sites: React.FC = () => {
       
       // 转换表单数据格式，确保与后端API期望的结构匹配
       const siteData = {
-        Name: values.name,
-        Domain: values.domain,
-        Domains: [values.domain], // 支持多个域名，先添加主域名
-        Port: parseInt(values.port, 10) || 80, // 转换为整数类型，默认为80
-        Mode: values.mode, // 添加站点模式
+        name: values.name,
+        domain: values.domain,
+        domains: [values.domain], // 支持多个域名，先添加主域名
+        port: parseInt(values.port, 10) || 80, // 转换为整数类型，默认为80
+        mode: values.mode, // 添加站点模式
         // 代理配置 - 根据模式决定是否启用
         proxy: {
           enabled: values.mode === 'proxy',
@@ -989,11 +1197,11 @@ const Sites: React.FC = () => {
       
       // 转换表单数据格式，确保与后端API期望的结构匹配
       const siteData = {
-        Name: editingPrerenderSite.name,
-        Domain: editingPrerenderSite.domain,
-        Domains: editingPrerenderSite.domains || [editingPrerenderSite.domain],
-        Port: editingPrerenderSite.port || 80,
-        Mode: editingPrerenderSite.mode || 'proxy',
+        name: editingPrerenderSite.name,
+        domain: editingPrerenderSite.domain,
+        domains: editingPrerenderSite.domains || [editingPrerenderSite.domain],
+        port: editingPrerenderSite.port || 80,
+        mode: editingPrerenderSite.mode || 'proxy',
         // 保留原有的其他配置
         proxy: {
           enabled: editingPrerenderSite.proxy?.enabled || false,
@@ -1107,11 +1315,11 @@ const Sites: React.FC = () => {
       
       // 转换表单数据格式，确保与后端API期望的结构匹配
       const siteData = {
-        Name: editingPushSite.name,
-        Domain: editingPushSite.domain,
-        Domains: editingPushSite.domains || [editingPushSite.domain],
-        Port: editingPushSite.port || 80,
-        Mode: editingPushSite.mode || 'proxy',
+        name: editingPushSite.name,
+        domain: editingPushSite.domain,
+        domains: editingPushSite.domains || [editingPushSite.domain],
+        port: editingPushSite.port || 80,
+        mode: editingPushSite.mode || 'proxy',
         // 保留原有的其他配置
         proxy: {
           enabled: editingPushSite.proxy?.enabled || false,
@@ -1223,6 +1431,73 @@ const Sites: React.FC = () => {
 
 
 
+  // 处理WAF配置表单提交
+  const handleWAFConfigSubmit = async () => {
+    try {
+      const values = await wafConfigForm.validateFields();
+      // 构造更新数据
+      const siteData = {
+        name: editingWAFSite.name,
+        domain: editingWAFSite.domain,
+        domains: editingWAFSite.domains || [editingWAFSite.domain],
+        port: editingWAFSite.port || 80,
+        mode: editingWAFSite.mode || 'proxy',
+        // 保留其他配置
+        proxy: editingWAFSite.proxy || {},
+        redirect: editingWAFSite.redirect || {},
+        prerender: editingWAFSite.prerender || {},
+        file_integrity: editingWAFSite.file_integrity || {},
+        // 更新WAF配置
+        firewall: {
+            enabled: values.enabled,
+            rules_path: editingWAFSite.firewall?.rulesPath || '/etc/prerender-shield/rules',
+            action: {
+                default_action: values.defaultAction,
+                block_message: values.blockMessage
+            },
+            geoip: {
+                enabled: values.geoip?.enabled || false,
+                allow_list: [], // 暂不使用白名单
+                block_list: values.geoip?.blockList || []
+            },
+            rate_limit: {
+                enabled: values.ratelimit?.enabled || false,
+                requests: values.ratelimit?.rate || 100,
+                window: values.ratelimit?.window || 60,
+                ban_time: values.ratelimit?.ban_time || 3600
+            },
+            blacklist: values.blacklist || [],
+            whitelist: values.whitelist || []
+        }
+      };
+
+      Modal.confirm({
+        title: '正在保存WAF配置',
+        content: '请稍候...',
+        okButtonProps: { disabled: true },
+        cancelButtonProps: { disabled: true },
+        closable: false,
+        keyboard: false,
+        centered: true,
+      });
+
+      const res = await sitesApi.updateSite(editingWAFSite.id, siteData);
+      Modal.destroyAll();
+
+      if (res.code === 200) {
+        messageApi.success('WAF配置更新成功');
+        setWafConfigModalVisible(false);
+        fetchSites();
+      } else {
+        messageApi.error(res.message || 'WAF配置更新失败');
+      }
+    } catch (error: any) {
+      Modal.destroyAll();
+      console.error('WAF config submission error:', error);
+      messageApi.error('配置提交失败');
+    }
+  }
+
   return (
     <>
       {contextHolder}
@@ -1315,625 +1590,386 @@ const Sites: React.FC = () => {
               dynamicScaling: true,
               scalingFactor: 0.5,
               scalingInterval: 60,
-              crawlerHeaders: [
-                "Googlebot",
-                "Bingbot",
-                "Slurp",
-                "DuckDuckBot",
-                "Baiduspider",
-                "Sogou spider",
-                "YandexBot",
-                "Exabot",
-                "FacebookBot",
-                "Twitterbot",
-                "LinkedInBot",
-                "WhatsAppBot",
-                "TelegramBot",
-                "DiscordBot",
-                "PinterestBot",
-                "InstagramBot",
-                "Google-InspectionTool",
-                "Google-Site-Verification",
-                "AhrefsBot",
-                "SEMrushBot",
-                "Majestic",
-                "Yahoo! Slurp",
-                "Applebot",
-                "Mediapartners-Google",
-                "AdsBot-Google",
-                "Feedfetcher-Google",
-                "Googlebot-Image",
-                "Googlebot-News",
-                "Googlebot-Video",
-                "Googlebot-Extended",
-                "bingbot/2.0",
-                "msnbot",
-                "MSNbot-Media",
-                "bingbot/1.0",
-                "msnbot-media/1.1",
-                "adidxbot",
-                "BingPreview",
-                "BingSiteAuth",
-                "BingLocalSearchBot",
-                "Baiduspider-image",
-                "Baiduspider-video",
-                "Baiduspider-mobile",
-                "Baiduspider-news",
-                "Baiduspider-favo",
-                "Baiduspider-cpro",
-                "Baiduspider-ads",
-                "Sogou web spider",
-                "Sogou inst spider",
-                "Sogou spider2",
-                "Sogou blog",
-                "Sogou News Spider",
-                "Sogou Orion spider",
-                "Sogou video spider",
-                "Sogou image spider",
-                "YandexBot/3.0",
-                "YandexMobileBot",
-                "YandexImages",
-                "YandexVideo",
-                "YandexMedia",
-                "YandexBlogs",
-                "YandexNews",
-                "YandexCatalog"
-              ],
-              preheat: {
-                enabled: false
-              }
-            },
-            ssl: {
-              enabled: true
+              crawlerHeaders: getDefaultCrawlerHeaders()
             }
           }}
         >
-          {/* 基本信息 */}
-          <Card title="基本信息" size="small" style={{ marginBottom: 16 }}>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="name"
-                  label="站点名称"
-                  rules={[
-                    { required: true, message: '请输入站点名称' },
-                    { min: 2, max: 50, message: '站点名称长度必须在2到50个字符之间' },
-                    { pattern: /^[\w\s\u4e00-\u9fa5a-zA-Z]+$/, message: '站点名称只能包含字母、数字、下划线、空格、中文和其他语言字符' }
-                  ]}
-                >
-                  <Input placeholder="请输入站点名称，例如：example" />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="domain"
-                  label="域名"
-                  rules={[
-                    { required: true, message: '请输入域名' },
-                    { pattern: /^(localhost|127\.0\.0\.1)$/, message: '只允许输入 localhost 或 127.0.0.1' }
-                  ]}
-                >
-                  <Input placeholder="请输入域名，仅允许 localhost 或 127.0.0.1" />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="port"
-                  label="站点端口"
-                  rules={[
-                    { required: true, message: '请输入站点端口' },
-                    { min: 1, max: 65535, message: '端口必须在1到65535之间' }
-                  ]}
-                >
-                  <Input type="number" placeholder="请输入站点端口，例如：8081" min={1} max={65535} />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="mode"
-                  label="站点模式"
-                  rules={[{ required: true, message: '请选择站点模式' }]}
-                >
-                  <Select placeholder="请选择站点模式">
-                    <Option value="proxy">代理已有应用</Option>
-                    <Option value="static">静态资源站</Option>
-                    <Option value="redirect">重定向</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
-          </Card>
+          <Form.Item name="name" label="站点名称" rules={[{ required: true, message: '请输入站点名称' }]}>
+            <Input placeholder="请输入站点名称" />
+          </Form.Item>
+          <Form.Item name="domain" label="域名" rules={[{ required: true, message: '请输入域名' }]}>
+            <Input placeholder="请输入域名，例如: example.com" />
+          </Form.Item>
+          <Form.Item name="port" label="端口" rules={[{ required: true, message: '请输入端口' }]}>
+            <Input type="number" placeholder="请输入端口，例如: 80" />
+          </Form.Item>
+          <Form.Item name="mode" label="站点模式" rules={[{ required: true, message: '请选择站点模式' }]}>
+            <Select>
+              <Option value="proxy">代理已有应用</Option>
+              <Option value="static">静态资源站</Option>
+              <Option value="redirect">重定向</Option>
+            </Select>
+          </Form.Item>
 
-          {/* 站点模式配置 */}
-          <Card title="站点模式配置" size="small" style={{ marginBottom: 16 }}>
-            <Form.Item 
-              dependencies={['mode']} 
-              noStyle
-            >
-              {({ getFieldValue }) => {
-                const mode = getFieldValue('mode');
-                
-                // 代理模式配置
-                if (mode === 'proxy') {
-                  return (
-                    <Form.Item
-                      name="proxy.targetURL"
-                      label="上游服务器地址"
-                      rules={[{ required: true, message: '请输入上游服务器地址' }, { type: 'url', message: '请输入完整域名，例如：http://example.com' }]}
-                      extra="提示：输入完整域名，不支持路径"
-                    >
-                      <Input placeholder="请输入上游服务器地址，例如：http://127.0.0.1:8080" />
-                    </Form.Item>
-                  );
-                }
-                
-                // 静态资源站配置
-                if (mode === 'static') {
-                  return (
-                    <div>
-                      <p style={{ color: '#8c8c8c', marginBottom: 16 }}>提示：在静态资源管理中上传资源</p>
-                      <p style={{ color: '#8c8c8c' }}>说明：站点列表中仅静态资源站允许上传资源</p>
-                    </div>
-                  );
-                }
-                
-                // 重定向配置
-                if (mode === 'redirect') {
-                  return (
-                    <>
-                      <Row gutter={16}>
-                        <Col span={12}>
-                          <Form.Item
-                            name="redirect.code"
-                            label="重定向类型"
-                            rules={[{ required: true, message: '请选择重定向类型' }]}
-                          >
-                            <Select>
-                              <Option value={301}>301 Moved Permanently</Option>
-                              <Option value={302}>302 Found</Option>
-                              <Option value={307}>307 Temporary Redirect</Option>
-                              <Option value={308}>308 Permanent Redirect</Option>
-                            </Select>
-                          </Form.Item>
-                        </Col>
-                        <Col span={12}>
-                          <Form.Item
-                            name="redirect.url"
-                            label="重定向地址"
-                            rules={[{ required: true, message: '请输入重定向地址' }, { type: 'url', message: '请输入完整域名，例如：http://example.com' }]}
-                            extra="提示：输入完整域名，不支持路径"
-                          >
-                            <Input placeholder="请输入重定向地址，例如：http://example.com" />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    </>
-                  );
-                }
-                
-                return null;
-              }}
-            </Form.Item>
-          </Card>
-
-          {/* 渲染预热配置 */}
-          <Form.Item dependencies={['mode']} noStyle>
+          <Form.Item
+            noStyle
+            shouldUpdate={(prevValues, currentValues) => prevValues.mode !== currentValues.mode}
+          >
             {({ getFieldValue }) => {
               const mode = getFieldValue('mode');
-              if (mode !== 'static') {
-                return null;
-              }
-              return (
-                <Card title="渲染预热配置" size="small" style={{ marginBottom: 16 }}>
-                  <Form.Item name={['prerender', 'enabled']} label="启用渲染预热" valuePropName="checked">
-                    <Switch />
+              return mode === 'proxy' ? (
+                <Form.Item
+                  name={['proxy', 'targetURL']}
+                  label="目标URL"
+                  rules={[{ required: true, message: '请输入目标URL' }]}
+                >
+                  <Input placeholder="http://localhost:3000" />
+                </Form.Item>
+              ) : mode === 'redirect' ? (
+                 <>
+                  <Form.Item
+                    name={['redirect', 'code']}
+                    label="状态码"
+                    initialValue={302}
+                  >
+                    <Select>
+                      <Option value={301}>301 (永久重定向)</Option>
+                      <Option value={302}>302 (临时重定向)</Option>
+                    </Select>
                   </Form.Item>
-
-                  {/* 依赖于启用渲染预热的配置 */}
-                  <Form.Item dependencies={[['prerender', 'enabled']]} noStyle>
-                    {({ getFieldValue }) => {
-                      const prerenderEnabled = getFieldValue(['prerender', 'enabled']);
-                      if (!prerenderEnabled) {
-                        return null;
-                      }
-                      return (
-                        <div style={{ marginBottom: 16, padding: 10, backgroundColor: '#f0f9ff', borderRadius: 4, border: '1px solid #91d5ff' }}>
-                          <p style={{ margin: 0, color: '#1890ff', fontWeight: 'bold' }}>提示：</p>
-                          <p style={{ margin: '8px 0 0 0', color: '#40a9ff' }}>浏览器池大小和缓存TTL（秒）等高级配置，请在站点列表页面点击「渲染预热配置」按钮进行设置。</p>
-                        </div>
-                      );
-                    }}
+                  <Form.Item
+                    name={['redirect', 'url']}
+                    label="目标URL"
+                    rules={[{ required: true, message: '请输入目标URL' }]}
+                  >
+                    <Input placeholder="https://example.com" />
                   </Form.Item>
-                </Card>
-              );
+                </>
+              ) : null;
             }}
           </Form.Item>
 
-          {/* 防火墙配置 */}
-          <Card title="防火墙配置" size="small" style={{ marginBottom: 16 }}>
-            <Form.Item name={['firewall', 'enabled']} label="启用防火墙" valuePropName="checked">
-              <Switch />
-            </Form.Item>
+          <Divider orientation="left">防火墙配置</Divider>
+          <Form.Item name={['firewall', 'enabled']} label="启用防火墙" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            noStyle
+            shouldUpdate={(prevValues, currentValues) => prevValues.firewall?.enabled !== currentValues.firewall?.enabled}
+          >
+             {({ getFieldValue }) => {
+               const enabled = getFieldValue(['firewall', 'enabled']);
+               return enabled ? (
+                 <>
+                   <Form.Item name={['firewall', 'action', 'defaultAction']} label="默认动作">
+                     <Select>
+                       <Option value="allow">允许</Option>
+                       <Option value="block">拒绝</Option>
+                     </Select>
+                   </Form.Item>
+                 </>
+               ) : null;
+             }}
+          </Form.Item>
 
-            <Form.Item name={['firewall', 'action', 'defaultAction']} label="默认动作">
-              <Select>
-                <Option value="allow">允许</Option>
-                <Option value="block">阻止</Option>
-              </Select>
-            </Form.Item>
-
-            {/* 地理位置访问控制 */}
-            <Form.Item label="地理位置访问控制" extra="配置允许或阻止的国家/地区列表">
-              <Form.Item name={['firewall', 'geoip', 'enabled']} label="启用地理位置访问控制" valuePropName="checked" noStyle>
-                <Switch />
-              </Form.Item>
-              
-              <Form.Item 
-                dependencies={[['firewall', 'geoip', 'enabled']]} 
-                noStyle
-              >
-                {({ getFieldValue }) => {
-                  const geoipEnabled = getFieldValue(['firewall', 'geoip', 'enabled']);
-                  if (!geoipEnabled) {
-                    return null;
-                  }
-                  return (
-                    <>
-                      <Form.Item
-                        name={['firewall', 'geoip', 'allowList']}
-                        label="允许的国家/地区代码"
-                        extra="例如：CN,US,JP，多个代码用逗号分隔"
-                      >
-                        <Input placeholder="请输入允许的国家/地区代码，用逗号分隔" />
-                      </Form.Item>
-                      
-                      <Form.Item
-                        name={['firewall', 'geoip', 'blockList']}
-                        label="阻止的国家/地区代码"
-                        extra="例如：CN,US,JP，多个代码用逗号分隔"
-                      >
-                        <Input placeholder="请输入阻止的国家/地区代码，用逗号分隔" />
-                      </Form.Item>
-                    </>
-                  );
-                }}
-              </Form.Item>
-            </Form.Item>
-
-            {/* 频率限制 / CC 攻击防护 */}
-            <Form.Item label="频率限制 / CC 攻击防护" extra="配置请求频率限制，防止CC攻击">
-              <Form.Item name={['firewall', 'rate_limit', 'enabled']} label="启用频率限制" valuePropName="checked" noStyle>
-                <Switch />
-              </Form.Item>
-              
-              <Form.Item 
-                dependencies={[['firewall', 'rate_limit', 'enabled']]} 
-                noStyle
-              >
-                {({ getFieldValue }) => {
-                  const rateLimitEnabled = getFieldValue(['firewall', 'rate_limit', 'enabled']);
-                  if (!rateLimitEnabled) {
-                    return null;
-                  }
-                  return (
-                    <>
-                      <Row gutter={16}>
-                        <Col span={8}>
-                          <Form.Item
-                            name={['firewall', 'rate_limit', 'requests']}
-                            label="时间窗口内允许的请求数"
-                          >
-                            <Input type="number" placeholder="例如：100" min={1} />
-                          </Form.Item>
-                        </Col>
-                        <Col span={8}>
-                          <Form.Item
-                            name={['firewall', 'rate_limit', 'window']}
-                            label="时间窗口（秒）"
-                          >
-                            <Input type="number" placeholder="例如：60" min={1} />
-                          </Form.Item>
-                        </Col>
-                        <Col span={8}>
-                          <Form.Item
-                            name={['firewall', 'rate_limit', 'ban_time']}
-                            label="封禁时间（秒）"
-                          >
-                            <Input type="number" placeholder="例如：3600" min={1} />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    </>
-                  );
-                }}
-              </Form.Item>
-            </Form.Item>
-
-            {/* 网页防篡改配置 */}
-            <Form.Item label="网页防篡改" extra="定期检查文件完整性，防止文件被篡改">
-              <Form.Item name={['file_integrity', 'enabled']} label="启用网页防篡改" valuePropName="checked" noStyle>
-                <Switch />
-              </Form.Item>
-              
-              <Form.Item 
-                dependencies={[['file_integrity', 'enabled']]} 
-                noStyle
-              >
-                {({ getFieldValue }) => {
-                  const fileIntegrityEnabled = getFieldValue(['file_integrity', 'enabled']);
-                  if (!fileIntegrityEnabled) {
-                    return null;
-                  }
-                  return (
-                    <>
-                      <Row gutter={16}>
-                        <Col span={12}>
-                          <Form.Item
-                            name={['file_integrity', 'check_interval']}
-                            label="检查间隔（秒）"
-                          >
-                            <Input type="number" placeholder="例如：300" min={10} />
-                          </Form.Item>
-                        </Col>
-                        <Col span={12}>
-                          <Form.Item
-                            name={['file_integrity', 'hash_algorithm']}
-                            label="哈希算法"
-                          >
-                            <Select>
-                              <Option value="md5">MD5</Option>
-                              <Option value="sha1">SHA-1</Option>
-                              <Option value="sha256">SHA-256</Option>
-                              <Option value="sha512">SHA-512</Option>
-                            </Select>
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    </>
-                  );
-                }}
-              </Form.Item>
-            </Form.Item>
-          </Card>
-
-
+          <Divider orientation="left">渲染预热配置</Divider>
+          <Form.Item name={['prerender', 'enabled']} label="启用渲染预热" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          
         </Form>
       </Modal>
 
-      {/* 文件上传弹窗 */}
+      {/* 渲染预热配置弹窗 */}
       <Modal
-        title={`站点 "${currentSite?.name}" 文件管理`}
-        open={uploadModalVisible}
-        onCancel={() => setUploadModalVisible(false)}
+        title="渲染预热配置"
+        open={prerenderConfigModalVisible}
+        onOk={handlePrerenderConfigSubmit}
+        onCancel={() => setPrerenderConfigModalVisible(false)}
         width={800}
-        footer={null}
       >
-        <div style={{ marginBottom: 20 }}>
-          <Typography.Title level={5} style={{ marginBottom: 10 }}>
-            文件上传
-          </Typography.Title>
-          <Typography.Text type="secondary">
-            支持拖拽上传，RAR/ZIP文件将自动解压，单个文件直接上传
-          </Typography.Text>
-        </div>
-        
-        {/* 拖拽上传区域 */}
-        <Upload
-          name="file"
-          beforeUpload={beforeUpload}
-          customRequest={customRequest}
-          accept=".zip,.rar,.html,.css,.js,.json,.txt"
-          multiple
-          showUploadList={false} // 隐藏文件上传列表
-        >
-          <div style={{
-            border: '1px dashed #d9d9d9',
-            borderRadius: '6px',
-            padding: '50px 20px',
-            textAlign: 'center',
-            background: '#fafafa',
-            cursor: 'pointer',
-          }}>
-            <Space direction="vertical" align="center">
-              <CloudUploadOutlined style={{ fontSize: '32px', color: '#1890ff' }} />
-              <Typography.Text>
-                拖拽文件到此处或
-                <Button type="link" size="small">
-                  点击上传
-                </Button>
-              </Typography.Text>
-              <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
-                支持 .zip, .rar, .html, .css, .js, .json, .txt 格式，单个文件不超过100MB
-              </Typography.Text>
-            </Space>
-          </div>
-        </Upload>
+        <Form form={prerenderConfigForm} layout="vertical">
+          <Form.Item name="enabled" label="启用预渲染" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="poolSize" label="初始池大小">
+                <Input type="number" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="maxPoolSize" label="最大池大小">
+                <Input type="number" />
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Divider orientation="left">预热设置</Divider>
+          <Form.Item name={['preheat', 'enabled']} label="启用预热" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item name={['preheat', 'sitemapURL']} label="Sitemap URL">
+            <Input placeholder="https://example.com/sitemap.xml" />
+          </Form.Item>
+          
+          <Divider orientation="left">爬虫设置</Divider>
+          <Form.Item name="crawlerHeaders" label="爬虫User-Agent列表">
+             <Select mode="tags" style={{ width: '100%' }} tokenSeparators={[',', '\n']} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* WAF配置弹窗 */}
+      <Modal
+        title="WAF 防火墙配置"
+        open={wafConfigModalVisible}
+        onOk={handleWAFConfigSubmit}
+        onCancel={() => setWafConfigModalVisible(false)}
+        width={800}
+      >
+        <Form form={wafConfigForm} layout="vertical">
+            <Tabs defaultActiveKey="1" items={[
+                {
+                    key: '1',
+                    label: '基础防护 & 频率限制',
+                    children: (
+                        <>
+                            <Form.Item name="enabled" label="启用防火墙" valuePropName="checked">
+                                <Switch />
+                            </Form.Item>
+                            
+                            <Divider orientation="left">请求频率限制 (Rate Limit)</Divider>
+                            <Form.Item name={['ratelimit', 'enabled']} label="启用频率限制" valuePropName="checked">
+                                <Switch />
+                            </Form.Item>
+                            <Row gutter={16}>
+                                <Col span={8}>
+                                    <Form.Item name={['ratelimit', 'rate']} label="限制请求数" help="周期内允许的最大请求次数">
+                                        <Input type="number" suffix="次" />
+                                    </Form.Item>
+                                </Col>
+                                <Col span={8}>
+                                    <Form.Item name={['ratelimit', 'window']} label="统计周期" help="统计请求的时间窗口">
+                                        <Input type="number" suffix="秒" />
+                                    </Form.Item>
+                                </Col>
+                                <Col span={8}>
+                                    <Form.Item name={['ratelimit', 'ban_time']} label="封禁时间" help="触发限制后的封禁时长">
+                                        <Input type="number" suffix="秒" />
+                                    </Form.Item>
+                                </Col>
+                            </Row>
+                        </>
+                    )
+                },
+                {
+                    key: '2',
+                    label: '访问控制 (GeoIP & 黑白名单)',
+                    children: (
+                        <>
+                            <Divider orientation="left">区域封禁 (GeoIP)</Divider>
+                            <Form.Item name={['geoip', 'enabled']} label="启用区域封禁" valuePropName="checked">
+                                <Switch />
+                            </Form.Item>
+                            <Form.Item label="禁止访问的国家/地区">
+                                <div style={{ marginBottom: 8 }}>
+                                    <Space>
+                                        <Button size="small" onClick={() => {
+                                            // 常用国家代码列表
+                                            const allCountries = ['CN', 'US', 'JP', 'KR', 'GB', 'DE', 'FR', 'RU', 'BR', 'IN', 'CA', 'AU'];
+                                            wafConfigForm.setFieldsValue({
+                                                geoip: {
+                                                    ...wafConfigForm.getFieldValue('geoip'),
+                                                    blockList: allCountries
+                                                }
+                                            });
+                                        }}>全选(常用)</Button>
+                                        <Button size="small" onClick={() => {
+                                            wafConfigForm.setFieldsValue({
+                                                geoip: {
+                                                    ...wafConfigForm.getFieldValue('geoip'),
+                                                    blockList: []
+                                                }
+                                            });
+                                        }}>清空</Button>
+                                    </Space>
+                                </div>
+                                <Form.Item name={['geoip', 'blockList']} noStyle>
+                                    <Select mode="tags" placeholder="输入国家代码，如 CN, US, JP" style={{ width: '100%' }} tokenSeparators={[',', ' ']} />
+                                </Form.Item>
+                            </Form.Item>
+                            
+                            <Divider orientation="left">黑白名单</Divider>
+                            <Form.Item name="blacklist" label="黑名单 IP (每行一个或逗号分隔)">
+                                <Select mode="tags" placeholder="输入IP地址" style={{ width: '100%' }} tokenSeparators={[',', '\n']} />
+                            </Form.Item>
+                            <Form.Item name="whitelist" label="白名单 IP (每行一个或逗号分隔)">
+                                <Select mode="tags" placeholder="输入IP地址" style={{ width: '100%' }} tokenSeparators={[',', '\n']} />
+                            </Form.Item>
+                        </>
+                    )
+                },
+                {
+                    key: '3',
+                    label: '拦截动作 & 页面',
+                    children: (
+                        <>
+                            <Form.Item name="defaultAction" label="默认动作">
+                                <Radio.Group>
+                                    <Radio value="allow">允许 (Allow)</Radio>
+                                    <Radio value="block">拦截 (Block)</Radio>
+                                </Radio.Group>
+                            </Form.Item>
+                            
+                            <Form.Item name="blockMessage" label="默认拦截提示信息">
+                                <Input.TextArea rows={2} />
+                            </Form.Item>
+                            
+                            <Divider orientation="left">自定义拦截页面</Divider>
+                            <div style={{ marginBottom: 16 }}>
+                                <p>您可以上传自定义的HTML文件作为拦截页面。文件名为 <code>waf_block.html</code>。</p>
+                                <Upload 
+                                    customRequest={(options) => {
+                                        const { onSuccess, onError, file } = options;
+                                        // 复用上传逻辑，但强制文件名为 waf_block.html，路径为根目录
+                                        // 注意：File对象是只读的，不能直接修改name。
+                                        // 我们需要在后端处理，或者在前端创建一个新的Blob。
+                                        // 简单起见，我们上传到根目录，并在上传成功后提示用户。
+                                        
+                                        if (!editingWAFSite) return;
+                                        
+                                        // 强制文件名为 waf_block.html
+                                        const newFile = new File([file as any], "waf_block.html", { type: "text/html" });
+                                        
+                                        sitesApi.uploadFile(editingWAFSite.id, newFile, "/", () => {})
+                                        .then(res => {
+                                            if(res.code === 200) {
+                                                messageApi.success("自定义拦截页面上传成功");
+                                                if(onSuccess) onSuccess("ok");
+                                            } else {
+                                                messageApi.error("上传失败");
+                                                if(onError) onError(new Error("Upload failed"));
+                                            }
+                                        })
+                                        .catch(err => {
+                                            messageApi.error("上传出错");
+                                            if(onError) onError(err);
+                                        });
+                                    }}
+                                    showUploadList={false}
+                                >
+                                    <Button icon={<UploadOutlined />}>上传自定义拦截页面 (waf_block.html)</Button>
+                                </Upload>
+                            </div>
+                        </>
+                    )
+                }
+            ]} />
+        </Form>
+      </Modal>
+
+      {/* 推送配置弹窗 */}
+      <Modal
+        title="推送配置"
+        open={pushConfigModalVisible}
+        onOk={handlePushConfigSubmit}
+        onCancel={() => setPushConfigModalVisible(false)}
+        width={600}
+      >
+        <Form form={pushConfigForm} layout="vertical">
+          <Form.Item name="enabled" label="启用推送" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item name="baiduAPI" label="百度推送API">
+            <Input />
+          </Form.Item>
+          <Form.Item name="baiduToken" label="百度推送Token">
+            <Input />
+          </Form.Item>
+          <Form.Item name="bingAPI" label="Bing推送API">
+            <Input />
+          </Form.Item>
+          <Form.Item name="bingToken" label="Bing推送Token">
+            <Input />
+          </Form.Item>
+        </Form>
       </Modal>
 
       {/* 静态资源管理弹窗 */}
       <Modal
-        title={`站点 "${currentSite?.name}" 静态资源管理`}
+        title={`静态资源管理 - ${currentSite?.name || ''}`}
         open={staticResModalVisible}
         onCancel={() => setStaticResModalVisible(false)}
-        width={1000}
+        width={900}
         footer={null}
       >
-        {/* 路径导航栏 */}
-        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Button
-            type="text"
-            icon={<UpOutlined />}
-            onClick={navigateUp}
-            disabled={currentPath === '/'}>
-            上一级
-          </Button>
-          <span style={{ fontWeight: 'bold' }}>当前路径：{currentPath}</span>
-          <div style={{ flex: 1 }}></div>
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
           <Space>
-            <Button
-              type="primary"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={() => {
-                Modal.confirm({
-                  title: '确认删除',
-                  content: `确定要删除当前路径下的所有文件吗？此操作不可恢复。`,
-                  okText: '删除',
-                  okType: 'danger',
-                  cancelText: '取消',
-                  onOk: async () => {
-                    try {
-                      // 确保站点ID存在
-                      const siteId = currentSite && currentSite.id;
-                      if (!siteId) {
-                        throw new Error('站点ID不存在');
-                      }
-                        
-                      // 调用API删除当前路径下的所有静态资源
-                      const response = await sitesApi.deleteStaticResources(siteId, currentPath);
-                      if (response.code === 200) {
-                        message.success('删除成功');
-                        // 重新加载文件列表
-                        loadFileList(currentPath, siteId);
-                      } else {
-                        message.error(`删除失败: ${response.message}`);
-                      }
-                    } catch (error) {
-                      console.error('删除静态资源失败:', error);
-                      message.error('删除静态资源失败: ' + (error as any).message);
-                    }
-                  },
-                });
-              }}
-            >
-              一键删除全部
-            </Button>
-            <Button
-              type="primary"
-              icon={<NewFolderOutlined />}
-              onClick={handleNewFolder}
-            >
-              新建目录
-            </Button>
-            <Button
-              type="primary"
-              icon={<FileAddOutlined />}
-              onClick={handleNewFile}
-            >
-              新建文件
-            </Button>
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={() => {
-                // 确保站点ID存在
-                const siteId = currentSite && currentSite.id;
-                if (siteId) {
-                  loadFileList(currentPath, siteId);
-                  messageApi.info('正在刷新文件列表...');
-                }
-              }}
-            >
-              刷新
-            </Button>
-            <Upload
-              beforeUpload={beforeUpload}
-              customRequest={customRequest}
+            <Button icon={<UpOutlined />} onClick={navigateUp} disabled={currentPath === '/'}>返回上级</Button>
+            <Typography.Text strong>当前路径: {currentPath}</Typography.Text>
+          </Space>
+          <Space>
+            <Button icon={<NewFolderOutlined />} onClick={handleNewFolder}>新建目录</Button>
+            <Button icon={<FileAddOutlined />} onClick={handleNewFile}>新建文件</Button>
+            <Upload 
+              customRequest={customRequest} 
+              beforeUpload={beforeUpload} 
               showUploadList={false}
-              multiple // 支持多文件上传
-              accept=".zip,.rar,.html,.css,.js,.json,.txt"
             >
-              <Button icon={<UploadOutlined />}>
-                上传文件
-              </Button>
+              <Button icon={<UploadOutlined />}>上传文件</Button>
             </Upload>
           </Space>
         </div>
-
-        {/* 文件列表 */}
-        <div style={{ height: 500, overflow: 'auto', border: '1px solid #e8e8e8', borderRadius: 6 }}>
-          <Table
-            columns={[
-              {
-                title: '名称',
-                dataIndex: 'name',
-                key: 'name',
-                render: (text: string, record: any) => (
-                  <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                    {record.type === 'dir' ? (
-                      <FolderOutlined style={{ color: '#faad14', marginRight: 8 }} onClick={() => enterDirectory(record)} />
-                    ) : (
-                      <FileOutlined style={{ color: '#1890ff', marginRight: 8 }} />
-                    )}
-                    <span onClick={() => record.type === 'dir' && enterDirectory(record)}>
-                      {text}
-                    </span>
-                  </div>
-                )
-              },
-              {
-                title: '类型',
-                dataIndex: 'type',
-                key: 'type',
-                render: (text: string) => (
-                  <span>{text === 'dir' ? '目录' : '文件'}</span>
-                )
-              },
-              {
-                title: '大小',
-                dataIndex: 'size',
-                key: 'size',
-                render: (size: number) => {
-                  if (size === 0) return '0 B'
-                  if (size < 1024) return `${size} B`
-                  if (size < 1024 * 1024) return `${(size / 1024).toFixed(2)} KB`
-                  return `${(size / (1024 * 1024)).toFixed(2)} MB`
-                }
-              },
-              {
-                title: '操作',
-                key: 'action',
-                render: (_, record: any) => (
-                  <Space>
-                    {record.type === 'file' && (
-                      <Button
-                        type="link"
-                        size="small"
-                        icon={<DownloadOutlined />}
-                        onClick={() => handleDownload(record)}
-                      >
-                        下载
-                      </Button>
-                    )}
-                    {(record.type === 'file' && (record.name.endsWith('.zip') || record.name.endsWith('.rar'))) && (
-                      <Button
-                        type="link"
-                        size="small"
-                        icon={<ExtractOutlined />}
-                        onClick={() => handleExtract(record)}
-                      >
-                        解压
-                      </Button>
-                    )}
-                    <Button
-                      type="link"
-                      size="small"
-                      danger
-                      icon={<DeleteOutlined />}
-                      onClick={() => handleFileDelete(record)}
-                    >
-                      删除
-                    </Button>
-                  </Space>
-                )
-              }
-            ]}
-            dataSource={fileList}
-            rowKey="key"
-            pagination={false}
-          />
-        </div>
+        
+        <Table
+          dataSource={fileList}
+          rowKey="key"
+          pagination={false}
+          columns={[
+            {
+              title: '名称',
+              dataIndex: 'name',
+              key: 'name',
+              render: (text, record) => (
+                <Space>
+                  {record.type === 'dir' ? <FolderOutlined style={{ color: '#1890ff' }} /> : <FileOutlined />}
+                  {record.type === 'dir' ? (
+                    <a onClick={() => enterDirectory(record)}>{text}</a>
+                  ) : (
+                    <span>{text}</span>
+                  )}
+                </Space>
+              )
+            },
+            {
+              title: '大小',
+              dataIndex: 'size',
+              key: 'size',
+              width: 100,
+              render: (size) => size ? `${(size / 1024).toFixed(2)} KB` : '-'
+            },
+            {
+              title: '操作',
+              key: 'action',
+              width: 250,
+              render: (_, record) => (
+                <Space>
+                  {record.type === 'file' && (
+                    <>
+                      <Button type="link" size="small" icon={<DownloadOutlined />} onClick={() => handleDownload(record)}>下载</Button>
+                      {record.name.endsWith('.zip') && (
+                        <Button type="link" size="small" icon={<ExtractOutlined />} onClick={() => handleExtract(record)}>解压</Button>
+                      )}
+                    </>
+                  )}
+                  <Button type="link" danger size="small" onClick={() => handleFileDelete(record)}>删除</Button>
+                </Space>
+              )
+            }
+          ]}
+        />
       </Modal>
 
       {/* 新建目录弹窗 */}
@@ -1942,19 +1978,12 @@ const Sites: React.FC = () => {
         open={showNewFolderModal}
         onOk={confirmNewFolder}
         onCancel={() => setShowNewFolderModal(false)}
-        width={400}
       >
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', marginBottom: 8 }}>目录名称：</label>
-          <Input
-            placeholder="请输入目录名称"
-            value={newFolderName}
-            onChange={(e) => setNewFolderName(e.target.value)}
-          />
-        </div>
-        <p style={{ color: '#666', fontSize: 12 }}>
-          当前路径：{currentPath}
-        </p>
+        <Input 
+          placeholder="请输入目录名称" 
+          value={newFolderName} 
+          onChange={e => setNewFolderName(e.target.value)} 
+        />
       </Modal>
 
       {/* 新建文件弹窗 */}
@@ -1963,257 +1992,15 @@ const Sites: React.FC = () => {
         open={showNewFileModal}
         onOk={confirmNewFile}
         onCancel={() => setShowNewFileModal(false)}
-        width={400}
       >
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', marginBottom: 8 }}>文件名称：</label>
-          <Input
-            placeholder="请输入文件名称，例如：index.html"
-            value={newFileName}
-            onChange={(e) => setNewFileName(e.target.value)}
-          />
-        </div>
-        <p style={{ color: '#666', fontSize: 12 }}>
-          当前路径：{currentPath}
-        </p>
+        <Input 
+          placeholder="请输入文件名称" 
+          value={newFileName} 
+          onChange={e => setNewFileName(e.target.value)} 
+        />
       </Modal>
 
-      {/* 预渲染配置弹窗 */}
-      <Modal
-        title="渲染预热配置"
-        open={prerenderConfigModalVisible}
-        onOk={handlePrerenderConfigSubmit}
-        onCancel={() => setPrerenderConfigModalVisible(false)}
-        width={800}
-        okText="保存"
-        cancelText="取消"
-      >
-        <Form
-          form={prerenderConfigForm}
-          layout="vertical"
-        >
-          {/* 基础配置 */}
-          <Card title="基础配置" size="small" style={{ marginBottom: 16 }}>
-            <Form.Item
-              name="enabled"
-              label="启用渲染预热"
-              valuePropName="checked"
-            >
-              <Switch />
-            </Form.Item>
-
-            {/* 依赖于启用渲染预热的配置 */}
-            <Form.Item dependencies={['enabled']} noStyle>
-              {({ getFieldValue }) => {
-                const enabled = getFieldValue('enabled');
-                if (!enabled) {
-                  return null;
-                }
-                return (
-                  <Row gutter={16}>
-                    <Col span={8}>
-                      <Form.Item
-                        name="poolSize"
-                        label="初始浏览器池大小"
-                        rules={[{ required: true, message: '请输入初始浏览器池大小' }]}
-                      >
-                        <Input type="number" min={1} max={100} placeholder="请输入初始浏览器池大小" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name="minPoolSize"
-                        label="最小浏览器池大小"
-                        rules={[{ required: true, message: '请输入最小浏览器池大小' }]}
-                      >
-                        <Input type="number" min={1} max={100} placeholder="请输入最小浏览器池大小" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name="maxPoolSize"
-                        label="最大浏览器池大小"
-                        rules={[{ required: true, message: '请输入最大浏览器池大小' }]}
-                      >
-                        <Input type="number" min={1} max={100} placeholder="请输入最大浏览器池大小" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name="timeout"
-                        label="渲染超时时间（秒）"
-                        rules={[{ required: true, message: '请输入渲染超时时间' }]}
-                      >
-                        <Input type="number" min={5} max={300} placeholder="请输入渲染超时时间" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name="cacheTTL"
-                        label="缓存过期时间（秒）"
-                        rules={[{ required: true, message: '请输入缓存过期时间' }]}
-                      >
-                        <Input type="number" min={60} max={86400} placeholder="请输入缓存过期时间" />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                );
-              }}
-            </Form.Item>
-          </Card>
-
-          {/* 高级配置 */}
-          <Form.Item dependencies={['enabled']} noStyle>
-            {({ getFieldValue }) => {
-              const enabled = getFieldValue('enabled');
-              if (!enabled) {
-                return null;
-              }
-              return (
-                <Card title="高级配置" size="small" style={{ marginBottom: 16 }}>
-                  <Form.Item
-                    name="crawlerHeaders"
-                    label="爬虫协议头"
-                    extra="每行一个，支持多个，默认包含市面上常见爬虫头。常见主流爬虫协议头参考：Googlebot, Bingbot, Baiduspider, Sogou spider, YandexBot, FacebookBot, Twitterbot等。"
-                  >
-                    <Input.TextArea rows={6} placeholder="请输入爬虫协议头，每行一个" />
-                  </Form.Item>
-                </Card>
-              );
-            }}
-          </Form.Item>
-
-          {/* 预热配置 */}
-          <Form.Item dependencies={['enabled']} noStyle>
-            {({ getFieldValue }) => {
-              const enabled = getFieldValue('enabled');
-              if (!enabled) {
-                return null;
-              }
-              return (
-                <Card title="预热配置" size="small">
-                  <Row gutter={16}>
-                    <Col span={8}>
-                      <Form.Item
-                        name={["preheat", "enabled"]}
-                        label="启用自动预热"
-                        valuePropName="checked"
-                      >
-                        <Switch />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                </Card>
-              );
-            }}
-          </Form.Item>
-        </Form>
-      </Modal>
-      
-      {/* 推送配置弹窗 */}
-      <Modal
-        title="推送配置"
-        open={pushConfigModalVisible}
-        onOk={handlePushConfigSubmit}
-        onCancel={() => setPushConfigModalVisible(false)}
-        width={800}
-        okText="保存"
-        cancelText="取消"
-      >
-        <Form
-          form={pushConfigForm}
-          layout="vertical"
-        >
-          {/* 推送配置 */}
-          <Card title="推送配置" size="small" style={{ marginBottom: 16 }}>
-            <Row gutter={16}>
-              <Col span={8}>
-                <Form.Item
-                  name="enabled"
-                  label="启用搜索引擎推送"
-                  valuePropName="checked"
-                >
-                  <Switch />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="pushDomain"
-                  label="推送域名"
-                >
-                  <Input placeholder="请输入用于推送的域名" />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="schedule"
-                  label="推送调度规则"
-                >
-                  <Input placeholder="Cron表达式，如：0 1 * * *" />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Divider orientation="left">百度推送配置</Divider>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="baiduAPI"
-                  label="百度API地址"
-                >
-                  <Input placeholder="请输入百度推送API地址" />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="baiduToken"
-                  label="百度推送Token"
-                >
-                  <Input placeholder="请输入百度推送Token" />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="baiduDailyLimit"
-                  label="百度每日推送限制条数"
-                  rules={[{ required: true, message: '请输入百度每日推送限制条数' }]}
-                >
-                  <Input type="number" min={1} max={10000} placeholder="请输入百度每日推送限制条数" />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Divider orientation="left">必应推送配置</Divider>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="bingAPI"
-                  label="必应API地址"
-                >
-                  <Input placeholder="请输入必应推送API地址" />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="bingToken"
-                  label="必应推送Token"
-                >
-                  <Input placeholder="请输入必应推送Token" />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="bingDailyLimit"
-                  label="必应每日推送限制条数"
-                  rules={[{ required: true, message: '请输入必应每日推送限制条数' }]}
-                >
-                  <Input type="number" min={1} max={10000} placeholder="请输入必应每日推送限制条数" />
-                </Form.Item>
-              </Col>
-            </Row>
-          </Card>
-        </Form>
-      </Modal>
-
-    </div>
+      </div>
     </>
   )
 }

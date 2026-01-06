@@ -21,7 +21,7 @@ sites:
     - id: 9dbfaa2b-9015-4012-a00a-8e7f47ab01dd
       name: test2
       domains:
-        - 127.0.0.1
+        - localhost
       port: 8082
       mode: static
       proxy:
@@ -47,33 +47,32 @@ sites:
       prerender:
         enabled: true
         pool_size: 5
-        min_pool_size: 2
-        max_pool_size: 20
+        min_pool_size: 1
+        max_pool_size: 10
         timeout: 30
         cache_ttl: 3600
-        idle_timeout: 300
-        dynamic_scaling: true
-        scaling_factor: 0.5
-        scaling_interval: 60
+        idle_timeout: 60
+        dynamic_scaling: false
+        scaling_factor: 0
+        scaling_interval: 0
         preheat:
             enabled: true
-            sitemap_url: ""
-            schedule: ""
-            concurrency: 0
+            sitemap_url: https://example.com/sitemap.xml
+            schedule: 0 0 * * *
+            concurrency: 5
             default_priority: 0
-            max_depth: 1
+            max_depth: 3
         push:
-            enabled: false
-            baidu_api: http://data.zz.baidu.com/urls
-            baidu_token: ""
-            bing_api: https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl
-            bing_token: ""
+            enabled: true
+            baidu_api: https://data.zz.baidu.com/urls?site=example.com&token=test
+            baidu_token: test
+            bing_api: https://ssl.bing.com/webmaster/api.svc/json/SubmitUrlbatch?apikey=test
+            bing_token: test
             baidu_daily_limit: 1000
-            bing_daily_limit: 1000
-            push_domain: ""
+            bing_daily_limit: 500
+            push_domain: example.com
             hour: 0
-        crawler_headers:
-            - Googlebot
+        crawler_headers: []
         use_default_headers: false
       routing:
         rules: []

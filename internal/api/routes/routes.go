@@ -26,6 +26,7 @@ type Router struct {
 	siteHandler      *sitehandler.Handler
 	monitor          *monitoring.Monitor
 	crawlerLogMgr    *logging.CrawlerLogManager
+	visitLogMgr      *logging.VisitLogManager
 	cfg              *config.Config
 }
 
@@ -41,6 +42,7 @@ func NewRouter(
 	siteHandler *sitehandler.Handler,
 	monitor *monitoring.Monitor,
 	crawlerLogMgr *logging.CrawlerLogManager,
+	visitLogMgr *logging.VisitLogManager,
 	cfg *config.Config,
 ) *Router {
 	return &Router{
@@ -54,6 +56,7 @@ func NewRouter(
 		siteHandler:      siteHandler,
 		monitor:          monitor,
 		crawlerLogMgr:    crawlerLogMgr,
+		visitLogMgr:      visitLogMgr,
 		cfg:              cfg,
 	}
 }
@@ -78,6 +81,7 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 		r.siteHandler,
 		r.monitor,
 		r.crawlerLogMgr,
+		r.visitLogMgr,
 		r.cfg,
 	)
 

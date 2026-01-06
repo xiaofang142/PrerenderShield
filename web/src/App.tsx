@@ -20,6 +20,7 @@ import Monitoring from './pages/Monitoring/Monitoring'
 import Logs from './pages/Logs/Logs'
 import Sites from './pages/Sites/Sites'
 import Crawler from './pages/Crawler/Crawler'
+import SystemConfig from './pages/System/SystemConfig'
 
 // Import layout
 import MainLayout from './components/layouts/MainLayout'
@@ -155,6 +156,16 @@ function App() {
                 <PrivateRoute>
                   <MainLayout>
                     <Crawler />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/system" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <SystemConfig />
                   </MainLayout>
                 </PrivateRoute>
               } 

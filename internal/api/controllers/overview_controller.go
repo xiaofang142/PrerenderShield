@@ -2,24 +2,28 @@ package controllers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"prerender-shield/internal/config"
+	"prerender-shield/internal/logging"
 	"prerender-shield/internal/monitoring"
 )
 
 // OverviewController 概览控制器
 type OverviewController struct {
-	cfg     *config.Config
-	monitor *monitoring.Monitor
+	cfg         *config.Config
+	monitor     *monitoring.Monitor
+	visitLogMgr *logging.VisitLogManager
 }
 
 // NewOverviewController 创建概览控制器实例
-func NewOverviewController(cfg *config.Config, monitor *monitoring.Monitor) *OverviewController {
+func NewOverviewController(cfg *config.Config, monitor *monitoring.Monitor, visitLogMgr *logging.VisitLogManager) *OverviewController {
 	return &OverviewController{
-		cfg:     cfg,
-		monitor: monitor,
+		cfg:         cfg,
+		monitor:     monitor,
+		visitLogMgr: visitLogMgr,
 	}
 }
 
@@ -44,6 +48,31 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	activeSites := len(c.cfg.Sites)
 	sslCertificates := 0 // SSL功能已移除
 
+	// 获取地理位置统计数据
+	geoStats, _ := c.visitLogMgr.GetVisitStats("", time.Now().Add(-24*time.Hour), time.Now())
+
+	// 处理Globe数据和国家数据
+	globeData := make([]gin.H, 0)
+	countryMap := make(map[string]int64)
+
+	for _, item := range geoStats {
+		globeData = append(globeData, gin.H{
+			"lat":   item["lat"],
+			"lng":   item["lng"],
+			"count": item["count"],
+		})
+		if country, ok := item["country"].(string); ok && country != "" {
+			countryMap[country] += item["count"].(int64)
+		}
+	}
+
+	mapData := make([]gin.H, 0)
+	countryData := make([]gin.H, 0)
+	for k, v := range countryMap {
+		mapData = append(mapData, gin.H{"name": k, "value": v})
+		countryData = append(countryData, gin.H{"country": k, "count": v, "color": "#1890ff"})
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
@@ -57,26 +86,10 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 			"sslCertificates":  sslCertificates,
 			"firewallEnabled":  firewallEnabled,
 			"prerenderEnabled": prerenderEnabled,
-			// 暂时保留模拟数据，后续可以替换为真实数据
 			"geoData": gin.H{
-				"countryData": []gin.H{
-					{"country": "中国", "count": 891800, "color": "#1890ff"},
-					{"country": "美国", "count": 2300, "color": "#52c41a"},
-					{"country": "爱尔兰", "count": 461, "color": "#faad14"},
-					{"country": "澳大利亚", "count": 361, "color": "#f5222d"},
-					{"country": "新加坡", "count": 221, "color": "#722ed1"},
-					{"country": "印度", "count": 157, "color": "#fa8c16"},
-					{"country": "日本", "count": 133, "color": "#eb2f96"},
-				},
-				"mapData": []gin.H{
-					{"name": "中国", "value": 891800},
-					{"name": "美国", "value": 2300},
-					{"name": "爱尔兰", "value": 461},
-					{"name": "澳大利亚", "value": 361},
-					{"name": "新加坡", "value": 221},
-					{"name": "印度", "value": 157},
-					{"name": "日本", "value": 133},
-				},
+				"countryData": countryData,
+				"mapData":     mapData,
+				"globeData":   globeData,
 			},
 			"trafficData": []gin.H{
 				{"time": "00:00", "totalRequests": int(stats["totalRequests"].(float64)) / 6, "crawlerRequests": int(stats["crawlerRequests"].(float64)) / 6, "blockedRequests": int(stats["blockedRequests"].(float64)) / 6},

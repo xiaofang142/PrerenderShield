@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis/v8"
+
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/firewall/detectors"
 	"prerender-shield/internal/firewall/types"
@@ -79,6 +81,9 @@ type Config struct {
 	GeoIPConfig         *config.GeoIPConfig         // 地理位置访问控制配置
 	RateLimitConfig     *config.RateLimitConfig     // 频率限制配置
 	FileIntegrityConfig *config.FileIntegrityConfig // 网页防篡改配置
+	Blacklist           []string                    // 静态黑名单
+	Whitelist           []string                    // 静态白名单
+	RedisClient         *redis.Client               // Redis客户端
 }
 
 // ActionConfig 动作配置
@@ -178,6 +183,9 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 		cacheTTL:       cacheTTL,
 	}
 
+	// 初始化动作处理器
+	e.actionHandler = NewDefaultActionHandler(config.ActionConfig, config.StaticDir, siteName)
+
 	// 初始化OWASP Top 10检测器
 	e.owaspDetectors["injection"] = detectors.NewInjectionDetector(ruleManager)
 	e.owaspDetectors["xss"] = detectors.NewXSSDetector(ruleManager)
@@ -189,6 +197,7 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 	e.coreDetectors = append(e.coreDetectors, detectors.NewGeoIPDetector(config.GeoIPConfig))
 	e.coreDetectors = append(e.coreDetectors, detectors.NewRateLimitDetector(config.RateLimitConfig))
 	e.coreDetectors = append(e.coreDetectors, detectors.NewFileIntegrityDetector(config.StaticDir, config.FileIntegrityConfig))
+	e.coreDetectors = append(e.coreDetectors, detectors.NewBlacklistDetector(config.RedisClient, siteName, config.Blacklist, config.Whitelist))
 
 	// 启动缓存清理协程
 	go e.cleanCacheLoop()

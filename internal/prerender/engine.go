@@ -993,8 +993,8 @@ func (e *Engine) GetPreheatManager() *PreheatManager {
 
 // GetCrawlerHeaders 获取完整的爬虫协议头列表
 func (e *Engine) GetCrawlerHeaders() []string {
-	// 直接使用配置中的CrawlerHeaders，已经包含了所有需要的爬虫协议头
-	allHeaders := e.config.CrawlerHeaders
+	// 合并默认爬虫协议头和配置中的爬虫协议头
+	allHeaders := append(e.defaultCrawlerHeaders, e.config.CrawlerHeaders...)
 
 	// 去重
 	uniqueHeaders := make([]string, 0, len(allHeaders))

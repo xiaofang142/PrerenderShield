@@ -27,6 +27,13 @@ type CrawlerLog struct {
 	Method     string    `json:"method"`
 	CacheTTL   int       `json:"cache_ttl"`
 	RenderTime float64   `json:"render_time"`
+	
+	// GeoIP fields
+	Country     string  `json:"country,omitempty"`
+	City        string  `json:"city,omitempty"`
+	Latitude    float64 `json:"latitude,omitempty"`
+	Longitude   float64 `json:"longitude,omitempty"`
+	Washed      bool    `json:"washed"` // 是否已清洗
 }
 
 // CrawlerLogManager 爬虫日志管理器
@@ -169,6 +176,75 @@ func (clm *CrawlerLogManager) saveLog(crawlerLog CrawlerLog) {
 	if err := clm.redisClient.Expire(clm.ctx, totalKey, expireTime).Err(); err != nil {
 		log.Printf("设置总日志集合过期时间失败: %v", err)
 	}
+
+	// 如果日志未清洗，添加到待清洗队列
+	if !crawlerLog.Washed {
+		unwashedKey := "crawler_logs:unwashed"
+		if err := clm.redisClient.RPush(clm.ctx, unwashedKey, logJSON).Err(); err != nil {
+			log.Printf("添加到待清洗队列失败: %v", err)
+		}
+	}
+}
+
+// GetUnwashedLogs 获取待清洗日志（批量）
+func (clm *CrawlerLogManager) GetUnwashedLogs(count int64) ([]CrawlerLog, error) {
+	unwashedKey := "crawler_logs:unwashed"
+	
+	// 从列表中弹出count个元素
+	// 由于Redis没有直接弹出N个元素的命令，我们可以用LRange + LTrim，或者循环LPop
+	// 为了原子性，循环LPop比较简单，或者使用Pipeline
+	// 这里为了简单，先用LPop循环
+	
+	var logs []CrawlerLog
+	for i := int64(0); i < count; i++ {
+		logJSON, err := clm.redisClient.LPop(clm.ctx, unwashedKey).Result()
+		if err == redis.Nil {
+			break
+		}
+		if err != nil {
+			return logs, err
+		}
+		
+		var l CrawlerLog
+		if err := json.Unmarshal([]byte(logJSON), &l); err != nil {
+			continue
+		}
+		logs = append(logs, l)
+	}
+	
+	return logs, nil
+}
+
+// UpdateLog 更新日志（用于清洗后更新）
+func (clm *CrawlerLogManager) UpdateLog(oldLog, newLog CrawlerLog) error {
+	dateStr := oldLog.Time.Format("2006-01-02")
+	siteKey := fmt.Sprintf("crawler_logs:%s:%s", oldLog.Site, dateStr)
+	totalKey := fmt.Sprintf("crawler_logs:all:%s", dateStr)
+
+	oldJSON, err := json.Marshal(oldLog)
+	if err != nil {
+		return err
+	}
+	newJSON, err := json.Marshal(newLog)
+	if err != nil {
+		return err
+	}
+
+	score := float64(newLog.Time.UnixNano())
+
+	// 使用Pipeline执行原子操作
+	pipe := clm.redisClient.Pipeline()
+	
+	// 更新站点日志
+	pipe.ZRem(clm.ctx, siteKey, oldJSON)
+	pipe.ZAdd(clm.ctx, siteKey, &redis.Z{Score: score, Member: newJSON})
+	
+	// 更新总日志
+	pipe.ZRem(clm.ctx, totalKey, oldJSON)
+	pipe.ZAdd(clm.ctx, totalKey, &redis.Z{Score: score, Member: newJSON})
+	
+	_, err = pipe.Exec(clm.ctx)
+	return err
 }
 
 // startCleanupTask 启动自动清理任务

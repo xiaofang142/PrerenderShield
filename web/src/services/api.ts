@@ -157,6 +157,7 @@ export const monitoringApi = {
 export const sitesApi = {
   getSites: () => api.get('/sites'),
   getSite: (id: string) => api.get(`/sites/${id}`),
+  getSiteConfig: (id: string, type: 'prerender' | 'push' | 'waf') => api.get(`/sites/${id}/config`, { params: { type } }),
   addSite: (site: any) => api.post('/sites', site),
   updateSite: (id: string, site: any) => api.put(`/sites/${id}`, site),
   deleteSite: (id: string) => api.delete(`/sites/${id}`),
@@ -197,6 +198,8 @@ export const pushApi = {
 export const systemApi = {
   health: () => api.get('/health'),
   version: () => api.get('/version'),
+  getConfig: () => api.get('/system/config'),
+  updateConfig: (config: any) => api.post('/system/config', config),
 }
 
 export default api

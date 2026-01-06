@@ -32,6 +32,10 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 		protectedGroup := apiGroup.Group("")
 		protectedGroup.Use(auth.JWTAuthMiddleware(jwtManager))
 		{
+			// 系统配置API
+			protectedGroup.GET("/system/config", controllers.SystemController.GetSystemConfig)
+			protectedGroup.POST("/system/config", controllers.SystemController.UpdateSystemConfig)
+
 			// 概览API
 			protectedGroup.GET("/overview", controllers.OverviewController.GetOverview)
 
@@ -73,6 +77,9 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 				// 获取单个站点信息
 				sitesGroup.GET("/:id", controllers.SitesController.GetSite)
 
+				// 获取站点的Redis配置（预渲染或推送配置）
+				sitesGroup.GET("/:id/config", controllers.SitesController.GetSiteConfig)
+
 				// 添加站点
 				sitesGroup.POST("", controllers.SitesController.AddSite)
 
@@ -94,7 +101,8 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 
 				// 删除静态资源文件
 				sitesGroup.DELETE("/:id/static", controllers.SitesController.DeleteStaticFile)
-			}
+	
+		}
 		}
 	}
 }

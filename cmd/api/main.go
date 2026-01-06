@@ -22,6 +22,7 @@ import (
 	"prerender-shield/internal/prerender"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/scheduler"
+	"prerender-shield/internal/services"
 	sitehandler "prerender-shield/internal/site-handler"
 	siteserver "prerender-shield/internal/site-server"
 )
@@ -58,12 +59,29 @@ func main() {
 		logging.DefaultLogger.Info("Services reloaded successfully")
 	})
 
-	// 初始化各模块
+	// 6. 初始化各模块
 	// 1. Redis客户端初始化
 	redisClient, err := redis.NewClient(cfg.Cache.RedisURL)
 	if err != nil {
 		log.Fatalf("Failed to initialize Redis client: %v", err)
 		// Redis不可用，系统直接退出
+	}
+
+	// 注入Redis客户端到配置管理器
+	configManager.SetRedisClient(redisClient)
+
+	// 从Redis加载站点配置
+	// 如果Redis中有配置，将覆盖文件配置
+	if err := configManager.LoadSitesFromRedis(); err != nil {
+		// 如果加载失败（可能是key不存在），则将当前文件配置同步到Redis
+		logging.DefaultLogger.Info("Could not load sites from Redis (first run?), syncing file config to Redis: %v", err)
+		if err := configManager.SaveSitesToRedis(); err != nil {
+			logging.DefaultLogger.Error("Failed to sync initial sites to Redis: %v", err)
+		}
+	} else {
+		// 重新获取更新后的配置
+		cfg = configManager.GetConfig()
+		logging.DefaultLogger.Info("Using sites configuration from Redis")
 	}
 
 	// 启动Redis订阅者，监听配置变更
@@ -84,7 +102,7 @@ func main() {
 	jwtManager := auth.NewJWTManager(&auth.JWTConfig{
 		SecretKey:  "prerender-shield-secret-key", // 实际项目中应该从配置文件读取
 		ExpireTime: 24 * time.Hour,                // 令牌过期时间
-	})
+	}, redisClient)
 
 	// 3. 防火墙引擎管理器
 	firewallManager := firewall.NewEngineManager()
@@ -94,6 +112,16 @@ func main() {
 
 	// 5. 爬虫日志管理器
 	crawlerLogManager := logging.NewCrawlerLogManager(cfg.Cache.RedisURL)
+
+	// 6. 访问日志管理器
+	visitLogManager := logging.NewVisitLogManager(cfg.Cache.RedisURL)
+
+	// 6.1 GeoIP服务
+	geoIPService := services.NewGeoIPService()
+
+	// 6.2 日志处理器
+	logProcessor := services.NewLogProcessor(crawlerLogManager, visitLogManager, geoIPService, configManager, redisClient.GetRawClient())
+	logProcessor.Start()
 
 	// 7. 为每个站点创建并启动引擎
 	for _, site := range cfg.Sites {
@@ -132,6 +160,9 @@ func main() {
 			GeoIPConfig:         &site.Firewall.GeoIPConfig,
 			RateLimitConfig:     &site.Firewall.RateLimitConfig,
 			FileIntegrityConfig: &site.FileIntegrityConfig,
+			Blacklist:           site.Firewall.Blacklist,
+			Whitelist:           site.Firewall.Whitelist,
+			RedisClient:         redisClient.GetRawClient(),
 		}); err != nil {
 			logging.DefaultLogger.Error("Failed to initialize firewall engine for site %s: %v", site.Name, err)
 			log.Fatalf("Failed to initialize firewall engine for site %s: %v", site.Name, err)
@@ -167,7 +198,7 @@ func main() {
 	// 11. 为每个站点启动服务器
 	for _, site := range cfg.Sites {
 		// 创建站点处理器
-		siteHTTPHandler := siteHandler.CreateSiteHandler(site, crawlerLogManager, monitor, cfg.Dirs.StaticDir)
+		siteHTTPHandler := siteHandler.CreateSiteHandler(site, crawlerLogManager, visitLogManager, monitor, cfg.Dirs.StaticDir)
 		// 启动站点服务器
 		siteServerManager.StartSiteServer(site, cfg.Server.Address, cfg.Dirs.StaticDir, crawlerLogManager, siteHTTPHandler)
 		log.Printf("站点服务器启动成功: %s (%s:%d)", site.Name, cfg.Server.Address, site.Port)
@@ -188,6 +219,7 @@ func main() {
 		siteHandler,
 		monitor,
 		crawlerLogManager,
+		visitLogManager,
 		cfg,
 	)
 
