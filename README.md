@@ -380,5 +380,6 @@ sudo systemctl restart prerender-shield
 **Prerender Shield** - 让前后端分离网站既安全又 SEO 友好！
 
 **最后更新**：2026年1月7日  
+**版本**：v1.0.0  
 **许可证**：MIT License  
 **项目状态**：生产就绪，欢迎试用和贡献

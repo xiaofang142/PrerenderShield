@@ -30,7 +30,7 @@ MANAGER_VERSION="v1.0.0"
 # 显示帮助信息
 show_help() {
     echo -e "${BLUE}=======================================${NC}"
-    echo -e "${GREEN}${APP_NAME} 管理器${NC}"
+    echo -e "${GREEN}${APP_NAME} 管理器 v${MANAGER_VERSION}${NC}"
     echo -e "${BLUE}=======================================${NC}"
     echo -e "${CYAN}用法:${NC} $0 [选项] [命令]"
     echo -e ""
