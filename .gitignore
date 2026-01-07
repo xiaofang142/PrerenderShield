@@ -6,6 +6,8 @@
 *.so
 *.dylib
 prerender-shield
+api
+/api
 
 # 依赖包目录
 gopkg.in/
@@ -38,7 +40,9 @@ profile.out
 .env.*.local
 
 # 配置文件（如果不需要提交）
-# configs/config.yml
+configs/config.yml
+configs/*.local.yml
+config.yml
 
 # 日志文件
 logs/
@@ -47,6 +51,10 @@ logs/
 # 临时文件
 tmp/
 temp/
+*.token
+.token
+*.pid
+.pid
 
 # Docker相关文件（如果不需要提交）
 # docker-compose.override.yml
