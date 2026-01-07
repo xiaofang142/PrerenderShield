@@ -77,13 +77,32 @@ print_step() {
 }
 
 check_root() {
-    if [[ $EUID -eq 0 ]]; then
-        print_warning "正在以root用户运行，继续安装..."
-        return 0
-    else
-        print_error "请使用sudo或以root用户运行此脚本"
-        exit 1
+    # macOS (Darwin) 不应该以root身份运行，因为Homebrew禁止root
+    if [[ "$OS" == "darwin" ]]; then
+        if [[ $EUID -eq 0 ]]; then
+            print_error "在macOS上不应以root身份运行此脚本，Homebrew禁止root操作"
+            print_error "请以普通用户身份运行，脚本会在需要时请求sudo权限"
+            exit 1
+        else
+            print_info "在macOS上以普通用户身份，运行继续安装..."
+            return 0
+        fi
     fi
+    
+    # Linux系统需要root权限进行系统级安装
+    if [[ "$OS" == "linux" ]]; then
+        if [[ $EUID -eq 0 ]]; then
+            print_warning "正在以root用户运行，继续安装..."
+            return 0
+        else
+            print_error "在Linux上请sudo或以root此用户运行使用脚本"
+            exit 1
+        fi
+    fi
+    
+    # 其他操作系统
+    print_warning "未知操作系统类型，跳过root检查..."
+    return 0
 }
 
 # ============================================================================
@@ -218,19 +237,44 @@ install_dependencies_linux() {
             apt-get)
                 sudo apt-get install -y redis-server
                 sudo systemctl enable redis-server
+                sudo systemctl start redis-server
                 ;;
             yum|dnf)
                 sudo $PACKAGE_MANAGER install -y redis
                 sudo systemctl enable redis
+                sudo systemctl start redis
                 ;;
             pacman)
                 sudo pacman -S --noconfirm redis
                 sudo systemctl enable redis
+                sudo systemctl start redis
                 ;;
         esac
         print_success "Redis安装完成"
     else
         print_info "Redis已安装"
+        # 检查Redis是否正在运行
+        local redis_service="redis-server"
+        if [[ "$PACKAGE_MANAGER" == "yum" ]] || [[ "$PACKAGE_MANAGER" == "dnf" ]]; then
+            redis_service="redis"
+        fi
+        if ! sudo systemctl is-active --quiet "$redis_service" 2>/dev/null; then
+            print_info "启动Redis服务..."
+            sudo systemctl start "$redis_service"
+            sleep 2
+        fi
+    fi
+    
+    # 验证Redis连接
+    print_info "验证Redis连接..."
+    if command -v redis-cli &> /dev/null; then
+        if redis-cli ping 2>/dev/null | grep -q "PONG"; then
+            print_success "Redis连接正常"
+        else
+            print_warning "Redis未响应，可能需要手动检查"
+        fi
+    else
+        print_warning "redis-cli未找到，跳过Redis连接测试"
     fi
     
     print_info "安装Node.js和npm..."
@@ -675,9 +719,13 @@ main() {
     trap 'cleanup_on_error' ERR
     
     print_header
-    check_root
     detect_os
+    check_root
     install_dependencies
+    # 配置Go模块镜像加速
+    print_info "配置Go模块镜像加速..."
+    export GOPROXY="https://goproxy.cn,direct"
+    print_info "GOPROXY设置为: $GOPROXY"
     build_and_install
     setup_configuration
     setup_system_service

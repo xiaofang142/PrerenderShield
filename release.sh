@@ -82,8 +82,10 @@ build_backend() {
     echo "构建后端二进制文件..."
     
     # 清理旧的二进制文件
-    rm -f "./$APP_NAME"
+    [ -f "./$APP_NAME" ] && rm -f "./$APP_NAME"
     
+    # 配置Go代理加速
+    export GOPROXY="https://goproxy.cn,direct"
     # 安装Go依赖
     go mod tidy
     if [ $? -ne 0 ]; then
@@ -142,7 +144,8 @@ package_release() {
 
 # 主程序
 if [ $# -eq 0 ]; then
-    usage
+    echo "未提供参数，默认执行build操作"
+    set -- build
 fi
 
 case "$1" in
