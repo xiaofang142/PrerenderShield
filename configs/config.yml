@@ -45,7 +45,7 @@ sites:
             window: 0
             ban_time: 0
       prerender:
-        enabled: true
+        enabled: false
         pool_size: 5
         min_pool_size: 1
         max_pool_size: 10

@@ -77,69 +77,7 @@ const Overview: React.FC = () => {
 
   const [isMapLoaded, setIsMapLoaded] = useState(false)
 
-  // 国家名称映射
-  const countryNameMap: Record<string, string> = {
-    'CN': 'China',
-    'US': 'United States',
-    'UK': 'United Kingdom',
-    'RU': 'Russia',
-    // Add more if needed
-  };
 
-  // 2D地图配置
-  const map2DOption: echarts.EChartsOption = {
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}: {c} ({d}%)'
-    },
-    visualMap: {
-      type: 'continuous',
-      left: 'left',
-      bottom: '3%',
-      min: 0,
-      max: 1000000,
-      text: ['高', '低'],
-      calculable: true,
-      color: ['#ff0000', '#ffa500', '#ffff00', '#90ee90', '#00ff00']
-    },
-    geo: {
-      map: 'world',
-      roam: true,
-      emphasis: {
-        label: {
-          show: true
-        }
-      },
-      itemStyle: {
-        areaColor: '#f0f0f0',
-        borderColor: '#999'
-      }
-    },
-    series: [
-      {
-        name: '访问数量',
-        type: 'scatter',
-        coordinateSystem: 'geo',
-        data: (stats.geoData?.mapData || accessStats.mapData).map(item => ({
-          name: item.name,
-          value: [item.name, item.value] // 这里需要地图的经纬度，scatter需要坐标，但这里我们用 map series 更好
-        })),
-        symbolSize: function(val: any) {
-          return Math.sqrt(val[1]) / 100;
-        },
-        label: {
-          formatter: '{b}',
-          position: 'right',
-          show: false
-        },
-        emphasis: {
-          label: {
-            show: true
-          }
-        }
-      }
-    ]
-  }
 
   // 如果地图未加载完成，暂时不渲染地图相关的 Option
   // 或者修改 series type 为 'map'，这样不需要经纬度数据，直接用 name 匹配

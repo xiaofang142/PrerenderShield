@@ -2,8 +2,11 @@ version: '3.8'
 
 services:
   prerender-shield:
-    # 使用最新的预构建镜像，而不是本地构建
-    image: your-org/prerender-shield:latest
+    # 使用本地构建而不是预构建镜像
+    build:
+      context: .
+      args:
+        - PUBLIC_IP=${HOST_IP}
     container_name: prerender-shield
     restart: unless-stopped
     ports:
@@ -15,8 +18,32 @@ services:
       - ./certs:/app/certs
     environment:
       - CONFIG_PATH=/app/configs/config.yml
+      - REDIS_HOST=prerender-shield-redis  # 使用容器名称访问Redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+      - API_PUBLIC_URL=http://${HOST_IP:-localhost}:9598  # 公网IP配置
+    depends_on:
+      - redis
     networks:
       - prerender-shield-network
+    command: ./api --config /app/configs/config.yml
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: prerender-shield-redis
+    restart: unless-stopped
+    volumes:
+      - ./data/redis:/data
+      - ./data/redis/redis.conf:/etc/redis/redis.conf:ro
+    command: redis-server /etc/redis/redis.conf
+    networks:
+      - prerender-shield-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   prerender-shield-network:
@@ -24,4 +51,4 @@ networks:
     ipam:
       driver: default
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.27.0.0/16

@@ -17,7 +17,12 @@ NC='\033[0m' # No Color
 
 # 常量定义
 APP_NAME="Prerender-Shield"
-APP_DIR="/opt/prerender-shield"
+# 默认安装目录，非root用户使用当前目录
+if [ "$EUID" -eq 0 ]; then
+    APP_DIR="/opt/prerender-shield"
+else
+    APP_DIR="./prerender-shield"
+fi
 GITHUB_REPO="https://github.com/your-org/prerender-shield"
 DOCKER_COMPOSE_URL="${GITHUB_REPO}/raw/main/docker-compose.yml"
 MANAGER_VERSION="v1.0.0"
@@ -147,7 +152,7 @@ install_app() {
     # 下载配置文件
     echo -e "${BLUE}[2/5] 下载配置文件${NC}"
     curl -fsSL "${DOCKER_COMPOSE_URL}" -o docker-compose.yml
-    mkdir -p data configs certs
+    mkdir -p data configs certs data/redis
     
     # 下载配置文件模板
     curl -fsSL "${GITHUB_REPO}/raw/main/configs/config.example.yml" -o configs/config.example.yml
@@ -155,9 +160,29 @@ install_app() {
         cp configs/config.example.yml configs/config.yml
     fi
     
+    # 创建Redis配置文件
+    if [ ! -f "data/redis/redis.conf" ]; then
+        cat > data/redis/redis.conf << EOF
+# Redis配置文件
+bind 0.0.0.0
+protected-mode no
+port 6379
+dir /data
+dbfilename dump.rdb
+save 900 1
+save 300 10
+save 60 10000
+appendonly yes
+appendfilename "appendonly.aof"
+EOF
+        echo -e "${GREEN}✓ Redis配置文件创建成功${NC}"
+    fi
+    
     # 启动服务
     echo -e "${BLUE}[3/5] 启动服务${NC}"
-    docker-compose up -d
+    # 获取公网IP作为默认值
+    PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || echo "localhost")
+    HOST_IP="${PUBLIC_IP}" docker-compose up -d
     
     # 等待服务启动
     echo -e "${BLUE}[4/5] 等待服务启动...${NC}"
@@ -240,7 +265,7 @@ repair_app() {
     
     # 重新创建必要目录
     echo -e "${BLUE}[1/4] 重新创建必要目录${NC}"
-    mkdir -p data configs certs
+    mkdir -p data configs certs data/redis
     
     # 重新下载配置文件
     echo -e "${BLUE}[2/4] 重新下载配置文件${NC}"
@@ -252,9 +277,29 @@ repair_app() {
         cp configs/config.example.yml configs/config.yml
     fi
     
+    # 重新创建Redis配置文件
+    if [ ! -f "data/redis/redis.conf" ]; then
+        cat > data/redis/redis.conf << EOF
+# Redis配置文件
+bind 0.0.0.0
+protected-mode no
+port 6379
+dir /data
+dbfilename dump.rdb
+save 900 1
+save 300 10
+save 60 10000
+appendonly yes
+appendfilename "appendonly.aof"
+EOF
+        echo -e "${GREEN}✓ Redis配置文件创建成功${NC}"
+    fi
+    
     # 重新启动服务
     echo -e "${BLUE}[3/4] 重新启动服务${NC}"
-    docker-compose up -d
+    # 获取公网IP作为默认值
+    PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || echo "localhost")
+    HOST_IP="${PUBLIC_IP}" docker-compose up -d
     
     # 验证修复
     echo -e "${BLUE}[4/4] 验证修复${NC}"

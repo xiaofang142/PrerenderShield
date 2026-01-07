@@ -1,21 +1,40 @@
 #!/bin/bash
 
-# PrerenderShield 启动脚本
+# PrerenderShield 一键安装部署脚本
 
 APP_NAME="prerender-shield"
-APP_BINARY="./prerender-shield"
 CONFIG_FILE="configs/config.yml"
 PID_FILE="./data/${APP_NAME}.pid"
 LOG_FILE="./data/${APP_NAME}.log"
 
+# 彩色输出
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# 打印彩色信息
+info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+warning() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
 usage() {
     echo "========================================"
-    echo "PrerenderShield 启动脚本"
+    echo -e "${GREEN}PrerenderShield 一键安装部署脚本${NC}"
     echo "========================================"
-    echo "用法: $0 {start|restart|stop|reinstall}"
+    echo "用法: $0 {start|check|restart|stop|reinstall}"
     echo ""
     echo "选项:"
-    echo "  start      启动应用程序"
+    echo "  start      检查依赖并启动应用程序"
+    echo "  check      仅检查系统依赖（不启动应用）"
     echo "  restart    重启应用程序"
     echo "  stop       停止应用程序"
     echo "  reinstall  重新安装应用程序（清除数据）"
@@ -25,54 +44,211 @@ usage() {
 
 check_root() {
     if [ "$EUID" -eq 0 ]; then
-        echo "警告: 正在以root用户运行，这可能不是最佳实践"
+        warning "正在以root用户运行，这可能不是最佳实践"
     fi
 }
 
-check_go() {
+# 系统依赖安装
+install_deps() {
+    echo "========================================"
+    echo -e "${GREEN}安装系统依赖...${NC}"
+    echo "======================================="
+    
+    local os_type=$(uname -s)
+    local install_cmd
+    
+    # 检测包管理器
+    if [ "$os_type" = "Linux" ]; then
+        if command -v apt-get &> /dev/null; then
+            install_cmd="apt-get"
+            sudo apt-get update
+        elif command -v yum &> /dev/null; then
+            install_cmd="yum"
+        elif command -v dnf &> /dev/null; then
+            install_cmd="dnf"
+        else
+            error "不支持的Linux发行版，无法自动安装依赖"
+            return 1
+        fi
+    elif [ "$os_type" = "Darwin" ]; then
+        # macOS
+        if ! command -v brew &> /dev/null; then
+            info "安装Homebrew..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        fi
+        install_cmd="brew"
+    else
+        error "不支持的操作系统，无法自动安装依赖"
+        return 1
+    fi
+    
+    # 安装Go环境
     if ! command -v go &> /dev/null; then
-        echo "错误: 未安装Go，无法构建应用程序"
-        exit 1
+        info "安装Go环境..."
+        if [ "$os_type" = "Linux" ]; then
+            case "$install_cmd" in
+                apt-get)
+                    sudo apt-get install -y golang
+                    ;;
+                yum|dnf)
+                    sudo $install_cmd install -y golang
+                    ;;
+            esac
+        elif [ "$os_type" = "Darwin" ]; then
+            brew install go
+        fi
+        info "✓ Go环境安装完成"
+    else
+        info "✓ Go环境已安装: $(go version)"
     fi
-
-    # 检查Go版本
-    GO_VERSION=$(go version | grep -o 'go1\.[0-9]*')
-    if [[ "$GO_VERSION" != "go1.20" && "$GO_VERSION" != "go1.21" && "$GO_VERSION" != "go1.22" ]]; then
-        echo "警告: Go版本可能不兼容，建议使用Go 1.20+，当前版本: $GO_VERSION"
+    
+    # 安装Redis
+    if ! command -v redis-server &> /dev/null; then
+        info "安装Redis..."
+        if [ "$os_type" = "Linux" ]; then
+            case "$install_cmd" in
+                apt-get)
+                    sudo apt-get install -y redis-server
+                    sudo systemctl enable --now redis-server
+                    ;;
+                yum|dnf)
+                    sudo $install_cmd install -y redis
+                    sudo systemctl enable --now redis
+                    ;;
+            esac
+        elif [ "$os_type" = "Darwin" ]; then
+            brew install redis
+            brew services start redis
+        fi
+        info "✓ Redis安装完成"
+    else
+        info "✓ Redis已安装"
+        # 启动Redis如果它没有运行
+        if ! redis-cli ping &> /dev/null; then
+            info "启动Redis..."
+            if [ "$os_type" = "Linux" ]; then
+                sudo systemctl start redis-server 2>/dev/null || sudo systemctl start redis
+            elif [ "$os_type" = "Darwin" ]; then
+                brew services start redis
+            fi
+        fi
     fi
+    
+    # 安装Node.js和npm
+    if ! command -v npm &> /dev/null; then
+        info "安装Node.js和npm..."
+        if [ "$os_type" = "Linux" ]; then
+            case "$install_cmd" in
+                apt-get)
+                    sudo apt-get install -y nodejs npm
+                    ;;
+                yum|dnf)
+                    sudo $install_cmd install -y nodejs npm
+                    ;;
+            esac
+        elif [ "$os_type" = "Darwin" ]; then
+            brew install node
+        fi
+        info "✓ Node.js和npm安装完成"
+    else
+        info "✓ Node.js和npm已安装: $(npm --version)"
+    fi
+    
+    # 安装Chrome/Chromium浏览器（用于预渲染）
+    if ! command -v google-chrome &> /dev/null && ! command -v chromium &> /dev/null; then
+        info "安装Chrome/Chromium浏览器..."
+        if [ "$os_type" = "Linux" ]; then
+            case "$install_cmd" in
+                apt-get)
+                    sudo apt-get install -y chromium-browser
+                    ;;
+                yum|dnf)
+                    sudo $install_cmd install -y chromium
+                    ;;
+            esac
+        elif [ "$os_type" = "Darwin" ]; then
+            brew install --cask google-chrome
+        fi
+        info "✓ 浏览器安装完成"
+    else
+        if command -v google-chrome &> /dev/null; then
+            info "✓ Chrome浏览器已安装: $(google-chrome --version)"
+        else
+            info "✓ Chromium浏览器已安装: $(chromium --version)"
+        fi
+    fi
+    
+    echo "========================================"
+    info "所有依赖安装完成！"
+    echo "======================================="
+    return 0
 }
 
 create_dirs() {
-    echo "创建必要的目录..."
+    info "创建必要的目录..."
     mkdir -p data/rules data/certs data/redis data/grafana
+    info "✓ 目录创建完成"
+    
+    # 创建Redis配置文件
+    if [ ! -f "data/redis/redis.conf" ]; then
+        info "创建Redis配置文件..."
+        cat > data/redis/redis.conf << EOF
+# Redis配置文件
+bind 0.0.0.0
+protected-mode no
+port 6379
+dir /data
+dbfilename dump.rdb
+save 900 1
+save 300 10
+save 60 10000
+appendonly yes
+appendfilename "appendonly.aof"
+EOF
+        info "✓ Redis配置文件创建完成"
+    fi
 }
 
 check_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
-        echo "配置文件不存在，从模板复制..."
+        info "配置文件不存在，从模板复制..."
         if [ -f configs/config.example.yml ]; then
             cp configs/config.example.yml "$CONFIG_FILE"
-            echo "已从config.example.yml复制到$CONFIG_FILE"
+            info "✓ 已从config.example.yml复制到$CONFIG_FILE"
+            
+            # 修改默认配置，使用内存存储和缓存
+            info "优化默认配置..."
+            sed -i '' 's/type: redis/type: memory/' "$CONFIG_FILE"
+            sed -i '' 's/type: postgres/type: memory/' "$CONFIG_FILE"
+            sed -i '' 's/redis_url: 127.0.0.1:6379/redis_url: /' "$CONFIG_FILE"
+            info "✓ 配置优化完成"
         else
-            echo "错误: 配置文件模板configs/config.example.yml不存在"
+            error "配置文件模板configs/config.example.yml不存在"
             exit 1
         fi
     fi
 }
 
 build_app() {
-    echo "安装Go依赖..."
+    info "配置Go镜像加速..."
+    export GOPROXY=https://goproxy.cn,direct
+    export GO111MODULE=on
+
+    info "安装Go依赖..."
     go mod tidy
-
-    echo "构建应用程序..."
-    go build -o "$APP_BINARY" ./cmd/api
-
     if [ $? -ne 0 ]; then
-        echo "错误: 构建失败"
+        error "Go依赖安装失败"
         exit 1
     fi
+    info "✓ Go依赖安装完成"
 
-    echo "构建成功！"
+    info "构建应用程序..."
+    go build -o "$APP_BINARY" ./cmd/api
+    if [ $? -ne 0 ]; then
+        error "应用程序构建失败"
+        exit 1
+    fi
+    info "✓ 应用程序构建成功"
 }
 
 is_running() {
@@ -89,35 +265,36 @@ is_running() {
 
 start() {
     if is_running; then
-        echo "$APP_NAME 已经在运行中"
+        info "$APP_NAME 已经在运行中"
         return 0
     fi
 
-    echo "启动$APP_NAME..."
+    info "启动$APP_NAME..."
     echo "========================================"
-    echo "应用程序服务已启动"
-    echo "========================================"
+    echo -e "${GREEN}应用程序服务启动信息${NC}"
+    echo "======================================="
     echo "管理控制台: http://0.0.0.0:9597"
     echo "API服务: http://0.0.0.0:9598"
     echo "健康检查接口: http://0.0.0.0:9598/api/v1/health"
     echo "版本信息接口: http://0.0.0.0:9598/api/v1/version"
-    echo "========================================"
+    echo "======================================="
 
     # 启动应用程序，确保工作目录正确
     cd "$(dirname "$0")" && nohup "$APP_BINARY" --config "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
-    echo "$APP_NAME 启动成功，PID: $(cat "$PID_FILE")"
-    echo "日志文件: $LOG_FILE"
+    info "$APP_NAME 启动成功，PID: $(cat "$PID_FILE")"
+    info "日志文件: $LOG_FILE"
+    info "查看日志: tail -f $LOG_FILE"
 }
 
 stop() {
     if ! is_running; then
-        echo "$APP_NAME 没有在运行中"
+        info "$APP_NAME 没有在运行中"
         return 0
     fi
 
     local pid=$(cat "$PID_FILE")
-    echo "停止$APP_NAME，PID: $pid..."
+    info "停止$APP_NAME，PID: $pid..."
     kill "$pid"
 
     # 等待进程退出
@@ -128,16 +305,16 @@ stop() {
     done
 
     if is_running; then
-        echo "强制终止$APP_NAME..."
+        warning "进程未正常退出，尝试强制终止..."
         kill -9 "$pid"
         sleep 1
     fi
 
     if ! is_running; then
-        echo "$APP_NAME 已停止"
+        info "$APP_NAME 已停止"
         rm -f "$PID_FILE"
     else
-        echo "错误: 无法停止$APP_NAME"
+        error "无法停止$APP_NAME"
         exit 1
     fi
 }
@@ -149,11 +326,11 @@ restart() {
 }
 
 reinstall() {
-    echo "重新安装$APP_NAME..."
+    info "重新安装$APP_NAME..."
     stop
     
     # 清除数据（保留配置文件）
-    echo "清除数据..."
+    info "清除数据..."
     rm -rf ./data/*
     mkdir -p data/rules data/certs data/redis data/grafana
     
@@ -172,8 +349,11 @@ fi
 check_root
 
 case "$1" in
+    check)
+        install_deps
+        ;;
     start)
-        check_go
+        install_deps || exit 1
         create_dirs
         check_config
         build_app
@@ -186,7 +366,7 @@ case "$1" in
         stop
         ;;
     reinstall)
-        check_go
+        install_deps || exit 1
         reinstall
         ;;
     *)

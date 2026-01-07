@@ -61,6 +61,12 @@ build_frontend() {
         exit 1
     fi
     
+    # 获取公网IP作为API地址
+    PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || echo "localhost")
+    export VITE_API_BASE_URL="http://${PUBLIC_IP}:9598/api/v1"
+    
+    echo "使用API地址: ${VITE_API_BASE_URL}"
+    
     # 构建前端代码
     npm run build
     if [ $? -ne 0 ]; then

@@ -5,6 +5,8 @@ server:
   address: "0.0.0.0"
   api_port: 9598
   console_port: 9597
+  # API公网地址，用于控制台前端访问API
+  public_api_url: "${API_PUBLIC_URL:-http://localhost:9598}"
 
 # 目录配置
 dirs:
@@ -16,7 +18,8 @@ dirs:
 # 缓存配置
 cache:
   type: "redis"
-  redis_url: "127.0.0.1:6379"
+  # Redis连接配置，支持环境变量替换
+  redis_url: "localhost:6379"
   memory_size: 1000
 
 # 站点配置

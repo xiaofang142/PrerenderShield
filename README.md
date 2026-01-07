@@ -84,17 +84,152 @@ PrerenderShield 是一款集防火墙安全防护与渲染预热功能于一体�
 - 内存：8GB（推荐 16GB）
 - 磁盘：100GB（推荐 200GB SSD）
 - 操作系统：Linux/macOS
+- Docker：20.10+ 
+- Docker Compose：2.0+
 
 ### 安装部署
 
-#### 使用 Docker 部署
+#### 一键安装（推荐）
+
+我们提供了便捷的一键安装脚本，自动完成环境检测、IP配置和服务部署：
+
 ```bash
-docker-compose up -d
+# 下载项目（如果未下载）
+git clone https://github.com/your-org/prerendershield.git
+cd prerendershield
+
+# 给脚本添加执行权限
+chmod +x install.sh
+
+# 自动获取IP并部署（推荐）
+./install.sh
+
+# 或手动指定IP并部署
+./install.sh --ip 192.168.0.100
 ```
 
-#### 访问管理界面
+##### 脚本功能
+- ✅ 自动获取本机公网IP和内网IP
+- ✅ 检查Docker和Docker Compose环境
+- ✅ 使用Dockerfile构建镜像
+- ✅ 配置Redis容器间连接
+- ✅ 启动所有服务
+- ✅ 显示详细部署信息
+
+##### 脚本选项
+```bash
+./install.sh [选项]
+
+选项：
+  -h, --help      显示帮助信息
+  -f, --force     强制重新构建镜像
+  --ip <ip>       手动指定本机IP地址
+  --test          测试模式，只检查环境和获取IP
 ```
-http://your-server-ip:8080
+
+##### 常见用法
+```bash
+# 测试环境（推荐在部署前执行）
+./install.sh --test
+
+# 强制重新构建镜像
+./install.sh --force
+
+# 手动指定IP并强制重新构建
+./install.sh --ip 192.168.0.100 --force
+```
+
+#### 传统 Docker 部署
+
+如果您更习惯手动部署，可以使用以下命令：
+
+```bash
+# 构建镜像
+docker-compose build
+
+# 启动服务
+docker-compose up -d
+
+# 查看服务状态
+docker-compose ps
+
+# 查看日志
+docker-compose logs -f
+```
+
+#### 直接运行（开发模式）
+
+```bash
+# 安装依赖
+go mod tidy
+
+# 构建应用
+go build -o prerender-shield ./cmd/api
+
+# 启动服务
+./start.sh start
+```
+
+### 访问管理界面
+
+部署完成后，通过以下地址访问管理控制台：
+
+```
+http://[您的服务器IP]:9597
+```
+
+#### 默认账号密码
+- **用户名**：admin
+- **密码**：123456
+
+### 服务端口
+
+| 服务类型 | 端口 | 说明 |
+|---------|------|------|
+| 管理控制台 | 9597 | Web 管理界面 |
+| API 服务 | 9598 | 后端 API 接口 |
+| Redis | 6379 | 缓存数据库（容器内部访问） |
+
+## 部署后操作
+
+### 查看服务状态
+
+```bash
+# 使用脚本查看
+docker-compose ps
+
+# 或使用Docker命令
+docker ps
+```
+
+### 查看日志
+
+```bash
+# 查看所有服务日志
+docker-compose logs -f
+
+# 查看特定服务日志
+docker-compose logs -f prerender-shield
+```
+
+### 停止/重启服务
+
+```bash
+# 停止服务
+docker-compose down
+
+# 重启服务
+docker-compose restart
+```
+
+### 更新服务
+
+```bash
+# 拉取最新代码
+git pull
+
+# 重新构建并启动
+./install.sh --force
 ```
 
 ## 项目优势
