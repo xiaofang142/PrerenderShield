@@ -256,7 +256,18 @@ install_dependencies_linux() {
             sudo apt-get update -y
             ;;
         yum)
-            sudo yum update -y
+            # 处理libzip5依赖冲突问题
+            print_info "检查并解决libzip5依赖冲突..."
+            # 尝试移除冲突的libzip5-devel包（如果存在）
+            if sudo yum list installed | grep -q libzip5-devel; then
+                sudo yum remove -y libzip5-devel libzip5-tools 2>/dev/null || true
+            fi
+            # 先安装libzstd依赖（如果需要）
+            if ! sudo yum list installed | grep -q libzstd; then
+                sudo yum install -y libzstd 2>/dev/null || true
+            fi
+            # 使用--skip-broken选项跳过冲突的包
+            sudo yum update -y --skip-broken
             ;;
         dnf)
             sudo dnf update -y
