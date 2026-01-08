@@ -991,12 +991,31 @@ setup_configuration() {
         # 使用临时文件方法，兼容所有系统
         local temp_config=$(mktemp)
         
-        # 读取原文件并替换内容
-        cat "$CONFIG_DIR/config.yml" | \
-            sed "s|data_dir: ./data|data_dir: $DATA_DIR|" | \
-            sed "s|static_dir: ./static|static_dir: $INSTALL_DIR/static|" | \
-            sed "s|admin_static_dir: ./web/dist|admin_static_dir: $INSTALL_DIR/web/dist|" | \
-            sed "s|redis_url: \"localhost:6379\"|redis_url: \"$redis_url\"|" > "$temp_config"
+        # 读取原文件并替换内容，使用awk避免sed特殊字符问题
+        awk -v data_dir="$DATA_DIR" -v install_dir="$INSTALL_DIR" -v redis_url="$redis_url" '{
+            # 替换data_dir
+            if (/^  data_dir: /) {
+                print "  data_dir: " data_dir;
+                next;
+            }
+            # 替换static_dir
+            if (/^  static_dir: /) {
+                print "  static_dir: " install_dir "/static";
+                next;
+            }
+            # 替换admin_static_dir
+            if (/^  admin_static_dir: /) {
+                print "  admin_static_dir: " install_dir "/web/dist";
+                next;
+            }
+            # 替换redis_url
+            if (/^  redis_url: /) {
+                print "  redis_url: \"" redis_url "\"";
+                next;
+            }
+            # 其他行直接打印
+            print;
+        }' "$CONFIG_DIR/config.yml" > "$temp_config"
         
         # 添加或修改redis_db配置
         if grep -q "redis_db:" "$temp_config"; then
