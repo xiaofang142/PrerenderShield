@@ -83,7 +83,24 @@ install_deps() {
     fi
     
     # 安装Go环境
-    if ! command -v go &> /dev/null; then
+    local go_installed=false
+    if command -v go &> /dev/null; then
+        go_installed=true
+    elif [ "$os_type" = "Linux" ]; then
+        # Linux额外检查包管理器
+        case "$install_cmd" in
+            apt-get)
+                dpkg -l | grep -q golang && go_installed=true
+                ;;
+            yum|dnf)
+                rpm -q golang &> /dev/null && go_installed=true
+                ;;
+        esac
+    elif [ "$os_type" = "Darwin" ] && brew list go &> /dev/null; then
+        go_installed=true
+    fi
+    
+    if [ "$go_installed" = false ]; then
         info "安装Go环境..."
         if [ "$os_type" = "Linux" ]; then
             case "$install_cmd" in
@@ -103,7 +120,24 @@ install_deps() {
     fi
     
     # 安装Redis
-    if ! command -v redis-server &> /dev/null; then
+    local redis_installed=false
+    if command -v redis-server &> /dev/null; then
+        redis_installed=true
+    elif [ "$os_type" = "Linux" ]; then
+        # Linux额外检查包管理器
+        case "$install_cmd" in
+            apt-get)
+                dpkg -l | grep -q redis-server && redis_installed=true
+                ;;
+            yum|dnf)
+                rpm -q redis &> /dev/null && redis_installed=true
+                ;;
+        esac
+    elif [ "$os_type" = "Darwin" ] && brew list redis &> /dev/null; then
+        redis_installed=true
+    fi
+    
+    if [ "$redis_installed" = false ]; then
         info "安装Redis..."
         if [ "$os_type" = "Linux" ]; then
             case "$install_cmd" in
@@ -135,7 +169,24 @@ install_deps() {
     fi
     
     # 安装Node.js和npm
-    if ! command -v npm &> /dev/null; then
+    local node_installed=false
+    if command -v npm &> /dev/null; then
+        node_installed=true
+    elif [ "$os_type" = "Linux" ]; then
+        # Linux额外检查包管理器
+        case "$install_cmd" in
+            apt-get)
+                dpkg -l | grep -q nodejs && node_installed=true
+                ;;
+            yum|dnf)
+                rpm -q nodejs &> /dev/null && node_installed=true
+                ;;
+        esac
+    elif [ "$os_type" = "Darwin" ] && brew list node &> /dev/null; then
+        node_installed=true
+    fi
+    
+    if [ "$node_installed" = false ]; then
         info "安装Node.js和npm..."
         if [ "$os_type" = "Linux" ]; then
             case "$install_cmd" in
@@ -157,13 +208,25 @@ install_deps() {
     # 安装Chrome/Chromium浏览器（用于预渲染）
     local chrome_installed=false
     
-    # 检查Chrome是否已安装（Linux检查命令行工具，macOS检查应用目录）
+    # 检查Chrome是否已安装（Linux检查命令行工具和包管理器，macOS检查应用目录和brew）
     if [ "$os_type" = "Linux" ]; then
-        if command -v google-chrome &> /dev/null || command -v chromium &> /dev/null; then
+        if command -v google-chrome &> /dev/null || command -v chromium &> /dev/null || command -v chromium-browser &> /dev/null; then
             chrome_installed=true
+        else
+            # Linux额外检查包管理器
+            case "$install_cmd" in
+                apt-get)
+                    dpkg -l | grep -q chromium-browser && chrome_installed=true
+                    ;;
+                yum|dnf)
+                    rpm -q chromium &> /dev/null && chrome_installed=true
+                    ;;
+            esac
         fi
     elif [ "$os_type" = "Darwin" ]; then
         if [ -d "/Applications/Google Chrome.app" ] || [ -d "/Applications/Chromium.app" ]; then
+            chrome_installed=true
+        elif brew list --cask google-chrome &> /dev/null || brew list --cask chromium &> /dev/null; then
             chrome_installed=true
         fi
     fi
@@ -187,8 +250,12 @@ install_deps() {
         if [ "$os_type" = "Linux" ]; then
             if command -v google-chrome &> /dev/null; then
                 info "✓ Chrome浏览器已安装: $(google-chrome --version)"
-            else
+            elif command -v chromium &> /dev/null; then
                 info "✓ Chromium浏览器已安装: $(chromium --version)"
+            elif command -v chromium-browser &> /dev/null; then
+                info "✓ Chromium浏览器已安装: $(chromium-browser --version)"
+            else
+                info "✓ 浏览器已安装"
             fi
         else
             if [ -d "/Applications/Google Chrome.app" ]; then
