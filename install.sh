@@ -900,11 +900,20 @@ setup_configuration() {
         # 修改默认配置
         print_info "优化默认配置..."
         # 兼容macOS/BSD和GNU sed的-i选项
-        # 在macOS/BSD上，-i需要一个备份后缀，在GNU sed上这个参数可选
-        sudo sed -i '' "s|data_dir: ./data|data_dir: $DATA_DIR|" "$CONFIG_DIR/config.yml"
-        sudo sed -i '' "s|static_dir: ./static|static_dir: $INSTALL_DIR/static|" "$CONFIG_DIR/config.yml"
-        sudo sed -i '' "s|admin_static_dir: ./web/dist|admin_static_dir: $INSTALL_DIR/web/dist|" "$CONFIG_DIR/config.yml"
-        sudo sed -i '' "s|redis_url: \"localhost:6379\"|redis_url: \"127.0.0.1:6379\"|" "$CONFIG_DIR/config.yml"
+        # 使用临时文件方法，兼容所有系统
+        local temp_config=$(mktemp)
+        
+        # 读取原文件并替换内容
+        cat "$CONFIG_DIR/config.yml" | \
+            sed "s|data_dir: ./data|data_dir: $DATA_DIR|" | \
+            sed "s|static_dir: ./static|static_dir: $INSTALL_DIR/static|" | \
+            sed "s|admin_static_dir: ./web/dist|admin_static_dir: $INSTALL_DIR/web/dist|" | \
+            sed "s|redis_url: \"localhost:6379\"|redis_url: \"127.0.0.1:6379\"|" > "$temp_config"
+        
+        # 使用sudo复制临时文件到目标位置
+        sudo cp "$temp_config" "$CONFIG_DIR/config.yml"
+        # 清理临时文件
+        rm -f "$temp_config"
         
         # 设置默认站点配置
         setup_default_site
