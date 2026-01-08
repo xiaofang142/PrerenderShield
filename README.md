@@ -208,10 +208,12 @@ chmod +x install.sh
 | ✅ **智能IP获取** | 自动获取本机公网IP和内网IP |
 | ✅ **依赖自动安装** | 自动安装 Go、Redis、Node.js 等依赖 |
 | ✅ **浏览器智能安装** | 自动检测并安装 Chromium/Chrome，支持多种安装方案 |
+| ✅ **交互式Redis配置** | 支持用户输入Redis连接信息（主机、端口、密码、数据库） |
 | ✅ **系统服务配置** | 自动配置 systemd/OpenRC 服务，支持开机自启 |
 | ✅ **服务自动启动** | 一键启动 Prerender Shield 服务 |
 | ✅ **健康检查验证** | 验证服务是否正常启动并可用 |
 | ✅ **跨平台兼容** | 支持 Ubuntu、CentOS、Fedora、openSUSE、Alpine、macOS |
+| ✅ **支持二次运行** | 便于重置Redis连接和重新配置 |
 
 #### 🔧 **手动编译安装（开发环境）**
 

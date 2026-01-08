@@ -4,7 +4,38 @@
 
 APP_NAME="prerender-shield"
 CONFIG_FILE="configs/config.yml"
-APP_BINARY="./api"
+
+# 根据当前平台选择合适的二进制文件
+get_platform_binary() {
+    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local arch=$(uname -m)
+    
+    # 转换架构名称
+    if [[ $arch == "x86_64" ]]; then
+        arch="amd64"
+    elif [[ $arch == "arm64" ]]; then
+        arch="arm64"
+    fi
+    
+    # 构建二进制文件路径
+    local binary_path="bin/${os}-${arch}/api"
+    
+    # 如果是Windows系统，添加.exe后缀
+    if [[ $os == "windows" ]]; then
+        binary_path="${binary_path}.exe"
+    fi
+    
+    echo "$binary_path"
+}
+
+# 获取当前平台的二进制文件路径
+APP_BINARY=$(get_platform_binary)
+
+# 如果当前平台的二进制文件不存在，使用当前目录下的api
+if [ ! -f "$APP_BINARY" ]; then
+    APP_BINARY="./api"
+fi
+
 PID_FILE="./data/${APP_NAME}.pid"
 LOG_FILE="./data/${APP_NAME}.log"
 

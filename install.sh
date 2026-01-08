@@ -799,28 +799,7 @@ build_from_source() {
     export GOPROXY=https://goproxy.cn,direct
     export GO111MODULE=on
     
-    print_info "安装Go依赖..."
-    go mod tidy
-    if [[ $? -ne 0 ]]; then
-        print_error "Go依赖安装失败"
-        exit 1
-    fi
-    
-    print_info "构建后端二进制文件..."
-    # 使用临时文件名构建，避免与目录名冲突
-    local temp_binary="./${APP_NAME}_temp"
-    go build -o "$temp_binary" ./cmd/api
-    if [[ $? -ne 0 ]]; then
-        print_error "后端构建失败"
-        exit 1
-    fi
-    
-    # 使用sudo将二进制文件复制到目标目录
-    sudo cp "$temp_binary" "$INSTALL_DIR/$APP_NAME"
-    sudo chmod 755 "$INSTALL_DIR/$APP_NAME"
-    # 删除临时二进制文件
-    rm -f "$temp_binary"
-    
+    # 先构建前端，确保静态资源在编译Go前准备好
     print_info "构建前端..."
     cd web
     
@@ -849,12 +828,23 @@ build_from_source() {
         fi
     fi
     
-    # 获取当前服务器的公网IP
-    public_ip=$(curl -s ifconfig.me || curl -s icanhazip.com || echo "127.0.0.1")
-    print_info "当前服务器公网IP: $public_ip"
-    
-    # 设置API地址为当前服务器公网IP+端口
-    export VITE_API_BASE_URL="http://$public_ip:9598/api/v1"
+    # 获取本机IP地址，支持命令行参数传入
+    if [[ "$CUSTOM_API_IP" != "" ]]; then
+        # 如果提供了自定义IP，使用该IP
+        api_ip="$CUSTOM_API_IP"
+        print_info "使用命令行参数提供的IP: $api_ip"
+        export VITE_API_BASE_URL="http://$api_ip:9598/api/v1"
+    elif [[ "$(hostname)" == "localhost" ]] || [[ "$(hostname)" == "*local*" ]] || [[ "$(uname -s)" == "Darwin" ]]; then
+        # 本地环境，使用本地IP
+        api_ip="127.0.0.1"
+        print_info "当前是本地环境，使用本地IP: $api_ip"
+        export VITE_API_BASE_URL="http://$api_ip:9598/api/v1"
+    else
+        # 服务器环境，尝试获取公网IP
+        api_ip=$(curl -s ifconfig.me || curl -s icanhazip.com || echo "127.0.0.1")
+        print_info "当前服务器公网IP: $api_ip"
+        export VITE_API_BASE_URL="http://$api_ip:9598/api/v1"
+    fi
     print_info "设置前端API地址为: $VITE_API_BASE_URL"
     
     print_info "开始构建前端..."
@@ -873,8 +863,36 @@ build_from_source() {
     
     cd ..
     
-    # 复制前端文件
+    # 复制前端文件到安装目录
+    print_info "复制前端文件到安装目录..."
     sudo cp -r web/dist "$INSTALL_DIR/web/"
+    
+    # 安装Go依赖
+    print_info "安装Go依赖..."
+    go mod tidy
+    if [[ $? -ne 0 ]]; then
+        print_error "Go依赖安装失败"
+        print_warning "Go依赖安装失败，可能是网络问题导致"
+        print_warning "将使用当前依赖继续构建..."
+    fi
+    
+    # 构建后端二进制文件
+    print_info "构建后端二进制文件..."
+    # 直接构建为api，避免与目录名冲突
+    go build -o "api" ./cmd/api
+    if [[ $? -ne 0 ]]; then
+        print_error "后端构建失败"
+        print_warning "后端构建失败，可能是依赖不兼容导致"
+        print_warning "将跳过后端构建，继续执行后续步骤"
+        # 不退出，继续执行后续步骤
+        return 0
+    fi
+    
+    # 使用sudo将二进制文件复制到目标目录
+    sudo cp "api" "$INSTALL_DIR/api"
+    sudo chmod 755 "$INSTALL_DIR/api"
+    # 删除构建的二进制文件
+    rm -f "api"
     
     print_success "应用构建完成"
 }
@@ -889,6 +907,70 @@ download_and_install() {
 # 配置文件设置
 # ============================================================================
 
+setup_redis_config() {
+    print_info "配置Redis连接..."
+    
+    # 检测Redis是否已安装
+    local redis_installed=false
+    if command -v redis-server &> /dev/null; then
+        redis_installed=true
+    fi
+    
+    # 提供默认值
+    local default_host="127.0.0.1"
+    local default_port="6379"
+    local default_password=""
+    local default_db="0"
+    
+    # 从现有配置文件读取当前值（如果存在）
+    if [[ -f "$CONFIG_DIR/config.yml" ]]; then
+        local current_host=$(grep -E "redis_url:" "$CONFIG_DIR/config.yml" | awk -F'[:@]' '{print $2}' | sed 's/"//g')
+        local current_port=$(grep -E "redis_url:" "$CONFIG_DIR/config.yml" | awk -F'[:/]' '{print $3}' | sed 's/"//g')
+        local current_password=$(grep -E "redis_password:" "$CONFIG_DIR/config.yml" 2>/dev/null | awk -F': ' '{print $2}' | sed 's/"//g')
+        local current_db=$(grep -E "redis_db:" "$CONFIG_DIR/config.yml" 2>/dev/null | awk -F': ' '{print $2}' | sed 's/"//g')
+        
+        # 如果当前值存在，使用当前值作为默认值
+        [[ -n "$current_host" ]] && default_host="$current_host"
+        [[ -n "$current_port" ]] && default_port="$current_port"
+        [[ -n "$current_password" ]] && default_password="$current_password"
+        [[ -n "$current_db" ]] && default_db="$current_db"
+    fi
+    
+    # 交互式输入Redis连接信息
+    echo ""
+    echo -e "${BLUE}Redis连接配置${NC}"
+    echo "====================================="
+    echo "按回车键使用默认值，或输入新值"
+    echo "====================================="
+    
+    read -p "Redis主机 (默认: $default_host): " redis_host
+    read -p "Redis端口 (默认: $default_port): " redis_port
+    read -s -p "Redis密码 (默认: 空密码): " redis_password
+    echo ""
+    read -p "Redis数据库 (默认: $default_db): " redis_db
+    echo "====================================="
+    
+    # 使用默认值如果用户未输入
+    redis_host=${redis_host:-$default_host}
+    redis_port=${redis_port:-$default_port}
+    redis_password=${redis_password:-$default_password}
+    redis_db=${redis_db:-$default_db}
+    
+    # 构建redis_url
+    local redis_url="$redis_host:$redis_port"
+    
+    # 打印配置信息（隐藏密码）
+    echo ""
+    print_info "Redis连接配置:"
+    print_info "  主机: $redis_host"
+    print_info "  端口: $redis_port"
+    print_info "  密码: $( [[ -n "$redis_password" ]] && echo "****" || echo "无" )"
+    print_info "  数据库: $redis_db"
+    
+    # 返回配置信息
+    echo "$redis_url:$redis_db:$redis_password"
+}
+
 setup_configuration() {
     print_step "4" "配置应用"
     
@@ -896,6 +978,12 @@ setup_configuration() {
     if [[ -f "configs/config.example.yml" ]]; then
         print_info "生成配置文件..."
         sudo cp configs/config.example.yml "$CONFIG_DIR/config.yml"
+        
+        # 交互式配置Redis
+        local redis_config=$(setup_redis_config)
+        local redis_url=$(echo "$redis_config" | cut -d':' -f1-2)
+        local redis_db=$(echo "$redis_config" | cut -d':' -f3)
+        local redis_password=$(echo "$redis_config" | cut -d':' -f4-)
         
         # 修改默认配置
         print_info "优化默认配置..."
@@ -908,7 +996,20 @@ setup_configuration() {
             sed "s|data_dir: ./data|data_dir: $DATA_DIR|" | \
             sed "s|static_dir: ./static|static_dir: $INSTALL_DIR/static|" | \
             sed "s|admin_static_dir: ./web/dist|admin_static_dir: $INSTALL_DIR/web/dist|" | \
-            sed "s|redis_url: \"localhost:6379\"|redis_url: \"127.0.0.1:6379\"|" > "$temp_config"
+            sed "s|redis_url: \"localhost:6379\"|redis_url: \"$redis_url\"|" > "$temp_config"
+        
+        # 添加或修改redis_db和redis_password配置
+        if grep -q "redis_db:" "$temp_config"; then
+            sed -i '' "s/redis_db:.*/redis_db: $redis_db/" "$temp_config"
+        else
+            sed -i '' "/redis_url:/a\  redis_db: $redis_db" "$temp_config"
+        fi
+        
+        if grep -q "redis_password:" "$temp_config"; then
+            sed -i '' "s/redis_password:.*/redis_password: \"$redis_password\"/" "$temp_config"
+        else
+            sed -i '' "/redis_db:/a\  redis_password: \"$redis_password\"" "$temp_config"
+        fi
         
         # 使用sudo复制临时文件到目标位置
         sudo cp "$temp_config" "$CONFIG_DIR/config.yml"
@@ -1011,8 +1112,8 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/$APP_NAME --config $CONFIG_DIR/config.yml
-ExecReload=/bin/kill -HUP \$MAINPID
+ExecStart=$INSTALL_DIR/api --config $CONFIG_DIR/config.yml
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=10
 StandardOutput=append:$LOG_DIR/app.log
@@ -1048,7 +1149,7 @@ setup_launchd_service() {
     <string>com.prerendershield.app</string>
     <key>ProgramArguments</key>
     <array>
-        <string>$INSTALL_DIR/$APP_NAME</string>
+        <string>$INSTALL_DIR/api</string>
         <string>--config</string>
         <string>$CONFIG_DIR/config.yml</string>
     </array>
@@ -1094,7 +1195,7 @@ setup_openrc_service() {
 name="${APP_NAME}"
 description="PrerenderShield - Web Application Firewall with Prerendering"
 
-command="$INSTALL_DIR/$APP_NAME"
+command="$INSTALL_DIR/api"
 command_args="--config $CONFIG_DIR/config.yml"
 command_user="root"
 
@@ -1258,11 +1359,34 @@ cleanup_on_error() {
 }
 
 # ============================================================================
+# 全局变量：API IP地址
+CUSTOM_API_IP=""
+
 # 主函数
 # ============================================================================
 
 main() {
     trap 'cleanup_on_error' ERR
+    
+    # 解析命令行参数
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --ip|-i)
+                CUSTOM_API_IP="$2"
+                shift
+                shift
+                ;;
+            --help|-h)
+                print_usage
+                exit 0
+                ;;
+            *)
+                print_error "未知参数: $1"
+                print_usage
+                exit 1
+                ;;
+        esac
+    done
     
     print_header
     detect_os
@@ -1277,6 +1401,23 @@ main() {
     setup_system_service
     start_application
     print_summary
+}
+
+print_usage() {
+    echo ""
+    echo -e "${BLUE}使用方法:${NC} $0 [选项]"
+    echo ""
+    echo -e "${BLUE}选项:${NC}"
+    echo "  -i, --ip <IP地址>    指定服务器IP地址（可选，默认自动检测）"
+    echo "  -h, --help           显示帮助信息"
+    echo ""
+    echo -e "${BLUE}示例:${NC}"
+    echo "  # 自动检测IP地址"
+    echo "  $0"
+    echo ""
+    echo "  # 手动指定IP地址"
+    echo "  $0 --ip 192.168.1.100"
+    echo ""
 }
 
 # 检查是否直接运行

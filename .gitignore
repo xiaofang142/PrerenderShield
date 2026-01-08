@@ -7,7 +7,7 @@
 *.dylib
 prerender-shield
 api
-/api
+bin/
 
 # 依赖包目录
 gopkg.in/
@@ -63,7 +63,6 @@ temp/
 node_modules/
 web/node_modules/
 web/build/
-web/dist/
 web/.eslintcache
 web/*.local
 web/.env
