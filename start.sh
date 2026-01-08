@@ -75,6 +75,18 @@ install_deps() {
         if ! command -v brew &> /dev/null; then
             info "安装Homebrew..."
             /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            if [ $? -ne 0 ]; then
+                error "Homebrew安装失败"
+                return 1
+            fi
+            # 添加Homebrew到PATH
+            if [ -f "/opt/homebrew/bin/brew" ]; then
+                # Apple Silicon
+                export PATH="/opt/homebrew/bin:$PATH"
+            elif [ -f "/usr/local/bin/brew" ]; then
+                # Intel
+                export PATH="/usr/local/bin:$PATH"
+            fi
         fi
         install_cmd="brew"
     else
@@ -106,15 +118,33 @@ install_deps() {
             case "$install_cmd" in
                 apt-get)
                     sudo apt-get install -y golang
+                    if [ $? -ne 0 ]; then
+                        error "Go环境安装失败"
+                        return 1
+                    fi
                     ;;
                 yum|dnf)
                     sudo $install_cmd install -y golang
+                    if [ $? -ne 0 ]; then
+                        error "Go环境安装失败"
+                        return 1
+                    fi
                     ;;
             esac
         elif [ "$os_type" = "Darwin" ]; then
             brew install go
+            if [ $? -ne 0 ]; then
+                error "Go环境安装失败"
+                return 1
+            fi
         fi
         info "✓ Go环境安装完成"
+        
+        # 验证Go是否可用
+        if ! command -v go &> /dev/null; then
+            error "Go环境安装后验证失败，无法找到go命令"
+            return 1
+        fi
     else
         info "✓ Go环境已安装: $(go version)"
     fi
@@ -143,18 +173,36 @@ install_deps() {
             case "$install_cmd" in
                 apt-get)
                     sudo apt-get install -y redis-server
+                    if [ $? -ne 0 ]; then
+                        error "Redis安装失败"
+                        return 1
+                    fi
                     sudo systemctl enable --now redis-server
                     ;;
                 yum|dnf)
                     sudo $install_cmd install -y redis
+                    if [ $? -ne 0 ]; then
+                        error "Redis安装失败"
+                        return 1
+                    fi
                     sudo systemctl enable --now redis
                     ;;
             esac
         elif [ "$os_type" = "Darwin" ]; then
             brew install redis
+            if [ $? -ne 0 ]; then
+                error "Redis安装失败"
+                return 1
+            fi
             brew services start redis
         fi
         info "✓ Redis安装完成"
+        
+        # 验证Redis是否可用
+        if ! command -v redis-server &> /dev/null; then
+            error "Redis安装后验证失败，无法找到redis-server命令"
+            return 1
+        fi
     else
         info "✓ Redis已安装"
         # 启动Redis如果它没有运行
@@ -192,15 +240,33 @@ install_deps() {
             case "$install_cmd" in
                 apt-get)
                     sudo apt-get install -y nodejs npm
+                    if [ $? -ne 0 ]; then
+                        error "Node.js和npm安装失败"
+                        return 1
+                    fi
                     ;;
                 yum|dnf)
                     sudo $install_cmd install -y nodejs npm
+                    if [ $? -ne 0 ]; then
+                        error "Node.js和npm安装失败"
+                        return 1
+                    fi
                     ;;
             esac
         elif [ "$os_type" = "Darwin" ]; then
             brew install node
+            if [ $? -ne 0 ]; then
+                error "Node.js和npm安装失败"
+                return 1
+            fi
         fi
         info "✓ Node.js和npm安装完成"
+        
+        # 验证Node.js和npm是否可用
+        if ! command -v npm &> /dev/null; then
+            error "Node.js和npm安装后验证失败，无法找到npm命令"
+            return 1
+        fi
     else
         info "✓ Node.js和npm已安装: $(npm --version)"
     fi
@@ -237,15 +303,44 @@ install_deps() {
             case "$install_cmd" in
                 apt-get)
                     sudo apt-get install -y chromium-browser
+                    if [ $? -ne 0 ]; then
+                        error "浏览器安装失败"
+                        return 1
+                    fi
                     ;;
                 yum|dnf)
                     sudo $install_cmd install -y chromium
+                    if [ $? -ne 0 ]; then
+                        error "浏览器安装失败"
+                        return 1
+                    fi
                     ;;
             esac
         elif [ "$os_type" = "Darwin" ]; then
             brew install --cask google-chrome
+            if [ $? -ne 0 ]; then
+                error "浏览器安装失败"
+                return 1
+            fi
         fi
         info "✓ 浏览器安装完成"
+        
+        # 验证浏览器是否可用
+        local chrome_verified=false
+        if [ "$os_type" = "Linux" ]; then
+            if command -v google-chrome &> /dev/null || command -v chromium &> /dev/null || command -v chromium-browser &> /dev/null; then
+                chrome_verified=true
+            fi
+        elif [ "$os_type" = "Darwin" ]; then
+            if [ -d "/Applications/Google Chrome.app" ] || [ -d "/Applications/Chromium.app" ]; then
+                chrome_verified=true
+            fi
+        fi
+        
+        if [ "$chrome_verified" = false ]; then
+            error "浏览器安装后验证失败，无法找到浏览器"
+            return 1
+        fi
     else
         if [ "$os_type" = "Linux" ]; then
             if command -v google-chrome &> /dev/null; then
@@ -438,7 +533,7 @@ check_root
 
 case "$1" in
     check)
-        install_deps
+        install_deps || exit 1
         ;;
     start)
         install_deps || exit 1
