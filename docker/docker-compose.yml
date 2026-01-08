@@ -1,0 +1,57 @@
+version: '3.9'
+
+services:
+  # Redis服务
+  redis:
+    image: redis:7.0-alpine
+    container_name: prerender-shield-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - prerender-shield-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PrerenderShield服务
+  prerender-shield:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: prerender-shield
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - app-data:/app/data
+      - app-static:/app/static
+      - ./config.yml:/app/config.yml:ro
+    environment:
+      - GIN_MODE=release
+      - TZ=Asia/Shanghai
+    # 使用主机网络模式，支持动态端口映射
+    # 这样容器内的所有端口直接映射到宿主机，无需手动配置
+    network_mode: "host"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9598/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+networks:
+  prerender-shield-network:
+    driver: bridge
+    name: prerender-shield-network
+
+volumes:
+  redis-data:
+    name: prerender-shield-redis-data
+  app-data:
+    name: prerender-shield-app-data
+  app-static:
+    name: prerender-shield-app-static
