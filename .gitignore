@@ -45,8 +45,8 @@ configs/*.local.yml
 config.yml
 
 # 日志文件
-logs/
 *.log
+/logs/
 
 # 临时文件
 tmp/
