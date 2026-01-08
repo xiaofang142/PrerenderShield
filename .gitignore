@@ -81,3 +81,6 @@ data/
 
 # Trace文件
 .trace
+
+# Trae IDE 配置目录
+.trae/
