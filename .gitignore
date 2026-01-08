@@ -60,6 +60,7 @@ temp/
 # docker-compose.override.yml
 
 # 前端项目忽略规则
+node_modules/
 web/node_modules/
 web/build/
 web/dist/
