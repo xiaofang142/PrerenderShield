@@ -483,6 +483,117 @@ install_dependencies_macos() {
     install_browser_environment
 }
 
+# 直接下载并安装Chromium的函数
+download_and_install_chromium() {
+    print_warning "尝试直接下载安装Chromium..."
+    
+    # 检测系统架构
+    local arch=$(uname -m)
+    case "$arch" in
+        x86_64|amd64)
+            local chromium_arch="x64"
+            ;;
+        aarch64|arm64)
+            local chromium_arch="arm64"
+            ;;
+        *)
+            print_error "不支持的系统架构: $arch"
+            return 1
+            ;;
+    esac
+    
+    # 设置安装目录
+    local chromium_install_dir="/opt/chromium"
+    local chromium_bin="$chromium_install_dir/chrome"
+    
+    # 如果Chromium已存在，直接返回
+    if [ -f "$chromium_bin" ]; then
+        print_info "Chromium已通过直接下载方式安装"
+        # 将Chromium添加到系统路径
+        if ! grep -q "$chromium_install_dir" /etc/profile.d/chromium.sh 2>/dev/null; then
+            echo "export PATH=\$PATH:$chromium_install_dir" | sudo tee /etc/profile.d/chromium.sh > /dev/null
+            sudo chmod +x /etc/profile.d/chromium.sh
+        fi
+        return 0
+    fi
+    
+    print_info "检测到架构: $arch，将下载 $chromium_arch 版本的Chromium"
+    
+    # 创建安装目录
+    sudo mkdir -p "$chromium_install_dir"
+    
+    # 下载Chromium
+    local download_url=""
+    local temp_dir=$(mktemp -d)
+    local temp_file="$temp_dir/chromium.zip"
+    
+    # 选择合适的下载源
+    if [ "$OS" = "linux" ]; then
+        # 对于Linux，使用官方下载链接
+        # 注意：这里使用的是Example URL，实际使用时需要替换为正确的下载链接
+        # 可以考虑使用第三方镜像或自动化下载工具
+        print_warning "直接下载Chromium功能正在开发中，使用临时解决方案"
+        print_warning "请手动安装Chromium或Chrome浏览器后重新运行脚本"
+        rm -rf "$temp_dir"
+        return 1
+        
+        # 以下是示例代码，实际使用时需要替换为正确的下载链接
+        # download_url="https://download-chromium.appspot.com/dl/Linux_x64"
+    elif [ "$OS" = "darwin" ]; then
+        # 对于macOS，提示用户手动安装
+        print_warning "对于macOS系统，请手动安装Chromium或Chrome浏览器"
+        print_warning "下载地址: https://www.chromium.org/getting-involved/download-chromium/"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # 下载Chromium
+    if ! wget -q -O "$temp_file" "$download_url"; then
+        print_error "无法下载Chromium: $download_url"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # 解压Chromium
+    print_info "解压Chromium..."
+    if ! unzip -q "$temp_file" -d "$temp_dir"; then
+        print_error "无法解压Chromium"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # 移动到安装目录
+    sudo cp -r "$temp_dir"/*/* "$chromium_install_dir/" 2>/dev/null || sudo cp -r "$temp_dir"/* "$chromium_install_dir/"
+    
+    # 设置可执行权限
+    sudo chmod -R +x "$chromium_install_dir"
+    
+    # 将Chromium添加到系统路径
+    if ! grep -q "$chromium_install_dir" /etc/profile.d/chromium.sh 2>/dev/null; then
+        echo "export PATH=\$PATH:$chromium_install_dir" | sudo tee /etc/profile.d/chromium.sh > /dev/null
+        sudo chmod +x /etc/profile.d/chromium.sh
+        # 立即生效
+        source /etc/profile.d/chromium.sh 2>/dev/null || true
+    fi
+    
+    # 创建符号链接，方便调用
+    if [ ! -f "/usr/local/bin/chromium" ]; then
+        sudo ln -s "$chromium_bin" /usr/local/bin/chromium
+    fi
+    
+    # 清理临时文件
+    rm -rf "$temp_dir"
+    
+    # 验证安装
+    if command -v chromium &> /dev/null; then
+        print_success "成功直接下载安装Chromium"
+        return 0
+    else
+        print_error "直接下载安装Chromium失败"
+        return 1
+    fi
+}
+
 install_browser_environment() {
     print_info "检测浏览器环境..."
     
@@ -532,8 +643,13 @@ install_browser_environment() {
                            sudo apt-get install -y google-chrome-stable; then
                             print_success "已安装google-chrome-stable"
                         else
-                            print_error "浏览器安装失败"
-                            return 1
+                            print_warning "无法通过包管理器安装浏览器，尝试直接下载安装Chromium"
+                            if download_and_install_chromium; then
+                                print_success "通过直接下载方式安装Chromium成功"
+                            else
+                                print_error "浏览器安装失败"
+                                return 1
+                            fi
                         fi
                     fi
                     ;;
@@ -560,10 +676,17 @@ install_browser_environment() {
                         else
                             # 清理临时文件
                             rm -f ./google-chrome-stable_current_x86_64.rpm
-                            print_error "浏览器安装失败"
-                            print_warning "您可以手动安装Chrome或Chromium浏览器，然后重新运行安装脚本"
-                            return 1
+                            print_warning "无法通过包管理器安装浏览器，尝试直接下载安装Chromium"
+                            if download_and_install_chromium; then
+                                print_success "通过直接下载方式安装Chromium成功"
+                                browser_installed=true
+                            fi
                         fi
+                    fi
+                    
+                    if [ "$browser_installed" = false ]; then
+                        print_error "浏览器安装失败"
+                        return 1
                     fi
                     ;;
                 pacman)
@@ -571,8 +694,13 @@ install_browser_environment() {
                     if sudo pacman -S --noconfirm chromium &> /dev/null; then
                         print_success "已安装chromium"
                     else
-                        print_error "浏览器安装失败"
-                        return 1
+                        print_warning "无法通过包管理器安装浏览器，尝试直接下载安装Chromium"
+                        if download_and_install_chromium; then
+                            print_success "通过直接下载方式安装Chromium成功"
+                        else
+                            print_error "浏览器安装失败"
+                            return 1
+                        fi
                     fi
                     ;;
                 zypper)
@@ -580,8 +708,13 @@ install_browser_environment() {
                     if sudo zypper install -y chromium &> /dev/null; then
                         print_success "已安装chromium"
                     else
-                        print_error "浏览器安装失败"
-                        return 1
+                        print_warning "无法通过包管理器安装浏览器，尝试直接下载安装Chromium"
+                        if download_and_install_chromium; then
+                            print_success "通过直接下载方式安装Chromium成功"
+                        else
+                            print_error "浏览器安装失败"
+                            return 1
+                        fi
                     fi
                     ;;
                 apk)
@@ -589,8 +722,13 @@ install_browser_environment() {
                     if sudo apk add chromium &> /dev/null; then
                         print_success "已安装chromium"
                     else
-                        print_error "浏览器安装失败"
-                        return 1
+                        print_warning "无法通过包管理器安装浏览器，尝试直接下载安装Chromium"
+                        if download_and_install_chromium; then
+                            print_success "通过直接下载方式安装Chromium成功"
+                        else
+                            print_error "浏览器安装失败"
+                            return 1
+                        fi
                     fi
                     ;;
             esac
@@ -602,6 +740,10 @@ install_browser_environment() {
             elif brew install --cask chromium &> /dev/null; then
                 print_success "已安装chromium"
             else
+                print_warning "无法通过包管理器安装浏览器"
+                print_warning "请手动安装Chromium或Chrome浏览器后重新运行脚本"
+                print_warning "Chrome下载地址: https://www.google.com/chrome/"
+                print_warning "Chromium下载地址: https://www.chromium.org/getting-involved/download-chromium/"
                 print_error "浏览器安装失败"
                 return 1
             fi
