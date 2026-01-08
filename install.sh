@@ -998,17 +998,22 @@ setup_configuration() {
             sed "s|admin_static_dir: ./web/dist|admin_static_dir: $INSTALL_DIR/web/dist|" | \
             sed "s|redis_url: \"localhost:6379\"|redis_url: \"$redis_url\"|" > "$temp_config"
         
-        # 添加或修改redis_db和redis_password配置
+        # 添加或修改redis_db配置
         if grep -q "redis_db:" "$temp_config"; then
-            sed -i '' "s/redis_db:.*/redis_db: $redis_db/" "$temp_config"
+            # 使用awk替换，避免sed命令中的特殊字符问题
+            awk -v new_db="$redis_db" '/redis_db:/{print "  redis_db: " new_db; next}1' "$temp_config" > "$temp_config.tmp" && mv "$temp_config.tmp" "$temp_config"
         else
-            sed -i '' "/redis_url:/a\  redis_db: $redis_db" "$temp_config"
+            # 使用awk在redis_url行后添加redis_db配置
+            awk -v new_db="$redis_db" '/redis_url:/{print; print "  redis_db: " new_db; next}1' "$temp_config" > "$temp_config.tmp" && mv "$temp_config.tmp" "$temp_config"
         fi
         
+        # 添加或修改redis_password配置
         if grep -q "redis_password:" "$temp_config"; then
-            sed -i '' "s/redis_password:.*/redis_password: \"$redis_password\"/" "$temp_config"
+            # 使用awk替换，避免sed命令中的特殊字符问题
+            awk -v new_pwd="$redis_password" '/redis_password:/{print "  redis_password: \"" new_pwd "\""; next}1' "$temp_config" > "$temp_config.tmp" && mv "$temp_config.tmp" "$temp_config"
         else
-            sed -i '' "/redis_db:/a\  redis_password: \"$redis_password\"" "$temp_config"
+            # 使用awk在redis_db行后添加redis_password配置
+            awk -v new_pwd="$redis_password" '/redis_db:/{print; print "  redis_password: \"" new_pwd "\""; next}1' "$temp_config" > "$temp_config.tmp" && mv "$temp_config.tmp" "$temp_config"
         fi
         
         # 使用sudo复制临时文件到目标位置
