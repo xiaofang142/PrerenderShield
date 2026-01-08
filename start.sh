@@ -155,7 +155,20 @@ install_deps() {
     fi
     
     # 安装Chrome/Chromium浏览器（用于预渲染）
-    if ! command -v google-chrome &> /dev/null && ! command -v chromium &> /dev/null; then
+    local chrome_installed=false
+    
+    # 检查Chrome是否已安装（Linux检查命令行工具，macOS检查应用目录）
+    if [ "$os_type" = "Linux" ]; then
+        if command -v google-chrome &> /dev/null || command -v chromium &> /dev/null; then
+            chrome_installed=true
+        fi
+    elif [ "$os_type" = "Darwin" ]; then
+        if [ -d "/Applications/Google Chrome.app" ] || [ -d "/Applications/Chromium.app" ]; then
+            chrome_installed=true
+        fi
+    fi
+    
+    if [ "$chrome_installed" = false ]; then
         info "安装Chrome/Chromium浏览器..."
         if [ "$os_type" = "Linux" ]; then
             case "$install_cmd" in
@@ -171,10 +184,18 @@ install_deps() {
         fi
         info "✓ 浏览器安装完成"
     else
-        if command -v google-chrome &> /dev/null; then
-            info "✓ Chrome浏览器已安装: $(google-chrome --version)"
+        if [ "$os_type" = "Linux" ]; then
+            if command -v google-chrome &> /dev/null; then
+                info "✓ Chrome浏览器已安装: $(google-chrome --version)"
+            else
+                info "✓ Chromium浏览器已安装: $(chromium --version)"
+            fi
         else
-            info "✓ Chromium浏览器已安装: $(chromium --version)"
+            if [ -d "/Applications/Google Chrome.app" ]; then
+                info "✓ Chrome浏览器已安装"
+            else
+                info "✓ Chromium浏览器已安装"
+            fi
         fi
     fi
     
