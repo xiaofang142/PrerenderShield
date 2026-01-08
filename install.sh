@@ -610,11 +610,18 @@ build_from_source() {
     fi
     
     print_info "构建后端二进制文件..."
-    go build -o "$INSTALL_DIR/$APP_NAME" ./cmd/api
+    # 先在当前目录构建，然后再复制到目标目录（避免权限问题）
+    go build -o "./$APP_NAME" ./cmd/api
     if [[ $? -ne 0 ]]; then
         print_error "后端构建失败"
         exit 1
     fi
+    
+    # 使用sudo将二进制文件复制到目标目录
+    sudo cp "./$APP_NAME" "$INSTALL_DIR/"
+    sudo chmod 755 "$INSTALL_DIR/$APP_NAME"
+    # 删除临时二进制文件
+    rm -f "./$APP_NAME"
     
     print_info "构建前端..."
     cd web
