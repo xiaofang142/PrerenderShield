@@ -78,3 +78,6 @@ data/
 
 #资源文件
 /static/
+
+# Trace文件
+.trace
