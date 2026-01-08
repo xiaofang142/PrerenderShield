@@ -1,6 +1,6 @@
 module prerender-shield
 
-go 1.24
+go 1.20
 
 require (
 	github.com/gin-gonic/gin v1.11.0
