@@ -117,36 +117,102 @@ detect_os() {
     ARCH=$(uname -m)
     
     case "$OS_TYPE" in
-        Linux)
+        Linux) 
             OS="linux"
             # 检测Linux发行版
             if [[ -f /etc/os-release ]]; then
                 . /etc/os-release
                 DISTRO=$ID
+                
+                # 改进的发行版检测
                 case $ID in
-                    ubuntu|debian)
+                    ubuntu|debian|linuxmint|pop|zorin|elementary)
                         PACKAGE_MANAGER="apt-get"
                         ;;
-                    centos|rhel|fedora)
-                        PACKAGE_MANAGER="yum"
+                    centos|rhel|fedora|rocky|alma|oracle|amzn)
+                        if [[ "$VERSION_ID" -ge 33 || "$ID" == "fedora" ]]; then
+                            PACKAGE_MANAGER="dnf"
+                        else
+                            PACKAGE_MANAGER="yum"
+                        fi
                         ;;
-                    fedora)
-                        PACKAGE_MANAGER="dnf"
-                        ;;
-                    arch)
+                    arch|manjaro|endeavouros)
                         PACKAGE_MANAGER="pacman"
                         ;;
+                    opensuse|opensuse-leap|opensuse-tumbleweed|sles)
+                        PACKAGE_MANAGER="zypper"
+                        ;;
+                    alpine)
+                        PACKAGE_MANAGER="apk"
+                        ;;
                     *)
-                        print_warning "未识别的Linux发行版: $ID"
-                        PACKAGE_MANAGER="apt-get"  # 默认尝试apt-get
+                        print_warning "未识别的Linux发行版: $ID, 尝试自动检测包管理器"
+                        # 自动检测包管理器
+                        if command -v apt-get &> /dev/null; then
+                            PACKAGE_MANAGER="apt-get"
+                        elif command -v dnf &> /dev/null; then
+                            PACKAGE_MANAGER="dnf"
+                        elif command -v yum &> /dev/null; then
+                            PACKAGE_MANAGER="yum"
+                        elif command -v pacman &> /dev/null; then
+                            PACKAGE_MANAGER="pacman"
+                        elif command -v zypper &> /dev/null; then
+                            PACKAGE_MANAGER="zypper"
+                        elif command -v apk &> /dev/null; then
+                            PACKAGE_MANAGER="apk"
+                        else
+                            print_error "无法检测到兼容的包管理器"
+                            exit 1
+                        fi
                         ;;
                 esac
-            else
-                print_warning "无法检测Linux发行版，使用默认包管理器"
+            elif [[ -f /etc/debian_version ]]; then
+                DISTRO="debian"
                 PACKAGE_MANAGER="apt-get"
+            elif [[ -f /etc/redhat-release ]]; then
+                DISTRO="rhel"
+                if command -v dnf &> /dev/null; then
+                    PACKAGE_MANAGER="dnf"
+                else
+                    PACKAGE_MANAGER="yum"
+                fi
+            elif [[ -f /etc/arch-release ]]; then
+                DISTRO="arch"
+                PACKAGE_MANAGER="pacman"
+            elif [[ -f /etc/SuSE-release ]]; then
+                DISTRO="opensuse"
+                PACKAGE_MANAGER="zypper"
+            elif [[ -f /etc/alpine-release ]]; then
+                DISTRO="alpine"
+                PACKAGE_MANAGER="apk"
+            else
+                print_warning "无法检测Linux发行版，尝试自动检测包管理器"
+                # 自动检测包管理器
+                if command -v apt-get &> /dev/null; then
+                    PACKAGE_MANAGER="apt-get"
+                    DISTRO="debian"
+                elif command -v dnf &> /dev/null; then
+                    PACKAGE_MANAGER="dnf"
+                    DISTRO="fedora"
+                elif command -v yum &> /dev/null; then
+                    PACKAGE_MANAGER="yum"
+                    DISTRO="centos"
+                elif command -v pacman &> /dev/null; then
+                    PACKAGE_MANAGER="pacman"
+                    DISTRO="arch"
+                elif command -v zypper &> /dev/null; then
+                    PACKAGE_MANAGER="zypper"
+                    DISTRO="opensuse"
+                elif command -v apk &> /dev/null; then
+                    PACKAGE_MANAGER="apk"
+                    DISTRO="alpine"
+                else
+                    print_error "无法检测到兼容的包管理器"
+                    exit 1
+                fi
             fi
             ;;
-        Darwin)
+        Darwin) 
             OS="darwin"
             PACKAGE_MANAGER="brew"
             ;;
@@ -198,6 +264,12 @@ install_dependencies_linux() {
         pacman)
             sudo pacman -Sy
             ;;
+        zypper)
+            sudo zypper refresh -y
+            ;;
+        apk)
+            sudo apk update
+            ;;
     esac
     
     print_info "安装基础工具..."
@@ -210,6 +282,12 @@ install_dependencies_linux() {
             ;;
         pacman)
             sudo pacman -S --noconfirm curl wget git base-devel
+            ;;
+        zypper)
+            sudo zypper install -y curl wget git gcc make
+            ;;
+        apk)
+            sudo apk add curl wget git gcc make musl-dev
             ;;
     esac
     
@@ -224,6 +302,12 @@ install_dependencies_linux() {
                 ;;
             pacman)
                 sudo pacman -S --noconfirm go
+                ;;
+            zypper)
+                sudo zypper install -y go
+                ;;
+            apk)
+                sudo apk add go
                 ;;
         esac
         print_success "Go环境安装完成"
@@ -249,19 +333,43 @@ install_dependencies_linux() {
                 sudo systemctl enable redis
                 sudo systemctl start redis
                 ;;
+            zypper)
+                sudo zypper install -y redis
+                sudo systemctl enable redis
+                sudo systemctl start redis
+                ;;
+            apk)
+                sudo apk add redis
+                sudo rc-update add redis default
+                sudo service redis start
+                ;;
         esac
         print_success "Redis安装完成"
     else
         print_info "Redis已安装"
         # 检查Redis是否正在运行
         local redis_service="redis-server"
-        if [[ "$PACKAGE_MANAGER" == "yum" ]] || [[ "$PACKAGE_MANAGER" == "dnf" ]]; then
+        local service_manager="systemctl"
+        
+        # 根据发行版调整服务名称和管理器
+        if [[ "$PACKAGE_MANAGER" == "yum" ]] || [[ "$PACKAGE_MANAGER" == "dnf" ]] || [[ "$PACKAGE_MANAGER" == "zypper" ]]; then
             redis_service="redis"
+        elif [[ "$PACKAGE_MANAGER" == "apk" ]]; then
+            service_manager="service"
         fi
-        if ! sudo systemctl is-active --quiet "$redis_service" 2>/dev/null; then
-            print_info "启动Redis服务..."
-            sudo systemctl start "$redis_service"
-            sleep 2
+        
+        if [[ "$service_manager" == "systemctl" ]]; then
+            if ! sudo systemctl is-active --quiet "$redis_service" 2>/dev/null; then
+                print_info "启动Redis服务..."
+                sudo systemctl start "$redis_service"
+                sleep 2
+            fi
+        else
+            if ! sudo $service_manager "$redis_service" status 2>/dev/null | grep -q "running"; then
+                print_info "启动Redis服务..."
+                sudo $service_manager "$redis_service" start
+                sleep 2
+            fi
         fi
     fi
     
@@ -288,6 +396,12 @@ install_dependencies_linux() {
                 ;;
             pacman)
                 sudo pacman -S --noconfirm nodejs npm
+                ;;
+            zypper)
+                sudo zypper install -y nodejs npm
+                ;;
+            apk)
+                sudo apk add nodejs npm
                 ;;
         esac
         print_success "Node.js和npm安装完成"
@@ -366,6 +480,12 @@ install_browser_environment() {
                     ;;
                 pacman)
                     sudo pacman -S --noconfirm chromium
+                    ;;
+                zypper)
+                    sudo zypper install -y chromium
+                    ;;
+                apk)
+                    sudo apk add chromium
                     ;;
             esac
             ;;
@@ -525,7 +645,13 @@ setup_system_service() {
     
     case "$OS" in
         linux)
-            setup_systemd_service
+            # 检查系统是否使用systemd
+            if command -v systemctl &> /dev/null && [[ "$(ps -p 1 -o comm=)" == "systemd" ]]; then
+                setup_systemd_service
+            else
+                # 非systemd系统（如Alpine Linux使用OpenRC）
+                setup_openrc_service
+            fi
             ;;
         darwin)
             setup_launchd_service
@@ -618,6 +744,59 @@ EOF
     print_success "launchd服务配置完成"
 }
 
+setup_openrc_service() {
+    print_info "创建OpenRC服务..."
+    
+    local service_file="/etc/init.d/${APP_NAME}"
+    
+    # 创建OpenRC服务脚本
+    cat << EOF | sudo tee "$service_file" > /dev/null
+#!/sbin/openrc-run
+
+name="${APP_NAME}"
+description="PrerenderShield - Web Application Firewall with Prerendering"
+
+command="$INSTALL_DIR/$APP_NAME"
+command_args="--config $CONFIG_DIR/config.yml"
+command_user="root"
+
+pidfile="/run/${APP_NAME}.pid"
+start_stop_daemon_args="--background --make-pidfile --pidfile $pidfile"
+
+# 依赖服务
+# 如果需要其他依赖，可以添加到这里
+depend() {
+    need net localmount
+    after firewall redis
+}
+
+# 启动前准备
+start_pre() {
+    # 确保配置文件存在
+    if [ ! -f "$CONFIG_DIR/config.yml" ]; then
+        eerror "配置文件不存在: $CONFIG_DIR/config.yml"
+        return 1
+    fi
+    
+    # 确保目录权限正确
+    chown -R root:root "$INSTALL_DIR"
+    chown -R root:root "$CONFIG_DIR"
+    chown -R root:root "$DATA_DIR"
+    chown -R root:root "$LOG_DIR"
+    
+    return 0
+}
+EOF
+    
+    # 赋予执行权限
+    sudo chmod +x "$service_file"
+    
+    # 添加到默认运行级别
+    sudo rc-update add "${APP_NAME}" default
+    
+    print_success "OpenRC服务配置完成"
+}
+
 # ============================================================================
 # 完成和启动
 # ============================================================================
@@ -626,10 +805,18 @@ start_application() {
     print_step "6" "启动应用"
     
     case "$OS" in
-        linux)
-            print_info "启动服务..."
-            sudo systemctl start "$SYSTEMD_SERVICE"
-            sudo systemctl status "$SYSTEMD_SERVICE" --no-pager
+        linux) 
+            # 检查系统是否使用systemd
+            if command -v systemctl &> /dev/null && [[ "$(ps -p 1 -o comm=)" == "systemd" ]]; then
+                print_info "启动systemd服务..."
+                sudo systemctl start "$SYSTEMD_SERVICE"
+                sudo systemctl status "$SYSTEMD_SERVICE" --no-pager
+            else
+                # 非systemd系统（如Alpine Linux使用OpenRC）
+                print_info "启动OpenRC服务..."
+                sudo /etc/init.d/${APP_NAME} start
+                sudo /etc/init.d/${APP_NAME} status
+            fi
             ;;
         darwin)
             print_info "启动服务..."
@@ -662,11 +849,21 @@ print_summary() {
     echo "管理命令："
     case "$OS" in
         linux)
-            echo "  启动: sudo systemctl start $SYSTEMD_SERVICE"
-            echo "  停止: sudo systemctl stop $SYSTEMD_SERVICE"
-            echo "  重启: sudo systemctl restart $SYSTEMD_SERVICE"
-            echo "  状态: sudo systemctl status $SYSTEMD_SERVICE"
-            echo "  日志: sudo journalctl -u $SYSTEMD_SERVICE -f"
+            # 检查系统是否使用systemd
+            if command -v systemctl &> /dev/null && [[ "$(ps -p 1 -o comm=)" == "systemd" ]]; then
+                echo "  启动: sudo systemctl start $SYSTEMD_SERVICE"
+                echo "  停止: sudo systemctl stop $SYSTEMD_SERVICE"
+                echo "  重启: sudo systemctl restart $SYSTEMD_SERVICE"
+                echo "  状态: sudo systemctl status $SYSTEMD_SERVICE"
+                echo "  日志: sudo journalctl -u $SYSTEMD_SERVICE -f"
+            else
+                # 非systemd系统（如Alpine Linux使用OpenRC）
+                echo "  启动: sudo /etc/init.d/${APP_NAME} start"
+                echo "  停止: sudo /etc/init.d/${APP_NAME} stop"
+                echo "  重启: sudo /etc/init.d/${APP_NAME} restart"
+                echo "  状态: sudo /etc/init.d/${APP_NAME} status"
+                echo "  日志: tail -f $LOG_DIR/app.log"
+            fi
             ;;
         darwin)
             echo "  启动: sudo launchctl start com.prerendershield.app"
@@ -693,10 +890,18 @@ cleanup_on_error() {
     # 停止服务
     case "$OS" in
         linux)
-            sudo systemctl stop "$SYSTEMD_SERVICE" 2>/dev/null || true
-            sudo systemctl disable "$SYSTEMD_SERVICE" 2>/dev/null || true
-            sudo rm -f "/etc/systemd/system/$SYSTEMD_SERVICE"
-            sudo systemctl daemon-reload
+            # 检查系统是否使用systemd
+            if command -v systemctl &> /dev/null && [[ "$(ps -p 1 -o comm=)" == "systemd" ]]; then
+                sudo systemctl stop "$SYSTEMD_SERVICE" 2>/dev/null || true
+                sudo systemctl disable "$SYSTEMD_SERVICE" 2>/dev/null || true
+                sudo rm -f "/etc/systemd/system/$SYSTEMD_SERVICE"
+                sudo systemctl daemon-reload
+            else
+                # 非systemd系统（如Alpine Linux使用OpenRC）
+                sudo /etc/init.d/${APP_NAME} stop 2>/dev/null || true
+                sudo rc-update del ${APP_NAME} default 2>/dev/null || true
+                sudo rm -f "/etc/init.d/${APP_NAME}"
+            fi
             ;;
         darwin)
             sudo launchctl stop com.prerendershield.app 2>/dev/null || true
@@ -707,6 +912,9 @@ cleanup_on_error() {
     
     # 清理目录
     sudo rm -rf "$INSTALL_DIR" 2>/dev/null || true
+    sudo rm -rf "$CONFIG_DIR" 2>/dev/null || true
+    sudo rm -rf "$DATA_DIR" 2>/dev/null || true
+    sudo rm -rf "$LOG_DIR" 2>/dev/null || true
     
     print_error "安装已回滚，请检查错误信息后重试"
 }
