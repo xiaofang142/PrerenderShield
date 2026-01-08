@@ -456,14 +456,29 @@ install_browser_environment() {
     print_info "检测浏览器环境..."
     
     # 检测Chrome/Chromium
+    local chrome_available=false
+    
     if command -v google-chrome &> /dev/null; then
         print_info "Chrome浏览器已安装: $(google-chrome --version)"
-        return 0
+        chrome_available=true
     elif command -v chromium &> /dev/null; then
         print_info "Chromium浏览器已安装: $(chromium --version)"
-        return 0
+        chrome_available=true
     elif command -v chromium-browser &> /dev/null; then
         print_info "Chromium浏览器已安装: $(chromium-browser --version)"
+        chrome_available=true
+    elif [ "$OS" = "darwin" ]; then
+        # macOS额外检查应用目录
+        if [ -d "/Applications/Google Chrome.app" ]; then
+            print_info "Chrome浏览器已安装在/Applications目录"
+            chrome_available=true
+        elif [ -d "/Applications/Chromium.app" ]; then
+            print_info "Chromium浏览器已安装在/Applications目录"
+            chrome_available=true
+        fi
+    fi
+    
+    if [ "$chrome_available" = true ]; then
         return 0
     fi
     
@@ -474,23 +489,47 @@ install_browser_environment() {
             case "$PACKAGE_MANAGER" in
                 apt-get)
                     sudo apt-get install -y chromium-browser
+                    if [ $? -ne 0 ]; then
+                        error "浏览器安装失败"
+                        return 1
+                    fi
                     ;;
                 yum|dnf)
                     sudo $PACKAGE_MANAGER install -y chromium
+                    if [ $? -ne 0 ]; then
+                        error "浏览器安装失败"
+                        return 1
+                    fi
                     ;;
                 pacman)
                     sudo pacman -S --noconfirm chromium
+                    if [ $? -ne 0 ]; then
+                        error "浏览器安装失败"
+                        return 1
+                    fi
                     ;;
                 zypper)
                     sudo zypper install -y chromium
+                    if [ $? -ne 0 ]; then
+                        error "浏览器安装失败"
+                        return 1
+                    fi
                     ;;
                 apk)
                     sudo apk add chromium
+                    if [ $? -ne 0 ]; then
+                        error "浏览器安装失败"
+                        return 1
+                    fi
                     ;;
             esac
             ;;
         darwin)
             brew install --cask google-chrome
+            if [ $? -ne 0 ]; then
+                error "浏览器安装失败"
+                return 1
+            fi
             ;;
     esac
     
