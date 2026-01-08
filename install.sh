@@ -812,10 +812,30 @@ build_from_source() {
     
     print_info "构建前端..."
     cd web
-    npm install
+    
+    # 检查系统内存，给出警告
+    print_info "检查系统内存..."
+    if [[ "$OS" == "linux" ]]; then
+        total_mem=$(free -m | grep Mem | awk '{print $2}')
+        if [[ $total_mem -lt 4096 ]]; then
+            print_warning "系统内存不足（当前 $total_mem MB，建议至少 4GB），前端构建可能失败"
+            print_warning "正在尝试优化内存使用..."
+        fi
+    fi
+    
+    # 优化npm内存使用
+    export NODE_OPTIONS="--max-old-space-size=2048"
+    
+    print_info "安装前端依赖..."
+    npm install --legacy-peer-deps
     if [[ $? -ne 0 ]]; then
-        print_error "前端依赖安装失败"
-        exit 1
+        print_warning "前端依赖安装失败，尝试使用 --force 选项..."
+        npm install --force
+        if [[ $? -ne 0 ]]; then
+            print_error "前端依赖安装失败"
+            print_warning "您可以手动安装前端依赖后重新运行脚本"
+            # 不退出，继续执行后续步骤
+        fi
     fi
     
     # 获取当前服务器的公网IP
@@ -826,10 +846,18 @@ build_from_source() {
     export VITE_API_BASE_URL="http://$public_ip:9598/api/v1"
     print_info "设置前端API地址为: $VITE_API_BASE_URL"
     
-    npm run build
+    print_info "开始构建前端..."
+    # 使用 --sourcemap false 减少内存使用
+    npm run build -- --sourcemap false
     if [[ $? -ne 0 ]]; then
         print_error "前端构建失败"
-        exit 1
+        print_warning "前端构建失败，可能是内存不足导致"
+        print_warning "建议："
+        print_warning "1. 增加服务器内存（建议至少 4GB）"
+        print_warning "2. 手动构建前端：cd web && npm run build -- --sourcemap false"
+        print_warning "3. 使用预构建的前端文件"
+        print_warning "4. 跳过前端构建，直接使用API服务"
+        print_info "继续安装，跳过前端构建..."
     fi
     
     cd ..
