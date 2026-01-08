@@ -115,20 +115,13 @@ push_all() {
     
     # 检查是否有未提交的更改
     if [ -n "$(git status --porcelain)" ]; then
-        log_warn "检测到未提交的更改"
-        read -p "是否要提交所有更改？(y/n): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            git add .
-            read -p "请输入提交信息: " COMMIT_MSG
-            if [ -z "$COMMIT_MSG" ]; then
-                COMMIT_MSG="Update $(date '+%Y-%m-%d %H:%M:%S')"
-            fi
-            git commit -m "$COMMIT_MSG"
-        else
-            log_error "请先提交更改"
-            exit 1
-        fi
+        log_warn "检测到未提交的更改，自动提交..."
+        # 自动添加所有更改
+        git add .
+        # 使用默认提交信息
+        COMMIT_MSG="Update $(date '+%Y-%m-%d %H:%M:%S')"
+        log_info "使用默认提交信息: $COMMIT_MSG"
+        git commit -m "$COMMIT_MSG"
     fi
     
     # 推送到所有配置的远程仓库
