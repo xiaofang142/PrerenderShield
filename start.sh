@@ -4,6 +4,7 @@
 
 APP_NAME="prerender-shield"
 CONFIG_FILE="configs/config.yml"
+APP_BINARY="./api"
 PID_FILE="./data/${APP_NAME}.pid"
 LOG_FILE="./data/${APP_NAME}.log"
 
@@ -431,7 +432,10 @@ build_app() {
         error "应用程序构建失败"
         exit 1
     fi
-    info "✓ 应用程序构建成功"
+    
+    # 添加执行权限
+    chmod +x "$APP_BINARY"
+    info "✓ 应用程序构建成功，并添加了执行权限"
 }
 
 is_running() {

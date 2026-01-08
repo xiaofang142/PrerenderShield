@@ -519,46 +519,90 @@ install_browser_environment() {
         linux)
             case "$PACKAGE_MANAGER" in
                 apt-get)
-                    sudo apt-get install -y chromium-browser
-                    if [ $? -ne 0 ]; then
-                        error "浏览器安装失败"
-                        return 1
+                    # Ubuntu/Debian系统，尝试安装chromium-browser
+                    if sudo apt-get install -y chromium-browser &> /dev/null; then
+                        print_success "已安装chromium-browser"
+                    elif sudo apt-get install -y chromium &> /dev/null; then
+                        print_success "已安装chromium"
+                    else
+                        print_warning "无法安装chromium，尝试安装google-chrome-stable"
+                        if wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add - && \
+                           sudo sh -c 'echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list' && \
+                           sudo apt-get update && \
+                           sudo apt-get install -y google-chrome-stable; then
+                            print_success "已安装google-chrome-stable"
+                        else
+                            print_error "浏览器安装失败"
+                            return 1
+                        fi
                     fi
                     ;;
                 yum|dnf)
-                    sudo $PACKAGE_MANAGER install -y chromium
-                    if [ $? -ne 0 ]; then
-                        error "浏览器安装失败"
-                        return 1
+                    # CentOS/RHEL/Fedora/OpenCloudOS系统，尝试多种浏览器安装方案
+                    browser_installed=false
+                    
+                    # 方案1：尝试安装chromium
+                    if sudo $PACKAGE_MANAGER install -y chromium &> /dev/null; then
+                        print_success "已安装chromium"
+                        browser_installed=true
+                    elif sudo $PACKAGE_MANAGER install -y chromium-browser &> /dev/null; then
+                        # 方案2：尝试安装chromium-browser
+                        print_success "已安装chromium-browser"
+                        browser_installed=true
+                    else
+                        # 方案3：尝试安装google-chrome-stable
+                        print_warning "无法安装chromium，尝试安装google-chrome-stable"
+                        if wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm && \
+                           sudo $PACKAGE_MANAGER install -y ./google-chrome-stable_current_x86_64.rpm; then
+                            print_success "已安装google-chrome-stable"
+                            rm -f ./google-chrome-stable_current_x86_64.rpm
+                            browser_installed=true
+                        else
+                            # 清理临时文件
+                            rm -f ./google-chrome-stable_current_x86_64.rpm
+                            print_error "浏览器安装失败"
+                            print_warning "您可以手动安装Chrome或Chromium浏览器，然后重新运行安装脚本"
+                            return 1
+                        fi
                     fi
                     ;;
                 pacman)
-                    sudo pacman -S --noconfirm chromium
-                    if [ $? -ne 0 ]; then
-                        error "浏览器安装失败"
+                    # Arch Linux系统
+                    if sudo pacman -S --noconfirm chromium &> /dev/null; then
+                        print_success "已安装chromium"
+                    else
+                        print_error "浏览器安装失败"
                         return 1
                     fi
                     ;;
                 zypper)
-                    sudo zypper install -y chromium
-                    if [ $? -ne 0 ]; then
-                        error "浏览器安装失败"
+                    # openSUSE系统
+                    if sudo zypper install -y chromium &> /dev/null; then
+                        print_success "已安装chromium"
+                    else
+                        print_error "浏览器安装失败"
                         return 1
                     fi
                     ;;
                 apk)
-                    sudo apk add chromium
-                    if [ $? -ne 0 ]; then
-                        error "浏览器安装失败"
+                    # Alpine Linux系统
+                    if sudo apk add chromium &> /dev/null; then
+                        print_success "已安装chromium"
+                    else
+                        print_error "浏览器安装失败"
                         return 1
                     fi
                     ;;
             esac
             ;;
         darwin)
-            brew install --cask google-chrome
-            if [ $? -ne 0 ]; then
-                error "浏览器安装失败"
+            # macOS系统
+            if brew install --cask google-chrome &> /dev/null; then
+                print_success "已安装google-chrome"
+            elif brew install --cask chromium &> /dev/null; then
+                print_success "已安装chromium"
+            else
+                print_error "浏览器安装失败"
                 return 1
             fi
             ;;
@@ -632,8 +676,14 @@ build_from_source() {
         exit 1
     fi
     
-    # 设置API地址
-    export VITE_API_BASE_URL="http://localhost:9598/api/v1"
+    # 获取当前服务器的公网IP
+    public_ip=$(curl -s ifconfig.me || curl -s icanhazip.com || echo "127.0.0.1")
+    print_info "当前服务器公网IP: $public_ip"
+    
+    # 设置API地址为当前服务器公网IP+端口
+    export VITE_API_BASE_URL="http://$public_ip:9598/api/v1"
+    print_info "设置前端API地址为: $VITE_API_BASE_URL"
+    
     npm run build
     if [[ $? -ne 0 ]]; then
         print_error "前端构建失败"
@@ -668,10 +718,12 @@ setup_configuration() {
         
         # 修改默认配置
         print_info "优化默认配置..."
-        sudo sed -i "s|data_dir: ./data|data_dir: $DATA_DIR|" "$CONFIG_DIR/config.yml"
-        sudo sed -i "s|static_dir: ./static|static_dir: $INSTALL_DIR/static|" "$CONFIG_DIR/config.yml"
-        sudo sed -i "s|admin_static_dir: ./web/dist|admin_static_dir: $INSTALL_DIR/web/dist|" "$CONFIG_DIR/config.yml"
-        sudo sed -i "s|redis_url: \"localhost:6379\"|redis_url: \"127.0.0.1:6379\"|" "$CONFIG_DIR/config.yml"
+        # 兼容macOS/BSD和GNU sed的-i选项
+        # 在macOS/BSD上，-i需要一个备份后缀，在GNU sed上这个参数可选
+        sudo sed -i '' "s|data_dir: ./data|data_dir: $DATA_DIR|" "$CONFIG_DIR/config.yml"
+        sudo sed -i '' "s|static_dir: ./static|static_dir: $INSTALL_DIR/static|" "$CONFIG_DIR/config.yml"
+        sudo sed -i '' "s|admin_static_dir: ./web/dist|admin_static_dir: $INSTALL_DIR/web/dist|" "$CONFIG_DIR/config.yml"
+        sudo sed -i '' "s|redis_url: \"localhost:6379\"|redis_url: \"127.0.0.1:6379\"|" "$CONFIG_DIR/config.yml"
         
         # 设置默认站点配置
         setup_default_site
@@ -685,8 +737,10 @@ setup_configuration() {
 setup_default_site() {
     print_info "配置默认站点..."
     
-    # 创建默认站点配置
-    local default_site_config=$(cat <<EOF
+    # 创建一个包含新sites配置的临时文件
+    local sites_temp=$(mktemp)
+    cat > "$sites_temp" << EOF
+sites:
   - id: "default-site"
     name: "默认站点"
     domains:
@@ -708,10 +762,20 @@ setup_default_site() {
         default_action: "block"
         block_message: "请求被防火墙拦截"
 EOF
-)
     
-    # 替换sites部分
-    sudo sed -i "/^sites:/,/^[^ ]/c\sites:\n$default_site_config" "$CONFIG_DIR/config.yml"
+    # 创建一个临时文件，用于存储修改后的配置
+    local config_temp=$(mktemp)
+    
+    # 使用更简单的方式：将原配置文件中sites:之前的内容复制到临时文件（不包括sites:行）
+    # 然后将新的sites配置追加到临时文件
+    awk '/^sites:/{exit}1' "$CONFIG_DIR/config.yml" > "$config_temp"
+    cat "$sites_temp" >> "$config_temp"
+    
+    # 将临时文件内容复制回原配置文件
+    sudo cp "$config_temp" "$CONFIG_DIR/config.yml"
+    
+    # 删除临时文件
+    rm "$sites_temp" "$config_temp"
 }
 
 # ============================================================================

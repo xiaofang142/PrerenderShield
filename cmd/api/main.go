@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -243,6 +244,54 @@ func main() {
 			log.Fatalf("Failed to start API server: %v", err)
 		}
 	}()
+
+	// 17. 启动管理控制台服务器
+	// 只在发行阶段启动管理控制台静态资源服务器，开发阶段（go run）不启动
+	// 检查是否是在go run模式下运行
+	exePath, _ := os.Executable()
+	isDevMode := strings.Contains(exePath, "/var/folders") || strings.Contains(exePath, "/tmp") || strings.Contains(exePath, "T\\go-build")
+
+	if !isDevMode {
+		// 创建静态文件服务器，用于提供管理控制台前端页面
+		log.Printf("Admin static dir: %s", cfg.Dirs.AdminStaticDir)
+		// 检查目录是否存在
+		if _, err := os.Stat(cfg.Dirs.AdminStaticDir); os.IsNotExist(err) {
+			log.Printf("Admin static dir does not exist: %s", cfg.Dirs.AdminStaticDir)
+		} else {
+			log.Printf("Admin static dir exists: %s", cfg.Dirs.AdminStaticDir)
+			// 列出目录内容
+			files, _ := os.ReadDir(cfg.Dirs.AdminStaticDir)
+			log.Printf("Admin static dir contents: %v", files)
+		}
+
+		adminMux := http.NewServeMux()
+		// 设置静态文件目录
+		staticHandler := http.FileServer(http.Dir(cfg.Dirs.AdminStaticDir))
+		// 使用StripPrefix处理路径
+		adminMux.Handle("/", http.StripPrefix("/", staticHandler))
+		// 启动管理控制台服务器
+		adminServer := &http.Server{
+			Addr:    fmt.Sprintf("%s:%d", cfg.Server.Address, cfg.Server.ConsolePort),
+			Handler: adminMux,
+		}
+
+		go func() {
+			log.Printf("Admin console server starting on %s:%d", cfg.Server.Address, cfg.Server.ConsolePort)
+			if err := adminServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("Failed to start admin console server: %v", err)
+			}
+		}()
+
+		// 18. 优雅关闭管理控制台服务器
+		defer func() {
+			if err := adminServer.Shutdown(context.Background()); err != nil {
+				log.Printf("Error shutting down admin console server: %v", err)
+			}
+		}()
+	} else {
+		log.Printf("Running in development mode, admin console server not started")
+		log.Printf("Use 'npm run dev' in web directory to start frontend development server")
+	}
 
 	// 16. 处理信号，优雅关闭服务
 	quit := make(chan os.Signal, 1)
