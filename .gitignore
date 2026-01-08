@@ -6,8 +6,6 @@
 *.so
 *.dylib
 prerender-shield
-api
-bin/
 
 # 依赖包目录
 gopkg.in/
