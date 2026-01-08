@@ -273,23 +273,43 @@ install_dependencies_linux() {
     esac
     
     print_info "安装基础工具..."
-    case "$PACKAGE_MANAGER" in
-        apt-get)
-            sudo apt-get install -y curl wget git build-essential
-            ;;
-        yum|dnf)
-            sudo $PACKAGE_MANAGER install -y curl wget git gcc make
-            ;;
-        pacman)
-            sudo pacman -S --noconfirm curl wget git base-devel
-            ;;
-        zypper)
-            sudo zypper install -y curl wget git gcc make
-            ;;
-        apk)
-            sudo apk add curl wget git gcc make musl-dev
-            ;;
-    esac
+    
+    # 基础工具列表
+    local basic_tools=()
+    
+    # 检查并添加需要安装的基础工具
+    if ! command -v curl &> /dev/null; then
+        basic_tools+=(curl)
+    fi
+    if ! command -v wget &> /dev/null; then
+        basic_tools+=(wget)
+    fi
+    if ! command -v git &> /dev/null; then
+        basic_tools+=(git)
+    fi
+    
+    # 根据包管理器安装基础工具
+    if [ ${#basic_tools[@]} -gt 0 ]; then
+        case "$PACKAGE_MANAGER" in
+            apt-get)
+                sudo apt-get install -y "${basic_tools[@]}" build-essential
+                ;;
+            yum|dnf)
+                sudo $PACKAGE_MANAGER install -y "${basic_tools[@]}" gcc make
+                ;;
+            pacman)
+                sudo pacman -S --noconfirm "${basic_tools[@]}" base-devel
+                ;;
+            zypper)
+                sudo zypper install -y "${basic_tools[@]}" gcc make
+                ;;
+            apk)
+                sudo apk add "${basic_tools[@]}" gcc make musl-dev
+                ;;
+        esac
+    else
+        print_info "✓ 基础工具已安装"
+    fi
     
     print_info "安装Go环境..."
     if ! command -v go &> /dev/null; then
@@ -421,7 +441,18 @@ install_dependencies_macos() {
     fi
     
     print_info "安装基础工具..."
-    brew install curl wget git
+    # 检查并安装curl
+    if ! command -v curl &> /dev/null; then
+        brew install curl
+    fi
+    # 检查并安装wget
+    if ! command -v wget &> /dev/null; then
+        brew install wget
+    fi
+    # 检查并安装git
+    if ! command -v git &> /dev/null; then
+        brew install git
+    fi
     
     print_info "安装Go环境..."
     if ! command -v go &> /dev/null; then
