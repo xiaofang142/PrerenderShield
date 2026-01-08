@@ -219,7 +219,7 @@ npm run dev
 
 ### 📚 **相关资源**
 - **项目主页**：[Gitee](https://gitee.com/xhpmayun/prerender-shield) | [GitHub](https://github.com/xiaofang142/PrerenderShield)
-- **在线文档**：[项目文档](https://github.com/xiaofang142/PrerenderShield/docs)
+- **在线文档**：[项目文档](https://prerender.websitetool.cn/)
 - **问题追踪**：[GitHub Issues](https://github.com/xiaofang142/PrerenderShield/issues)
 
 ## 5. 联系我们

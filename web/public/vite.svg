@@ -105,18 +105,25 @@
         filter="url(#glow)">prerender-shield</text>
   
   <!-- 副标题文字 -->
-  <text x="256" y="355" 
+  <text x="256" y="345" 
         font-family="Arial, sans-serif" 
-        font-size="24" 
+        font-size="20" 
         font-weight="bold" 
         fill="#00ff88" 
         text-anchor="middle"
-        opacity="0.9">预渲染解决方案</text>
-  
-  <text x="400" y="388" 
+        opacity="0.9">企业级 Web 应用中间件</text>
+
+  <text x="256" y="375" 
         font-family="Arial, sans-serif" 
-        font-size="18" 
-        fill="#00ffaa" 
-        text-anchor="end"
-        opacity="0.9">前端网站的新选择</text>
+        font-size="14" 
+        fill="url(#eyeGradient)" 
+        text-anchor="middle"
+        opacity="0.9">安全防护 + SEO 优化</text>
+
+  <text x="256" y="400" 
+        font-family="Arial, sans-serif" 
+        font-size="12" 
+        fill="#0099ff" 
+        text-anchor="middle"
+        opacity="0.8">专为解决前后端分离架构痛点而设计</text>
 </svg>
