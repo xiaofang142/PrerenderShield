@@ -994,11 +994,17 @@ setup_system_service() {
 setup_systemd_service() {
     print_info "创建systemd服务..."
     
+    # 根据包管理器设置正确的Redis服务名称
+    local redis_service="redis-server.service"
+    if [[ "$PACKAGE_MANAGER" == "yum" ]] || [[ "$PACKAGE_MANAGER" == "dnf" ]] || [[ "$PACKAGE_MANAGER" == "zypper" ]]; then
+        redis_service="redis.service"
+    fi
+    
     local service_file=$(cat <<EOF
 [Unit]
 Description=PrerenderShield - Web Application Firewall with Prerendering
-After=network.target redis-server.service
-Requires=redis-server.service
+After=network.target $redis_service
+Requires=$redis_service
 
 [Service]
 Type=simple
