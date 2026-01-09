@@ -69,9 +69,13 @@ web/dist/
 # 数据库文件
 data/
 !data/.gitkeep
+*/data/
+!*/data/.gitkeep
 
 # 证书文件
 /etc/prerender-shield/certs/
+certs/
+*/certs/
 
 #资源文件
 /static/

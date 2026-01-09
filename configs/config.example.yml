@@ -28,7 +28,7 @@ sites:
     name: "example-site"
     domains:
       - "example.com"
-    port: 8080
+    port: 8082
     mode: "static"
     proxy:
       target_url: ""

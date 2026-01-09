@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"strings"
 	"syscall"
 	"time"
@@ -264,10 +265,24 @@ func main() {
 	}
 
 	adminMux := http.NewServeMux()
-	// 设置静态文件目录
-	staticHandler := http.FileServer(http.Dir(cfg.Dirs.AdminStaticDir))
-	// 使用StripPrefix处理路径
-	adminMux.Handle("/", http.StripPrefix("/", staticHandler))
+
+	// 简化的SPA路由处理
+	adminMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// 检查请求是否指向一个具体的文件
+		filePath := path.Join(cfg.Dirs.AdminStaticDir, r.URL.Path)
+
+		// 如果文件不存在，返回index.html
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			// 记录日志
+			log.Printf("File not found, serving index.html: %s", r.URL.Path)
+			// 返回index.html
+			http.ServeFile(w, r, path.Join(cfg.Dirs.AdminStaticDir, "index.html"))
+			return
+		}
+
+		// 如果文件存在，使用默认的文件服务器处理
+		http.FileServer(http.Dir(cfg.Dirs.AdminStaticDir)).ServeHTTP(w, r)
+	})
 	// 启动管理控制台服务器
 	adminServer := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", cfg.Server.Address, cfg.Server.ConsolePort),

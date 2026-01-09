@@ -243,20 +243,20 @@ else
 fi
 
 # 验证多平台二进制文件
-local multi_platform_valid=true
-local built_platforms=0
-local total_platforms=$(( ${#PLATFORMS[@]} * ${#ARCHITECTURES[@]} ))
+multi_platform_valid=true
+built_platforms=0
+total_platforms=$(( ${#PLATFORMS[@]} * ${#ARCHITECTURES[@]} ))
 
 print_info "验证多平台二进制文件 ($total_platforms 个平台)..."
 
 for platform in "${PLATFORMS[@]}"; do
     for arch in "${ARCHITECTURES[@]}"; do
-        local output_dir="bin/$platform-$arch"
-        local binary_name="api"
+        output_dir="bin/$platform-$arch"
+        binary_name="api"
         if [[ $platform == "windows" ]]; then
             binary_name="api.exe"
         fi
-        local binary_path="$output_dir/$binary_name"
+        binary_path="$output_dir/$binary_name"
         
         if [ -f "$binary_path" ]; then
             print_success "$platform/$arch 二进制文件验证成功: $binary_path"
