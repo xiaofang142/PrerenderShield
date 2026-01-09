@@ -276,11 +276,27 @@ func main() {
 
 	// 17. 启动管理控制台服务器
 	// 检查管理控制台静态目录
+	// 强制设置AdminStaticDir为bin/web目录
+	// 获取当前工作目录
+	currentDir, _ := os.Getwd()
+	// 获取二进制文件所在目录
+	appDir := filepath.Dir(os.Args[0])
+	var webDir string
+	if filepath.Base(appDir) == "bin" {
+		// 如果二进制文件在bin目录中，直接使用web子目录
+		webDir = filepath.Join(appDir, "web")
+	} else {
+		// 否则使用bin/web目录
+		webDir = filepath.Join(currentDir, "bin", "web")
+	}
+	cfg.Dirs.AdminStaticDir = webDir
 	log.Printf("Admin static dir: %s", cfg.Dirs.AdminStaticDir)
 
 	// 检查目录是否存在
+	var actualStaticDir string
 	if _, err := os.Stat(cfg.Dirs.AdminStaticDir); os.IsNotExist(err) {
 		log.Printf("Admin static dir does not exist: %s", cfg.Dirs.AdminStaticDir)
+		actualStaticDir = cfg.Dirs.AdminStaticDir
 	} else {
 		log.Printf("Admin static dir exists: %s", cfg.Dirs.AdminStaticDir)
 		// 列出目录内容
@@ -291,6 +307,10 @@ func main() {
 		distDir := filepath.Join(cfg.Dirs.AdminStaticDir, "dist")
 		if _, err := os.Stat(distDir); err == nil {
 			log.Printf("Using dist directory for static files: %s", distDir)
+			actualStaticDir = distDir
+		} else {
+			// 直接使用web目录
+			actualStaticDir = cfg.Dirs.AdminStaticDir
 		}
 	}
 
@@ -309,7 +329,7 @@ func main() {
 	adminMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// 移除URL中的hash部分，支持SPA路由
 		path := strings.Split(r.URL.Path, "#")[0]
-		filePath := filepath.Join(cfg.Dirs.AdminStaticDir, strings.TrimPrefix(path, "/"))
+		filePath := filepath.Join(actualStaticDir, strings.TrimPrefix(path, "/"))
 
 		log.Printf("Static file request: %s -> %s", r.URL.Path, filePath)
 
@@ -351,7 +371,7 @@ func main() {
 		}
 
 		// SPA路由处理：非静态资源请求返回index.html
-		indexPath := filepath.Join(cfg.Dirs.AdminStaticDir, "index.html")
+		indexPath := filepath.Join(actualStaticDir, "index.html")
 		if _, err := os.Stat(indexPath); err == nil {
 			// 设置正确的Content-Type
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")

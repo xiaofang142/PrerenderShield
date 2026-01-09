@@ -1,47 +1,6 @@
 #!/bin/bash
 
-# ============================================================================
-# PrerenderShield 一键安装脚本 (方案A - 原生安装)
-# ============================================================================
-#
-# 功能特点：
-# 1. 跨平台支持 (Linux/macOS/Windows WSL2)
-# 2. 自动依赖检测和安装
-# 3. 浏览器环境自动配置
-# 4. 系统服务自动配置
-# 5. 智能配置初始化
-# ============================================================================
-
-set -euo pipefail
-
-# ============================================================================
-# 全局变量和常量
-# ============================================================================
-
-APP_NAME="prerender-shield"
-APP_VERSION="1.0.1"
-
-# 动态获取当前平台目录作为安装目录
-detect_platform_dir() {
-    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
-    local arch=$(uname -m)
-    
-    # 转换架构名称
-    if [[ $arch == "x86_64" ]]; then
-        arch="amd64"
-    elif [[ $arch == "aarch64" || $arch == "arm64" ]]; then
-        arch="arm64"
-    fi
-    
-    echo "bin/${os}-${arch}"
-}
-
-# 初始化安装目录变量
-INSTALL_DIR=""
-CONFIG_DIR=""
-DATA_DIR=""
-LOG_DIR=""
-SYSTEMD_SERVICE="${APP_NAME}.service"
+# PrerenderShield 服务端安装脚本
 
 # 彩色输出定义
 RED='\033[0;31m'
@@ -49,25 +8,6 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
-
-# 操作系统检测
-OS=""
-OS_TYPE=""
-ARCH=""
-PACKAGE_MANAGER=""
-DISTRO=""
-
-# ============================================================================
-# 工具函数
-# ============================================================================
-
-print_header() {
-    echo -e "${BLUE}"
-    echo "===================================================================="
-    echo "PrerenderShield 安装程序 v${APP_VERSION}"
-    echo "===================================================================="
-    echo -e "${NC}"
-}
 
 print_success() {
     echo -e "${GREEN}[✓] $1${NC}"
@@ -85,63 +25,45 @@ print_error() {
     echo -e "${RED}[✗] $1${NC}" >&2
 }
 
-print_step() {
-    echo -e "${BLUE}"
-    echo "--------------------------------------------------------------------"
-    echo "步骤 $1: $2"
-    echo "--------------------------------------------------------------------"
-    echo -e "${NC}"
-}
+# 全局变量
+BIN_DIR="bin"
+CONFIG_DIR="$BIN_DIR/config"
+DATA_DIR="$BIN_DIR/data"
+LOG_DIR="$BIN_DIR/logs"
+GOOGLE_DIR="$BIN_DIR/google"
+BINARY_PATH="$BIN_DIR/api"
 
+# 检查root权限
 check_root() {
     # macOS (Darwin) 不应该以root身份运行，因为Homebrew禁止root
-    if [[ "$OS" == "darwin" ]]; then
+    if [[ "$(uname -s)" == "Darwin" ]]; then
         if [[ $EUID -eq 0 ]]; then
             print_error "在macOS上不应以root身份运行此脚本，Homebrew禁止root操作"
             print_error "请以普通用户身份运行，脚本会在需要时请求sudo权限"
             exit 1
-        else
-            print_info "在macOS上以普通用户身份，运行继续安装..."
-            return 0
         fi
-    fi
-    
-    # Linux系统需要root权限进行系统级安装
-    if [[ "$OS" == "linux" ]]; then
-        if [[ $EUID -eq 0 ]]; then
-            print_warning "正在以root用户运行，继续安装..."
-            return 0
-        else
-            print_error "在Linux上请sudo或以root此用户运行使用脚本"
+    else
+        # Linux系统需要root权限进行系统级安装
+        if [[ $EUID -ne 0 ]]; then
+            print_error "在Linux上请以root用户运行此脚本"
             exit 1
         fi
     fi
-    
-    # 其他操作系统
-    print_warning "未知操作系统类型，跳过root检查..."
-    return 0
 }
 
-# ============================================================================
-# 操作系统检测和初始化
-# ============================================================================
-
+# 检测操作系统
 detect_os() {
-    print_step "1" "检测和操作系统架构"
-    
-    # 检测操作系统类型
     OS_TYPE=$(uname -s)
     ARCH=$(uname -m)
     
     case "$OS_TYPE" in
         Linux) 
             OS="linux"
-            # 检测Linux发行版
+            # 检测Linux发行版和包管理器
             if [[ -f /etc/os-release ]]; then
                 . /etc/os-release
                 DISTRO=$ID
                 
-                # 改进的发行版检测
                 case $ID in
                     ubuntu|debian|linuxmint|pop|zorin|elementary)
                         PACKAGE_MANAGER="apt-get"
@@ -163,7 +85,6 @@ detect_os() {
                         PACKAGE_MANAGER="apk"
                         ;;
                     *)
-                        print_warning "未识别的Linux发行版: $ID, 尝试自动检测包管理器"
                         # 自动检测包管理器
                         if command -v apt-get &> /dev/null; then
                             PACKAGE_MANAGER="apt-get"
@@ -183,50 +104,9 @@ detect_os() {
                         fi
                         ;;
                 esac
-            elif [[ -f /etc/debian_version ]]; then
-                DISTRO="debian"
-                PACKAGE_MANAGER="apt-get"
-            elif [[ -f /etc/redhat-release ]]; then
-                DISTRO="rhel"
-                if command -v dnf &> /dev/null; then
-                    PACKAGE_MANAGER="dnf"
-                else
-                    PACKAGE_MANAGER="yum"
-                fi
-            elif [[ -f /etc/arch-release ]]; then
-                DISTRO="arch"
-                PACKAGE_MANAGER="pacman"
-            elif [[ -f /etc/SuSE-release ]]; then
-                DISTRO="opensuse"
-                PACKAGE_MANAGER="zypper"
-            elif [[ -f /etc/alpine-release ]]; then
-                DISTRO="alpine"
-                PACKAGE_MANAGER="apk"
             else
-                print_warning "无法检测Linux发行版，尝试自动检测包管理器"
-                # 自动检测包管理器
-                if command -v apt-get &> /dev/null; then
-                    PACKAGE_MANAGER="apt-get"
-                    DISTRO="debian"
-                elif command -v dnf &> /dev/null; then
-                    PACKAGE_MANAGER="dnf"
-                    DISTRO="fedora"
-                elif command -v yum &> /dev/null; then
-                    PACKAGE_MANAGER="yum"
-                    DISTRO="centos"
-                elif command -v pacman &> /dev/null; then
-                    PACKAGE_MANAGER="pacman"
-                    DISTRO="arch"
-                elif command -v zypper &> /dev/null; then
-                    PACKAGE_MANAGER="zypper"
-                    DISTRO="opensuse"
-                elif command -v apk &> /dev/null; then
-                    PACKAGE_MANAGER="apk"
-                    DISTRO="alpine"
-                else
-                    print_error "无法检测到兼容的包管理器"
-                    exit 1
-                fi
+                print_error "无法检测Linux发行版"
+                exit 1
             fi
             ;;
         Darwin) 
@@ -245,1110 +125,388 @@ detect_os() {
     print_info "包管理器: $PACKAGE_MANAGER"
 }
 
-# ============================================================================
-# 依赖检测和安装
-# ============================================================================
-
-install_dependencies() {
-    print_step "2" "安装系统依赖"
+# 安装Redis
+install_redis() {
+    print_info "检测Redis..."
     
-    case "$OS" in
-        linux)
-            install_dependencies_linux
-            ;;
-        darwin)
-            install_dependencies_macos
-            ;;
-        *)
-            print_error "不支持的操作系统"
-            exit 1
-            ;;
-    esac
-}
-
-install_dependencies_linux() {
-    print_info "更新包管理器..."
-    case "$PACKAGE_MANAGER" in
-        apt-get)
-            sudo apt-get update -y
-            ;;
-        yum)
-            # 处理libzip5依赖冲突问题
-            print_info "检查并解决libzip5依赖冲突..."
-            # 尝试移除冲突的libzip5-devel包（如果存在）
-            if sudo yum list installed | grep -q libzip5-devel; then
-                sudo yum remove -y libzip5-devel libzip5-tools 2>/dev/null || true
-            fi
-            # 先安装libzstd依赖（如果需要）
-            if ! sudo yum list installed | grep -q libzstd; then
-                sudo yum install -y libzstd 2>/dev/null || true
-            fi
-            # 使用--skip-broken选项跳过冲突的包
-            sudo yum update -y --skip-broken
-            ;;
-        dnf)
-            sudo dnf update -y
-            ;;
-        pacman)
-            sudo pacman -Sy
-            ;;
-        zypper)
-            sudo zypper refresh -y
-            ;;
-        apk)
-            sudo apk update
-            ;;
-    esac
-    
-    print_info "安装基础工具..."
-    
-    # 基础工具列表
-    local basic_tools=()
-    
-    # 检查并添加需要安装的基础工具
-    if ! command -v curl &> /dev/null; then
-        basic_tools+=(curl)
-    fi
-    if ! command -v wget &> /dev/null; then
-        basic_tools+=(wget)
-    fi
-    if ! command -v git &> /dev/null; then
-        basic_tools+=(git)
-    fi
-    
-    # 根据包管理器安装基础工具
-    if [ ${#basic_tools[@]} -gt 0 ]; then
-        case "$PACKAGE_MANAGER" in
-            apt-get)
-                sudo apt-get install -y "${basic_tools[@]}" build-essential
-                ;;
-            yum|dnf)
-                sudo $PACKAGE_MANAGER install -y "${basic_tools[@]}" gcc make
-                ;;
-            pacman)
-                sudo pacman -S --noconfirm "${basic_tools[@]}" base-devel
-                ;;
-            zypper)
-                sudo zypper install -y "${basic_tools[@]}" gcc make
-                ;;
-            apk)
-                sudo apk add "${basic_tools[@]}" gcc make musl-dev
-                ;;
-        esac
-    else
-        print_info "✓ 基础工具已安装"
-    fi
-    
-    print_info "安装Redis..."
-    if ! command -v redis-server &> /dev/null; then
-        case "$PACKAGE_MANAGER" in
-            apt-get)
-                sudo apt-get install -y redis-server
-                sudo systemctl enable redis-server
-                sudo systemctl start redis-server
-                ;;
-            yum|dnf)
-                sudo $PACKAGE_MANAGER install -y redis
-                sudo systemctl enable redis
-                sudo systemctl start redis
-                ;;
-            pacman)
-                sudo pacman -S --noconfirm redis
-                sudo systemctl enable redis
-                sudo systemctl start redis
-                ;;
-            zypper)
-                sudo zypper install -y redis
-                sudo systemctl enable redis
-                sudo systemctl start redis
-                ;;
-            apk)
-                sudo apk add redis
-                sudo rc-update add redis default
-                sudo service redis start
-                ;;
-        esac
-        print_success "Redis安装完成"
-    else
-        print_info "Redis已安装"
-        # 检查Redis是否正在运行
-        local redis_service="redis-server"
-        local service_manager="systemctl"
-        
-        # 根据发行版调整服务名称和管理器
-        if [[ "$PACKAGE_MANAGER" == "yum" ]] || [[ "$PACKAGE_MANAGER" == "dnf" ]] || [[ "$PACKAGE_MANAGER" == "zypper" ]]; then
-            redis_service="redis"
-        elif [[ "$PACKAGE_MANAGER" == "apk" ]]; then
-            service_manager="service"
-        fi
-        
-        if [[ "$service_manager" == "systemctl" ]]; then
-            if ! sudo systemctl is-active --quiet "$redis_service" 2>/dev/null; then
-                print_info "启动Redis服务..."
-                sudo systemctl start "$redis_service"
-                sleep 2
-            fi
-        else
-            if ! sudo $service_manager "$redis_service" status 2>/dev/null | grep -q "running"; then
-                print_info "启动Redis服务..."
-                sudo $service_manager "$redis_service" start
-                sleep 2
-            fi
-        fi
-    fi
-    
-    # 验证Redis连接
-    print_info "验证Redis连接..."
-    if command -v redis-cli &> /dev/null; then
-        local redis_requires_auth=false
-        local redis_password=""
-        
-        # 尝试无密码连接
-        if redis-cli ping 2>/dev/null | grep -q "PONG"; then
-            print_success "Redis连接正常，无需密码"
-        elif redis-cli ping 2>/dev/null | grep -q "NOAUTH Authentication required"; then
-            print_info "Redis需要密码认证"
-            redis_requires_auth=true
-            # 尝试使用默认密码连接
-            if redis-cli -a "" ping 2>/dev/null | grep -q "PONG"; then
-                print_success "Redis使用空密码连接成功"
-            else
-                print_warning "Redis需要密码，但默认密码连接失败"
-            fi
-        else
-            print_warning "Redis未响应，可能需要手动检查"
-        fi
-    else
-        print_warning "redis-cli未找到，跳过Redis连接测试"
-    fi
-    
-    print_info "安装浏览器环境..."
-    install_browser_environment
-}
-
-install_dependencies_macos() {
-    print_info "检查Homebrew..."
-    if ! command -v brew &> /dev/null; then
-        print_info "安装Homebrew..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    fi
-    
-    print_info "安装基础工具..."
-    # 检查并安装curl
-    if ! command -v curl &> /dev/null; then
-        brew install curl
-    fi
-    # 检查并安装wget
-    if ! command -v wget &> /dev/null; then
-        brew install wget
-    fi
-    # 检查并安装git
-    if ! command -v git &> /dev/null; then
-        brew install git
-    fi
-    
-    print_info "安装Redis..."
-    if ! command -v redis-server &> /dev/null; then
-        brew install redis
-        brew services start redis
-        print_success "Redis安装完成"
-    else
-        print_info "Redis已安装"
-    fi
-    
-    print_info "安装浏览器环境..."
-    install_browser_environment
-}
-
-# 直接下载并安装Chromium的函数
-download_and_install_chromium() {
-    print_warning "尝试直接下载安装Chromium..."
-    
-    # 检测系统架构
-    local arch=$(uname -m)
-    case "$arch" in
-        x86_64|amd64)
-            local chromium_arch="x64"
-            ;;
-        aarch64|arm64)
-            local chromium_arch="arm64"
-            ;;
-        *)
-            print_error "不支持的系统架构: $arch"
-            return 1
-            ;;
-    esac
-    
-    # 设置安装目录，使用当前目录下的browser目录
-    local chromium_install_dir="./browser"
-    local chromium_bin="$chromium_install_dir/chrome"
-    
-    # 如果Chromium已存在，直接返回
-    if [ -f "$chromium_bin" ]; then
-        print_info "Chromium已通过直接下载方式安装"
-        # 将Chromium添加到系统路径（如果需要）
-        if ! grep -q "$chromium_install_dir" ~/.bashrc 2>/dev/null && ! grep -q "$chromium_install_dir" ~/.zshrc 2>/dev/null; then
-            echo "export PATH=\$PATH:$chromium_install_dir" >> ~/.bashrc
-            echo "export PATH=\$PATH:$chromium_install_dir" >> ~/.zshrc
-        fi
+    if command -v redis-server &> /dev/null; then
+        print_success "Redis已安装: $(redis-server --version)"
         return 0
     fi
     
-    print_info "检测到架构: $arch，将下载 $chromium_arch 版本的Chromium"
-    
-    # 创建安装目录
-    mkdir -p "$chromium_install_dir"
-    
-    # 下载Chromium
-    local download_url=""
-    local temp_dir=$(mktemp -d)
-    local temp_file="$temp_dir/chromium.zip"
-    
-    # 选择合适的下载源
-    if [ "$OS" = "linux" ]; then
-        # 对于Linux，使用官方下载链接
-        # 注意：这里使用的是Example URL，实际使用时需要替换为正确的下载链接
-        # 可以考虑使用第三方镜像或自动化下载工具
-        print_warning "直接下载Chromium功能正在开发中，使用临时解决方案"
-        print_warning "请手动安装Chromium或Chrome浏览器后重新运行脚本"
-        rm -rf "$temp_dir"
-        return 1
-        
-        # 以下是示例代码，实际使用时需要替换为正确的下载链接
-        # download_url="https://download-chromium.appspot.com/dl/Linux_x64"
-    elif [ "$OS" = "darwin" ]; then
-        # 对于macOS，提示用户手动安装
-        print_warning "对于macOS系统，请手动安装Chromium或Chrome浏览器"
-        print_warning "下载地址: https://www.chromium.org/getting-involved/download-chromium/"
-        rm -rf "$temp_dir"
-        return 1
-    fi
-    
-    # 下载Chromium
-    if ! wget -q -O "$temp_file" "$download_url"; then
-        print_error "无法下载Chromium: $download_url"
-        rm -rf "$temp_dir"
-        return 1
-    fi
-    
-    # 解压Chromium
-    print_info "解压Chromium..."
-    if ! unzip -q "$temp_file" -d "$temp_dir"; then
-        print_error "无法解压Chromium"
-        rm -rf "$temp_dir"
-        return 1
-    fi
-    
-    # 移动到安装目录
-    cp -r "$temp_dir"/*/* "$chromium_install_dir/" 2>/dev/null || cp -r "$temp_dir"/* "$chromium_install_dir/"
-    
-    # 设置可执行权限
-    chmod -R +x "$chromium_install_dir"
-    
-    # 将Chromium添加到系统路径
-    if ! grep -q "$chromium_install_dir" ~/.bashrc 2>/dev/null && ! grep -q "$chromium_install_dir" ~/.zshrc 2>/dev/null; then
-        echo "export PATH=\$PATH:$chromium_install_dir" >> ~/.bashrc
-        echo "export PATH=\$PATH:$chromium_install_dir" >> ~/.zshrc
-        # 立即生效
-        source ~/.bashrc 2>/dev/null || source ~/.zshrc 2>/dev/null || true
-    fi
-    
-    # 创建符号链接到当前目录，方便调用
-    if [ ! -f "./chromium" ]; then
-        ln -s "$chromium_bin" "./chromium"
-    fi
-    
-    # 清理临时文件
-    rm -rf "$temp_dir"
-    
-    # 验证安装
-    if command -v chromium &> /dev/null; then
-        print_success "成功直接下载安装Chromium"
-        return 0
-    else
-        print_error "直接下载安装Chromium失败"
-        return 1
-    fi
-}
-
-install_browser_environment() {
-    print_info "检测浏览器环境..."
-    
-    # 检测Chrome/Chromium
-    local chrome_available=false
-    
-    if command -v google-chrome &> /dev/null; then
-        print_info "Chrome浏览器已安装: $(google-chrome --version)"
-        chrome_available=true
-    elif command -v chromium &> /dev/null; then
-        print_info "Chromium浏览器已安装: $(chromium --version)"
-        chrome_available=true
-    elif command -v chromium-browser &> /dev/null; then
-        print_info "Chromium浏览器已安装: $(chromium-browser --version)"
-        chrome_available=true
-    elif [ "$OS" = "darwin" ]; then
-        # macOS额外检查应用目录
-        if [ -d "/Applications/Google Chrome.app" ]; then
-            print_info "Chrome浏览器已安装在/Applications目录"
-            chrome_available=true
-        elif [ -d "/Applications/Chromium.app" ]; then
-            print_info "Chromium浏览器已安装在/Applications目录"
-            chrome_available=true
-        fi
-    fi
-    
-    if [ "$chrome_available" = true ]; then
-        return 0
-    fi
-    
-    print_info "安装Chrome/Chromium浏览器..."
+    print_info "Redis未安装，开始安装..."
     
     case "$OS" in
         linux)
             case "$PACKAGE_MANAGER" in
                 apt-get)
-                    # Ubuntu/Debian系统，尝试安装chromium-browser
-                    if sudo apt-get install -y chromium-browser &> /dev/null; then
-                        print_success "已安装chromium-browser"
-                    elif sudo apt-get install -y chromium &> /dev/null; then
-                        print_success "已安装chromium"
-                    else
-                        print_warning "无法安装chromium，尝试安装google-chrome-stable"
-                        if wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add - && \
-                           sudo sh -c 'echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list' && \
-                           sudo apt-get update && \
-                           sudo apt-get install -y google-chrome-stable; then
-                            print_success "已安装google-chrome-stable"
-                        else
-                            print_warning "无法通过包管理器安装浏览器，尝试直接下载安装Chromium"
-                            if download_and_install_chromium; then
-                                print_success "通过直接下载方式安装Chromium成功"
-                            else
-                                print_error "浏览器安装失败"
-                                return 1
-                            fi
-                        fi
-                    fi
+                    sudo $PACKAGE_MANAGER update -y
+                    sudo $PACKAGE_MANAGER install -y redis-server
+                    sudo systemctl enable redis-server
+                    sudo systemctl start redis-server
                     ;;
                 yum|dnf)
-                    # CentOS/RHEL/Fedora/OpenCloudOS系统，尝试多种浏览器安装方案
-                    browser_installed=false
-                    
-                    # 方案1：尝试安装chromium
-                    if sudo $PACKAGE_MANAGER install -y chromium &> /dev/null; then
-                        print_success "已安装chromium"
-                        browser_installed=true
-                    elif sudo $PACKAGE_MANAGER install -y chromium-browser &> /dev/null; then
-                        # 方案2：尝试安装chromium-browser
-                        print_success "已安装chromium-browser"
-                        browser_installed=true
-                    else
-                        # 方案3：尝试安装google-chrome-stable
-                        print_warning "无法安装chromium，尝试安装google-chrome-stable"
-                        if wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm && \
-                           sudo $PACKAGE_MANAGER install -y ./google-chrome-stable_current_x86_64.rpm; then
-                            print_success "已安装google-chrome-stable"
-                            rm -f ./google-chrome-stable_current_x86_64.rpm
-                            browser_installed=true
-                        else
-                            # 清理临时文件
-                            rm -f ./google-chrome-stable_current_x86_64.rpm
-                            print_warning "无法通过包管理器安装浏览器，尝试直接下载安装Chromium"
-                            if download_and_install_chromium; then
-                                print_success "通过直接下载方式安装Chromium成功"
-                                browser_installed=true
-                            fi
-                        fi
-                    fi
-                    
-                    if [ "$browser_installed" = false ]; then
-                        print_error "浏览器安装失败"
-                        return 1
-                    fi
+                    sudo $PACKAGE_MANAGER install -y redis
+                    sudo systemctl enable redis
+                    sudo systemctl start redis
                     ;;
                 pacman)
-                    # Arch Linux系统
-                    if sudo pacman -S --noconfirm chromium &> /dev/null; then
-                        print_success "已安装chromium"
-                    else
-                        print_warning "无法通过包管理器安装浏览器，尝试直接下载安装Chromium"
-                        if download_and_install_chromium; then
-                            print_success "通过直接下载方式安装Chromium成功"
-                        else
-                            print_error "浏览器安装失败"
-                            return 1
-                        fi
-                    fi
+                    sudo pacman -Sy --noconfirm redis
+                    sudo systemctl enable redis
+                    sudo systemctl start redis
                     ;;
                 zypper)
-                    # openSUSE系统
-                    if sudo zypper install -y chromium &> /dev/null; then
-                        print_success "已安装chromium"
-                    else
-                        print_warning "无法通过包管理器安装浏览器，尝试直接下载安装Chromium"
-                        if download_and_install_chromium; then
-                            print_success "通过直接下载方式安装Chromium成功"
-                        else
-                            print_error "浏览器安装失败"
-                            return 1
-                        fi
-                    fi
+                    sudo zypper refresh -y
+                    sudo zypper install -y redis
+                    sudo systemctl enable redis
+                    sudo systemctl start redis
                     ;;
                 apk)
-                    # Alpine Linux系统
-                    if sudo apk add chromium &> /dev/null; then
-                        print_success "已安装chromium"
-                    else
-                        print_warning "无法通过包管理器安装浏览器，尝试直接下载安装Chromium"
-                        if download_and_install_chromium; then
-                            print_success "通过直接下载方式安装Chromium成功"
-                        else
-                            print_error "浏览器安装失败"
-                            return 1
-                        fi
-                    fi
+                    sudo apk update
+                    sudo apk add redis
+                    sudo rc-update add redis default
+                    sudo service redis start
                     ;;
             esac
             ;;
         darwin)
-            # macOS系统
-            if brew install --cask google-chrome &> /dev/null; then
-                print_success "已安装google-chrome"
-            elif brew install --cask chromium &> /dev/null; then
-                print_success "已安装chromium"
-            else
-                print_warning "无法通过包管理器安装浏览器"
-                print_warning "请手动安装Chromium或Chrome浏览器后重新运行脚本"
-                print_warning "Chrome下载地址: https://www.google.com/chrome/"
-                print_warning "Chromium下载地址: https://www.chromium.org/getting-involved/download-chromium/"
-                print_error "浏览器安装失败"
-                return 1
+            # 检查Homebrew
+            if ! command -v brew &> /dev/null; then
+                print_info "安装Homebrew..."
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
             fi
+            brew install redis
+            brew services start redis
             ;;
     esac
     
-    print_success "浏览器环境安装完成"
+    if command -v redis-server &> /dev/null; then
+        print_success "Redis安装完成"
+        return 0
+    else
+        print_error "Redis安装失败"
+        exit 1
+    fi
 }
 
-# ============================================================================
-# 应用构建和安装
-# ============================================================================
-
-build_and_install() {
-    print_step "3" "安装应用程序"
+# 配置Redis信息
+configure_redis() {
+    print_info "配置Redis连接信息..."
     
-    # 创建安装目录和子目录
-    print_info "创建安装目录结构..."
-    mkdir -p "$INSTALL_DIR"
+    # 创建配置目录
+    mkdir -p "$CONFIG_DIR"
+    
+    # 交互式输入Redis连接信息
+    echo -e "\n${BLUE}[i] 请配置Redis连接信息:${NC}"
+    
+    # 输入主机地址
+    local redis_host=""
+    while [[ -z "$redis_host" ]]; do
+        read -p "  主机地址: " redis_host
+        if [[ -z "$redis_host" ]]; then
+            print_error "IP地址不能为空，请重新输入"
+        fi
+    done
+    
+    # 输入端口号
+    local redis_port=""
+    while [[ -z "$redis_port" ]]; do
+        read -p "  端口号: " redis_port
+        if [[ -z "$redis_port" ]]; then
+            print_error "端口号不能为空，请重新输入"
+        fi
+    done
+    
+    # 输入密码（可以为空）
+    read -s -p "  密码 (无密码请直接回车): " redis_password
+    echo
+    
+    # 输入数据库编号
+    local redis_db=""
+    while [[ -z "$redis_db" ]]; do
+        read -p "  数据库编号: " redis_db
+        if [[ -z "$redis_db" ]]; then
+            print_error "数据库编号不能为空，请重新输入"
+        fi
+    done
+    
+    # 生成配置文件
+    local config_file="$CONFIG_DIR/config.yml"
+    
+    # 检查是否存在示例配置文件
+    if [[ -f "configs/config.example.yml" ]]; then
+        # 复制示例配置文件
+        cp configs/config.example.yml "$config_file"
+        
+        # 修改配置文件
+        print_info "更新配置文件..."
+        
+        # 使用awk替换配置
+        awk -v redis_host="$redis_host" -v redis_port="$redis_port" -v redis_db="$redis_db" -v redis_password="$redis_password" -v data_dir="$DATA_DIR" -v logs_dir="$LOG_DIR" -v google_dir="$GOOGLE_DIR" '{ 
+            if (/^  redis_url:/) {
+                print "  redis_url: \""redis_host":"redis_port"\""
+            } else if (/^  redis_db:/) {
+                print "  redis_db: "redis_db
+            } else if (/^  redis_password:/) {
+                print "  redis_password: \""redis_password"\""
+            } else if (/^  data_dir:/) {
+                print "  data_dir: "data_dir
+            } else if (/^  logs_dir:/) {
+                print "  logs_dir: "logs_dir
+            } else if (/^    chrome_path:/) {
+                print "    chrome_path: \""google_dir"/chrome\""
+            } else {
+                print
+            }
+        }' "$config_file" > "$config_file.tmp" && mv "$config_file.tmp" "$config_file"
+    else
+        # 创建默认配置文件
+        print_info "创建默认配置文件..."
+        cat > "$config_file" << EOF
+server:
+  address: "0.0.0.0"
+  port: 9597
+  api_port: 9598
+  mode: "release"
+
+redis:
+  redis_url: "$redis_host:$redis_port"
+  redis_db: $redis_db
+  redis_password: "$redis_password"
+
+storage:
+  data_dir: "$DATA_DIR"
+  logs_dir: "$LOG_DIR"
+
+browser:
+  chrome_path: "$GOOGLE_DIR/chrome"
+  user_data_dir: "$BIN_DIR/chrome-user-data"
+  args:
+    - "--no-sandbox"
+    - "--headless"
+    - "--disable-gpu"
+    - "--disable-dev-shm-usage"
+    - "--remote-debugging-port=9222"
+EOF
+    fi
+    
+    print_success "Redis配置完成，配置文件: $config_file"
+}
+
+# 安装谷歌无头浏览器
+install_google_chrome() {
+    print_info "检测谷歌无头浏览器..."
+    
+    # 检查是否已安装
+    local chrome_available=false
+    local chrome_path=""
+    
+    if command -v google-chrome &> /dev/null; then
+        chrome_path=$(which google-chrome)
+        chrome_available=true
+    elif command -v chromium &> /dev/null; then
+        chrome_path=$(which chromium)
+        chrome_available=true
+    elif command -v chromium-browser &> /dev/null; then
+        chrome_path=$(which chromium-browser)
+        chrome_available=true
+    elif [ "$OS" = "darwin" ] && [ -d "/Applications/Google Chrome.app" ]; then
+        chrome_path="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        chrome_available=true
+    fi
+    
+    if [ "$chrome_available" = true ]; then
+        print_success "Chrome/Chromium已安装: $($chrome_path --version)"
+        
+        # 创建安装目录并复制到指定位置
+        mkdir -p "$GOOGLE_DIR"
+        if [ "$OS" = "linux" ]; then
+            sudo cp "$chrome_path" "$GOOGLE_DIR/chrome"
+            sudo chmod +x "$GOOGLE_DIR/chrome"
+        else
+            cp "$chrome_path" "$GOOGLE_DIR/chrome" 2>/dev/null || ln -s "$chrome_path" "$GOOGLE_DIR/chrome"
+            chmod +x "$GOOGLE_DIR/chrome"
+        fi
+        print_success "谷歌无头浏览器已链接到: $GOOGLE_DIR/chrome"
+        return 0
+    fi
+    
+    print_info "谷歌无头浏览器未安装，开始安装..."
+    
+    # 创建安装目录
+    mkdir -p "$GOOGLE_DIR"
+    
+    case "$OS" in
+        linux)
+            case "$PACKAGE_MANAGER" in
+                apt-get)
+                    # 安装依赖
+                    sudo $PACKAGE_MANAGER update -y
+                    sudo $PACKAGE_MANAGER install -y wget gnupg2
+                    
+                    # 添加Google Chrome源
+                    wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+                    sudo sh -c 'echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+                    sudo $PACKAGE_MANAGER update -y
+                    
+                    # 安装Google Chrome
+                    sudo $PACKAGE_MANAGER install -y google-chrome-stable
+                    
+                    # 复制到指定目录
+                    sudo cp $(which google-chrome) "$GOOGLE_DIR/chrome"
+                    sudo chmod +x "$GOOGLE_DIR/chrome"
+                    ;;
+                yum|dnf)
+                    # 下载并安装Google Chrome
+                    wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm
+                    sudo $PACKAGE_MANAGER install -y ./google-chrome-stable_current_x86_64.rpm
+                    rm -f ./google-chrome-stable_current_x86_64.rpm
+                    
+                    # 复制到指定目录
+                    cp $(which google-chrome) "$GOOGLE_DIR/chrome"
+                    chmod +x "$GOOGLE_DIR/chrome"
+                    ;;
+                pacman)
+                    sudo pacman -Sy --noconfirm chromium
+                    cp $(which chromium) "$GOOGLE_DIR/chrome"
+                    chmod +x "$GOOGLE_DIR/chrome"
+                    ;;
+                zypper)
+                    sudo zypper refresh -y
+                    sudo zypper install -y chromium
+                    cp $(which chromium) "$GOOGLE_DIR/chrome"
+                    chmod +x "$GOOGLE_DIR/chrome"
+                    ;;
+                apk)
+                    sudo apk update
+                    sudo apk add chromium
+                    cp $(which chromium) "$GOOGLE_DIR/chrome"
+                    chmod +x "$GOOGLE_DIR/chrome"
+                    ;;
+                *)
+                    print_error "暂不支持此发行版的自动安装，请手动安装Google Chrome"
+                    exit 1
+                    ;;
+            esac
+            ;;
+        darwin)
+            # 在macOS上，使用brew安装
+            if ! command -v brew &> /dev/null; then
+                print_info "安装Homebrew..."
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            fi
+            brew install --cask google-chrome
+            
+            # 复制到指定目录
+            cp /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome "$GOOGLE_DIR/chrome" 2>/dev/null || ln -s /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome "$GOOGLE_DIR/chrome"
+            chmod +x "$GOOGLE_DIR/chrome"
+            ;;
+    esac
+    
+    if [ -f "$GOOGLE_DIR/chrome" ]; then
+        print_success "谷歌无头浏览器安装完成，路径: $GOOGLE_DIR/chrome"
+        return 0
+    else
+        print_error "谷歌无头浏览器安装失败"
+        exit 1
+    fi
+}
+
+# 创建必要的目录结构
+create_directories() {
+    print_info "创建必要的目录结构..."
     mkdir -p "$CONFIG_DIR"
     mkdir -p "$DATA_DIR"
     mkdir -p "$LOG_DIR"
-    mkdir -p "$INSTALL_DIR/certs"
-    mkdir -p "$INSTALL_DIR/static"
+    mkdir -p "$BIN_DIR/certs"
+    mkdir -p "$BIN_DIR/static"
+    mkdir -p "$GOOGLE_DIR"
     
-    # 设置目录权限
-    chmod 755 "$INSTALL_DIR"
-    chmod 755 "$CONFIG_DIR"
-    chmod 750 "$DATA_DIR"
-    chmod 750 "$LOG_DIR"
-    chmod 755 "$INSTALL_DIR/certs"
-    chmod 755 "$INSTALL_DIR/static"
-    
-    # 从预编译包安装
-    if [[ -d "./bin" && -d "./web/dist" ]]; then
-        print_info "从预编译包安装..."
-        install_from_prebuilt
-    else
-        print_error "未找到预编译包，请先运行 ./build.sh 构建应用"
-        exit 1
-    fi
+    print_success "目录结构创建完成"
 }
 
-install_from_prebuilt() {
-    # 复制前端文件到安装目录
-    print_info "复制前端文件到安装目录..."
+# 主函数
+main() {
+    print_success "========================================"
+    print_success "PrerenderShield 服务端安装脚本"
+    print_success "========================================"
     
-    # 优先使用web/dist目录中的前端文件，复制到平台特定目录下的web目录
-    if [[ -d "./web/dist" ]]; then
-        print_info "使用web/dist目录中的前端文件"
-        mkdir -p "$INSTALL_DIR/web"
-        cp -r ./web/dist/ "$INSTALL_DIR/web/"
-        print_success "前端文件从web/dist目录复制完成"
-    else
-        print_error "未找到前端构建目录: ./web/dist"
-        exit 1
-    fi
+    # 检查root权限
+    check_root
     
-    # 替换前端API地址为当前服务器IP
-    print_info "配置前端API地址..."
-    local api_ip="127.0.0.1"
-    if [[ "$CUSTOM_API_IP" != "" ]]; then
-        api_ip="$CUSTOM_API_IP"
-        print_info "使用命令行参数提供的IP: $api_ip"
-    elif [[ "$(hostname)" == "localhost" ]] || [[ "$(hostname)" == "*local*" ]] || [[ "$(uname -s)" == "Darwin" ]]; then
-        # 本地环境，使用本地回环IP 127.0.0.1
-        api_ip="127.0.0.1"
-        print_info "当前是本地环境，使用本地IP: $api_ip"
-    else
-        # 服务器环境，尝试获取公网IP
-        api_ip=$(curl -s ifconfig.me || curl -s icanhazip.com || curl -s ipinfo.io/ip || echo "127.0.0.1")
-        print_info "当前服务器公网IP: $api_ip"
-    fi
+    # 检测操作系统
+    detect_os
     
-    # 替换前端文件中的API地址
-    local frontend_dir="$INSTALL_DIR/web"
-    local api_url="http://$api_ip:9598/api/v1"
+    # 创建必要的目录结构
+    create_directories
     
-    # 使用更可靠的方式替换前端API地址，兼容macOS和Linux
-    print_info "正在替换前端文件中的API地址为: $api_url"
+    # 安装Redis
+    install_redis
     
-    # 先检查前端目录是否存在
-    if [[ -d "$frontend_dir" ]]; then
-        # 查找所有JavaScript和HTML文件进行替换
-        local files=$(find "$frontend_dir" -name "*.js" -o -name "*.html" -o -name "*.css" | grep -v "node_modules" | grep -v ".git")
-        
-        if [[ -n "$files" ]]; then
-            # 使用sed进行替换，兼容macOS和Linux
-            # 检测操作系统类型
-            if [[ "$(uname -s)" == "Darwin" ]]; then
-                # macOS系统，需要空字符串作为-i选项的参数
-                for file in $files; do
-                    # 先替换127.0.0.1的API地址
-                    sed -i '' -e "s|http://127\.0\.0\.1:9598/api/v1|$api_url|g" "$file"
-                done
-            else
-                # Linux系统，不需要空字符串
-                for file in $files; do
-                    # 先替换127.0.0.1的API地址
-                    sed -i -e "s|http://127\.0\.0\.1:9598/api/v1|$api_url|g" "$file"
-                done
-            fi
-            print_success "前端API地址配置完成"
-        else
-            print_warning "未找到需要替换API地址的文件"
-        fi
-    else
-        print_error "前端目录不存在: $frontend_dir"
-        exit 1
-    fi
+    # 配置Redis信息
+    configure_redis
     
-    # 直接使用bin目录下的二进制文件，不需要复制
-    print_info "使用bin目录下的后端二进制文件..."
-    
-    # 获取当前平台信息
-    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
-    local arch=$(uname -m)
-    if [[ $arch == "x86_64" ]]; then
-        arch="amd64"
-    elif [[ $arch == "arm64" ]]; then
-        arch="arm64"
-    fi
-    
-    # 检查bin目录中是否存在当前平台的二进制文件
-    local binary_path="bin/${os}-${arch}/api"
-    if [[ -f "$binary_path" ]]; then
-        chmod 755 "$binary_path"
-        print_success "使用${os}-${arch}平台二进制文件: $binary_path"
-    elif [[ -f "./api" ]]; then
-        # 后备方案：使用当前目录的api二进制文件
-        chmod 755 "./api"
-        print_success "使用当前目录二进制文件"
-    else
-        print_error "未找到可用的后端二进制文件: $binary_path 或 ./api"
-        print_error "请先运行 ./build.sh 编译应用"
-        exit 1
-    fi
+    # 安装谷歌无头浏览器
+    install_google_chrome
     
     # 验证安装结果
     print_info "验证安装结果..."
     
-    # 验证前端文件
-    if [[ -d "$INSTALL_DIR/web" && -f "$INSTALL_DIR/web/index.html" ]]; then
-        print_success "前端文件安装成功"
+    # 检查二进制文件
+    if [ -f "$BINARY_PATH" ] && [ -x "$BINARY_PATH" ]; then
+        print_success "二进制文件验证成功: $BINARY_PATH"
     else
-        print_error "前端文件安装失败"
+        print_error "二进制文件不存在或不可执行: $BINARY_PATH"
+        print_error "请先运行 ./build.sh 构建应用"
         exit 1
     fi
     
-    print_success "应用安装完成"
-}
-
-download_and_install() {
-    print_error "从发布包安装功能尚未实现"
-    print_info "请从源码构建或下载预编译版本"
-    exit 1
-}
-
-# ============================================================================
-# 配置文件设置
-# ============================================================================
-
-setup_redis_config() {
-    # 将所有交互式输出重定向到标准错误，这样它们就不会被包含在函数的返回值中
-    print_info "配置Redis连接..." 1>&2
-    
-    # 检测Redis是否已安装
-    local redis_installed=false
-    if command -v redis-server &> /dev/null; then
-        redis_installed=true
-    fi
-    
-    # 提供默认值
-    local default_host="127.0.0.1"
-    local default_port="6379"
-    local default_password=""
-    local default_db="0"
-    
-    # 从现有配置文件读取当前值（如果存在）
-    if [[ -f "$CONFIG_DIR/config.yml" ]]; then
-        # 使用更可靠的方式提取redis_url，避免空格问题
-        local redis_url_line=$(grep -E "^  redis_url:" "$CONFIG_DIR/config.yml")
-        if [[ -n "$redis_url_line" ]]; then
-            # 提取引号内的内容
-            local quoted_url=$(echo "$redis_url_line" | grep -o '"[^"]*"' | head -1)
-            if [[ -n "$quoted_url" ]]; then
-                # 去除引号并分割host和port
-                local clean_url=$(echo "$quoted_url" | sed 's/"//g')
-                local current_host=$(echo "$clean_url" | cut -d':' -f1 | xargs)
-                local current_port=$(echo "$clean_url" | cut -d':' -f2 | xargs)
-            fi
-        fi
-        
-        local current_password=$(grep -E "redis_password:" "$CONFIG_DIR/config.yml" 2>/dev/null | awk -F': ' '{print $2}' | sed 's/"//g' | xargs)
-        local current_db=$(grep -E "redis_db:" "$CONFIG_DIR/config.yml" 2>/dev/null | awk -F': ' '{print $2}' | sed 's/"//g' | xargs)
-        
-        # 如果当前值存在，使用当前值作为默认值
-        [[ -n "$current_host" ]] && default_host="$current_host"
-        [[ -n "$current_port" ]] && default_port="$current_port"
-        [[ -n "$current_password" ]] && default_password="$current_password"
-        [[ -n "$current_db" ]] && default_db="$current_db"
-    fi
-    
-    # 交互式输入Redis连接信息
-    echo "" 1>&2
-    print_info "请配置Redis连接信息（按Enter使用默认值）:" 1>&2
-    echo "" 1>&2
-    
-    # 输入主机地址
-    read -p "  主机地址 [$default_host]: " redis_host 1>&2
-    if [[ -z "$redis_host" ]]; then
-        redis_host="$default_host"
-    fi
-    
-    # 输入端口号
-    read -p "  端口号 [$default_port]: " redis_port 1>&2
-    if [[ -z "$redis_port" ]]; then
-        redis_port="$default_port"
-    fi
-    
-    # 输入密码（不显示输入内容）
-    read -s -p "  密码 [$([[ -n "$default_password" ]] && echo "****" || echo "无")]: " redis_password 1>&2
-    echo 1>&2  # 换行
-    if [[ -z "$redis_password" ]]; then
-        redis_password="$default_password"
-    fi
-    
-    # 输入数据库编号
-    read -p "  数据库编号 [$default_db]: " redis_db 1>&2
-    if [[ -z "$redis_db" ]]; then
-        redis_db="$default_db"
-    fi
-    
-    # 构建redis_url
-    local redis_url="$redis_host:$redis_port"
-    
-    # 打印确认配置信息（隐藏密码）到标准错误
-    echo "" 1>&2
-    print_info "Redis连接配置确认:" 1>&2
-    print_info "  主机: $redis_host" 1>&2
-    print_info "  端口: $redis_port" 1>&2
-    print_info "  密码: $( [[ -n "$redis_password" ]] && echo "****" || echo "无" )" 1>&2
-    print_info "  数据库: $redis_db" 1>&2
-    
-    # 返回配置信息（只输出到标准输出）
-    echo "$redis_url:$redis_db:$redis_password"
-}
-
-setup_configuration() {
-    print_step "4" "配置应用"
-    
-    # 复制配置文件
-    if [[ -f "configs/config.example.yml" ]]; then
-        print_info "生成配置文件..."
-        cp configs/config.example.yml "$CONFIG_DIR/config.yml"
-        
-        # 交互式配置Redis
-        local redis_config=$(setup_redis_config)
-        local redis_url=$(echo "$redis_config" | cut -d':' -f1-2)
-        local redis_db=$(echo "$redis_config" | cut -d':' -f3)
-        local redis_password=$(echo "$redis_config" | cut -d':' -f4-)
-        
-        # 修复空密码问题：如果redis_password是":"，说明用户输入的是空密码
-        if [[ "$redis_password" == ":" ]]; then
-            redis_password=""
-        fi
-        
-        # 修改默认配置
-        print_info "优化默认配置..."
-        # 兼容macOS/BSD和GNU sed的-i选项
-        # 使用临时文件方法，兼容所有系统
-        local temp_config=$(mktemp)
-        
-        # 读取原文件并替换内容，使用awk避免sed特殊字符问题
-        awk -v data_dir="$DATA_DIR" -v install_dir="$INSTALL_DIR" -v redis_url="$redis_url" '{
-            # 替换data_dir
-            if (/^  data_dir: /) {
-                print "  data_dir: " data_dir;
-                next;
-            }
-            # 替换static_dir
-            if (/^  static_dir: /) {
-                print "  static_dir: " install_dir "/static";
-                next;
-            }
-            # 替换admin_static_dir
-            if (/^  admin_static_dir: /) {
-                # 直接使用相对路径，避免绝对路径重复
-                print "  admin_static_dir: " "web";
-                next;
-            }
-            # 替换redis_url
-            if (/^  redis_url: /) {
-                print "  redis_url: \"" redis_url "\"";
-                next;
-            }
-            # 替换certs_dir
-            if (/^  certs_dir: /) {
-                print "  certs_dir: " install_dir "/certs";
-                next;
-            }
-            # 其他行直接打印
-            print;
-        }' "$CONFIG_DIR/config.yml" > "$temp_config"
-        
-        # 添加或修改redis_db配置
-        if grep -q "redis_db:" "$temp_config"; then
-            # 使用awk替换，避免sed命令中的特殊字符问题
-            awk -v new_db="$redis_db" '/redis_db:/{print "  redis_db: " new_db; next}1' "$temp_config" > "$temp_config.tmp" && mv "$temp_config.tmp" "$temp_config"
-        else
-            # 使用awk在redis_url行后添加redis_db配置
-            awk -v new_db="$redis_db" '/redis_url:/{print; print "  redis_db: " new_db; next}1' "$temp_config" > "$temp_config.tmp" && mv "$temp_config.tmp" "$temp_config"
-        fi
-        
-        # 添加或修改redis_password配置
-        if grep -q "redis_password:" "$temp_config"; then
-            # 使用awk替换，避免sed命令中的特殊字符问题
-            awk -v new_pwd="$redis_password" '/redis_password:/{print "  redis_password: \"" new_pwd "\""; next}1' "$temp_config" > "$temp_config.tmp" && mv "$temp_config.tmp" "$temp_config"
-        else
-            # 使用awk在redis_db行后添加redis_password配置
-            awk -v new_pwd="$redis_password" '/redis_db:/{print; print "  redis_password: \"" new_pwd "\""; next}1' "$temp_config" > "$temp_config.tmp" && mv "$temp_config.tmp" "$temp_config"
-        fi
-        
-        # 复制临时文件到目标位置
-        cp "$temp_config" "$CONFIG_DIR/config.yml"
-        # 清理临时文件
-        rm -f "$temp_config"
-        
-        # 设置默认站点配置
-        setup_default_site
-        
-        print_success "配置文件生成完成: $CONFIG_DIR/config.yml"
-    else
-        print_warning "未找到配置文件模板，使用默认配置"
-    fi
-}
-
-setup_default_site() {
-    print_info "配置默认站点..."
-    
-    # 创建一个包含新sites配置的临时文件
-    local sites_temp=$(mktemp)
-    cat > "$sites_temp" << EOF
-sites:
-  - id: "default-site"
-    name: "默认站点"
-    domains:
-      - "127.0.0.1"
-    port: 8082
-    mode: "static"
-    enabled: true
-    prerender:
-      enabled: true
-      pool_size: 2
-      min_pool_size: 1
-      max_pool_size: 5
-      timeout: 30
-      cache_ttl: 3600
-      use_default_headers: true
-    firewall:
-      enabled: true
-      action:
-        default_action: "block"
-        block_message: "请求被防火墙拦截"
-EOF
-    
-    # 创建一个临时文件，用于存储修改后的配置
-    local config_temp=$(mktemp)
-    
-    # 使用更简单的方式：将原配置文件中sites:之前的内容复制到临时文件（不包括sites:行）
-    # 然后将新的sites配置追加到临时文件
-    awk '/^sites:/{exit}1' "$CONFIG_DIR/config.yml" > "$config_temp"
-    cat "$sites_temp" >> "$config_temp"
-    
-    # 将临时文件内容复制回原配置文件
-    cp "$config_temp" "$CONFIG_DIR/config.yml"
-    
-    # 删除临时文件
-    rm "$sites_temp" "$config_temp"
-}
-
-# 添加安装后的健康检查功能
-install_health_check() {
-    print_step "4" "执行安装后的健康检查"
-    
-    local health_check_passed=true
-    
     # 检查配置文件
     if [ -f "$CONFIG_DIR/config.yml" ]; then
-        print_success "配置文件检查通过: $CONFIG_DIR/config.yml"
+        print_success "配置文件验证成功: $CONFIG_DIR/config.yml"
     else
         print_error "配置文件不存在: $CONFIG_DIR/config.yml"
-        health_check_passed=false
+        exit 1
     fi
     
-    # 检查安装目录结构
-    local required_files=(
-        "$INSTALL_DIR/api"
-        "$INSTALL_DIR/web"
-        "$INSTALL_DIR/web/index.html"
-        "$INSTALL_DIR/certs"
-        "$INSTALL_DIR/static"
-        "$DATA_DIR"
-        "$LOG_DIR"
-    )
-    
-    for file in "${required_files[@]}"; do
-        if [ -e "$file" ]; then
-            if [ -x "$file" ]; then
-                print_success "可执行文件检查通过: $file"
-            else
-                print_success "文件/目录检查通过: $file"
-            fi
-        else
-            print_error "安装目录结构不完整，缺少: $file"
-            health_check_passed=false
-        fi
-    done
-    
-    # 检查二进制文件权限
-    if [ -f "$INSTALL_DIR/api" ]; then
-        if [ -x "$INSTALL_DIR/api" ]; then
-            print_success "二进制文件权限检查通过"
-        else
-            print_warning "二进制文件权限不足，正在添加执行权限..."
-            chmod +x "$INSTALL_DIR/api" > /dev/null 2>&1
-            if [ $? -eq 0 ]; then
-                print_success "已添加二进制文件执行权限"
-            else
-                print_error "无法添加二进制文件执行权限"
-                health_check_passed=false
-            fi
-        fi
-    fi
-    
-    # 检查Redis连接
-    print_info "检查Redis连接..."
-    if command -v redis-cli &> /dev/null; then
-        local redis_status=$(redis-cli ping 2>/dev/null)
-        if [[ "$redis_status" == "PONG" ]]; then
-            print_success "Redis连接检查通过"
-        else
-            print_warning "Redis连接检查失败，请确保Redis服务已启动"
-            print_warning "当前Redis状态: ${redis_status:-无法连接}"
-            print_warning "可以使用以下命令启动Redis:"
-            case "$OS" in
-                linux)
-                    if command -v systemctl &> /dev/null; then
-                        print_warning "  sudo systemctl start redis-server"
-                    else
-                        print_warning "  sudo service redis start"
-                    fi
-                    ;;
-                darwin)
-                    print_warning "  brew services start redis"
-                    ;;
-            esac
-            health_check_passed=false
-        fi
+    # 检查谷歌浏览器
+    if [ -f "$GOOGLE_DIR/chrome" ] && [ -x "$GOOGLE_DIR/chrome" ]; then
+        print_success "谷歌无头浏览器验证成功: $GOOGLE_DIR/chrome"
     else
-        print_warning "redis-cli未找到，跳过Redis连接检查"
-        print_warning "请确保Redis服务已安装并正常运行"
+        print_error "谷歌无头浏览器不存在或不可执行: $GOOGLE_DIR/chrome"
+        exit 1
     fi
     
-    # 检查浏览器环境
-    print_info "检查浏览器环境..."
-    local browser_available=false
-    if command -v google-chrome &> /dev/null || \
-       command -v chromium &> /dev/null || \
-       command -v chromium-browser &> /dev/null || \
-       [[ -d "/Applications/Google Chrome.app" ]]; then
-        browser_available=true
-        print_success "浏览器环境检查通过"
+    # 检查前端文件
+    if [ -d "$BIN_DIR/web" ] && [ -f "$BIN_DIR/web/index.html" ]; then
+        print_success "前端文件验证成功: $BIN_DIR/web"
     else
-        print_warning "未检测到Chrome/Chromium浏览器"
-        print_warning "请确保已安装Chrome或Chromium浏览器，否则渲染功能可能无法正常工作"
-        health_check_passed=false
+        print_error "前端文件不存在: $BIN_DIR/web"
+        print_error "请先运行 ./build.sh 构建应用"
+        exit 1
     fi
     
-    # 检查日志目录权限
-    print_info "检查日志目录权限..."
-    if [ -d "$LOG_DIR" ]; then
-        if [ -w "$LOG_DIR" ]; then
-            print_success "日志目录权限检查通过"
-        else
-            print_warning "日志目录权限不足，正在修复..."
-            chmod 755 "$LOG_DIR" > /dev/null 2>&1
-            if [ $? -eq 0 ]; then
-                print_success "已修复日志目录权限"
-            else
-                print_error "无法修复日志目录权限"
-                health_check_passed=false
-            fi
-        fi
-    else
-        print_warning "日志目录不存在，正在创建..."
-        mkdir -p "$LOG_DIR" > /dev/null 2>&1
-        if [ $? -eq 0 ]; then
-            chmod 755 "$LOG_DIR" > /dev/null 2>&1
-            print_success "已创建日志目录并设置权限"
-        else
-            print_error "无法创建日志目录"
-            health_check_passed=false
-        fi
-    fi
-    
-    if [ "$health_check_passed" = true ]; then
-        print_success "健康检查完成，安装结果正常"
-    else
-        print_warning "健康检查部分项未通过，请根据上面的提示进行修复"
-        print_warning "安装已完成，但某些依赖或配置可能存在问题"
-        print_warning "建议在启动服务前解决这些问题"
-    fi
-}
-
-# ============================================================================
-# 清理和回滚
-# ============================================================================
-
-cleanup_on_error() {
-    print_error "安装过程中出现错误，正在清理..."
-    
-    # 清理目录
-    rm -rf "$INSTALL_DIR" 2>/dev/null || true
-    rm -rf "$CONFIG_DIR" 2>/dev/null || true
-    rm -rf "$DATA_DIR" 2>/dev/null || true
-    rm -rf "$LOG_DIR" 2>/dev/null || true
-    
-    print_error "安装已回滚，请检查错误信息后重试"
-}
-
-# ============================================================================
-# 全局变量：API IP地址
-CUSTOM_API_IP=""
-
-# 主函数
-# ============================================================================
-
-main() {
-    trap 'cleanup_on_error' ERR
-    
-    # 解析命令行参数
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --ip|-i)
-                CUSTOM_API_IP="$2"
-                shift
-                shift
-                ;;
-            --help|-h)
-                print_usage
-                exit 0
-                ;;
-            *)
-                print_error "未知参数: $1"
-                print_usage
-                exit 1
-                ;;
-        esac
-    done
-    
-    print_header
-    detect_os
-    
-    # 设置安装目录为当前平台目录
-    INSTALL_DIR="$(detect_platform_dir)"
-    CONFIG_DIR="${INSTALL_DIR}/config"
-    DATA_DIR="${INSTALL_DIR}/data"
-    LOG_DIR="${INSTALL_DIR}/logs"
-    
-    print_info "安装目录: ${INSTALL_DIR}"
-    print_info "配置目录: ${CONFIG_DIR}"
-    print_info "数据目录: ${DATA_DIR}"
-    print_info "日志目录: ${LOG_DIR}"
-    
-    check_root
-    install_dependencies
-    # 配置Go模块镜像加速
-    build_and_install
-    setup_configuration
-    install_health_check
-    
-    # 获取本机IP地址，用于访问信息
-    local api_ip="127.0.0.1"
-    if [[ "$CUSTOM_API_IP" != "" ]]; then
-        api_ip="$CUSTOM_API_IP"
-    elif [[ "$(hostname)" != "localhost" && ! "$(hostname)" =~ "local" && "$(uname -s)" != "Darwin" ]]; then
-        # 服务器环境，尝试获取公网IP
-        api_ip=$(curl -s ifconfig.me || curl -s icanhazip.com || echo "127.0.0.1")
-    fi
-    
-    # 输出启动命令和访问信息
-    print_success "======================================="
+    print_success "========================================"
     print_success "PrerenderShield 安装完成！"
-    print_success "======================================="
-    echo ""
-    echo -e "${BLUE}重要信息：${NC}"
-    echo -e "${BLUE}1. 管理控制台: http://$api_ip:9597${NC}"
-    echo -e "${BLUE}2. API服务: http://$api_ip:9598${NC}"
-    echo -e "${BLUE}3. 配置文件: $CONFIG_DIR/config.yml${NC}"
-    echo -e "${BLUE}4. 日志目录: $LOG_DIR${NC}"
-    echo ""
-    echo ""
-    print_success "======================================="
-    print_success "启动命令: ./start.sh start"
-    print_success "重启命令: ./start.sh restart"
-    print_success "停止命令: ./start.sh stop"
-    print_success "======================================="
+    print_success "========================================"
+    print_success "二进制文件: $BINARY_PATH"
+    print_success "配置文件: $CONFIG_DIR/config.yml"
+    print_success "数据目录: $DATA_DIR"
+    print_success "日志目录: $LOG_DIR"
+    print_success "谷歌浏览器: $GOOGLE_DIR/chrome"
+    print_success "前端文件: $BIN_DIR/web"
+    print_success ""
+    print_success "========================================"
+    print_success "使用以下命令管理服务:"
+    print_success "启动服务: $BINARY_PATH start"
+    print_success "重启服务: $BINARY_PATH restart"
+    print_success "停止服务: $BINARY_PATH stop"
+    print_success "========================================"
     echo ""
     echo -e "${GREEN}接下来：${NC}"
-    echo -e "${GREEN}1. 执行 ./start.sh start 启动应用${NC}"
-}
-
-print_usage() {
-    echo ""
-    echo -e "${BLUE}使用方法:${NC} $0 [选项]"
-    echo ""
-    echo -e "${BLUE}选项:${NC}"
-    echo "  -i, --ip <IP地址>    指定服务器IP地址（可选，默认自动检测）"
-    echo "  -h, --help           显示帮助信息"
-    echo ""
-    echo -e "${BLUE}示例:${NC}"
-    echo "  # 自动检测IP地址"
-    echo "  $0"
-    echo ""
-    echo "  # 手动指定IP地址"
-    echo "  $0 --ip 127.0.0.1"
-    echo ""
+    echo -e "${GREEN}1. 执行 $BINARY_PATH start 启动应用${NC}"
+    echo -e "${GREEN}2. 访问管理控制台: http://your-server-ip:9597${NC}"
+    echo -e "${GREEN}3. API服务地址: http://your-server-ip:9598${NC}"
 }
 
 # 检查是否直接运行

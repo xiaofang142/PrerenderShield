@@ -4,15 +4,27 @@
 
 APP_NAME="prerender-shield"
 
+# 获取脚本所在的根目录
+SCRIPT_DIR=$(dirname "$(realpath "$0")")
+
+# 新的二进制文件位置：bin/api
+NEW_BINARY_PATH="${SCRIPT_DIR}/bin/api"
+
 # 检查当前目录是否已经是平台目录（包含api二进制文件）
 if [ -f "./api" ]; then
     # 直接使用当前目录作为平台目录
     PLATFORM_DIR=$(pwd)
+    BINARY_PATH="./api"
+    info "使用当前目录下的二进制文件: $BINARY_PATH"
+elif [ -f "$NEW_BINARY_PATH" ]; then
+    # 使用新的二进制文件位置
+    PLATFORM_DIR="${SCRIPT_DIR}/bin"
+    BINARY_PATH="$NEW_BINARY_PATH"
+    info "使用新位置的二进制文件: $BINARY_PATH"
 else
     # 获取脚本所在的根目录
-    SCRIPT_DIR=$(dirname "$(realpath "$0")")
     
-    # 动态获取当前平台目录
+    # 动态获取当前平台目录（兼容旧版本）
     platform_dir() {
         local os=$(uname -s | tr '[:upper:]' '[:lower:]')
         local arch=$(uname -m)
@@ -29,19 +41,59 @@ else
     
     # 获取当前平台目录
     PLATFORM_DIR=$(platform_dir)
+    
+    # 根据当前平台选择合适的二进制文件
+    get_platform_binary() {
+        # 构建二进制文件路径
+        local binary_path="${PLATFORM_DIR}/api"
+        
+        # 如果是Windows系统，添加.exe后缀
+        local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+        if [[ $os == "windows" ]]; then
+            binary_path="${binary_path}.exe"
+        fi
+        
+        echo "$binary_path"
+    }
+    
+    # 获取当前平台的二进制文件路径
+    BINARY_PATH=$(get_platform_binary)
+    
+    # 如果当前平台的二进制文件不存在，使用当前目录下的api
+    if [ ! -f "$BINARY_PATH" ]; then
+        if [ -f "./api" ]; then
+            BINARY_PATH="./api"
+            info "使用当前目录下的二进制文件: $BINARY_PATH"
+        else
+            error "未找到二进制文件: $BINARY_PATH 或 ./api 或 $NEW_BINARY_PATH"
+            error "请先运行 ./build.sh 编译应用程序"
+            exit 1
+        fi
+    else
+        info "使用平台特定二进制文件: $BINARY_PATH"
+    fi
 fi
 
-# 优先使用平台目录下的config/config.yml，然后使用configs/config.yml
+# 优先使用platform_dir/config/config.yml，然后使用bin/config/config.yml，最后使用configs/config.yml
 if [ -f "${PLATFORM_DIR}/config/config.yml" ]; then
     CONFIG_FILE="${PLATFORM_DIR}/config/config.yml"
+elif [ -f "${SCRIPT_DIR}/bin/config/config.yml" ]; then
+    CONFIG_FILE="${SCRIPT_DIR}/bin/config/config.yml"
 elif [ -f "configs/config.yml" ]; then
     CONFIG_FILE="configs/config.yml"
 else
     CONFIG_FILE="${PLATFORM_DIR}/config/config.yml"
 fi
 
-# 使用平台目录下的数据目录
-DATA_DIR="${PLATFORM_DIR}/data"
+# 使用platform_dir/data或bin/data作为数据目录
+if [ -d "${PLATFORM_DIR}/data" ]; then
+    DATA_DIR="${PLATFORM_DIR}/data"
+elif [ -d "${SCRIPT_DIR}/bin/data" ]; then
+    DATA_DIR="${SCRIPT_DIR}/bin/data"
+else
+    DATA_DIR="${PLATFORM_DIR}/data"
+fi
+
 PID_FILE="${DATA_DIR}/${APP_NAME}.pid"
 LOG_FILE="${DATA_DIR}/${APP_NAME}.log"
 
@@ -63,37 +115,6 @@ warning() {
 error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
-
-# 根据当前平台选择合适的二进制文件
-get_platform_binary() {
-    # 构建二进制文件路径
-    local binary_path="${PLATFORM_DIR}/api"
-    
-    # 如果是Windows系统，添加.exe后缀
-    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
-    if [[ $os == "windows" ]]; then
-        binary_path="${binary_path}.exe"
-    fi
-    
-    echo "$binary_path"
-}
-
-# 获取当前平台的二进制文件路径
-BINARY_PATH=$(get_platform_binary)
-
-# 如果当前平台的二进制文件不存在，使用当前目录下的api
-if [ ! -f "$BINARY_PATH" ]; then
-    if [ -f "./api" ]; then
-        BINARY_PATH="./api"
-        info "使用当前目录下的二进制文件: $BINARY_PATH"
-    else
-        error "未找到二进制文件: $BINARY_PATH 或 ./api"
-        error "请先运行 ./build.sh 编译应用程序"
-        exit 1
-    fi
-else
-    info "使用平台特定二进制文件: $BINARY_PATH"
-fi
 
 # 获取本机IP地址，用于访问信息
 get_local_ip() {

@@ -428,11 +428,18 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// 处理管理控制台静态目录
 	if !filepath.IsAbs(cfg.Dirs.AdminStaticDir) {
-		// 检查路径是否已经包含"bin/"，如果包含则直接使用简单的相对路径
-		if strings.HasPrefix(cfg.Dirs.AdminStaticDir, "bin/") {
-			// 如果路径是bin/darwin-arm64/web/dist，直接使用web/dist
-			cfg.Dirs.AdminStaticDir = filepath.Join(wd, "web", "dist")
+		// 如果配置的是相对路径 ./web，则转换为 bin/web
+		if cfg.Dirs.AdminStaticDir == "./web" {
+			// 检查当前目录是否已经是bin目录
+			if filepath.Base(appDir) == "bin" {
+				// 如果当前目录是bin目录，直接使用web子目录
+				cfg.Dirs.AdminStaticDir = filepath.Join(appDir, "web")
+			} else {
+				// 否则使用bin/web目录
+				cfg.Dirs.AdminStaticDir = filepath.Join(appDir, "bin", "web")
+			}
 		} else {
+			// 否则使用原来的逻辑
 			cfg.Dirs.AdminStaticDir = filepath.Join(wd, cfg.Dirs.AdminStaticDir)
 		}
 	}

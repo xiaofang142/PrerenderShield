@@ -1,9 +1,6 @@
 #!/bin/bash
 
-# PrerenderShield 跨平台编译脚本
-
-APP_NAME="prerender-shield"
-APP_BINARY="./api"
+# PrerenderShield 服务端构建脚本
 
 # 彩色输出定义
 RED='\033[0;31m'
@@ -28,39 +25,23 @@ print_error() {
     echo -e "${RED}[✗] $1${NC}" >&2
 }
 
-# 定义要编译的平台和架构
-PLATFORMS=("linux" "darwin")
-ARCHITECTURES=("amd64" "arm64")
-
-# 构建单个平台的二进制文件
-build_single() {
-    local platform=$1
-    local arch=$2
-    local output_dir="bin/$platform-$arch"
-    local binary_name="api"
+# 获取当前平台类型
+detect_platform() {
+    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local arch=$(uname -m)
     
-    if [[ $platform == "windows" ]]; then
-        binary_name="api.exe"
+    # 转换架构名称
+    if [[ $arch == "x86_64" ]]; then
+        arch="amd64"
+    elif [[ $arch == "aarch64" || $arch == "arm64" ]]; then
+        arch="arm64"
     fi
     
-    print_info "构建 $platform/$arch 版本..."
-    mkdir -p "$output_dir"
-    
-    # 交叉编译
-    GOOS=$platform GOARCH=$arch go build -o "$output_dir/$binary_name" ./cmd/api
-    if [ $? -ne 0 ]; then
-        print_error "构建 $platform/$arch 失败"
-        return 1
-    fi
-    
-
-    
-    print_success "$platform/$arch 构建完成: $output_dir/$binary_name"
-    return 0
+    echo "$os $arch"
 }
 
 echo "========================================"
-echo -e "${BLUE}PrerenderShield 跨平台编译脚本${NC}"
+echo -e "${BLUE}PrerenderShield 服务端构建脚本${NC}"
 echo "========================================"
 
 # 检查Go环境
@@ -80,6 +61,13 @@ fi
 print_info "Node.js版本: $(node --version)"
 print_info "npm版本: $(npm --version)"
 
+# 获取当前平台信息
+platform_info=$(detect_platform)
+platform=$(echo $platform_info | cut -d' ' -f1)
+arch=$(echo $platform_info | cut -d' ' -f2)
+
+print_info "当前平台: $platform/$arch"
+
 # 配置Go模块镜像加速
 export GOPROXY=https://goproxy.cn,direct
 export GO111MODULE=on
@@ -87,7 +75,17 @@ export GO111MODULE=on
 print_info "配置Go模块镜像加速..."
 print_info "GOPROXY设置为: $GOPROXY"
 
-# 构建前端（先构建前端，确保静态资源在编译Go前准备好）
+# 创建输出目录
+BIN_DIR="bin"
+BINARY_PATH="$BIN_DIR/api"
+WEB_DIST_DIR="web/dist"
+BIN_WEB_DIR="$BIN_DIR/web"
+
+print_info "创建输出目录..."
+mkdir -p "$BIN_DIR"
+mkdir -p "$BIN_WEB_DIR"
+
+# 构建前端
 print_info "构建前端控制台..."
 cd web
 
@@ -106,16 +104,29 @@ fi
 
 print_success "前端依赖安装完成"
 
-# 设置前端API地址，开发者使用的构建脚本默认使用本地IP
-    # 支持通过环境变量VITE_API_BASE_URL覆盖默认值
-    if [[ "$VITE_API_BASE_URL" == "" ]]; then
-        local_ip="127.0.0.1"
-        export VITE_API_BASE_URL="http://$local_ip:9598/api/v1"
-        print_info "自动检测到本地IP: $local_ip"
+# 设置前端API地址
+if [[ "$VITE_API_BASE_URL" == "" ]]; then
+    api_ip=""
+    # Check if IP is provided as command-line argument
+    if [[ -n "$1" ]]; then
+        api_ip="$1"
+        print_info "使用命令行提供的服务器IP地址: $api_ip"
     else
-        print_info "使用环境变量提供的API地址: $VITE_API_BASE_URL"
+        echo -e "\n${BLUE}[i] 请配置前端API地址:${NC}"
+        while [[ -z "$api_ip" ]]; do
+            read -p "  请输入服务器IP地址: " api_ip
+            if [[ -z "$api_ip" ]]; then
+                print_error "IP地址不能为空，请重新输入"
+            fi
+        done
+        print_info "使用手动输入的服务器IP地址: $api_ip"
     fi
-    print_info "设置前端API地址为: $VITE_API_BASE_URL"
+    export VITE_API_BASE_URL="http://$api_ip:9598/api/v1"
+    print_info "使用构建的API地址: $VITE_API_BASE_URL"
+else
+    print_info "使用环境变量提供的API地址: $VITE_API_BASE_URL"
+fi
+print_info "设置前端API地址为: $VITE_API_BASE_URL"
 
 print_info "开始构建前端..."
 npm run build 
@@ -129,7 +140,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-print_success "前端构建完成，构建文件位于: web/dist"
+print_success "前端构建完成，构建文件位于: $WEB_DIST_DIR"
 
 cd ..
 
@@ -143,138 +154,49 @@ fi
 
 print_success "Go依赖安装完成"
 
-
-
-# 构建所有平台的二进制文件
-print_info "开始构建所有平台的二进制文件..."
-build_failed=false
-for platform in "${PLATFORMS[@]}"; do
-    for arch in "${ARCHITECTURES[@]}"; do
-        if ! build_single "$platform" "$arch"; then
-            build_failed=true
-        fi
-    done
-done
-
-if [ "$build_failed" = true ]; then
-    print_error "部分平台构建失败，请检查日志"
+# 编译Go应用（仅当前平台）
+print_info "编译Go应用（仅当前平台）..."
+GOOS=$platform GOARCH=$arch go build -o "$BINARY_PATH" ./cmd/api
+if [ $? -ne 0 ]; then
+    print_error "Go应用编译失败"
+    exit 1
 fi
 
-# 构建产物验证
+# 设置二进制文件权限
+chmod +x "$BINARY_PATH"
+print_success "Go应用编译完成: $BINARY_PATH"
+
+# 复制前端代码到bin/web目录
+print_info "复制前端代码到 $BIN_WEB_DIR 目录..."
+rm -rf "$BIN_WEB_DIR"/*
+cp -r "$WEB_DIST_DIR"/* "$BIN_WEB_DIR/"
+
+print_success "前端代码复制完成"
+
+# 验证构建产物
 print_info "验证构建产物..."
-build_valid=true
 
-# 验证当前平台二进制文件
-if [ -f "$APP_BINARY" ]; then
-    if [ -x "$APP_BINARY" ]; then
-        print_success "当前平台二进制文件验证成功: $APP_BINARY"
-        print_success "当前平台二进制文件可正常执行"
-    else
-        print_error "当前平台二进制文件不可执行: $APP_BINARY"
-        chmod +x "$APP_BINARY"
-        if [ -x "$APP_BINARY" ]; then
-            print_success "已修复当前平台二进制文件权限"
-            print_success "修复后的二进制文件可正常执行"
-        else
-            print_error "无法修复当前平台二进制文件权限"
-            build_valid=false
-        fi
-    fi
+# 验证二进制文件
+if [ -f "$BINARY_PATH" ] && [ -x "$BINARY_PATH" ]; then
+    print_success "二进制文件验证成功: $BINARY_PATH"
 else
-    print_error "未找到当前平台二进制文件: $APP_BINARY"
-    build_valid=false
+    print_error "二进制文件验证失败: $BINARY_PATH"
+    exit 1
 fi
 
-# 验证前端构建文件
-frontend_valid=false
-if [ -d "web/dist" ]; then
-    required_frontend_files=("index.html" "assets" "vite.svg")
-    frontend_valid=true
-    
-    for file in "${required_frontend_files[@]}"; do
-        if [ -e "web/dist/$file" ]; then
-            print_success "前端文件验证成功: web/dist/$file"
-        else
-            print_warning "前端文件缺失: web/dist/$file"
-            # 只有index.html是必须的，其他文件缺失不影响基本功能
-            if [ "$file" == "index.html" ]; then
-                frontend_valid=false
-            fi
-        fi
-    done
-    
-    if $frontend_valid; then
-        print_success "前端构建文件验证完整成功: web/dist"
-    else
-        print_error "前端构建文件不完整，可能影响运行效果"
-        build_valid=false
-    fi
+# 验证前端文件
+if [ -d "$BIN_WEB_DIR" ] && [ -f "$BIN_WEB_DIR/index.html" ]; then
+    print_success "前端文件验证成功: $BIN_WEB_DIR"
 else
-    print_error "未找到前端构建目录: web/dist"
-    build_valid=false
-fi
-
-# 验证多平台二进制文件和前端文件
-multi_platform_valid=true
-built_platforms=0
-total_platforms=$(( ${#PLATFORMS[@]} * ${#ARCHITECTURES[@]} ))
-
-print_info "验证多平台二进制文件和前端文件 ($total_platforms 个平台)..."
-
-for platform in "${PLATFORMS[@]}"; do
-    for arch in "${ARCHITECTURES[@]}"; do
-        output_dir="bin/$platform-$arch"
-        binary_name="api"
-        if [[ $platform == "windows" ]]; then
-            binary_name="api.exe"
-        fi
-        binary_path="$output_dir/$binary_name"
-        
-        # 验证二进制文件
-        if [ -f "$binary_path" ]; then
-            print_success "$platform/$arch 二进制文件验证成功: $binary_path"
-            built_platforms=$((built_platforms + 1))
-        else
-            print_error "$platform/$arch 二进制文件未找到: $binary_path"
-            multi_platform_valid=false
-            continue
-        fi
-    done
-
-done
-
-print_info "多平台构建结果: $built_platforms/$total_platforms 个平台构建成功"
-
-
-
-# 显示构建完成信息
-print_success "========================================"
-print_success "PrerenderShield 编译完成！"
-print_success "多平台编译结果: bin/目录下"
-print_success "前端构建文件: web/dist"
-print_success ""
-print_success "接下来的操作:"
-print_success "1. 安装应用: ./install.sh"
-print_success "========================================"
-
-# 构建后的验证测试
-print_info "执行构建后的验证测试..."
-
-# 运行go test进行基本测试
-print_info "运行Go测试..."
-go test ./... -short
-if [ $? -eq 0 ]; then
-    print_success "Go测试通过"
-else
-    print_warning "Go测试未全部通过，但构建继续进行"
+    print_error "前端文件验证失败: $BIN_WEB_DIR"
+    exit 1
 fi
 
 print_success "========================================"
-print_success "PrerenderShield 编译完成！"
+print_success "PrerenderShield 构建完成！"
 print_success "========================================"
-print_success "当前平台二进制文件: $APP_BINARY"
-print_success "多平台编译结果: bin/目录下"
-print_success "前端构建文件: web/dist"
+print_success "二进制文件: $BINARY_PATH"
+print_success "前端文件: $BIN_WEB_DIR"
 print_success ""
 print_success "接下来的操作:"
 print_success "1. 安装应用: ./install.sh"

@@ -72,40 +72,87 @@ check_remotes() {
 configure_dual_push() {
     log_info "配置双仓库推送..."
     
-    # 检查当前推送配置
-    CURRENT_PUSH_URL=$(git config --get remote.origin.pushurl 2>/dev/null || git config --get remote.origin.url)
-    
-    # 如果已经配置了多个推送 URL，跳过
-    if git config --get-all remote.origin.pushurl 2>/dev/null | grep -q ","; then
-        log_info "双仓库推送已配置"
-        return
-    fi
-    
     # 获取 GitHub 仓库 URL
     if git remote get-url github &> /dev/null; then
         GITHUB_URL=$(git remote get-url github)
         
-        # 配置同时推送到 origin (Gitee) 和 github
-        git remote set-url --add --push origin "$GITEE_URL"
+        # 清除现有的推送配置
+        git remote set-url --delete --push origin "$GITEE_URL" 2>/dev/null || true
+        git remote set-url --delete --push origin "$GITHUB_URL" 2>/dev/null || true
+        
+        # 重置 origin 的推送 URL 为 Gitee
+        git remote set-url --push origin "$GITEE_URL"
+        
+        # 增加 GitHub 作为额外的推送 URL
         git remote set-url --add --push origin "$GITHUB_URL"
         
         log_info "已配置双仓库推送:"
-        log_info "  - Gitee:  $GITEE_URL"
-        log_info "  - GitHub: $GITHUB_URL"
+        git remote -v
         log_info "现在执行 'git push' 会自动推送到两个仓库"
     else
         log_warn "未配置 GitHub 仓库，跳过双仓库推送配置"
     fi
 }
 
+# 自动同步双仓库（拉取所有，推送所有）
+auto_sync() {
+    log_info "开始自动同步双仓库..."
+    
+    # 检查远程仓库配置
+    check_remotes
+    
+    # 使用当前分支
+    CURRENT_BRANCH=$(git branch --show-current)
+    log_info "使用分支: $CURRENT_BRANCH"
+    
+    # 拉取最新代码（先 Gitee，再 GitHub）
+    log_info "拉取 Gitee 最新代码..."
+    git pull origin "$CURRENT_BRANCH"
+    
+    if git remote get-url github &> /dev/null; then
+        log_info "拉取 GitHub 最新代码..."
+        git pull github "$CURRENT_BRANCH"
+    fi
+    
+    # 推送代码到所有仓库
+    log_info "推送代码到所有仓库..."
+    
+    # 检查是否有未提交的更改
+    if [ -n "$(git status --porcelain)" ]; then
+        log_warn "检测到未提交的更改，自动提交..."
+        # 自动添加所有更改
+        git add .
+        # 使用默认提交信息
+        COMMIT_MSG="Auto sync $(date '+%Y-%m-%d %H:%M:%S')"
+        log_info "使用默认提交信息: $COMMIT_MSG"
+        git commit -m "$COMMIT_MSG"
+    fi
+    
+    # 推送到所有配置的远程仓库
+    log_info "执行 git push..."
+    git push
+    
+    # 检查推送结果
+    if [ $? -eq 0 ]; then
+        log_info "双仓库同步成功完成"
+    else
+        log_error "双仓库同步失败"
+        exit 1
+    fi
+}
+
 # 拉取最新代码
 pull_latest() {
+    # 使用当前分支
+    CURRENT_BRANCH=$(git branch --show-current)
+    log_info "使用分支: $CURRENT_BRANCH"
+    
     log_info "从 Gitee 拉取最新代码..."
-    git pull origin master
+    git pull origin "$CURRENT_BRANCH"
     
     if git remote get-url github &> /dev/null; then
         log_info "从 GitHub 拉取最新代码..."
-        git pull github master
+        git pull github "$CURRENT_BRANCH"
     fi
 }
 
@@ -139,16 +186,18 @@ push_all() {
 
 # 手动分别推送
 push_manual() {
-    log_info "手动分别推送..."
+    # 使用当前分支
+    CURRENT_BRANCH=$(git branch --show-current)
+    log_info "手动分别推送，使用分支: $CURRENT_BRANCH..."
     
     # 推送到 Gitee
     log_info "推送到 Gitee..."
-    git push origin master
+    git push origin "$CURRENT_BRANCH"
     
     # 推送到 GitHub
     if git remote get-url github &> /dev/null; then
         log_info "推送到 GitHub..."
-        git push github master
+        git push github "$CURRENT_BRANCH"
     fi
 }
 
@@ -180,11 +229,12 @@ main_menu() {
     echo "3. 拉取最新代码"
     echo "4. 推送代码到所有仓库"
     echo "5. 手动分别推送"
-    echo "6. 显示仓库状态"
-    echo "7. 退出"
+    echo "6. 自动同步双仓库（拉取+推送）"
+    echo "7. 显示仓库状态"
+    echo "8. 退出"
     echo "========================================"
     
-    read -p "请选择操作 (1-7): " choice
+    read -p "请选择操作 (1-8): " choice
     
     case $choice in
         1)
@@ -207,9 +257,12 @@ main_menu() {
             push_manual
             ;;
         6)
-            show_status
+            auto_sync
             ;;
         7)
+            show_status
+            ;;
+        8)
             log_info "退出"
             exit 0
             ;;
@@ -232,6 +285,7 @@ usage() {
     echo "  setup     配置双仓库同步"
     echo "  pull      拉取最新代码"
     echo "  push      推送代码"
+    echo "  sync      自动同步双仓库（拉取+推送）"
     echo "  status    显示仓库状态"
     echo "  menu      显示交互式菜单"
     echo "  help      显示帮助信息"
@@ -239,6 +293,7 @@ usage() {
     echo "示例:"
     echo "  $0 setup  配置双仓库同步"
     echo "  $0 push   推送代码到所有仓库"
+    echo "  $0 sync   自动同步双仓库"
 }
 
 # 命令行参数处理
@@ -261,6 +316,9 @@ else
         push)
             check_remotes
             push_all
+            ;;
+        sync)
+            auto_sync
             ;;
         status)
             show_status
