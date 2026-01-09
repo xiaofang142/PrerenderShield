@@ -280,7 +280,6 @@ start() {
         echo ""
         info "$APP_NAME 启动完成"
         info "访问管理控制台: http://$local_ip:9597"
-        info "使用默认账号登录: admin / 123456"
         info "查看日志: tail -f $LOG_FILE"
     else
         echo ""

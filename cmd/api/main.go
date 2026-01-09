@@ -9,7 +9,8 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"path"
+	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -274,13 +275,9 @@ func main() {
 	}()
 
 	// 17. 启动管理控制台服务器
-	// 只在发行阶段启动管理控制台静态资源服务器，开发阶段（go run）不启动
-	// 检查是否是在go run模式下运行
-	exePath, _ := os.Executable()
-	isDevMode := strings.Contains(exePath, "/var/folders") || strings.Contains(exePath, "/tmp") || strings.Contains(exePath, "T\\go-build")
-
-	// 创建静态文件服务器，用于提供管理控制台前端页面
+	// 检查管理控制台静态目录
 	log.Printf("Admin static dir: %s", cfg.Dirs.AdminStaticDir)
+
 	// 检查目录是否存在
 	if _, err := os.Stat(cfg.Dirs.AdminStaticDir); os.IsNotExist(err) {
 		log.Printf("Admin static dir does not exist: %s", cfg.Dirs.AdminStaticDir)
@@ -289,27 +286,84 @@ func main() {
 		// 列出目录内容
 		files, _ := os.ReadDir(cfg.Dirs.AdminStaticDir)
 		log.Printf("Admin static dir contents: %v", files)
+
+		// 检查dist目录是否在web目录下
+		distDir := filepath.Join(cfg.Dirs.AdminStaticDir, "dist")
+		if _, err := os.Stat(distDir); err == nil {
+			log.Printf("Using dist directory for static files: %s", distDir)
+		}
 	}
 
 	adminMux := http.NewServeMux()
 
-	// 简化的SPA路由处理
-	adminMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// 检查请求是否指向一个具体的文件
-		filePath := path.Join(cfg.Dirs.AdminStaticDir, r.URL.Path)
+	// 静态文件类型映射，与站点服务器保持一致
+	staticExts := []string{".html", ".htm", ".css", ".js", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico", ".webp", ".woff", ".woff2", ".ttf", ".eot", ".json"}
 
-		// 如果文件不存在，返回index.html
-		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			// 记录日志
-			log.Printf("File not found, serving index.html: %s", r.URL.Path)
+	// 检查文件扩展名是否为静态资源
+	isStaticFile := func(path string) bool {
+		ext := strings.ToLower(filepath.Ext(path))
+		return slices.Contains(staticExts, ext)
+	}
+
+	// 处理静态资源请求
+	adminMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// 移除URL中的hash部分，支持SPA路由
+		path := strings.Split(r.URL.Path, "#")[0]
+		filePath := filepath.Join(cfg.Dirs.AdminStaticDir, strings.TrimPrefix(path, "/"))
+
+		log.Printf("Static file request: %s -> %s", r.URL.Path, filePath)
+
+		// 检查是否为静态资源
+		if isStaticFile(filePath) {
+			// 检查文件是否存在
+			if _, err := os.Stat(filePath); err == nil {
+				// 根据文件扩展名设置正确的MIME类型
+				ext := filepath.Ext(filePath)
+				switch ext {
+				case ".html", ".htm":
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				case ".css":
+					w.Header().Set("Content-Type", "text/css; charset=utf-8")
+				case ".js":
+					w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+				case ".json":
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				case ".png":
+					w.Header().Set("Content-Type", "image/png")
+				case ".jpg", ".jpeg":
+					w.Header().Set("Content-Type", "image/jpeg")
+				case ".gif":
+					w.Header().Set("Content-Type", "image/gif")
+				case ".svg":
+					w.Header().Set("Content-Type", "image/svg+xml")
+				case ".ico":
+					w.Header().Set("Content-Type", "image/x-icon")
+				case ".webp":
+					w.Header().Set("Content-Type", "image/webp")
+				default:
+					w.Header().Set("Content-Type", "application/octet-stream")
+				}
+
+				// 返回静态文件
+				http.ServeFile(w, r, filePath)
+				return
+			}
+		}
+
+		// SPA路由处理：非静态资源请求返回index.html
+		indexPath := filepath.Join(cfg.Dirs.AdminStaticDir, "index.html")
+		if _, err := os.Stat(indexPath); err == nil {
+			// 设置正确的Content-Type
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			// 返回index.html
-			http.ServeFile(w, r, path.Join(cfg.Dirs.AdminStaticDir, "index.html"))
+			http.ServeFile(w, r, indexPath)
 			return
 		}
 
-		// 如果文件存在，使用默认的文件服务器处理
-		http.FileServer(http.Dir(cfg.Dirs.AdminStaticDir)).ServeHTTP(w, r)
+		// 404处理
+		http.NotFound(w, r)
 	})
+
 	// 启动管理控制台服务器
 	adminServer := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", cfg.Server.Address, cfg.Server.ConsolePort),
@@ -330,11 +384,6 @@ func main() {
 		}
 	}()
 
-	if isDevMode {
-		log.Printf("Running in development mode, admin console server started from static files")
-		log.Printf("Use 'npm run dev' in web directory for hot-reload development")
-	}
-
 	// 16. 处理信号，优雅关闭服务
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -354,4 +403,15 @@ func main() {
 	siteServerManager.StopAllServers()
 
 	log.Println("Server exited")
+}
+
+// responseRecorder 响应记录器，用于捕获状态码
+type responseRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *responseRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
 }

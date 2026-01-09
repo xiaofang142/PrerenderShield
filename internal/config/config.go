@@ -316,7 +316,53 @@ func LoadConfig(configPath string) (*Config, error) {
 	// 创建默认配置
 	cfg := defaultConfig()
 
-	// 如果指定了配置文件路径，从文件加载配置
+	// 获取应用程序二进制文件的位置
+	exePath, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("无法获取应用程序路径: %v", err)
+	}
+	// 获取二进制文件所在目录
+	appDir := filepath.Dir(exePath)
+
+	// 如果是在 go run 模式下运行（可执行文件在临时目录），使用当前工作目录
+	// 这确保了在开发环境下重启后静态资源路径不变
+	var wd string
+	if wd, err = os.Getwd(); err != nil {
+		wd = appDir
+	}
+
+	if strings.Contains(exePath, "/var/folders") || strings.Contains(exePath, "/tmp") || strings.Contains(exePath, "T\\go-build") {
+		appDir = wd
+	}
+
+	// 如果没有指定配置文件路径，尝试从默认位置加载
+	if configPath == "" {
+		// 尝试从项目根目录下的configs/config.yml加载
+		projectConfigPath := filepath.Join(wd, "configs", "config.yml")
+		if _, err := os.Stat(projectConfigPath); err == nil {
+			configPath = projectConfigPath
+		} else {
+			// 尝试从当前目录下的config.yml加载
+			localConfigPath := filepath.Join(".", "config.yml")
+			if _, err := os.Stat(localConfigPath); err == nil {
+				configPath = localConfigPath
+			} else {
+				// 尝试从应用程序所在目录下的config.yml加载
+				appConfigPath := filepath.Join(appDir, "config.yml")
+				if _, err := os.Stat(appConfigPath); err == nil {
+					configPath = appConfigPath
+				} else {
+					// 尝试从应用程序所在目录下的config/config.yml加载
+					appConfigDirPath := filepath.Join(appDir, "config", "config.yml")
+					if _, err := os.Stat(appConfigDirPath); err == nil {
+						configPath = appConfigDirPath
+					}
+				}
+			}
+		}
+	}
+
+	// 如果找到配置文件路径，从文件加载配置
 	if configPath != "" {
 		// 检查配置文件是否存在
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -347,30 +393,14 @@ func LoadConfig(configPath string) (*Config, error) {
 	loadFromEnv(cfg)
 
 	// 确保所有目录路径都是绝对路径
-	// 获取应用程序二进制文件的位置
-	exePath, err := os.Executable()
-	if err != nil {
-		return nil, fmt.Errorf("无法获取应用程序路径: %v", err)
-	}
-	// 获取二进制文件所在目录
-	appDir := filepath.Dir(exePath)
-
-	// 如果是在 go run 模式下运行（可执行文件在临时目录），使用当前工作目录
-	// 这确保了在开发环境下重启后静态资源路径不变
-	if strings.Contains(exePath, "/var/folders") || strings.Contains(exePath, "/tmp") || strings.Contains(exePath, "T\\go-build") {
-		if wd, err := os.Getwd(); err == nil {
-			appDir = wd
-		}
-	}
-
 	// 处理静态目录
 	if !filepath.IsAbs(cfg.Dirs.StaticDir) {
 		// 检查路径是否已经包含"bin/"，如果包含则直接使用简单的相对路径
 		if strings.HasPrefix(cfg.Dirs.StaticDir, "bin/") {
 			// 如果路径是bin/darwin-arm64/static，直接使用static
-			cfg.Dirs.StaticDir = "./static"
+			cfg.Dirs.StaticDir = filepath.Join(wd, "static")
 		} else {
-			cfg.Dirs.StaticDir = filepath.Join(appDir, cfg.Dirs.StaticDir)
+			cfg.Dirs.StaticDir = filepath.Join(wd, cfg.Dirs.StaticDir)
 		}
 	}
 
@@ -379,9 +409,9 @@ func LoadConfig(configPath string) (*Config, error) {
 		// 检查路径是否已经包含"bin/"，如果包含则直接使用简单的相对路径
 		if strings.HasPrefix(cfg.Dirs.DataDir, "bin/") {
 			// 如果路径是bin/darwin-arm64/data，直接使用data
-			cfg.Dirs.DataDir = "./data"
+			cfg.Dirs.DataDir = filepath.Join(wd, "data")
 		} else {
-			cfg.Dirs.DataDir = filepath.Join(appDir, cfg.Dirs.DataDir)
+			cfg.Dirs.DataDir = filepath.Join(wd, cfg.Dirs.DataDir)
 		}
 	}
 
@@ -390,9 +420,9 @@ func LoadConfig(configPath string) (*Config, error) {
 		// 检查路径是否已经包含"bin/"，如果包含则直接使用简单的相对路径
 		if strings.HasPrefix(cfg.Dirs.CertsDir, "bin/") {
 			// 如果路径是bin/darwin-arm64/certs，直接使用certs
-			cfg.Dirs.CertsDir = "./certs"
+			cfg.Dirs.CertsDir = filepath.Join(wd, "certs")
 		} else {
-			cfg.Dirs.CertsDir = filepath.Join(appDir, cfg.Dirs.CertsDir)
+			cfg.Dirs.CertsDir = filepath.Join(wd, cfg.Dirs.CertsDir)
 		}
 	}
 
@@ -401,9 +431,9 @@ func LoadConfig(configPath string) (*Config, error) {
 		// 检查路径是否已经包含"bin/"，如果包含则直接使用简单的相对路径
 		if strings.HasPrefix(cfg.Dirs.AdminStaticDir, "bin/") {
 			// 如果路径是bin/darwin-arm64/web/dist，直接使用web/dist
-			cfg.Dirs.AdminStaticDir = "./web/dist"
+			cfg.Dirs.AdminStaticDir = filepath.Join(wd, "web", "dist")
 		} else {
-			cfg.Dirs.AdminStaticDir = filepath.Join(appDir, cfg.Dirs.AdminStaticDir)
+			cfg.Dirs.AdminStaticDir = filepath.Join(wd, cfg.Dirs.AdminStaticDir)
 		}
 	}
 
@@ -749,7 +779,7 @@ func defaultConfig() *Config {
 		ID:      "default", // 默认站点ID
 		Name:    "默认站点",
 		Domains: []string{"localhost"}, // 支持多个域名
-		Port:    8081,                  // 默认端口
+		Port:    8084,                  // 默认端口
 		Mode:    "static",              // 默认模式：静态资源站
 		// 代理配置
 		Proxy: ProxyConfig{
