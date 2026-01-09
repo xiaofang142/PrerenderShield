@@ -181,14 +181,43 @@ Prerender Shield 在市场上具有独特的定位，填补了现有产品的功
 | **网络** | 可访问公网 | 稳定的网络连接 |
 | **架构** | x86_64, arm64 | x86_64 |
 
-### 📥 **一键安装部署（推荐）**
+### 📥 **部署方案**
 
-Prerender Shield 提供了智能安装脚本 `install.sh`，自动完成所有配置和部署：
+Prerender Shield 采用三阶段部署模式：**开发者构建 → 用户安装 → 用户启动**，提供了完整的脚本支持。
+
+#### 🚀 **开发者构建流程**
+
+适合开发者和需要自定义编译的场景：
 
 ```bash
 # 1. 克隆项目代码（Gitee 镜像，国内访问更快）
 git clone https://gitee.com/xhpmayun/prerender-shield.git
 cd prerender-shield
+
+# 2. 给构建脚本添加执行权限
+chmod +x build.sh
+
+# 3. 执行构建脚本（自动构建前端和后端）
+./build.sh
+```
+
+**build.sh 脚本功能说明**：
+- ✅ 检查Go和Node.js环境
+- ✅ 配置Go模块镜像加速
+- ✅ 构建前端（安装依赖、设置API地址、构建）
+- ✅ 安装Go依赖
+- ✅ 构建当前平台的二进制文件
+- ✅ 构建所有平台的二进制文件（6个平台）
+- ✅ 构建产物验证和测试
+- ✅ 输出构建结果和使用说明
+
+#### 📦 **用户安装流程**
+
+适合普通用户使用，基于预编译的二进制文件进行安装：
+
+```bash
+# 1. 确保已经完成构建（由开发者执行）
+# ./build.sh
 
 # 2. 给安装脚本添加执行权限
 chmod +x install.sh
@@ -200,64 +229,80 @@ chmod +x install.sh
 ./install.sh --ip 192.168.1.100
 ```
 
-#### 🎯 **安装脚本功能说明**
+**install.sh 脚本功能说明**：
+- ✅ 检测操作系统和架构
+- ✅ 检查并安装基础依赖（Redis、浏览器环境）
+- ✅ 从预编译包安装应用
+- ✅ 配置前端API地址
+- ✅ 设置Redis连接信息
+- ✅ 配置默认站点
+- ✅ 执行安装后的健康检查
+- ✅ 输出启动命令和访问信息
 
-| 功能 | 说明 |
-|------|------|
-| ✅ **自动环境检测** | 检查操作系统、架构、内存、磁盘空间 |
-| ✅ **智能IP获取** | 自动获取本机公网IP和内网IP |
-| ✅ **依赖自动安装** | 自动安装 Go、Redis、Node.js 等依赖 |
-| ✅ **浏览器智能安装** | 自动检测并安装 Chromium/Chrome，支持多种安装方案 |
-| ✅ **交互式Redis配置** | 支持用户输入Redis连接信息（主机、端口、密码、数据库） |
-| ✅ **系统服务配置** | 自动配置 systemd/OpenRC 服务，支持开机自启 |
-| ✅ **服务自动启动** | 一键启动 Prerender Shield 服务 |
-| ✅ **健康检查验证** | 验证服务是否正常启动并可用 |
-| ✅ **跨平台兼容** | 支持 Ubuntu、CentOS、Fedora、openSUSE、Alpine、macOS |
-| ✅ **支持二次运行** | 便于重置Redis连接和重新配置 |
+#### 🎯 **用户启动流程**
 
-#### 🔧 **手动编译安装（开发环境）**
-
-适合开发者和需要自定义编译的场景：
+适合普通用户使用，启动已安装的应用：
 
 ```bash
-# 1. 安装 Go 环境（如果未安装）
-# 下载地址：https://golang.org/dl/
-# 安装后设置环境变量
-export PATH=$PATH:/usr/local/go/bin
+# 1. 确保已经完成安装
+# ./install.sh
 
-# 2. 安装 Redis（如果未安装）
-# Ubuntu/Debian
-sudo apt-get install -y redis-server
-sudo systemctl enable redis-server
-sudo systemctl start redis-server
+# 2. 给启动脚本添加执行权限
+chmod +x start.sh
 
-# CentOS/RHEL
-sudo yum install -y redis
-sudo systemctl enable redis
-sudo systemctl start redis
+# 3. 启动应用（使用预编译的二进制文件）
+./start.sh start
 
-# 3. 安装 Node.js 和 npm（前端开发）
-# 下载地址：https://nodejs.org/en/download/
+# 4. 重启应用
+./start.sh restart
 
-# 4. 克隆项目
-git clone https://gitee.com/xhpmayun/prerender-shield.git
-cd prerender-shield
-
-# 5. 启动后端服务（开发模式）
-# 开发模式下只启动API服务器(9598端口)，不启动管理控制台
-cd cmd/api
-go run main.go
-
-# 6. 启动前端开发服务（可选，仅开发环境需要）
-cd web
-npm install
-npm run dev
-
-# 7. 访问管理界面
-# 开发模式：http://localhost:5173（由npm run dev启动）
-# 生产模式：http://localhost:9597
-# 默认账号：admin / 123456
+# 5. 停止应用
+./start.sh stop
 ```
+
+**start.sh 脚本功能说明**：
+- ✅ 根据当前平台选择合适的二进制文件
+- ✅ 检查二进制文件和配置文件是否存在
+- ✅ 启动应用程序
+- ✅ 停止应用程序
+- ✅ 重启应用程序
+- ✅ 检测服务是否真正启动
+- ✅ 执行服务健康检查
+- ✅ 输出清晰的访问信息
+
+### 📋 **脚本体系说明**
+
+| 脚本名称 | 角色 | 主要功能 | 执行环境 |
+|----------|------|----------|----------|
+| **build.sh** | 开发者构建脚本 | 构建前端和后端，生成多平台二进制文件 | 开发环境 |
+| **install.sh** | 用户安装脚本 | 依赖安装和配置，从预编译包安装应用 | 生产环境 |
+| **start.sh** | 用户启动脚本 | 启动、停止、重启应用，执行健康检查 | 生产环境 |
+| **test_script.sh** | 测试脚本 | 验证脚本体系在不同平台上的兼容性 | 测试环境 |
+
+### 🔍 **验证安装**
+
+安装完成后，请通过以下步骤验证服务是否正常运行：
+
+1. **检查服务状态**
+   ```bash
+   ./start.sh status
+   ```
+
+2. **访问管理界面**
+   - 打开浏览器访问：`http://你的服务器IP:9597`
+   - 使用默认账号登录：**admin** / **123456**
+   - 首次登录建议立即修改默认密码
+
+3. **测试API接口**
+   ```bash
+   # 健康检查接口
+   curl http://localhost:9598/api/v1/health
+   # 预期返回：{"status":"ok","timestamp":"..."}
+   
+   # 版本信息接口
+   curl http://localhost:9598/api/v1/version
+   # 预期返回：{"version":"v1.0.1","build":"..."}
+   ```
 
 ### 🚀 **服务管理**
 
@@ -289,7 +334,7 @@ sudo systemctl disable prerender-shield
 #### 📝 **使用 start.sh 脚本管理**
 
 ```bash
-# 启动服务（编译并启动）
+# 启动服务（使用预编译的二进制文件）
 ./start.sh start
 
 # 重启服务
@@ -297,12 +342,6 @@ sudo systemctl disable prerender-shield
 
 # 停止服务
 ./start.sh stop
-
-# 重新安装（清除数据并重启）
-./start.sh reinstall
-
-# 仅检查依赖（不启动服务）
-./start.sh check
 ```
 
 ### 🔍 **验证安装**
@@ -345,14 +384,48 @@ sudo systemctl disable prerender-shield
 /opt/prerender-shield/          # 安装目录
 ├── api                          # 后端二进制文件
 ├── web/                         # 前端静态文件目录
-│   └── dist/                    # 构建后的前端文件
+│   ├── index.html               # 主页面
+│   ├── assets/                  # 静态资源（CSS、JS、图片等）
+│   └── favicon.ico              # 网站图标
 ├── configs/                     # 配置文件目录
 │   └── config.yml               # 主配置文件
 ├── static/                      # 静态资源目录
 └── data/                        # 数据目录
     ├── rules/                   # 防火墙规则目录
     ├── certs/                   # 证书目录
-    └── logs/                     # 日志目录
+    └── logs/                    # 日志目录
+```
+
+**项目根目录结构**：
+
+```
+prerender-shield/               # 项目根目录
+├── bin/                        # 构建产物目录（多平台二进制文件）
+│   ├── linux-amd64/            # Linux x86_64 平台
+│   │   └── api                 # 二进制文件
+│   ├── linux-arm64/            # Linux ARM64 平台
+│   ├── darwin-amd64/           # macOS x86_64 平台
+│   ├── darwin-arm64/           # macOS ARM64 平台
+│   ├── windows-amd64/          # Windows x86_64 平台
+│   └── windows-arm64/          # Windows ARM64 平台
+├── cmd/                        # Go 命令行入口目录
+│   └── api/                    # API 服务入口
+│       └── main.go             # 主程序入口
+├── configs/                    # 配置文件模板目录
+│   └── config.example.yml      # 配置文件模板
+├── data/                       # 数据目录（运行时生成）
+│   ├── prerender-shield.pid    # 进程PID文件
+│   └── prerender-shield.log    # 日志文件
+├── web/                        # 前端代码目录
+│   ├── dist/                   # 构建后的前端文件（部署时使用）
+│   ├── src/                    # 前端源代码
+│   ├── package.json            # 前端依赖配置
+│   └── vite.config.ts          # Vite配置文件
+├── build.sh                    # 构建脚本（开发者使用）
+├── install.sh                  # 安装脚本（用户使用）
+├── start.sh                    # 启动脚本（用户使用）
+├── go.mod                      # Go模块依赖配置
+└── README.md                   # 项目说明文档
 ```
 
 ## 5. 配置管理

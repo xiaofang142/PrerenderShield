@@ -105,15 +105,28 @@ fi
 print_success "前端依赖安装完成"
 
 # 设置前端API地址，开发者使用的构建脚本默认使用本地IP
-# 支持通过环境变量VITE_API_BASE_URL覆盖默认值
-if [[ "$VITE_API_BASE_URL" == "" ]]; then
-    # 构建脚本默认使用本地IP，开发者可以通过环境变量覆盖
-    export VITE_API_BASE_URL="http://127.0.0.1:9598/api/v1"
-    print_info "使用默认本地IP: 127.0.0.1"
-else
-    print_info "使用环境变量提供的API地址: $VITE_API_BASE_URL"
-fi
-print_info "设置前端API地址为: $VITE_API_BASE_URL"
+    # 支持通过环境变量VITE_API_BASE_URL覆盖默认值
+    if [[ "$VITE_API_BASE_URL" == "" ]]; then
+        # 构建脚本默认使用本地IP，开发者可以通过环境变量覆盖
+        # 自动检测本地网络IP，优先使用非本地回环地址
+        local local_ip="127.0.0.1"
+        if command -v ip &> /dev/null; then
+            # Linux系统使用ip命令
+            local_ip=$(ip addr show | grep -E "inet.*brd" | grep -v "127.0.0.1" | head -1 | awk '{print $2}' | cut -d/ -f1)
+        elif command -v ifconfig &> /dev/null; then
+            # macOS系统使用ifconfig命令
+            local_ip=$(ifconfig | grep -E "inet.*broadcast" | grep -v "127.0.0.1" | head -1 | awk '{print $2}')
+        fi
+        # 如果无法检测到本地IP，使用默认值
+        if [[ -z "$local_ip" ]]; then
+            local_ip="127.0.0.1"
+        fi
+        export VITE_API_BASE_URL="http://$local_ip:9598/api/v1"
+        print_info "自动检测到本地IP: $local_ip"
+    else
+        print_info "使用环境变量提供的API地址: $VITE_API_BASE_URL"
+    fi
+    print_info "设置前端API地址为: $VITE_API_BASE_URL"
 
 print_info "开始构建前端..."
 # 使用 --sourcemap false 减少内存使用
@@ -154,11 +167,130 @@ print_success "当前平台构建完成，二进制文件: $APP_BINARY"
 
 # 构建所有平台的二进制文件
 print_info "开始构建所有平台的二进制文件..."
+build_failed=false
 for platform in "${PLATFORMS[@]}"; do
     for arch in "${ARCHITECTURES[@]}"; do
-        build_single "$platform" "$arch"
+        if ! build_single "$platform" "$arch"; then
+            build_failed=true
+        fi
     done
 done
+
+if [ "$build_failed" = true ]; then
+    print_error "部分平台构建失败，请检查日志"
+fi
+
+# 构建产物验证
+print_info "验证构建产物..."
+local build_valid=true
+
+# 验证当前平台二进制文件
+if [ -f "$APP_BINARY" ]; then
+    if [ -x "$APP_BINARY" ]; then
+        print_success "当前平台二进制文件验证成功: $APP_BINARY"
+        # 验证二进制文件是否可执行（尝试运行版本命令）
+        if $APP_BINARY --version > /dev/null 2>&1; then
+            print_success "当前平台二进制文件可正常执行"
+        else
+            print_warning "当前平台二进制文件可能存在问题，无法执行版本命令"
+            build_valid=false
+        fi
+    else
+        print_error "当前平台二进制文件不可执行: $APP_BINARY"
+        chmod +x "$APP_BINARY"
+        if [ -x "$APP_BINARY" ]; then
+            print_success "已修复当前平台二进制文件权限"
+            # 验证修复后的二进制文件
+            if $APP_BINARY --version > /dev/null 2>&1; then
+                print_success "修复后的二进制文件可正常执行"
+            else
+                print_warning "修复后的二进制文件可能存在问题，无法执行版本命令"
+                build_valid=false
+            fi
+        else
+            print_error "无法修复当前平台二进制文件权限"
+            build_valid=false
+        fi
+    fi
+else
+    print_error "未找到当前平台二进制文件: $APP_BINARY"
+    build_valid=false
+fi
+
+# 验证前端构建文件
+if [ -d "web/dist" ]; then
+    local required_frontend_files=("index.html" "assets" "favicon.ico")
+    local frontend_valid=true
+    
+    for file in "${required_frontend_files[@]}"; do
+        if [ -e "web/dist/$file" ]; then
+            print_success "前端文件验证成功: web/dist/$file"
+        else
+            print_warning "前端文件缺失: web/dist/$file"
+            frontend_valid=false
+        fi
+    done
+    
+    if $frontend_valid; then
+        print_success "前端构建文件验证完整成功: web/dist"
+    else
+        print_error "前端构建文件不完整，可能影响运行效果"
+        build_valid=false
+    fi
+else
+    print_error "未找到前端构建目录: web/dist"
+    build_valid=false
+fi
+
+# 验证多平台二进制文件
+local multi_platform_valid=true
+local built_platforms=0
+local total_platforms=$(( ${#PLATFORMS[@]} * ${#ARCHITECTURES[@]} ))
+
+print_info "验证多平台二进制文件 ($total_platforms 个平台)..."
+
+for platform in "${PLATFORMS[@]}"; do
+    for arch in "${ARCHITECTURES[@]}"; do
+        local output_dir="bin/$platform-$arch"
+        local binary_name="api"
+        if [[ $platform == "windows" ]]; then
+            binary_name="api.exe"
+        fi
+        local binary_path="$output_dir/$binary_name"
+        
+        if [ -f "$binary_path" ]; then
+            print_success "$platform/$arch 二进制文件验证成功: $binary_path"
+            built_platforms=$((built_platforms + 1))
+        else
+            print_error "$platform/$arch 二进制文件未找到: $binary_path"
+            multi_platform_valid=false
+        fi
+    done
+done
+
+print_info "多平台构建结果: $built_platforms/$total_platforms 个平台构建成功"
+
+# 构建结果汇总
+if $build_valid && $multi_platform_valid; then
+    print_success "构建产物验证全部通过！"
+elif $build_valid; then
+    print_warning "构建产物验证基本通过，但部分平台构建失败"
+else
+    print_error "构建产物验证失败，建议检查日志并修复问题"
+    exit 1
+fi
+
+# 构建后的验证测试
+print_info "执行构建后的验证测试..."
+
+# 运行go test进行基本测试
+print_info "运行Go测试..."
+go test ./... -short
+if [ $? -eq 0 ]; then
+    print_success "Go测试通过"
+else
+    print_warning "Go测试未全部通过，但构建继续进行"
+fi
 
 print_success "========================================"
 print_success "PrerenderShield 编译完成！"
@@ -166,5 +298,9 @@ print_success "========================================"
 print_success "当前平台二进制文件: $APP_BINARY"
 print_success "多平台编译结果: bin/目录下"
 print_success "前端构建文件: web/dist"
-print_success "可以使用 ./start.sh 启动应用"
+print_success ""
+print_success "接下来的操作:"
+print_success "1. 安装应用: ./install.sh"
+print_success "2. 启动应用: ./start.sh start"
+print_success "3. 查看日志: tail -f ./data/prerender-shield.log"
 print_success "========================================"

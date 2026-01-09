@@ -6,6 +6,7 @@
 *.so
 *.dylib
 prerender-shield
+api
 
 # 依赖包目录
 gopkg.in/
@@ -13,16 +14,13 @@ vendor/
 
 # 编译产生的目录
 __pycache__/
+bin/
 
 # Go编译产生的文件
 *.o
 *.a
 *.test
 *.out
-
-# 测试覆盖率文件
-coverage.txt
-profile.out
 
 # 编辑器配置文件
 .idea/
@@ -66,6 +64,7 @@ web/*.local
 web/.env
 web/.env.local
 web/.env.*.local
+web/dist/
 
 # 数据库文件
 data/

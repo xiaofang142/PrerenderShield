@@ -1,41 +1,9 @@
 #!/bin/bash
 
-# PrerenderShield 一键安装部署脚本
+# PrerenderShield 启动脚本
 
 APP_NAME="prerender-shield"
 CONFIG_FILE="configs/config.yml"
-
-# 根据当前平台选择合适的二进制文件
-get_platform_binary() {
-    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
-    local arch=$(uname -m)
-    
-    # 转换架构名称
-    if [[ $arch == "x86_64" ]]; then
-        arch="amd64"
-    elif [[ $arch == "arm64" ]]; then
-        arch="arm64"
-    fi
-    
-    # 构建二进制文件路径
-    local binary_path="bin/${os}-${arch}/api"
-    
-    # 如果是Windows系统，添加.exe后缀
-    if [[ $os == "windows" ]]; then
-        binary_path="${binary_path}.exe"
-    fi
-    
-    echo "$binary_path"
-}
-
-# 获取当前平台的二进制文件路径
-APP_BINARY=$(get_platform_binary)
-
-# 如果当前平台的二进制文件不存在，使用当前目录下的api
-if [ ! -f "$APP_BINARY" ]; then
-    APP_BINARY="./api"
-fi
-
 PID_FILE="./data/${APP_NAME}.pid"
 LOG_FILE="./data/${APP_NAME}.log"
 
@@ -58,427 +26,179 @@ error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# 根据当前平台选择合适的二进制文件
+get_platform_binary() {
+    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local arch=$(uname -m)
+    
+    # 转换架构名称
+    if [[ $arch == "x86_64" ]]; then
+        arch="amd64"
+    elif [[ $arch == "arm64" || $arch == "aarch64" ]]; then
+        arch="arm64"
+    else
+        error "不支持的架构: $arch"
+        exit 1
+    fi
+    
+    # 构建二进制文件路径
+    local binary_path="bin/${os}-${arch}/api"
+    
+    # 如果是Windows系统，添加.exe后缀
+    if [[ $os == "windows" ]]; then
+        binary_path="${binary_path}.exe"
+    fi
+    
+    echo "$binary_path"
+}
+
+# 获取当前平台的二进制文件路径
+BINARY_PATH=$(get_platform_binary)
+
+# 如果当前平台的二进制文件不存在，使用当前目录下的api
+if [ ! -f "$BINARY_PATH" ]; then
+    if [ -f "./api" ]; then
+        BINARY_PATH="./api"
+        info "使用当前目录下的二进制文件: $BINARY_PATH"
+    else
+        error "未找到二进制文件: $BINARY_PATH 或 ./api"
+        error "请先运行 ./build.sh 编译应用程序"
+        exit 1
+    fi
+else
+    info "使用平台特定二进制文件: $BINARY_PATH"
+fi
+
+# 确保数据目录存在
+mkdir -p ./data
+
+# 获取本机IP地址，用于访问信息
+get_local_ip() {
+    local ip="127.0.0.1"
+    
+    if [[ "$(hostname)" != "localhost" && ! "$(hostname)" =~ "local" && "$(uname -s)" != "Darwin" ]]; then
+        # 服务器环境，尝试获取公网IP
+        ip=$(curl -s ifconfig.me || curl -s icanhazip.com || echo "127.0.0.1")
+    fi
+    
+    echo "$ip"
+}
+
+# 彩色输出
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# 打印彩色信息
+info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+warning() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
 usage() {
     echo "========================================"
-    echo -e "${GREEN}PrerenderShield 一键安装部署脚本${NC}"
+    echo -e "${GREEN}PrerenderShield 启动脚本${NC}"
     echo "========================================"
-    echo "用法: $0 {start|check|restart|stop|reinstall}"
+    echo "用法: $0 {start|restart|stop}"
     echo ""
     echo "选项:"
-    echo "  start      检查依赖并启动应用程序"
-    echo "  check      仅检查系统依赖（不启动应用）"
+    echo "  start      启动应用程序"
     echo "  restart    重启应用程序"
     echo "  stop       停止应用程序"
-    echo "  reinstall  重新安装应用程序（清除数据）"
     echo ""
     exit 1
 }
 
-check_root() {
-    if [ "$EUID" -eq 0 ]; then
-        warning "正在以root用户运行，这可能不是最佳实践"
-    fi
-}
-
-# 系统依赖安装
-install_deps() {
-    echo "========================================"
-    echo -e "${GREEN}安装系统依赖...${NC}"
-    echo "======================================="
-    
-    local os_type=$(uname -s)
-    local install_cmd
-    
-    # 检测包管理器
-    if [ "$os_type" = "Linux" ]; then
-        if command -v apt-get &> /dev/null; then
-            install_cmd="apt-get"
-            sudo apt-get update
-        elif command -v yum &> /dev/null; then
-            install_cmd="yum"
-        elif command -v dnf &> /dev/null; then
-            install_cmd="dnf"
-        else
-            error "不支持的Linux发行版，无法自动安装依赖"
-            return 1
-        fi
-    elif [ "$os_type" = "Darwin" ]; then
-        # macOS
-        if ! command -v brew &> /dev/null; then
-            info "安装Homebrew..."
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-            if [ $? -ne 0 ]; then
-                error "Homebrew安装失败"
-                return 1
-            fi
-            # 添加Homebrew到PATH
-            if [ -f "/opt/homebrew/bin/brew" ]; then
-                # Apple Silicon
-                export PATH="/opt/homebrew/bin:$PATH"
-            elif [ -f "/usr/local/bin/brew" ]; then
-                # Intel
-                export PATH="/usr/local/bin:$PATH"
-            fi
-        fi
-        install_cmd="brew"
-    else
-        error "不支持的操作系统，无法自动安装依赖"
-        return 1
-    fi
-    
-    # 安装Go环境
-    local go_installed=false
-    if command -v go &> /dev/null; then
-        go_installed=true
-    elif [ "$os_type" = "Linux" ]; then
-        # Linux额外检查包管理器
-        case "$install_cmd" in
-            apt-get)
-                dpkg -l | grep -q golang && go_installed=true
-                ;;
-            yum|dnf)
-                rpm -q golang &> /dev/null && go_installed=true
-                ;;
-        esac
-    elif [ "$os_type" = "Darwin" ] && brew list go &> /dev/null; then
-        go_installed=true
-    fi
-    
-    if [ "$go_installed" = false ]; then
-        info "安装Go环境..."
-        if [ "$os_type" = "Linux" ]; then
-            case "$install_cmd" in
-                apt-get)
-                    sudo apt-get install -y golang
-                    if [ $? -ne 0 ]; then
-                        error "Go环境安装失败"
-                        return 1
-                    fi
-                    ;;
-                yum|dnf)
-                    sudo $install_cmd install -y golang
-                    if [ $? -ne 0 ]; then
-                        error "Go环境安装失败"
-                        return 1
-                    fi
-                    ;;
-            esac
-        elif [ "$os_type" = "Darwin" ]; then
-            brew install go
-            if [ $? -ne 0 ]; then
-                error "Go环境安装失败"
-                return 1
-            fi
-        fi
-        info "✓ Go环境安装完成"
-        
-        # 验证Go是否可用
-        if ! command -v go &> /dev/null; then
-            error "Go环境安装后验证失败，无法找到go命令"
-            return 1
-        fi
-    else
-        info "✓ Go环境已安装: $(go version)"
-    fi
-    
-    # 安装Redis
-    local redis_installed=false
-    if command -v redis-server &> /dev/null; then
-        redis_installed=true
-    elif [ "$os_type" = "Linux" ]; then
-        # Linux额外检查包管理器
-        case "$install_cmd" in
-            apt-get)
-                dpkg -l | grep -q redis-server && redis_installed=true
-                ;;
-            yum|dnf)
-                rpm -q redis &> /dev/null && redis_installed=true
-                ;;
-        esac
-    elif [ "$os_type" = "Darwin" ] && brew list redis &> /dev/null; then
-        redis_installed=true
-    fi
-    
-    if [ "$redis_installed" = false ]; then
-        info "安装Redis..."
-        if [ "$os_type" = "Linux" ]; then
-            case "$install_cmd" in
-                apt-get)
-                    sudo apt-get install -y redis-server
-                    if [ $? -ne 0 ]; then
-                        error "Redis安装失败"
-                        return 1
-                    fi
-                    sudo systemctl enable --now redis-server
-                    ;;
-                yum|dnf)
-                    sudo $install_cmd install -y redis
-                    if [ $? -ne 0 ]; then
-                        error "Redis安装失败"
-                        return 1
-                    fi
-                    sudo systemctl enable --now redis
-                    ;;
-            esac
-        elif [ "$os_type" = "Darwin" ]; then
-            brew install redis
-            if [ $? -ne 0 ]; then
-                error "Redis安装失败"
-                return 1
-            fi
-            brew services start redis
-        fi
-        info "✓ Redis安装完成"
-        
-        # 验证Redis是否可用
-        if ! command -v redis-server &> /dev/null; then
-            error "Redis安装后验证失败，无法找到redis-server命令"
-            return 1
-        fi
-    else
-        info "✓ Redis已安装"
-        # 启动Redis如果它没有运行
-        if ! redis-cli ping &> /dev/null; then
-            info "启动Redis..."
-            if [ "$os_type" = "Linux" ]; then
-                sudo systemctl start redis-server 2>/dev/null || sudo systemctl start redis
-            elif [ "$os_type" = "Darwin" ]; then
-                brew services start redis
-            fi
-        fi
-    fi
-    
-    # 安装Node.js和npm
-    local node_installed=false
-    if command -v npm &> /dev/null; then
-        node_installed=true
-    elif [ "$os_type" = "Linux" ]; then
-        # Linux额外检查包管理器
-        case "$install_cmd" in
-            apt-get)
-                dpkg -l | grep -q nodejs && node_installed=true
-                ;;
-            yum|dnf)
-                rpm -q nodejs &> /dev/null && node_installed=true
-                ;;
-        esac
-    elif [ "$os_type" = "Darwin" ] && brew list node &> /dev/null; then
-        node_installed=true
-    fi
-    
-    if [ "$node_installed" = false ]; then
-        info "安装Node.js和npm..."
-        if [ "$os_type" = "Linux" ]; then
-            case "$install_cmd" in
-                apt-get)
-                    sudo apt-get install -y nodejs npm
-                    if [ $? -ne 0 ]; then
-                        error "Node.js和npm安装失败"
-                        return 1
-                    fi
-                    ;;
-                yum|dnf)
-                    sudo $install_cmd install -y nodejs npm
-                    if [ $? -ne 0 ]; then
-                        error "Node.js和npm安装失败"
-                        return 1
-                    fi
-                    ;;
-            esac
-        elif [ "$os_type" = "Darwin" ]; then
-            brew install node
-            if [ $? -ne 0 ]; then
-                error "Node.js和npm安装失败"
-                return 1
-            fi
-        fi
-        info "✓ Node.js和npm安装完成"
-        
-        # 验证Node.js和npm是否可用
-        if ! command -v npm &> /dev/null; then
-            error "Node.js和npm安装后验证失败，无法找到npm命令"
-            return 1
-        fi
-    else
-        info "✓ Node.js和npm已安装: $(npm --version)"
-    fi
-    
-    # 安装Chrome/Chromium浏览器（用于预渲染）
-    local chrome_installed=false
-    
-    # 检查Chrome是否已安装（Linux检查命令行工具和包管理器，macOS检查应用目录和brew）
-    if [ "$os_type" = "Linux" ]; then
-        if command -v google-chrome &> /dev/null || command -v chromium &> /dev/null || command -v chromium-browser &> /dev/null; then
-            chrome_installed=true
-        else
-            # Linux额外检查包管理器
-            case "$install_cmd" in
-                apt-get)
-                    dpkg -l | grep -q chromium-browser && chrome_installed=true
-                    ;;
-                yum|dnf)
-                    rpm -q chromium &> /dev/null && chrome_installed=true
-                    ;;
-            esac
-        fi
-    elif [ "$os_type" = "Darwin" ]; then
-        if [ -d "/Applications/Google Chrome.app" ] || [ -d "/Applications/Chromium.app" ]; then
-            chrome_installed=true
-        elif brew list --cask google-chrome &> /dev/null || brew list --cask chromium &> /dev/null; then
-            chrome_installed=true
-        fi
-    fi
-    
-    if [ "$chrome_installed" = false ]; then
-        info "安装Chrome/Chromium浏览器..."
-        if [ "$os_type" = "Linux" ]; then
-            case "$install_cmd" in
-                apt-get)
-                    sudo apt-get install -y chromium-browser
-                    if [ $? -ne 0 ]; then
-                        error "浏览器安装失败"
-                        return 1
-                    fi
-                    ;;
-                yum|dnf)
-                    sudo $install_cmd install -y chromium
-                    if [ $? -ne 0 ]; then
-                        error "浏览器安装失败"
-                        return 1
-                    fi
-                    ;;
-            esac
-        elif [ "$os_type" = "Darwin" ]; then
-            brew install --cask google-chrome
-            if [ $? -ne 0 ]; then
-                error "浏览器安装失败"
-                return 1
-            fi
-        fi
-        info "✓ 浏览器安装完成"
-        
-        # 验证浏览器是否可用
-        local chrome_verified=false
-        if [ "$os_type" = "Linux" ]; then
-            if command -v google-chrome &> /dev/null || command -v chromium &> /dev/null || command -v chromium-browser &> /dev/null; then
-                chrome_verified=true
-            fi
-        elif [ "$os_type" = "Darwin" ]; then
-            if [ -d "/Applications/Google Chrome.app" ] || [ -d "/Applications/Chromium.app" ]; then
-                chrome_verified=true
-            fi
-        fi
-        
-        if [ "$chrome_verified" = false ]; then
-            error "浏览器安装后验证失败，无法找到浏览器"
-            return 1
-        fi
-    else
-        if [ "$os_type" = "Linux" ]; then
-            if command -v google-chrome &> /dev/null; then
-                info "✓ Chrome浏览器已安装: $(google-chrome --version)"
-            elif command -v chromium &> /dev/null; then
-                info "✓ Chromium浏览器已安装: $(chromium --version)"
-            elif command -v chromium-browser &> /dev/null; then
-                info "✓ Chromium浏览器已安装: $(chromium-browser --version)"
-            else
-                info "✓ 浏览器已安装"
-            fi
-        else
-            if [ -d "/Applications/Google Chrome.app" ]; then
-                info "✓ Chrome浏览器已安装"
-            else
-                info "✓ Chromium浏览器已安装"
-            fi
-        fi
-    fi
-    
-    echo "========================================"
-    info "所有依赖安装完成！"
-    echo "======================================="
-    return 0
-}
-
-create_dirs() {
-    info "创建必要的目录..."
-    mkdir -p data/rules data/certs data/redis data/grafana
-    info "✓ 目录创建完成"
-    
-    # 创建Redis配置文件
-    if [ ! -f "data/redis/redis.conf" ]; then
-        info "创建Redis配置文件..."
-        cat > data/redis/redis.conf << EOF
-# Redis配置文件
-bind 0.0.0.0
-protected-mode no
-port 6379
-dir /data
-dbfilename dump.rdb
-save 900 1
-save 300 10
-save 60 10000
-appendonly yes
-appendfilename "appendonly.aof"
-EOF
-        info "✓ Redis配置文件创建完成"
-    fi
-}
-
-check_config() {
-    if [ ! -f "$CONFIG_FILE" ]; then
-        info "配置文件不存在，从模板复制..."
-        if [ -f configs/config.example.yml ]; then
-            cp configs/config.example.yml "$CONFIG_FILE"
-            info "✓ 已从config.example.yml复制到$CONFIG_FILE"
-            
-            # 修改默认配置，使用内存存储和缓存
-            info "优化默认配置..."
-            sed -i '' 's/type: redis/type: memory/' "$CONFIG_FILE"
-            sed -i '' 's/type: postgres/type: memory/' "$CONFIG_FILE"
-            sed -i '' 's/redis_url: 127.0.0.1:6379/redis_url: /' "$CONFIG_FILE"
-            info "✓ 配置优化完成"
-        else
-            error "配置文件模板configs/config.example.yml不存在"
-            exit 1
-        fi
-    fi
-}
-
-build_app() {
-    info "配置Go镜像加速..."
-    export GOPROXY=https://goproxy.cn,direct
-    export GO111MODULE=on
-
-    info "安装Go依赖..."
-    go mod tidy
-    if [ $? -ne 0 ]; then
-        error "Go依赖安装失败"
-        exit 1
-    fi
-    info "✓ Go依赖安装完成"
-
-    info "构建应用程序..."
-    go build -o "$APP_BINARY" ./cmd/api
-    if [ $? -ne 0 ]; then
-        error "应用程序构建失败"
-        exit 1
-    fi
-    
-    # 添加执行权限
-    chmod +x "$APP_BINARY"
-    info "✓ 应用程序构建成功，并添加了执行权限"
-}
-
 is_running() {
     if [ -f "$PID_FILE" ]; then
-        local pid=$(cat "$PID_FILE")
-        if ps -p "$pid" > /dev/null 2>&1; then
+        local pid=$(cat "$PID_FILE" 2>/dev/null)
+        if [ -n "$pid" ] && ps -p "$pid" > /dev/null 2>&1; then
             return 0 # 运行中
         else
-            rm -f "$PID_FILE" # PID文件存在但进程不存在，删除PID文件
+            warning "PID文件存在但进程不存在，删除失效的PID文件"
+            rm -f "$PID_FILE" > /dev/null 2>&1 # PID文件存在但进程不存在，删除PID文件
         fi
     fi
     return 1 # 未运行
+}
+
+status() {
+    if is_running; then
+        local pid=$(cat "$PID_FILE")
+        info "$APP_NAME 正在运行，PID: $pid"
+        info "日志文件: $LOG_FILE"
+        info "配置文件: $CONFIG_FILE"
+        info "二进制文件: $BINARY_PATH"
+        
+        # 输出服务访问信息
+        local local_ip=$(get_local_ip)
+        info ""
+        info "======================================="
+        info "服务访问信息"
+        info "======================================="
+        info "管理控制台: http://$local_ip:9597"
+        info "API服务: http://$local_ip:9598"
+        info "健康检查接口: http://$local_ip:9598/api/v1/health"
+        info "======================================="
+        return 0
+    else
+        warning "$APP_NAME 没有在运行中"
+        return 1
+    fi
+}
+
+# 检测服务是否真正启动
+detect_service_started() {
+    local ip=$1
+    local port=$2
+    local timeout=30
+    local interval=2
+    local count=0
+    
+    info "正在检测服务 http://$ip:$port 是否启动..."
+    
+    while [[ $count -lt $timeout ]]; do
+        if curl -s --connect-timeout 1 http://$ip:$port > /dev/null 2>&1; then
+            return 0 # 服务已启动
+        fi
+        
+        sleep $interval
+        count=$((count + interval))
+    done
+    
+    return 1 # 服务未在指定时间内启动
+}
+
+# 执行服务健康检查
+service_health_check() {
+    local ip=$1
+    
+    echo ""
+    info "执行服务健康检查..."
+    
+    # 检查API服务
+    if curl -s http://$ip:9598/api/v1/health > /dev/null 2>&1; then
+        info "✓ API服务健康检查通过"
+    else
+        warning "✗ API服务健康检查失败，可能服务尚未完全启动"
+        warning "  请稍后使用以下命令检查服务状态: curl http://$ip:9598/api/v1/health"
+    fi
+    
+    # 检查管理控制台
+    if curl -s http://$ip:9597 > /dev/null 2>&1; then
+        info "✓ 管理控制台健康检查通过"
+    else
+        warning "✗ 管理控制台健康检查失败，可能服务尚未完全启动"
+        warning "  请稍后使用以下命令检查服务状态: curl http://$ip:9597"
+    fi
 }
 
 start() {
@@ -487,21 +207,73 @@ start() {
         return 0
     fi
 
-    info "启动$APP_NAME..."
-    echo "========================================"
-    echo -e "${GREEN}应用程序服务启动信息${NC}"
-    echo "======================================="
-    echo "管理控制台: http://0.0.0.0:9597"
-    echo "API服务: http://0.0.0.0:9598"
-    echo "健康检查接口: http://0.0.0.0:9598/api/v1/health"
-    echo "版本信息接口: http://0.0.0.0:9598/api/v1/version"
-    echo "======================================="
+    # 检查二进制文件是否存在和可执行
+    if [ ! -f "$BINARY_PATH" ]; then
+        error "未找到二进制文件: $BINARY_PATH"
+        error "请先运行 ./build.sh 编译应用程序"
+        exit 1
+    fi
+    
+    if [ ! -x "$BINARY_PATH" ]; then
+        warning "二进制文件不可执行，添加执行权限"
+        chmod +x "$BINARY_PATH"
+        if [ ! -x "$BINARY_PATH" ]; then
+            error "无法添加执行权限: $BINARY_PATH"
+            exit 1
+        fi
+    fi
 
-    # 启动应用程序，确保工作目录正确
-    cd "$(dirname "$0")" && nohup "$APP_BINARY" --config "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
+    # 检查配置文件是否存在
+    if [ ! -f "$CONFIG_FILE" ]; then
+        error "配置文件不存在: $CONFIG_FILE"
+        error "请先运行 ./install.sh 安装应用程序或检查配置文件路径"
+        exit 1
+    fi
+
+    # 确保数据目录存在
+    mkdir -p data/rules data/certs data/redis data/grafana
+
+    # 直接启动应用程序
+    info "启动$APP_NAME..."
+    cd "$(dirname "$0")" && nohup "$BINARY_PATH" --config "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
-    info "$APP_NAME 启动成功，PID: $(cat "$PID_FILE")"
+    info "$APP_NAME 启动命令已执行，PID: $(cat "$PID_FILE")"
     info "日志文件: $LOG_FILE"
+    
+    # 获取本机IP地址
+    local local_ip=$(get_local_ip)
+    
+    # 输出访问信息
+    echo ""
+    info "========================================"
+    info "应用程序服务启动信息"
+    info "======================================="
+    info "管理控制台: http://$local_ip:9597"
+    info "API服务: http://$local_ip:9598"
+    info "健康检查接口: http://$local_ip:9598/api/v1/health"
+    info "======================================="
+    
+    # 检测API服务是否真正启动
+    if detect_service_started "$local_ip" "9598"; then
+        info "API服务已成功启动"
+    else
+        warning "API服务可能未成功启动，请检查日志: tail -f $LOG_FILE"
+    fi
+    
+    # 检测管理控制台是否真正启动
+    if detect_service_started "$local_ip" "9597"; then
+        info "管理控制台已成功启动"
+    else
+        warning "管理控制台可能未成功启动，请检查日志: tail -f $LOG_FILE"
+    fi
+    
+    # 执行服务健康检查
+    service_health_check "$local_ip"
+    
+    echo ""
+    info "$APP_NAME 启动完成"
+    info "访问管理控制台: http://$local_ip:9597"
+    info "使用默认账号登录: admin / 123456"
     info "查看日志: tail -f $LOG_FILE"
 }
 
@@ -513,13 +285,17 @@ stop() {
 
     local pid=$(cat "$PID_FILE")
     info "停止$APP_NAME，PID: $pid..."
+    
+    # 尝试优雅停止
     kill "$pid"
 
     # 等待进程退出
     local count=0
-    while is_running && [ $count -lt 10 ]; do
+    local max_wait=10
+    while is_running && [ $count -lt $max_wait ]; do
         sleep 1
         count=$((count + 1))
+        info "等待进程退出... ($count/$max_wait 秒)"
     done
 
     if is_running; then
@@ -529,33 +305,22 @@ stop() {
     fi
 
     if ! is_running; then
-        info "$APP_NAME 已停止"
-        rm -f "$PID_FILE"
+        info "$APP_NAME 已成功停止"
+        if [ -f "$PID_FILE" ]; then
+            rm -f "$PID_FILE"
+        fi
     else
-        error "无法停止$APP_NAME"
+        error "无法停止$APP_NAME，请手动检查并终止进程"
+        info "可以使用以下命令手动终止进程: kill -9 $pid"
         exit 1
     fi
 }
 
 restart() {
+    info "重启$APP_NAME..."
     stop
+    info "等待2秒后重新启动..."
     sleep 2
-    start
-}
-
-reinstall() {
-    info "重新安装$APP_NAME..."
-    stop
-    
-    # 清除数据（保留配置文件）
-    info "清除数据..."
-    rm -rf ./data/*
-    mkdir -p data/rules data/certs data/redis data/grafana
-    
-    # 重新构建
-    build_app
-    
-    # 启动
     start
 }
 
@@ -564,17 +329,8 @@ if [ $# -eq 0 ]; then
     usage
 fi
 
-check_root
-
 case "$1" in
-    check)
-        install_deps || exit 1
-        ;;
     start)
-        install_deps || exit 1
-        create_dirs
-        check_config
-        build_app
         start
         ;;
     restart)
@@ -583,9 +339,8 @@ case "$1" in
     stop)
         stop
         ;;
-    reinstall)
-        install_deps || exit 1
-        reinstall
+    status)
+        status
         ;;
     *)
         usage

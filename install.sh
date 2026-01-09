@@ -322,30 +322,6 @@ install_dependencies_linux() {
         print_info "✓ 基础工具已安装"
     fi
     
-    print_info "安装Go环境..."
-    if ! command -v go &> /dev/null; then
-        case "$PACKAGE_MANAGER" in
-            apt-get)
-                sudo apt-get install -y golang-go
-                ;;
-            yum|dnf)
-                sudo $PACKAGE_MANAGER install -y golang
-                ;;
-            pacman)
-                sudo pacman -S --noconfirm go
-                ;;
-            zypper)
-                sudo zypper install -y go
-                ;;
-            apk)
-                sudo apk add go
-                ;;
-        esac
-        print_success "Go环境安装完成"
-    else
-        print_info "Go环境已安装: $(go version)"
-    fi
-    
     print_info "安装Redis..."
     if ! command -v redis-server &> /dev/null; then
         case "$PACKAGE_MANAGER" in
@@ -416,30 +392,6 @@ install_dependencies_linux() {
         print_warning "redis-cli未找到，跳过Redis连接测试"
     fi
     
-    print_info "安装Node.js和npm..."
-    if ! command -v npm &> /dev/null; then
-        case "$PACKAGE_MANAGER" in
-            apt-get)
-                sudo apt-get install -y nodejs npm
-                ;;
-            yum|dnf)
-                sudo $PACKAGE_MANAGER install -y nodejs npm
-                ;;
-            pacman)
-                sudo pacman -S --noconfirm nodejs npm
-                ;;
-            zypper)
-                sudo zypper install -y nodejs npm
-                ;;
-            apk)
-                sudo apk add nodejs npm
-                ;;
-        esac
-        print_success "Node.js和npm安装完成"
-    else
-        print_info "Node.js和npm已安装: $(npm --version)"
-    fi
-    
     print_info "安装浏览器环境..."
     install_browser_environment
 }
@@ -465,14 +417,6 @@ install_dependencies_macos() {
         brew install git
     fi
     
-    print_info "安装Go环境..."
-    if ! command -v go &> /dev/null; then
-        brew install go
-        print_success "Go环境安装完成"
-    else
-        print_info "Go环境已安装: $(go version)"
-    fi
-    
     print_info "安装Redis..."
     if ! command -v redis-server &> /dev/null; then
         brew install redis
@@ -480,14 +424,6 @@ install_dependencies_macos() {
         print_success "Redis安装完成"
     else
         print_info "Redis已安装"
-    fi
-    
-    print_info "安装Node.js和npm..."
-    if ! command -v npm &> /dev/null; then
-        brew install node
-        print_success "Node.js和npm安装完成"
-    else
-        print_info "Node.js和npm已安装: $(npm --version)"
     fi
     
     print_info "安装浏览器环境..."
@@ -769,7 +705,7 @@ install_browser_environment() {
 # ============================================================================
 
 build_and_install() {
-    print_step "3" "构建和安装应用"
+    print_step "3" "安装应用程序"
     
     # 创建安装目录
     print_info "创建安装目录..."
@@ -784,117 +720,122 @@ build_and_install() {
     sudo chmod 750 "$DATA_DIR"
     sudo chmod 750 "$LOG_DIR"
     
-    # 如果是开发环境，使用当前目录
-    if [[ -f "./go.mod" ]]; then
-        print_info "从源代码构建..."
-        build_from_source
+    # 从预编译包安装
+    if [[ -d "./bin" && -d "./web/dist" ]]; then
+        print_info "从预编译包安装..."
+        install_from_prebuilt
     else
-        print_info "从发布包安装..."
-        download_and_install
+        print_error "未找到预编译包，请先运行 ./build.sh 构建应用"
+        exit 1
     fi
 }
 
-build_from_source() {
-    print_info "配置Go环境..."
-    export GOPROXY=https://goproxy.cn,direct
-    export GO111MODULE=on
-    
-    # 先构建前端，确保静态资源在编译Go前准备好
-    print_info "构建前端..."
-    cd web
-    
-    # 检查系统内存，给出警告
-    print_info "检查系统内存..."
-    if [[ "$OS" == "linux" ]]; then
-        total_mem=$(free -m | grep Mem | awk '{print $2}')
-        if [[ $total_mem -lt 4096 ]]; then
-            print_warning "系统内存不足（当前 $total_mem MB，建议至少 4GB），前端构建可能失败"
-            print_warning "正在尝试优化内存使用..."
-        fi
+install_from_prebuilt() {
+    # 复制前端文件到安装目录
+    print_info "复制前端文件到安装目录..."
+    if [[ -d "./web/dist" ]]; then
+        sudo cp -r ./web/dist "$INSTALL_DIR/web/"
+        print_success "前端文件复制完成"
+    else
+        print_error "未找到前端构建目录: ./web/dist"
+        exit 1
     fi
     
-    # 优化npm内存使用
-    export NODE_OPTIONS="--max-old-space-size=2048"
-    
-    print_info "安装前端依赖..."
-    npm install --legacy-peer-deps
-    if [[ $? -ne 0 ]]; then
-        print_warning "前端依赖安装失败，尝试使用 --force 选项..."
-        npm install --force
-        if [[ $? -ne 0 ]]; then
-            print_error "前端依赖安装失败"
-            print_warning "您可以手动安装前端依赖后重新运行脚本"
-            # 不退出，继续执行后续步骤
-        fi
-    fi
-    
-    # 获取本机IP地址，支持命令行参数传入
+    # 替换前端API地址为当前服务器IP
+    print_info "配置前端API地址..."
+    local api_ip="127.0.0.1"
     if [[ "$CUSTOM_API_IP" != "" ]]; then
-        # 如果提供了自定义IP，使用该IP
         api_ip="$CUSTOM_API_IP"
         print_info "使用命令行参数提供的IP: $api_ip"
-        export VITE_API_BASE_URL="http://$api_ip:9598/api/v1"
     elif [[ "$(hostname)" == "localhost" ]] || [[ "$(hostname)" == "*local*" ]] || [[ "$(uname -s)" == "Darwin" ]]; then
         # 本地环境，使用本地IP
         api_ip="127.0.0.1"
         print_info "当前是本地环境，使用本地IP: $api_ip"
-        export VITE_API_BASE_URL="http://$api_ip:9598/api/v1"
     else
         # 服务器环境，尝试获取公网IP
-        api_ip=$(curl -s ifconfig.me || curl -s icanhazip.com || echo "127.0.0.1")
+        api_ip=$(curl -s ifconfig.me || curl -s icanhazip.com || curl -s ipinfo.io/ip || echo "127.0.0.1")
         print_info "当前服务器公网IP: $api_ip"
-        export VITE_API_BASE_URL="http://$api_ip:9598/api/v1"
-    fi
-    print_info "设置前端API地址为: $VITE_API_BASE_URL"
-    
-    print_info "开始构建前端..."
-    # 使用 --sourcemap false 减少内存使用
-    npm run build -- --sourcemap false
-    if [[ $? -ne 0 ]]; then
-        print_error "前端构建失败"
-        print_warning "前端构建失败，可能是内存不足导致"
-        print_warning "建议："
-        print_warning "1. 增加服务器内存（建议至少 4GB）"
-        print_warning "2. 手动构建前端：cd web && npm run build -- --sourcemap false"
-        print_warning "3. 使用预构建的前端文件"
-        print_warning "4. 跳过前端构建，直接使用API服务"
-        print_info "继续安装，跳过前端构建..."
     fi
     
-    cd ..
+    # 替换前端文件中的API地址
+    local frontend_dir="$INSTALL_DIR/web"
+    local api_url="http://$api_ip:9598/api/v1"
     
-    # 复制前端文件到安装目录
-    print_info "复制前端文件到安装目录..."
-    sudo cp -r web/dist "$INSTALL_DIR/web/"
+    # 使用更可靠的方式替换前端API地址，兼容macOS和Linux
+    print_info "正在替换前端文件中的API地址为: $api_url"
     
-    # 安装Go依赖
-    print_info "安装Go依赖..."
-    go mod tidy
-    if [[ $? -ne 0 ]]; then
-        print_error "Go依赖安装失败"
-        print_warning "Go依赖安装失败，可能是网络问题导致"
-        print_warning "将使用当前依赖继续构建..."
+    # 先检查前端目录是否存在
+    if [[ -d "$frontend_dir" ]]; then
+        # 查找所有JavaScript和HTML文件进行替换
+        local files=$(sudo find "$frontend_dir" -name "*.js" -o -name "*.html" -o -name "*.css" | grep -v "node_modules" | grep -v ".git")
+        
+        if [[ -n "$files" ]]; then
+            # 使用awk进行替换，避免sed的跨平台兼容性问题
+            for file in $files; do
+                sudo awk -v api_url="$api_url" '{gsub(/http:\/\/127\.0\.0\.1:9598\/api\/v1/, api_url); print}' "$file" > "$file.tmp"
+                if [[ $? -eq 0 ]]; then
+                    sudo mv "$file.tmp" "$file"
+                else
+                    sudo rm -f "$file.tmp" > /dev/null 2>&1
+                fi
+            done
+            print_success "前端API地址配置完成"
+        else
+            print_warning "未找到需要替换API地址的文件"
+        fi
+    else
+        print_error "前端目录不存在: $frontend_dir"
+        exit 1
     fi
     
-    # 构建后端二进制文件
-    print_info "构建后端二进制文件..."
-    # 直接构建为api，避免与目录名冲突
-    go build -o "api" ./cmd/api
-    if [[ $? -ne 0 ]]; then
-        print_error "后端构建失败"
-        print_warning "后端构建失败，可能是依赖不兼容导致"
-        print_warning "将跳过后端构建，继续执行后续步骤"
-        # 不退出，继续执行后续步骤
-        return 0
+    # 复制后端二进制文件到安装目录
+    print_info "复制后端二进制文件到安装目录..."
+    
+    # 检查当前目录是否存在api二进制文件
+    if [[ -f "./api" ]]; then
+        sudo cp "./api" "$INSTALL_DIR/api"
+        sudo chmod 755 "$INSTALL_DIR/api"
+        print_success "使用当前目录二进制文件"
+    else
+        # 检查bin目录中是否存在当前平台的二进制文件
+        local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+        local arch=$(uname -m)
+        if [[ $arch == "x86_64" ]]; then
+            arch="amd64"
+        elif [[ $arch == "arm64" ]]; then
+            arch="arm64"
+        fi
+        
+        local binary_path="bin/${os}-${arch}/api"
+        if [[ -f "$binary_path" ]]; then
+            sudo cp "$binary_path" "$INSTALL_DIR/api"
+            sudo chmod 755 "$INSTALL_DIR/api"
+            print_success "使用${os}-${arch}平台二进制文件"
+        else
+            print_error "未找到可用的后端二进制文件: $binary_path"
+            print_error "请先运行 ./build.sh 编译应用"
+            exit 1
+        fi
     fi
     
-    # 使用sudo将二进制文件复制到目标目录
-    sudo cp "api" "$INSTALL_DIR/api"
-    sudo chmod 755 "$INSTALL_DIR/api"
-    # 删除构建的二进制文件
-    rm -f "api"
+    # 验证安装结果
+    print_info "验证安装结果..."
     
-    print_success "应用构建完成"
+    if [[ -f "$INSTALL_DIR/api" && -x "$INSTALL_DIR/api" ]]; then
+        print_success "后端二进制文件安装成功"
+    else
+        print_error "后端二进制文件安装失败或不可执行"
+        exit 1
+    fi
+    
+    if [[ -d "$INSTALL_DIR/web" && -f "$INSTALL_DIR/web/index.html" ]]; then
+        print_success "前端文件安装成功"
+    else
+        print_error "前端文件安装失败"
+        exit 1
+    fi
+    
+    print_success "应用安装完成"
 }
 
 download_and_install() {
@@ -1093,254 +1034,134 @@ EOF
     rm "$sites_temp" "$config_temp"
 }
 
-# ============================================================================
-# 系统服务配置
-# ============================================================================
-
-setup_system_service() {
-    print_step "5" "配置系统服务"
+# 添加安装后的健康检查功能
+install_health_check() {
+    print_step "4" "执行安装后的健康检查"
     
-    case "$OS" in
-        linux)
-            # 检查系统是否使用systemd
-            if command -v systemctl &> /dev/null && [[ "$(ps -p 1 -o comm=)" == "systemd" ]]; then
-                setup_systemd_service
-            else
-                # 非systemd系统（如Alpine Linux使用OpenRC）
-                setup_openrc_service
-            fi
-            ;;
-        darwin)
-            setup_launchd_service
-            ;;
-    esac
-}
-
-setup_systemd_service() {
-    print_info "创建systemd服务..."
+    local health_check_passed=true
     
-    # 根据包管理器设置正确的Redis服务名称
-    local redis_service="redis-server.service"
-    if [[ "$PACKAGE_MANAGER" == "yum" ]] || [[ "$PACKAGE_MANAGER" == "dnf" ]] || [[ "$PACKAGE_MANAGER" == "zypper" ]]; then
-        redis_service="redis.service"
+    # 检查配置文件
+    if [ -f "$CONFIG_DIR/config.yml" ]; then
+        print_success "配置文件检查通过: $CONFIG_DIR/config.yml"
+    else
+        print_error "配置文件不存在: $CONFIG_DIR/config.yml"
+        health_check_passed=false
     fi
     
-    local service_file=$(cat <<EOF
-[Unit]
-Description=PrerenderShield - Web Application Firewall with Prerendering
-After=network.target $redis_service
-Requires=$redis_service
-
-[Service]
-Type=simple
-User=root
-Group=root
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/api --config $CONFIG_DIR/config.yml
-ExecReload=/bin/kill -HUP $MAINPID
-Restart=always
-RestartSec=10
-StandardOutput=append:$LOG_DIR/app.log
-StandardError=append:$LOG_DIR/error.log
-Environment="GOPROXY=https://goproxy.cn,direct"
-Environment="GO111MODULE=on"
-
-[Install]
-WantedBy=multi-user.target
-EOF
-)
+    # 检查安装目录结构
+    local required_files=(
+        "$INSTALL_DIR/api"
+        "$INSTALL_DIR/web"
+        "$INSTALL_DIR/web/index.html"
+    )
     
-    echo "$service_file" | sudo tee "/etc/systemd/system/$SYSTEMD_SERVICE" > /dev/null
+    for file in "${required_files[@]}"; do
+        if [ -e "$file" ]; then
+            if [ -x "$file" ]; then
+                print_success "可执行文件检查通过: $file"
+            else
+                print_success "文件/目录检查通过: $file"
+            fi
+        else
+            print_error "安装目录结构不完整，缺少: $file"
+            health_check_passed=false
+        fi
+    done
     
-    print_info "重新加载systemd配置..."
-    sudo systemctl daemon-reload
-    
-    print_info "启用服务自启动..."
-    sudo systemctl enable "$SYSTEMD_SERVICE"
-    
-    print_success "systemd服务配置完成"
-}
-
-setup_launchd_service() {
-    print_info "创建launchd服务..."
-    
-    local plist_file=$(cat <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.prerendershield.app</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>$INSTALL_DIR/api</string>
-        <string>--config</string>
-        <string>$CONFIG_DIR/config.yml</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>$LOG_DIR/app.log</string>
-    <key>StandardErrorPath</key>
-    <string>$LOG_DIR/error.log</string>
-    <key>WorkingDirectory</key>
-    <string>$INSTALL_DIR</string>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>GOPROXY</key>
-        <string>https://goproxy.cn,direct</string>
-        <key>GO111MODULE</key>
-        <string>on</string>
-    </dict>
-</dict>
-</plist>
-EOF
-)
-    
-    echo "$plist_file" | sudo tee "/Library/LaunchDaemons/com.prerendershield.app.plist" > /dev/null
-    
-    print_info "加载launchd服务..."
-    sudo launchctl load "/Library/LaunchDaemons/com.prerendershield.app.plist"
-    
-    print_success "launchd服务配置完成"
-}
-
-setup_openrc_service() {
-    print_info "创建OpenRC服务..."
-    
-    local service_file="/etc/init.d/${APP_NAME}"
-    
-    # 创建OpenRC服务脚本
-    cat << EOF | sudo tee "$service_file" > /dev/null
-#!/sbin/openrc-run
-
-name="${APP_NAME}"
-description="PrerenderShield - Web Application Firewall with Prerendering"
-
-command="$INSTALL_DIR/api"
-command_args="--config $CONFIG_DIR/config.yml"
-command_user="root"
-
-pidfile="/run/${APP_NAME}.pid"
-start_stop_daemon_args="--background --make-pidfile --pidfile $pidfile"
-
-# 依赖服务
-# 如果需要其他依赖，可以添加到这里
-depend() {
-    need net localmount
-    after firewall redis
-}
-
-# 启动前准备
-start_pre() {
-    # 确保配置文件存在
-    if [ ! -f "$CONFIG_DIR/config.yml" ]; then
-        eerror "配置文件不存在: $CONFIG_DIR/config.yml"
-        return 1
+    # 检查二进制文件权限
+    if [ -f "$INSTALL_DIR/api" ]; then
+        if [ -x "$INSTALL_DIR/api" ]; then
+            print_success "二进制文件权限检查通过"
+        else
+            print_warning "二进制文件权限不足，正在添加执行权限..."
+            sudo chmod +x "$INSTALL_DIR/api" > /dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                print_success "已添加二进制文件执行权限"
+            else
+                print_error "无法添加二进制文件执行权限"
+                health_check_passed=false
+            fi
+        fi
     fi
     
-    # 确保目录权限正确
-    chown -R root:root "$INSTALL_DIR"
-    chown -R root:root "$CONFIG_DIR"
-    chown -R root:root "$DATA_DIR"
-    chown -R root:root "$LOG_DIR"
+    # 检查Redis连接
+    print_info "检查Redis连接..."
+    if command -v redis-cli &> /dev/null; then
+        local redis_status=$(redis-cli ping 2>/dev/null)
+        if [[ "$redis_status" == "PONG" ]]; then
+            print_success "Redis连接检查通过"
+        else
+            print_warning "Redis连接检查失败，请确保Redis服务已启动"
+            print_warning "当前Redis状态: ${redis_status:-无法连接}"
+            print_warning "可以使用以下命令启动Redis:"
+            case "$OS" in
+                linux)
+                    if command -v systemctl &> /dev/null; then
+                        print_warning "  sudo systemctl start redis-server"
+                    else
+                        print_warning "  sudo service redis start"
+                    fi
+                    ;;
+                darwin)
+                    print_warning "  brew services start redis"
+                    ;;
+            esac
+            health_check_passed=false
+        fi
+    else
+        print_warning "redis-cli未找到，跳过Redis连接检查"
+        print_warning "请确保Redis服务已安装并正常运行"
+    fi
     
-    return 0
-}
-EOF
+    # 检查浏览器环境
+    print_info "检查浏览器环境..."
+    local browser_available=false
+    if command -v google-chrome &> /dev/null || \
+       command -v chromium &> /dev/null || \
+       command -v chromium-browser &> /dev/null || \
+       [[ -d "/Applications/Google Chrome.app" ]]; then
+        browser_available=true
+        print_success "浏览器环境检查通过"
+    else
+        print_warning "未检测到Chrome/Chromium浏览器"
+        print_warning "请确保已安装Chrome或Chromium浏览器，否则渲染功能可能无法正常工作"
+        health_check_passed=false
+    fi
     
-    # 赋予执行权限
-    sudo chmod +x "$service_file"
-    
-    # 添加到默认运行级别
-    sudo rc-update add "${APP_NAME}" default
-    
-    print_success "OpenRC服务配置完成"
-}
-
-# ============================================================================
-# 完成和启动
-# ============================================================================
-
-start_application() {
-    print_step "6" "启动应用"
-    
-    case "$OS" in
-        linux) 
-            # 检查系统是否使用systemd
-            if command -v systemctl &> /dev/null && [[ "$(ps -p 1 -o comm=)" == "systemd" ]]; then
-                print_info "启动systemd服务..."
-                sudo systemctl start "$SYSTEMD_SERVICE"
-                sudo systemctl status "$SYSTEMD_SERVICE" --no-pager
+    # 检查日志目录权限
+    print_info "检查日志目录权限..."
+    if [ -d "$LOG_DIR" ]; then
+        if [ -w "$LOG_DIR" ]; then
+            print_success "日志目录权限检查通过"
+        else
+            print_warning "日志目录权限不足，正在修复..."
+            sudo chmod 755 "$LOG_DIR" > /dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                print_success "已修复日志目录权限"
             else
-                # 非systemd系统（如Alpine Linux使用OpenRC）
-                print_info "启动OpenRC服务..."
-                sudo /etc/init.d/${APP_NAME} start
-                sudo /etc/init.d/${APP_NAME} status
+                print_error "无法修复日志目录权限"
+                health_check_passed=false
             fi
-            ;;
-        darwin)
-            print_info "启动服务..."
-            sudo launchctl start com.prerendershield.app
-            ;;
-    esac
+        fi
+    else
+        print_warning "日志目录不存在，正在创建..."
+        sudo mkdir -p "$LOG_DIR" > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            sudo chmod 755 "$LOG_DIR" > /dev/null 2>&1
+            print_success "已创建日志目录并设置权限"
+        else
+            print_error "无法创建日志目录"
+            health_check_passed=false
+        fi
+    fi
     
-    print_success "应用启动完成"
-}
-
-print_summary() {
-    print_step "7" "安装完成"
-    
-    echo -e "${GREEN}"
-    echo "===================================================================="
-    echo "PrerenderShield 安装完成！"
-    echo "===================================================================="
-    echo ""
-    echo "重要信息："
-    echo "1. 管理控制台: http://localhost:9597"
-    echo "2. API服务: http://localhost:9598"
-    echo "3. 默认站点: http://127.0.0.1:8081"
-    echo "4. 配置文件: $CONFIG_DIR/config.yml"
-    echo "5. 日志目录: $LOG_DIR"
-    echo ""
-    echo "默认登录信息："
-    echo "  用户名: admin"
-    echo "  密码: 123456"
-    echo ""
-    echo "管理命令："
-    case "$OS" in
-        linux)
-            # 检查系统是否使用systemd
-            if command -v systemctl &> /dev/null && [[ "$(ps -p 1 -o comm=)" == "systemd" ]]; then
-                echo "  启动: sudo systemctl start $SYSTEMD_SERVICE"
-                echo "  停止: sudo systemctl stop $SYSTEMD_SERVICE"
-                echo "  重启: sudo systemctl restart $SYSTEMD_SERVICE"
-                echo "  状态: sudo systemctl status $SYSTEMD_SERVICE"
-                echo "  日志: sudo journalctl -u $SYSTEMD_SERVICE -f"
-            else
-                # 非systemd系统（如Alpine Linux使用OpenRC）
-                echo "  启动: sudo /etc/init.d/${APP_NAME} start"
-                echo "  停止: sudo /etc/init.d/${APP_NAME} stop"
-                echo "  重启: sudo /etc/init.d/${APP_NAME} restart"
-                echo "  状态: sudo /etc/init.d/${APP_NAME} status"
-                echo "  日志: tail -f $LOG_DIR/app.log"
-            fi
-            ;;
-        darwin)
-            echo "  启动: sudo launchctl start com.prerendershield.app"
-            echo "  停止: sudo launchctl stop com.prerendershield.app"
-            echo "  日志: tail -f $LOG_DIR/app.log"
-            ;;
-    esac
-    echo ""
-    echo "接下来："
-    echo "1. 打开浏览器访问 http://localhost:9597"
-    echo "2. 使用默认账号登录"
-    echo "3. 在管理界面中添加和管理您的站点"
-    echo "===================================================================="
-    echo -e "${NC}"
+    if [ "$health_check_passed" = true ]; then
+        print_success "健康检查完成，安装结果正常"
+    else
+        print_warning "健康检查部分项未通过，请根据上面的提示进行修复"
+        print_warning "安装已完成，但某些依赖或配置可能存在问题"
+        print_warning "建议在启动服务前解决这些问题"
+    fi
 }
 
 # ============================================================================
@@ -1349,29 +1170,6 @@ print_summary() {
 
 cleanup_on_error() {
     print_error "安装过程中出现错误，正在清理..."
-    
-    # 停止服务
-    case "$OS" in
-        linux)
-            # 检查系统是否使用systemd
-            if command -v systemctl &> /dev/null && [[ "$(ps -p 1 -o comm=)" == "systemd" ]]; then
-                sudo systemctl stop "$SYSTEMD_SERVICE" 2>/dev/null || true
-                sudo systemctl disable "$SYSTEMD_SERVICE" 2>/dev/null || true
-                sudo rm -f "/etc/systemd/system/$SYSTEMD_SERVICE"
-                sudo systemctl daemon-reload
-            else
-                # 非systemd系统（如Alpine Linux使用OpenRC）
-                sudo /etc/init.d/${APP_NAME} stop 2>/dev/null || true
-                sudo rc-update del ${APP_NAME} default 2>/dev/null || true
-                sudo rm -f "/etc/init.d/${APP_NAME}"
-            fi
-            ;;
-        darwin)
-            sudo launchctl stop com.prerendershield.app 2>/dev/null || true
-            sudo launchctl unload "/Library/LaunchDaemons/com.prerendershield.app.plist" 2>/dev/null || true
-            sudo rm -f "/Library/LaunchDaemons/com.prerendershield.app.plist"
-            ;;
-    esac
     
     # 清理目录
     sudo rm -rf "$INSTALL_DIR" 2>/dev/null || true
@@ -1422,9 +1220,43 @@ main() {
     print_info "GOPROXY设置为: $GOPROXY"
     build_and_install
     setup_configuration
-    setup_system_service
-    start_application
-    print_summary
+    install_health_check
+    
+    # 获取本机IP地址，用于访问信息
+    local api_ip="127.0.0.1"
+    if [[ "$CUSTOM_API_IP" != "" ]]; then
+        api_ip="$CUSTOM_API_IP"
+    elif [[ "$(hostname)" != "localhost" && ! "$(hostname)" =~ "local" && "$(uname -s)" != "Darwin" ]]; then
+        # 服务器环境，尝试获取公网IP
+        api_ip=$(curl -s ifconfig.me || curl -s icanhazip.com || echo "127.0.0.1")
+    fi
+    
+    # 输出启动命令和访问信息
+    print_success "======================================="
+    print_success "PrerenderShield 安装完成！"
+    print_success "======================================="
+    echo ""
+    echo -e "${BLUE}重要信息：${NC}"
+    echo -e "${BLUE}1. 管理控制台: http://$api_ip:9597${NC}"
+    echo -e "${BLUE}2. API服务: http://$api_ip:9598${NC}"
+    echo -e "${BLUE}3. 配置文件: $CONFIG_DIR/config.yml${NC}"
+    echo -e "${BLUE}4. 日志目录: $LOG_DIR${NC}"
+    echo ""
+    echo -e "${BLUE}默认登录信息：${NC}"
+    echo -e "${BLUE}  用户名: admin${NC}"
+    echo -e "${BLUE}  密码: 123456${NC}"
+    echo ""
+    print_success "======================================="
+    print_success "启动命令: ./start.sh start"
+    print_success "重启命令: ./start.sh restart"
+    print_success "停止命令: ./start.sh stop"
+    print_success "======================================="
+    echo ""
+    echo -e "${GREEN}接下来：${NC}"
+    echo -e "${GREEN}1. 执行 ./start.sh start 启动应用${NC}"
+    echo -e "${GREEN}2. 打开浏览器访问 http://$api_ip:9597${NC}"
+    echo -e "${GREEN}3. 使用默认账号登录${NC}"
+    echo -e "${GREEN}4. 在管理界面中添加和管理您的站点${NC}"
 }
 
 print_usage() {
