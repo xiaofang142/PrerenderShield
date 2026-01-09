@@ -809,10 +809,20 @@ install_from_prebuilt() {
         
         if [[ -n "$files" ]]; then
             # 使用sed进行替换，兼容macOS和Linux
-            for file in $files; do
-                # 先替换127.0.0.1的API地址
-                sed -i '' -e "s|http://127\.0\.0\.1:9598/api/v1|$api_url|g" "$file"
-            done
+            # 检测操作系统类型
+            if [[ "$(uname -s)" == "Darwin" ]]; then
+                # macOS系统，需要空字符串作为-i选项的参数
+                for file in $files; do
+                    # 先替换127.0.0.1的API地址
+                    sed -i '' -e "s|http://127\.0\.0\.1:9598/api/v1|$api_url|g" "$file"
+                done
+            else
+                # Linux系统，不需要空字符串
+                for file in $files; do
+                    # 先替换127.0.0.1的API地址
+                    sed -i -e "s|http://127\.0\.0\.1:9598/api/v1|$api_url|g" "$file"
+                done
+            fi
             print_success "前端API地址配置完成"
         else
             print_warning "未找到需要替换API地址的文件"

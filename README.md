@@ -306,32 +306,7 @@ chmod +x start.sh
 
 ### 🚀 **服务管理**
 
-#### 🔌 **使用系统服务管理（安装脚本自动配置）**
-
-```bash
-# 查看服务状态
-sudo systemctl status prerender-shield
-
-# 启动服务
-sudo systemctl start prerender-shield
-
-# 停止服务
-sudo systemctl stop prerender-shield
-
-# 重启服务
-sudo systemctl restart prerender-shield
-
-# 查看服务日志
-sudo journalctl -u prerender-shield -f
-
-# 启用开机自启
-sudo systemctl enable prerender-shield
-
-# 禁用开机自启
-sudo systemctl disable prerender-shield
-```
-
-#### 📝 **使用 start.sh 脚本管理**
+####  **使用 start.sh 脚本管理**
 
 ```bash
 # 启动服务（使用预编译的二进制文件）
