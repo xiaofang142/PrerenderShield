@@ -939,6 +939,11 @@ setup_configuration() {
         local redis_db=$(echo "$redis_config" | cut -d':' -f3)
         local redis_password=$(echo "$redis_config" | cut -d':' -f4-)
         
+        # 修复空密码问题：如果redis_password是":"，说明用户输入的是空密码
+        if [[ "$redis_password" == ":" ]]; then
+            redis_password=""
+        fi
+        
         # 修改默认配置
         print_info "优化默认配置..."
         # 兼容macOS/BSD和GNU sed的-i选项
