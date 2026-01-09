@@ -24,7 +24,7 @@ func NewGeoIPDetector(geoIPConfig *config.GeoIPConfig) *GeoIPDetector {
 	
 	var reader *geoip2.Reader
 	// 实际项目中应该从配置文件读取路径
-	dbPath := "/etc/prerender-shield/rules/GeoLite2-Country.mmdb"
+	dbPath := "./rules/GeoLite2-Country.mmdb"
 	
 	r, err := geoip2.Open(dbPath)
 	if err != nil {

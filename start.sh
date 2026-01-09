@@ -3,9 +3,38 @@
 # PrerenderShield 启动脚本
 
 APP_NAME="prerender-shield"
-CONFIG_FILE="configs/config.yml"
-PID_FILE="./data/${APP_NAME}.pid"
-LOG_FILE="./data/${APP_NAME}.log"
+
+# 动态获取当前平台目录
+platform_dir() {
+    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local arch=$(uname -m)
+    
+    # 转换架构名称
+    if [[ $arch == "x86_64" ]]; then
+        arch="amd64"
+    elif [[ $arch == "aarch64" || $arch == "arm64" ]]; then
+        arch="arm64"
+    fi
+    
+    echo "bin/${os}-${arch}"
+}
+
+# 获取当前平台目录
+PLATFORM_DIR=$(platform_dir)
+
+# 优先使用平台目录下的config/config.yml，然后使用configs/config.yml
+if [ -f "${PLATFORM_DIR}/config/config.yml" ]; then
+    CONFIG_FILE="${PLATFORM_DIR}/config/config.yml"
+elif [ -f "configs/config.yml" ]; then
+    CONFIG_FILE="configs/config.yml"
+else
+    CONFIG_FILE="${PLATFORM_DIR}/config/config.yml"
+fi
+
+# 使用平台目录下的数据目录
+DATA_DIR="${PLATFORM_DIR}/data"
+PID_FILE="${DATA_DIR}/${APP_NAME}.pid"
+LOG_FILE="${DATA_DIR}/${APP_NAME}.log"
 
 # 彩色输出
 RED='\033[0;31m'
@@ -42,7 +71,7 @@ get_platform_binary() {
     fi
     
     # 构建二进制文件路径
-    local binary_path="bin/${os}-${arch}/api"
+    local binary_path="${PLATFORM_DIR}/api"
     
     # 如果是Windows系统，添加.exe后缀
     if [[ $os == "windows" ]]; then
@@ -231,7 +260,7 @@ start() {
     fi
 
     # 确保数据目录存在
-    mkdir -p data/rules data/certs data/redis data/grafana
+    mkdir -p "${DATA_DIR}/rules" "${DATA_DIR}/certs" "${DATA_DIR}/redis" "${DATA_DIR}/grafana"
 
     # 直接启动应用程序
     info "启动$APP_NAME..."
@@ -243,19 +272,13 @@ start() {
     # 获取本机IP地址
     local local_ip=$(get_local_ip)
     
-    # 输出访问信息
-    echo ""
-    info "========================================"
-    info "应用程序服务启动信息"
-    info "======================================="
-    info "管理控制台: http://$local_ip:9597"
-    info "API服务: http://$local_ip:9598"
-    info "健康检查接口: http://$local_ip:9598/api/v1/health"
-    info "======================================="
-    
     # 检测API服务是否真正启动
+    local api_started=false
+    local admin_started=false
+    
     if detect_service_started "$local_ip" "9598"; then
         info "API服务已成功启动"
+        api_started=true
     else
         warning "API服务可能未成功启动，请检查日志: tail -f $LOG_FILE"
     fi
@@ -263,6 +286,7 @@ start() {
     # 检测管理控制台是否真正启动
     if detect_service_started "$local_ip" "9597"; then
         info "管理控制台已成功启动"
+        admin_started=true
     else
         warning "管理控制台可能未成功启动，请检查日志: tail -f $LOG_FILE"
     fi
@@ -270,11 +294,27 @@ start() {
     # 执行服务健康检查
     service_health_check "$local_ip"
     
-    echo ""
-    info "$APP_NAME 启动完成"
-    info "访问管理控制台: http://$local_ip:9597"
-    info "使用默认账号登录: admin / 123456"
-    info "查看日志: tail -f $LOG_FILE"
+    # 只有当服务真正启动成功后才输出访问提示
+    if $api_started && $admin_started; then
+        echo ""
+        info "========================================"
+        info "应用程序服务启动信息"
+        info "======================================="
+        info "管理控制台: http://$local_ip:9597"
+        info "API服务: http://$local_ip:9598"
+        info "健康检查接口: http://$local_ip:9598/api/v1/health"
+        info "======================================="
+        
+        echo ""
+        info "$APP_NAME 启动完成"
+        info "访问管理控制台: http://$local_ip:9597"
+        info "使用默认账号登录: admin / 123456"
+        info "查看日志: tail -f $LOG_FILE"
+    else
+        echo ""
+        warning "$APP_NAME 启动可能存在问题，请检查日志: tail -f $LOG_FILE"
+        warning "建议使用 ./start.sh status 检查服务状态"
+    fi
 }
 
 stop() {

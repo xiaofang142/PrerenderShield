@@ -738,7 +738,7 @@ func defaultConfig() *Config {
 		},
 		Firewall: FirewallConfig{
 			Enabled:   true,
-			RulesPath: "/etc/prerender-shield/rules",
+			RulesPath: "./rules",
 			ActionConfig: ActionConfig{
 				DefaultAction: "block",
 				BlockMessage:  "Request blocked by firewall",

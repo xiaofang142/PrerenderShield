@@ -18,9 +18,11 @@ bin/
 
 # 各平台运行时目录
 bin/*/certs/
+bin/*/config/
 bin/*/data/
 bin/*/static/
 bin/*/logs/
+bin/*/web/
 
 # Go编译产生的文件
 *.o
@@ -45,6 +47,7 @@ bin/*/logs/
 configs/config.yml
 configs/*.local.yml
 config.yml
+config/
 
 # 日志文件
 *.log
@@ -82,6 +85,9 @@ data/
 /etc/prerender-shield/certs/
 certs/
 */certs/
+
+# 浏览器文件
+browser/
 
 #资源文件
 /static/

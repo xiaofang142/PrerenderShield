@@ -20,10 +20,27 @@ set -euo pipefail
 
 APP_NAME="prerender-shield"
 APP_VERSION="1.0.1"
-INSTALL_DIR="/opt/${APP_NAME}"
-CONFIG_DIR="/etc/${APP_NAME}"
-DATA_DIR="/var/lib/${APP_NAME}"
-LOG_DIR="/var/log/${APP_NAME}"
+
+# 动态获取当前平台目录作为安装目录
+detect_platform_dir() {
+    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local arch=$(uname -m)
+    
+    # 转换架构名称
+    if [[ $arch == "x86_64" ]]; then
+        arch="amd64"
+    elif [[ $arch == "aarch64" || $arch == "arm64" ]]; then
+        arch="arm64"
+    fi
+    
+    echo "bin/${os}-${arch}"
+}
+
+# 初始化安装目录变量
+INSTALL_DIR=""
+CONFIG_DIR=""
+DATA_DIR=""
+LOG_DIR=""
 SYSTEMD_SERVICE="${APP_NAME}.service"
 
 # 彩色输出定义
@@ -462,17 +479,17 @@ download_and_install_chromium() {
             ;;
     esac
     
-    # 设置安装目录
-    local chromium_install_dir="/opt/chromium"
+    # 设置安装目录，使用当前目录下的browser目录
+    local chromium_install_dir="./browser"
     local chromium_bin="$chromium_install_dir/chrome"
     
     # 如果Chromium已存在，直接返回
     if [ -f "$chromium_bin" ]; then
         print_info "Chromium已通过直接下载方式安装"
-        # 将Chromium添加到系统路径
-        if ! grep -q "$chromium_install_dir" /etc/profile.d/chromium.sh 2>/dev/null; then
-            echo "export PATH=\$PATH:$chromium_install_dir" | sudo tee /etc/profile.d/chromium.sh > /dev/null
-            sudo chmod +x /etc/profile.d/chromium.sh
+        # 将Chromium添加到系统路径（如果需要）
+        if ! grep -q "$chromium_install_dir" ~/.bashrc 2>/dev/null && ! grep -q "$chromium_install_dir" ~/.zshrc 2>/dev/null; then
+            echo "export PATH=\$PATH:$chromium_install_dir" >> ~/.bashrc
+            echo "export PATH=\$PATH:$chromium_install_dir" >> ~/.zshrc
         fi
         return 0
     fi
@@ -480,7 +497,7 @@ download_and_install_chromium() {
     print_info "检测到架构: $arch，将下载 $chromium_arch 版本的Chromium"
     
     # 创建安装目录
-    sudo mkdir -p "$chromium_install_dir"
+    mkdir -p "$chromium_install_dir"
     
     # 下载Chromium
     local download_url=""
@@ -523,22 +540,22 @@ download_and_install_chromium() {
     fi
     
     # 移动到安装目录
-    sudo cp -r "$temp_dir"/*/* "$chromium_install_dir/" 2>/dev/null || sudo cp -r "$temp_dir"/* "$chromium_install_dir/"
+    cp -r "$temp_dir"/*/* "$chromium_install_dir/" 2>/dev/null || cp -r "$temp_dir"/* "$chromium_install_dir/"
     
     # 设置可执行权限
-    sudo chmod -R +x "$chromium_install_dir"
+    chmod -R +x "$chromium_install_dir"
     
     # 将Chromium添加到系统路径
-    if ! grep -q "$chromium_install_dir" /etc/profile.d/chromium.sh 2>/dev/null; then
-        echo "export PATH=\$PATH:$chromium_install_dir" | sudo tee /etc/profile.d/chromium.sh > /dev/null
-        sudo chmod +x /etc/profile.d/chromium.sh
+    if ! grep -q "$chromium_install_dir" ~/.bashrc 2>/dev/null && ! grep -q "$chromium_install_dir" ~/.zshrc 2>/dev/null; then
+        echo "export PATH=\$PATH:$chromium_install_dir" >> ~/.bashrc
+        echo "export PATH=\$PATH:$chromium_install_dir" >> ~/.zshrc
         # 立即生效
-        source /etc/profile.d/chromium.sh 2>/dev/null || true
+        source ~/.bashrc 2>/dev/null || source ~/.zshrc 2>/dev/null || true
     fi
     
-    # 创建符号链接，方便调用
-    if [ ! -f "/usr/local/bin/chromium" ]; then
-        sudo ln -s "$chromium_bin" /usr/local/bin/chromium
+    # 创建符号链接到当前目录，方便调用
+    if [ ! -f "./chromium" ]; then
+        ln -s "$chromium_bin" "./chromium"
     fi
     
     # 清理临时文件
@@ -720,18 +737,24 @@ install_browser_environment() {
 build_and_install() {
     print_step "3" "安装应用程序"
     
-    # 创建安装目录
-    print_info "创建安装目录..."
-    sudo mkdir -p "$INSTALL_DIR"
-    sudo mkdir -p "$CONFIG_DIR"
-    sudo mkdir -p "$DATA_DIR"
-    sudo mkdir -p "$LOG_DIR"
+    # 创建安装目录和子目录
+    print_info "创建安装目录结构..."
+    mkdir -p "$INSTALL_DIR"
+    mkdir -p "$CONFIG_DIR"
+    mkdir -p "$DATA_DIR"
+    mkdir -p "$LOG_DIR"
+    mkdir -p "$INSTALL_DIR/certs"
+    mkdir -p "$INSTALL_DIR/static"
+    mkdir -p "$INSTALL_DIR/redis"
     
     # 设置目录权限
-    sudo chmod 755 "$INSTALL_DIR"
-    sudo chmod 755 "$CONFIG_DIR"
-    sudo chmod 750 "$DATA_DIR"
-    sudo chmod 750 "$LOG_DIR"
+    chmod 755 "$INSTALL_DIR"
+    chmod 755 "$CONFIG_DIR"
+    chmod 750 "$DATA_DIR"
+    chmod 750 "$LOG_DIR"
+    chmod 755 "$INSTALL_DIR/certs"
+    chmod 755 "$INSTALL_DIR/static"
+    chmod 750 "$INSTALL_DIR/redis"
     
     # 从预编译包安装
     if [[ -d "./bin" && -d "./web/dist" ]]; then
@@ -746,9 +769,13 @@ build_and_install() {
 install_from_prebuilt() {
     # 复制前端文件到安装目录
     print_info "复制前端文件到安装目录..."
+    
+    # 优先使用web/dist目录中的前端文件，复制到平台特定目录下的web目录
     if [[ -d "./web/dist" ]]; then
-        sudo cp -r ./web/dist "$INSTALL_DIR/web/"
-        print_success "前端文件复制完成"
+        print_info "使用web/dist目录中的前端文件"
+        mkdir -p "$INSTALL_DIR/web"
+        cp -r ./web/dist "$INSTALL_DIR/web/"
+        print_success "前端文件从web/dist目录复制完成"
     else
         print_error "未找到前端构建目录: ./web/dist"
         exit 1
@@ -780,16 +807,16 @@ install_from_prebuilt() {
     # 先检查前端目录是否存在
     if [[ -d "$frontend_dir" ]]; then
         # 查找所有JavaScript和HTML文件进行替换
-        local files=$(sudo find "$frontend_dir" -name "*.js" -o -name "*.html" -o -name "*.css" | grep -v "node_modules" | grep -v ".git")
+        local files=$(find "$frontend_dir" -name "*.js" -o -name "*.html" -o -name "*.css" | grep -v "node_modules" | grep -v ".git")
         
         if [[ -n "$files" ]]; then
             # 使用awk进行替换，避免sed的跨平台兼容性问题
             for file in $files; do
-                sudo awk -v api_url="$api_url" '{gsub(/http:\/\/127\.0\.0\.1:9598\/api\/v1/, api_url); print}' "$file" > "$file.tmp"
+                awk -v api_url="$api_url" '{gsub(/http:\/\/127\.0\.0\.1:9598\/api\/v1/, api_url); print}' "$file" > "$file.tmp"
                 if [[ $? -eq 0 ]]; then
-                    sudo mv "$file.tmp" "$file"
+                    mv "$file.tmp" "$file"
                 else
-                    sudo rm -f "$file.tmp" > /dev/null 2>&1
+                    rm -f "$file.tmp" > /dev/null 2>&1
                 fi
             done
             print_success "前端API地址配置完成"
@@ -804,31 +831,34 @@ install_from_prebuilt() {
     # 复制后端二进制文件到安装目录
     print_info "复制后端二进制文件到安装目录..."
     
-    # 检查当前目录是否存在api二进制文件
-    if [[ -f "./api" ]]; then
-        sudo cp "./api" "$INSTALL_DIR/api"
-        sudo chmod 755 "$INSTALL_DIR/api"
+    # 获取当前平台信息
+    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local arch=$(uname -m)
+    if [[ $arch == "x86_64" ]]; then
+        arch="amd64"
+    elif [[ $arch == "arm64" ]]; then
+        arch="arm64"
+    fi
+    
+    # 检查bin目录中是否存在当前平台的二进制文件
+    local binary_path="bin/${os}-${arch}/api"
+    if [[ "$binary_path" == "$INSTALL_DIR/api" ]]; then
+        # 源文件和目标文件相同，跳过复制
+        chmod 755 "$INSTALL_DIR/api"
+        print_success "使用${os}-${arch}平台二进制文件: $binary_path"
+    elif [[ -f "$binary_path" ]]; then
+        cp "$binary_path" "$INSTALL_DIR/api"
+        chmod 755 "$INSTALL_DIR/api"
+        print_success "使用${os}-${arch}平台二进制文件: $binary_path"
+    elif [[ -f "./api" ]]; then
+        # 后备方案：使用当前目录的api二进制文件
+        cp "./api" "$INSTALL_DIR/api"
+        chmod 755 "$INSTALL_DIR/api"
         print_success "使用当前目录二进制文件"
     else
-        # 检查bin目录中是否存在当前平台的二进制文件
-        local os=$(uname -s | tr '[:upper:]' '[:lower:]')
-        local arch=$(uname -m)
-        if [[ $arch == "x86_64" ]]; then
-            arch="amd64"
-        elif [[ $arch == "arm64" ]]; then
-            arch="arm64"
-        fi
-        
-        local binary_path="bin/${os}-${arch}/api"
-        if [[ -f "$binary_path" ]]; then
-            sudo cp "$binary_path" "$INSTALL_DIR/api"
-            sudo chmod 755 "$INSTALL_DIR/api"
-            print_success "使用${os}-${arch}平台二进制文件"
-        else
-            print_error "未找到可用的后端二进制文件: $binary_path"
-            print_error "请先运行 ./build.sh 编译应用"
-            exit 1
-        fi
+        print_error "未找到可用的后端二进制文件: $binary_path 或 ./api"
+        print_error "请先运行 ./build.sh 编译应用"
+        exit 1
     fi
     
     # 验证安装结果
@@ -841,7 +871,7 @@ install_from_prebuilt() {
         exit 1
     fi
     
-    if [[ -d "$INSTALL_DIR/web" && -f "$INSTALL_DIR/web/index.html" ]]; then
+    if [[ -d "$INSTALL_DIR/web" && -f "$INSTALL_DIR/web/dist/index.html" ]]; then
         print_success "前端文件安装成功"
     else
         print_error "前端文件安装失败"
@@ -879,10 +909,21 @@ setup_redis_config() {
     
     # 从现有配置文件读取当前值（如果存在）
     if [[ -f "$CONFIG_DIR/config.yml" ]]; then
-        local current_host=$(grep -E "redis_url:" "$CONFIG_DIR/config.yml" | awk -F'[:@]' '{print $2}' | sed 's/"//g')
-        local current_port=$(grep -E "redis_url:" "$CONFIG_DIR/config.yml" | awk -F'[:/]' '{print $3}' | sed 's/"//g')
-        local current_password=$(grep -E "redis_password:" "$CONFIG_DIR/config.yml" 2>/dev/null | awk -F': ' '{print $2}' | sed 's/"//g')
-        local current_db=$(grep -E "redis_db:" "$CONFIG_DIR/config.yml" 2>/dev/null | awk -F': ' '{print $2}' | sed 's/"//g')
+        # 使用更可靠的方式提取redis_url，避免空格问题
+        local redis_url_line=$(grep -E "^  redis_url:" "$CONFIG_DIR/config.yml")
+        if [[ -n "$redis_url_line" ]]; then
+            # 提取引号内的内容
+            local quoted_url=$(echo "$redis_url_line" | grep -o '"[^\"]*"' | head -1)
+            if [[ -n "$quoted_url" ]]; then
+                # 去除引号并分割host和port
+                local clean_url=$(echo "$quoted_url" | sed 's/"//g')
+                local current_host=$(echo "$clean_url" | cut -d':' -f1 | xargs)
+                local current_port=$(echo "$clean_url" | cut -d':' -f2 | xargs)
+            fi
+        fi
+        
+        local current_password=$(grep -E "redis_password:" "$CONFIG_DIR/config.yml" 2>/dev/null | awk -F': ' '{print $2}' | sed 's/"//g' | xargs)
+        local current_db=$(grep -E "redis_db:" "$CONFIG_DIR/config.yml" 2>/dev/null | awk -F': ' '{print $2}' | sed 's/"//g' | xargs)
         
         # 如果当前值存在，使用当前值作为默认值
         [[ -n "$current_host" ]] && default_host="$current_host"
@@ -891,25 +932,11 @@ setup_redis_config() {
         [[ -n "$current_db" ]] && default_db="$current_db"
     fi
     
-    # 交互式输入Redis连接信息
-    echo "" 1>&2
-    echo -e "${BLUE}Redis连接配置${NC}" 1>&2
-    echo "=====================================" 1>&2
-    echo "按回车键使用默认值，或输入新值" 1>&2
-    echo "=====================================" 1>&2
-    
-    read -p "Redis主机 (默认: $default_host): " redis_host
-    read -p "Redis端口 (默认: $default_port): " redis_port
-    read -s -p "Redis密码 (默认: 空密码): " redis_password
-    echo "" 1>&2
-    read -p "Redis数据库 (默认: $default_db): " redis_db
-    echo "=====================================" 1>&2
-    
-    # 使用默认值如果用户未输入
-    redis_host=${redis_host:-$default_host}
-    redis_port=${redis_port:-$default_port}
-    redis_password=${redis_password:-$default_password}
-    redis_db=${redis_db:-$default_db}
+    # 使用默认值，避免交互式输入
+    local redis_host="$default_host"
+    local redis_port="$default_port"
+    local redis_password="$default_password"
+    local redis_db="$default_db"
     
     # 构建redis_url
     local redis_url="$redis_host:$redis_port"
@@ -932,7 +959,7 @@ setup_configuration() {
     # 复制配置文件
     if [[ -f "configs/config.example.yml" ]]; then
         print_info "生成配置文件..."
-        sudo cp configs/config.example.yml "$CONFIG_DIR/config.yml"
+        cp configs/config.example.yml "$CONFIG_DIR/config.yml"
         
         # 交互式配置Redis
         local redis_config=$(setup_redis_config)
@@ -965,12 +992,18 @@ setup_configuration() {
             }
             # 替换admin_static_dir
             if (/^  admin_static_dir: /) {
-                print "  admin_static_dir: " install_dir "/web/dist";
+                # 直接使用相对路径，避免绝对路径重复
+                print "  admin_static_dir: " "web/dist";
                 next;
             }
             # 替换redis_url
             if (/^  redis_url: /) {
                 print "  redis_url: \"" redis_url "\"";
+                next;
+            }
+            # 替换certs_dir
+            if (/^  certs_dir: /) {
+                print "  certs_dir: " install_dir "/certs";
                 next;
             }
             # 其他行直接打印
@@ -995,15 +1028,15 @@ setup_configuration() {
             awk -v new_pwd="$redis_password" '/redis_db:/{print; print "  redis_password: \"" new_pwd "\""; next}1' "$temp_config" > "$temp_config.tmp" && mv "$temp_config.tmp" "$temp_config"
         fi
         
-        # 使用sudo复制临时文件到目标位置
-        sudo cp "$temp_config" "$CONFIG_DIR/config.yml"
+        # 复制临时文件到目标位置
+        cp "$temp_config" "$CONFIG_DIR/config.yml"
         # 清理临时文件
         rm -f "$temp_config"
         
         # 设置默认站点配置
         setup_default_site
         
-        print_success "配置文件生成完成"
+        print_success "配置文件生成完成: $CONFIG_DIR/config.yml"
     else
         print_warning "未找到配置文件模板，使用默认配置"
     fi
@@ -1047,7 +1080,7 @@ EOF
     cat "$sites_temp" >> "$config_temp"
     
     # 将临时文件内容复制回原配置文件
-    sudo cp "$config_temp" "$CONFIG_DIR/config.yml"
+    cp "$config_temp" "$CONFIG_DIR/config.yml"
     
     # 删除临时文件
     rm "$sites_temp" "$config_temp"
@@ -1071,7 +1104,12 @@ install_health_check() {
     local required_files=(
         "$INSTALL_DIR/api"
         "$INSTALL_DIR/web"
-        "$INSTALL_DIR/web/index.html"
+        "$INSTALL_DIR/web/dist/index.html"
+        "$INSTALL_DIR/certs"
+        "$INSTALL_DIR/static"
+        "$INSTALL_DIR/redis"
+        "$DATA_DIR"
+        "$LOG_DIR"
     )
     
     for file in "${required_files[@]}"; do
@@ -1093,7 +1131,7 @@ install_health_check() {
             print_success "二进制文件权限检查通过"
         else
             print_warning "二进制文件权限不足，正在添加执行权限..."
-            sudo chmod +x "$INSTALL_DIR/api" > /dev/null 2>&1
+            chmod +x "$INSTALL_DIR/api" > /dev/null 2>&1
             if [ $? -eq 0 ]; then
                 print_success "已添加二进制文件执行权限"
             else
@@ -1154,7 +1192,7 @@ install_health_check() {
             print_success "日志目录权限检查通过"
         else
             print_warning "日志目录权限不足，正在修复..."
-            sudo chmod 755 "$LOG_DIR" > /dev/null 2>&1
+            chmod 755 "$LOG_DIR" > /dev/null 2>&1
             if [ $? -eq 0 ]; then
                 print_success "已修复日志目录权限"
             else
@@ -1164,9 +1202,9 @@ install_health_check() {
         fi
     else
         print_warning "日志目录不存在，正在创建..."
-        sudo mkdir -p "$LOG_DIR" > /dev/null 2>&1
+        mkdir -p "$LOG_DIR" > /dev/null 2>&1
         if [ $? -eq 0 ]; then
-            sudo chmod 755 "$LOG_DIR" > /dev/null 2>&1
+            chmod 755 "$LOG_DIR" > /dev/null 2>&1
             print_success "已创建日志目录并设置权限"
         else
             print_error "无法创建日志目录"
@@ -1191,10 +1229,10 @@ cleanup_on_error() {
     print_error "安装过程中出现错误，正在清理..."
     
     # 清理目录
-    sudo rm -rf "$INSTALL_DIR" 2>/dev/null || true
-    sudo rm -rf "$CONFIG_DIR" 2>/dev/null || true
-    sudo rm -rf "$DATA_DIR" 2>/dev/null || true
-    sudo rm -rf "$LOG_DIR" 2>/dev/null || true
+    rm -rf "$INSTALL_DIR" 2>/dev/null || true
+    rm -rf "$CONFIG_DIR" 2>/dev/null || true
+    rm -rf "$DATA_DIR" 2>/dev/null || true
+    rm -rf "$LOG_DIR" 2>/dev/null || true
     
     print_error "安装已回滚，请检查错误信息后重试"
 }
@@ -1231,6 +1269,18 @@ main() {
     
     print_header
     detect_os
+    
+    # 设置安装目录为当前平台目录
+    INSTALL_DIR="$(detect_platform_dir)"
+    CONFIG_DIR="${INSTALL_DIR}/config"
+    DATA_DIR="${INSTALL_DIR}/data"
+    LOG_DIR="${INSTALL_DIR}/logs"
+    
+    print_info "安装目录: ${INSTALL_DIR}"
+    print_info "配置目录: ${CONFIG_DIR}"
+    print_info "数据目录: ${DATA_DIR}"
+    print_info "日志目录: ${LOG_DIR}"
+    
     check_root
     install_dependencies
     # 配置Go模块镜像加速

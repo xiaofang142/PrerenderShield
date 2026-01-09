@@ -381,19 +381,21 @@ sudo systemctl disable prerender-shield
 ### 📁 **目录结构说明**
 
 ```
-/opt/prerender-shield/          # 安装目录
-├── api                          # 后端二进制文件
-├── web/                         # 前端静态文件目录
-│   ├── index.html               # 主页面
-│   ├── assets/                  # 静态资源（CSS、JS、图片等）
-│   └── favicon.ico              # 网站图标
-├── configs/                     # 配置文件目录
-│   └── config.yml               # 主配置文件
-├── static/                      # 静态资源目录
-└── data/                        # 数据目录
-    ├── rules/                   # 防火墙规则目录
-    ├── certs/                   # 证书目录
-    └── logs/                    # 日志目录
+prerender-shield/                # 项目根目录/运行目录
+├── bin/                        # 构建产物目录
+│   ├── linux-amd64/            # Linux x86_64 平台
+│   │   ├── api                 # 二进制文件
+│   │   ├── static/             # 静态资源目录
+│   │   └── config/             # 配置文件目录
+│   └── ...                     # 其他平台
+├── static/                     # 静态资源目录
+├── config/                     # 配置文件目录
+├── data/                       # 数据目录
+│   ├── rules/                  # 防火墙规则目录
+│   ├── certs/                  # 证书目录
+│   └── logs/                   # 日志目录
+└── web/                        # 前端目录
+    └── dist/                   # 前端构建产物
 ```
 
 **项目根目录结构**：
@@ -434,7 +436,7 @@ prerender-shield/               # 项目根目录
 
 | 配置文件 | 路径 | 说明 |
 |---------|------|------|
-| 主配置文件 | `/etc/prerender-shield/config.yml` | 包含所有核心配置 |
+| 主配置文件 | `./config/config.yml` | 包含所有核心配置 |
 | 站点配置 | 存储在 Redis 中 | 动态站点配置，支持热更新 |
 | 系统环境变量 | `/etc/default/prerender-shield` | 系统服务环境变量 |
 
@@ -450,8 +452,8 @@ server:
 # 目录配置
 dirs:
   data_dir: /var/lib/prerender-shield
-  static_dir: /opt/prerender-shield/static
-  admin_static_dir: /opt/prerender-shield/web/dist
+  static_dir: ./static
+  admin_static_dir: ./web/dist
   certs_dir: /var/lib/prerender-shield/certs
 
 # 缓存配置
@@ -553,7 +555,7 @@ npm run dev
 1. 检查 Redis 服务状态：`sudo systemctl status redis-server` 或 `redis-cli ping`
 2. 检查 Redis 配置：`sudo cat /etc/redis/redis.conf | grep -i bind`
 3. 确保 Redis 允许远程连接（如果需要）
-4. 检查配置文件中的 Redis URL：`grep redis_url /etc/prerender-shield/config.yml`
+4. 检查配置文件中的 Redis URL：`grep redis_url ./config/config.yml`
 
 ### ❓ **API 服务无法访问？**
 

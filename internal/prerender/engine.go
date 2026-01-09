@@ -119,10 +119,10 @@ type PreheatManager struct {
 // NewPreheatManager 创建新的预热管理器
 func NewPreheatManager(engine *Engine, redisClient *redis.Client) *PreheatManager {
 	return &PreheatManager{
-		config:      engine.config,
-		engine:      engine,
-		redisClient: redisClient,
-		isRunning:   false,
+		config:        engine.config,
+		engine:        engine,
+		redisClient:   redisClient,
+		isRunning:     false,
 		currentTaskID: "",
 	}
 }
@@ -145,7 +145,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 		// 标记为停止，但不要重置 currentTaskID，直到我们分配新的
 		pm.isRunning = false
 	}
-	
+
 	pm.isRunning = true
 	// 生成新的任务ID，这会使旧的goroutine（如果还在运行）失效（不会更新isRunning状态）
 	pm.currentTaskID = fmt.Sprintf("preheat-%d", time.Now().UnixNano())
@@ -168,7 +168,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 	// 但是我们需要 currentTaskID 来控制并发。
 	// 实际上，Redis中的TaskID是用于记录进度的。
 	// 我们可以让 Redis 创建 TaskID，然后我们也用这个 ID 作为 currentTaskID。
-	
+
 	redisTaskID, err := pm.redisClient.CreatePreheatTask(pm.engine.SiteName)
 	if err != nil {
 		pm.mutex.Lock()
@@ -177,7 +177,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 		pm.mutex.Unlock()
 		return "", fmt.Errorf("failed to create preheat task: %v", err)
 	}
-	
+
 	// 更新 currentTaskID 为 Redis 返回的 ID
 	pm.mutex.Lock()
 	pm.currentTaskID = redisTaskID
@@ -249,7 +249,7 @@ func (pm *PreheatManager) TriggerPreheatWithURL(baseURL, domain string) (string,
 			logging.DefaultLogger.Error("Failed to crawl URLs: %v", err)
 			return
 		}
-		
+
 		// 再次检查任务是否已被取消
 		pm.mutex.Lock()
 		if pm.currentTaskID != taskID {
@@ -1105,6 +1105,12 @@ func (e *Engine) initBrowserPool() error {
 	for i := 0; i < e.config.PoolSize; i++ {
 		// 启动一个新的浏览器实例
 		launchOpts := launcher.New()
+		// 优先使用我们安装的浏览器路径
+		if _, err := os.Stat("./browser/chrome"); err == nil {
+			launchOpts.Set("executablePath", "./browser/chrome")
+		} else if _, err := os.Stat("./browser/chromium"); err == nil {
+			launchOpts.Set("executablePath", "./browser/chromium")
+		}
 		launchOpts.Set("headless")
 		launchOpts.Set("no-sandbox")
 		launchOpts.Set("disable-dev-shm-usage")
@@ -1232,6 +1238,12 @@ func (e *Engine) replaceBrowser(index int, oldBrowser *Browser) {
 
 	// 启动一个新的浏览器实例
 	launchOpts := launcher.New()
+	// 优先使用我们安装的浏览器路径
+	if _, err := os.Stat("./browser/chrome"); err == nil {
+		launchOpts.Set("executablePath", "./browser/chrome")
+	} else if _, err := os.Stat("./browser/chromium"); err == nil {
+		launchOpts.Set("executablePath", "./browser/chromium")
+	}
 	launchOpts.Set("headless")
 	launchOpts.Set("no-sandbox")
 	launchOpts.Set("disable-dev-shm-usage")

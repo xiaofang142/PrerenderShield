@@ -37,7 +37,7 @@ sites:
       target_url: ""
     firewall:
       enabled: false
-      rules_path: "/etc/prerender-shield/rules"
+      rules_path: "./rules"
       action:
         default_action: "block"
         block_message: "Request blocked by firewall"

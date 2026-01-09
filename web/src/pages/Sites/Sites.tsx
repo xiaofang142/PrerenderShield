@@ -461,7 +461,7 @@ const Sites: React.FC = () => {
         },
         Firewall: {
           Enabled: updatedSite.firewall.enabled,
-          RulesPath: updatedSite.firewall.rulesPath || '/etc/prerender-shield/rules',
+          RulesPath: updatedSite.firewall.rulesPath || './rules',
           ActionConfig: {
             DefaultAction: updatedSite.firewall.action?.defaultAction || 'block',
             BlockMessage: updatedSite.firewall.action?.blockMessage || 'Request blocked by firewall'
@@ -1125,7 +1125,7 @@ const Sites: React.FC = () => {
         },
         firewall: {
           enabled: values.firewall?.enabled || false,
-          rules_path: values.firewall?.rulesPath || '/etc/prerender-shield/rules',
+          rules_path: values.firewall?.rulesPath || './rules',
           action: {
             default_action: values.firewall?.action?.defaultAction || 'block',
             block_message: values.firewall?.action?.blockMessage || 'Request blocked by firewall'
@@ -1379,7 +1379,7 @@ const Sites: React.FC = () => {
         // 防火墙基础配置
         firewall: {
           enabled: redisConfig.firewall_enabled !== undefined ? (redisConfig.firewall_enabled === true || redisConfig.firewall_enabled === 'true') : (site.firewall?.enabled || false),
-          rulesPath: site.firewall?.rulesPath || '/etc/prerender-shield/rules',
+          rulesPath: site.firewall?.rulesPath || './rules',
           action: {
             defaultAction: redisConfig.default_action || site.firewall?.action?.defaultAction || 'block',
             blockMessage: redisConfig.block_message || site.firewall?.action?.blockMessage || 'Request blocked by firewall'
@@ -1418,7 +1418,7 @@ const Sites: React.FC = () => {
       const defaultConfig = {
         firewall: {
           enabled: false,
-          rulesPath: '/etc/prerender-shield/rules',
+          rulesPath: './rules',
           action: {
             defaultAction: 'block',
             blockMessage: 'Request blocked by firewall'
@@ -1456,7 +1456,7 @@ const Sites: React.FC = () => {
           // 构造WAF配置数据
           const configData = {
               enabled: values.firewall?.enabled || false,
-              rules_path: values.firewall?.rulesPath || '/etc/prerender-shield/rules',
+              rules_path: values.firewall?.rulesPath || './rules',
               action: {
                 default_action: values.firewall?.action?.defaultAction || 'block',
                 block_message: values.firewall?.action?.blockMessage || 'Request blocked by firewall'
@@ -1824,7 +1824,7 @@ const Sites: React.FC = () => {
             <Switch />
           </Form.Item>
           <Form.Item name={['firewall', 'rulesPath']} label="规则路径">
-            <Input placeholder="/etc/prerender-shield/rules" />
+            <Input placeholder="./rules" />
           </Form.Item>
           <Form.Item name={['firewall', 'action', 'defaultAction']} label="默认动作">
             <Select>
