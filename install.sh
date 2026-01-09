@@ -862,7 +862,8 @@ download_and_install() {
 # ============================================================================
 
 setup_redis_config() {
-    print_info "配置Redis连接..."
+    # 将所有交互式输出重定向到标准错误，这样它们就不会被包含在函数的返回值中
+    print_info "配置Redis连接..." 1>&2
     
     # 检测Redis是否已安装
     local redis_installed=false
@@ -891,18 +892,18 @@ setup_redis_config() {
     fi
     
     # 交互式输入Redis连接信息
-    echo ""
-    echo -e "${BLUE}Redis连接配置${NC}"
-    echo "====================================="
-    echo "按回车键使用默认值，或输入新值"
-    echo "====================================="
+    echo "" 1>&2
+    echo -e "${BLUE}Redis连接配置${NC}" 1>&2
+    echo "=====================================" 1>&2
+    echo "按回车键使用默认值，或输入新值" 1>&2
+    echo "=====================================" 1>&2
     
     read -p "Redis主机 (默认: $default_host): " redis_host
     read -p "Redis端口 (默认: $default_port): " redis_port
     read -s -p "Redis密码 (默认: 空密码): " redis_password
-    echo ""
+    echo "" 1>&2
     read -p "Redis数据库 (默认: $default_db): " redis_db
-    echo "====================================="
+    echo "=====================================" 1>&2
     
     # 使用默认值如果用户未输入
     redis_host=${redis_host:-$default_host}
@@ -913,15 +914,15 @@ setup_redis_config() {
     # 构建redis_url
     local redis_url="$redis_host:$redis_port"
     
-    # 打印配置信息（隐藏密码）
-    echo ""
-    print_info "Redis连接配置:"
-    print_info "  主机: $redis_host"
-    print_info "  端口: $redis_port"
-    print_info "  密码: $( [[ -n "$redis_password" ]] && echo "****" || echo "无" )"
-    print_info "  数据库: $redis_db"
+    # 打印配置信息（隐藏密码）到标准错误
+    echo "" 1>&2
+    print_info "Redis连接配置:" 1>&2
+    print_info "  主机: $redis_host" 1>&2
+    print_info "  端口: $redis_port" 1>&2
+    print_info "  密码: $( [[ -n "$redis_password" ]] && echo "****" || echo "无" )" 1>&2
+    print_info "  数据库: $redis_db" 1>&2
     
-    # 返回配置信息
+    # 返回配置信息（只输出到标准输出）
     echo "$redis_url:$redis_db:$redis_password"
 }
 
