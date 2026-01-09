@@ -13,7 +13,7 @@ dirs:
   data_dir: ./data
   static_dir: ./static
   certs_dir: ./certs
-  admin_static_dir: ./web/dist
+  admin_static_dir: ./web
 
 # 缓存配置
 cache:

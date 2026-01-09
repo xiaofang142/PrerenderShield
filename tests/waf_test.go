@@ -33,7 +33,7 @@ func TestWafMiddleware_IPAccessControl(t *testing.T) {
 		ID: "test-waf-site",
 		Firewall: config.FirewallConfig{
 			Enabled:   true,
-			Blacklist: []string{"192.168.1.100"},
+			Blacklist: []string{"127.0.0.1"},
 			Whitelist: []string{"10.0.0.1"},
 			ActionConfig: config.ActionConfig{
 				BlockMessage: "Access Denied",
@@ -51,9 +51,9 @@ func TestWafMiddleware_IPAccessControl(t *testing.T) {
 
 	t.Run("Blacklisted IP should be blocked", func(t *testing.T) {
 		req, _ := http.NewRequest("GET", "/test", nil)
-		req.Header.Set("X-Forwarded-For", "192.168.1.100") // Gin's ClientIP() uses this
-		req.RemoteAddr = "192.168.1.100:12345"
-		
+		req.Header.Set("X-Forwarded-For", "127.0.0.1") // Gin's ClientIP() uses this
+		req.RemoteAddr = "127.0.0.1:12345"
+
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
@@ -64,7 +64,7 @@ func TestWafMiddleware_IPAccessControl(t *testing.T) {
 	t.Run("Whitelisted IP should be allowed", func(t *testing.T) {
 		req, _ := http.NewRequest("GET", "/test", nil)
 		req.RemoteAddr = "10.0.0.1:12345"
-		
+
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
@@ -75,7 +75,7 @@ func TestWafMiddleware_IPAccessControl(t *testing.T) {
 	t.Run("Normal IP should be allowed", func(t *testing.T) {
 		req, _ := http.NewRequest("GET", "/test", nil)
 		req.RemoteAddr = "8.8.8.8:12345"
-		
+
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
@@ -121,9 +121,9 @@ func TestWafMiddleware_GeoIPAccessControl(t *testing.T) {
 
 	t.Run("Blocked Country (RU) should be blocked", func(t *testing.T) {
 		req, _ := http.NewRequest("GET", "/test", nil)
-		req.Header.Set("X-Forwarded-For", "3.3.3.3") 
+		req.Header.Set("X-Forwarded-For", "3.3.3.3")
 		req.RemoteAddr = "3.3.3.3:12345"
-		
+
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
@@ -135,7 +135,7 @@ func TestWafMiddleware_GeoIPAccessControl(t *testing.T) {
 		req, _ := http.NewRequest("GET", "/test", nil)
 		req.Header.Set("X-Forwarded-For", "1.1.1.1")
 		req.RemoteAddr = "1.1.1.1:12345"
-		
+
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
@@ -147,7 +147,7 @@ func TestWafMiddleware_GeoIPAccessControl(t *testing.T) {
 		// Update config to use AllowList
 		siteWithAllow := site
 		siteWithAllow.Firewall.GeoIPConfig.AllowList = []string{"CN"}
-		
+
 		rAllow := gin.New()
 		rAllow.Use(middleware.WafMiddleware(siteWithAllow, nil, nil, mockGeoIP))
 		rAllow.GET("/test", func(c *gin.Context) { c.String(http.StatusOK, "OK") })

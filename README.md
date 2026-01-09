@@ -226,7 +226,7 @@ chmod +x install.sh
 ./install.sh
 
 # 4. 或者手动指定服务器IP（如果自动检测失败）
-./install.sh --ip 192.168.1.100
+./install.sh --ip 127.0.0.1
 ```
 
 **install.sh 脚本功能说明**：

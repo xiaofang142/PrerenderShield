@@ -365,22 +365,46 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// 处理静态目录
 	if !filepath.IsAbs(cfg.Dirs.StaticDir) {
-		cfg.Dirs.StaticDir = filepath.Join(appDir, cfg.Dirs.StaticDir)
+		// 检查路径是否已经包含"bin/"，如果包含则直接使用简单的相对路径
+		if strings.HasPrefix(cfg.Dirs.StaticDir, "bin/") {
+			// 如果路径是bin/darwin-arm64/static，直接使用static
+			cfg.Dirs.StaticDir = "./static"
+		} else {
+			cfg.Dirs.StaticDir = filepath.Join(appDir, cfg.Dirs.StaticDir)
+		}
 	}
 
 	// 处理数据目录
 	if !filepath.IsAbs(cfg.Dirs.DataDir) {
-		cfg.Dirs.DataDir = filepath.Join(appDir, cfg.Dirs.DataDir)
+		// 检查路径是否已经包含"bin/"，如果包含则直接使用简单的相对路径
+		if strings.HasPrefix(cfg.Dirs.DataDir, "bin/") {
+			// 如果路径是bin/darwin-arm64/data，直接使用data
+			cfg.Dirs.DataDir = "./data"
+		} else {
+			cfg.Dirs.DataDir = filepath.Join(appDir, cfg.Dirs.DataDir)
+		}
 	}
 
 	// 处理证书目录
 	if !filepath.IsAbs(cfg.Dirs.CertsDir) {
-		cfg.Dirs.CertsDir = filepath.Join(appDir, cfg.Dirs.CertsDir)
+		// 检查路径是否已经包含"bin/"，如果包含则直接使用简单的相对路径
+		if strings.HasPrefix(cfg.Dirs.CertsDir, "bin/") {
+			// 如果路径是bin/darwin-arm64/certs，直接使用certs
+			cfg.Dirs.CertsDir = "./certs"
+		} else {
+			cfg.Dirs.CertsDir = filepath.Join(appDir, cfg.Dirs.CertsDir)
+		}
 	}
 
 	// 处理管理控制台静态目录
 	if !filepath.IsAbs(cfg.Dirs.AdminStaticDir) {
-		cfg.Dirs.AdminStaticDir = filepath.Join(appDir, cfg.Dirs.AdminStaticDir)
+		// 检查路径是否已经包含"bin/"，如果包含则直接使用简单的相对路径
+		if strings.HasPrefix(cfg.Dirs.AdminStaticDir, "bin/") {
+			// 如果路径是bin/darwin-arm64/web/dist，直接使用web/dist
+			cfg.Dirs.AdminStaticDir = "./web/dist"
+		} else {
+			cfg.Dirs.AdminStaticDir = filepath.Join(appDir, cfg.Dirs.AdminStaticDir)
+		}
 	}
 
 	// 创建必要的目录
@@ -869,10 +893,10 @@ func defaultConfig() *Config {
 			ConsolePort: 9597,
 		},
 		Dirs: DirsConfig{
-			DataDir:        "./data",     // 数据目录
-			StaticDir:      "./static",   // 静态文件目录
-			CertsDir:       "./certs",    // 证书目录
-			AdminStaticDir: "./web/dist", // 管理控制台静态文件目录
+			DataDir:        "./data",   // 数据目录
+			StaticDir:      "./static", // 静态文件目录
+			CertsDir:       "./certs",  // 证书目录
+			AdminStaticDir: "./web",    // 管理控制台静态文件目录
 		},
 		Cache: CacheConfig{
 			Type:          "memory",

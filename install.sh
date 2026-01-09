@@ -745,7 +745,6 @@ build_and_install() {
     mkdir -p "$LOG_DIR"
     mkdir -p "$INSTALL_DIR/certs"
     mkdir -p "$INSTALL_DIR/static"
-    mkdir -p "$INSTALL_DIR/redis"
     
     # 设置目录权限
     chmod 755 "$INSTALL_DIR"
@@ -754,7 +753,6 @@ build_and_install() {
     chmod 750 "$LOG_DIR"
     chmod 755 "$INSTALL_DIR/certs"
     chmod 755 "$INSTALL_DIR/static"
-    chmod 750 "$INSTALL_DIR/redis"
     
     # 从预编译包安装
     if [[ -d "./bin" && -d "./web/dist" ]]; then
@@ -774,7 +772,7 @@ install_from_prebuilt() {
     if [[ -d "./web/dist" ]]; then
         print_info "使用web/dist目录中的前端文件"
         mkdir -p "$INSTALL_DIR/web"
-        cp -r ./web/dist "$INSTALL_DIR/web/"
+        cp -r ./web/dist/ "$INSTALL_DIR/web/"
         print_success "前端文件从web/dist目录复制完成"
     else
         print_error "未找到前端构建目录: ./web/dist"
@@ -788,7 +786,7 @@ install_from_prebuilt() {
         api_ip="$CUSTOM_API_IP"
         print_info "使用命令行参数提供的IP: $api_ip"
     elif [[ "$(hostname)" == "localhost" ]] || [[ "$(hostname)" == "*local*" ]] || [[ "$(uname -s)" == "Darwin" ]]; then
-        # 本地环境，使用本地IP
+        # 本地环境，使用本地回环IP 127.0.0.1
         api_ip="127.0.0.1"
         print_info "当前是本地环境，使用本地IP: $api_ip"
     else
@@ -810,14 +808,10 @@ install_from_prebuilt() {
         local files=$(find "$frontend_dir" -name "*.js" -o -name "*.html" -o -name "*.css" | grep -v "node_modules" | grep -v ".git")
         
         if [[ -n "$files" ]]; then
-            # 使用awk进行替换，避免sed的跨平台兼容性问题
+            # 使用sed进行替换，兼容macOS和Linux
             for file in $files; do
-                awk -v api_url="$api_url" '{gsub(/http:\/\/127\.0\.0\.1:9598\/api\/v1/, api_url); print}' "$file" > "$file.tmp"
-                if [[ $? -eq 0 ]]; then
-                    mv "$file.tmp" "$file"
-                else
-                    rm -f "$file.tmp" > /dev/null 2>&1
-                fi
+                # 先替换127.0.0.1的API地址
+                sed -i '' -e "s|http://127\.0\.0\.1:9598/api/v1|$api_url|g" "$file"
             done
             print_success "前端API地址配置完成"
         else
@@ -828,8 +822,8 @@ install_from_prebuilt() {
         exit 1
     fi
     
-    # 复制后端二进制文件到安装目录
-    print_info "复制后端二进制文件到安装目录..."
+    # 直接使用bin目录下的二进制文件，不需要复制
+    print_info "使用bin目录下的后端二进制文件..."
     
     # 获取当前平台信息
     local os=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -842,18 +836,12 @@ install_from_prebuilt() {
     
     # 检查bin目录中是否存在当前平台的二进制文件
     local binary_path="bin/${os}-${arch}/api"
-    if [[ "$binary_path" == "$INSTALL_DIR/api" ]]; then
-        # 源文件和目标文件相同，跳过复制
-        chmod 755 "$INSTALL_DIR/api"
-        print_success "使用${os}-${arch}平台二进制文件: $binary_path"
-    elif [[ -f "$binary_path" ]]; then
-        cp "$binary_path" "$INSTALL_DIR/api"
-        chmod 755 "$INSTALL_DIR/api"
+    if [[ -f "$binary_path" ]]; then
+        chmod 755 "$binary_path"
         print_success "使用${os}-${arch}平台二进制文件: $binary_path"
     elif [[ -f "./api" ]]; then
         # 后备方案：使用当前目录的api二进制文件
-        cp "./api" "$INSTALL_DIR/api"
-        chmod 755 "$INSTALL_DIR/api"
+        chmod 755 "./api"
         print_success "使用当前目录二进制文件"
     else
         print_error "未找到可用的后端二进制文件: $binary_path 或 ./api"
@@ -864,14 +852,8 @@ install_from_prebuilt() {
     # 验证安装结果
     print_info "验证安装结果..."
     
-    if [[ -f "$INSTALL_DIR/api" && -x "$INSTALL_DIR/api" ]]; then
-        print_success "后端二进制文件安装成功"
-    else
-        print_error "后端二进制文件安装失败或不可执行"
-        exit 1
-    fi
-    
-    if [[ -d "$INSTALL_DIR/web" && -f "$INSTALL_DIR/web/dist/index.html" ]]; then
+    # 验证前端文件
+    if [[ -d "$INSTALL_DIR/web" && -f "$INSTALL_DIR/web/index.html" ]]; then
         print_success "前端文件安装成功"
     else
         print_error "前端文件安装失败"
@@ -913,7 +895,7 @@ setup_redis_config() {
         local redis_url_line=$(grep -E "^  redis_url:" "$CONFIG_DIR/config.yml")
         if [[ -n "$redis_url_line" ]]; then
             # 提取引号内的内容
-            local quoted_url=$(echo "$redis_url_line" | grep -o '"[^\"]*"' | head -1)
+            local quoted_url=$(echo "$redis_url_line" | grep -o '"[^"]*"' | head -1)
             if [[ -n "$quoted_url" ]]; then
                 # 去除引号并分割host和port
                 local clean_url=$(echo "$quoted_url" | sed 's/"//g')
@@ -932,18 +914,42 @@ setup_redis_config() {
         [[ -n "$current_db" ]] && default_db="$current_db"
     fi
     
-    # 使用默认值，避免交互式输入
-    local redis_host="$default_host"
-    local redis_port="$default_port"
-    local redis_password="$default_password"
-    local redis_db="$default_db"
+    # 交互式输入Redis连接信息
+    echo "" 1>&2
+    print_info "请配置Redis连接信息（按Enter使用默认值）:" 1>&2
+    echo "" 1>&2
+    
+    # 输入主机地址
+    read -p "  主机地址 [$default_host]: " redis_host 1>&2
+    if [[ -z "$redis_host" ]]; then
+        redis_host="$default_host"
+    fi
+    
+    # 输入端口号
+    read -p "  端口号 [$default_port]: " redis_port 1>&2
+    if [[ -z "$redis_port" ]]; then
+        redis_port="$default_port"
+    fi
+    
+    # 输入密码（不显示输入内容）
+    read -s -p "  密码 [$([[ -n "$default_password" ]] && echo "****" || echo "无")]: " redis_password 1>&2
+    echo 1>&2  # 换行
+    if [[ -z "$redis_password" ]]; then
+        redis_password="$default_password"
+    fi
+    
+    # 输入数据库编号
+    read -p "  数据库编号 [$default_db]: " redis_db 1>&2
+    if [[ -z "$redis_db" ]]; then
+        redis_db="$default_db"
+    fi
     
     # 构建redis_url
     local redis_url="$redis_host:$redis_port"
     
-    # 打印配置信息（隐藏密码）到标准错误
+    # 打印确认配置信息（隐藏密码）到标准错误
     echo "" 1>&2
-    print_info "Redis连接配置:" 1>&2
+    print_info "Redis连接配置确认:" 1>&2
     print_info "  主机: $redis_host" 1>&2
     print_info "  端口: $redis_port" 1>&2
     print_info "  密码: $( [[ -n "$redis_password" ]] && echo "****" || echo "无" )" 1>&2
@@ -993,7 +999,7 @@ setup_configuration() {
             # 替换admin_static_dir
             if (/^  admin_static_dir: /) {
                 # 直接使用相对路径，避免绝对路径重复
-                print "  admin_static_dir: " "web/dist";
+                print "  admin_static_dir: " "web";
                 next;
             }
             # 替换redis_url
@@ -1104,10 +1110,9 @@ install_health_check() {
     local required_files=(
         "$INSTALL_DIR/api"
         "$INSTALL_DIR/web"
-        "$INSTALL_DIR/web/dist/index.html"
+        "$INSTALL_DIR/web/index.html"
         "$INSTALL_DIR/certs"
         "$INSTALL_DIR/static"
-        "$INSTALL_DIR/redis"
         "$DATA_DIR"
         "$LOG_DIR"
     )
@@ -1284,9 +1289,6 @@ main() {
     check_root
     install_dependencies
     # 配置Go模块镜像加速
-    print_info "配置Go模块镜像加速..."
-    export GOPROXY="https://goproxy.cn,direct"
-    print_info "GOPROXY设置为: $GOPROXY"
     build_and_install
     setup_configuration
     install_health_check
@@ -1311,9 +1313,6 @@ main() {
     echo -e "${BLUE}3. 配置文件: $CONFIG_DIR/config.yml${NC}"
     echo -e "${BLUE}4. 日志目录: $LOG_DIR${NC}"
     echo ""
-    echo -e "${BLUE}默认登录信息：${NC}"
-    echo -e "${BLUE}  用户名: admin${NC}"
-    echo -e "${BLUE}  密码: 123456${NC}"
     echo ""
     print_success "======================================="
     print_success "启动命令: ./start.sh start"
@@ -1323,9 +1322,6 @@ main() {
     echo ""
     echo -e "${GREEN}接下来：${NC}"
     echo -e "${GREEN}1. 执行 ./start.sh start 启动应用${NC}"
-    echo -e "${GREEN}2. 打开浏览器访问 http://$api_ip:9597${NC}"
-    echo -e "${GREEN}3. 使用默认账号登录${NC}"
-    echo -e "${GREEN}4. 在管理界面中添加和管理您的站点${NC}"
 }
 
 print_usage() {
@@ -1341,7 +1337,7 @@ print_usage() {
     echo "  $0"
     echo ""
     echo "  # 手动指定IP地址"
-    echo "  $0 --ip 192.168.1.100"
+    echo "  $0 --ip 127.0.0.1"
     echo ""
 }
 

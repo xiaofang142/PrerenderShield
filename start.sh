@@ -4,23 +4,32 @@
 
 APP_NAME="prerender-shield"
 
-# 动态获取当前平台目录
-platform_dir() {
-    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
-    local arch=$(uname -m)
+# 检查当前目录是否已经是平台目录（包含api二进制文件）
+if [ -f "./api" ]; then
+    # 直接使用当前目录作为平台目录
+    PLATFORM_DIR=$(pwd)
+else
+    # 获取脚本所在的根目录
+    SCRIPT_DIR=$(dirname "$(realpath "$0")")
     
-    # 转换架构名称
-    if [[ $arch == "x86_64" ]]; then
-        arch="amd64"
-    elif [[ $arch == "aarch64" || $arch == "arm64" ]]; then
-        arch="arm64"
-    fi
+    # 动态获取当前平台目录
+    platform_dir() {
+        local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+        local arch=$(uname -m)
+        
+        # 转换架构名称
+        if [[ $arch == "x86_64" ]]; then
+            arch="amd64"
+        elif [[ $arch == "aarch64" || $arch == "arm64" ]]; then
+            arch="arm64"
+        fi
+        
+        echo "${SCRIPT_DIR}/bin/${os}-${arch}"
+    }
     
-    echo "bin/${os}-${arch}"
-}
-
-# 获取当前平台目录
-PLATFORM_DIR=$(platform_dir)
+    # 获取当前平台目录
+    PLATFORM_DIR=$(platform_dir)
+fi
 
 # 优先使用平台目录下的config/config.yml，然后使用configs/config.yml
 if [ -f "${PLATFORM_DIR}/config/config.yml" ]; then
@@ -57,23 +66,11 @@ error() {
 
 # 根据当前平台选择合适的二进制文件
 get_platform_binary() {
-    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
-    local arch=$(uname -m)
-    
-    # 转换架构名称
-    if [[ $arch == "x86_64" ]]; then
-        arch="amd64"
-    elif [[ $arch == "arm64" || $arch == "aarch64" ]]; then
-        arch="arm64"
-    else
-        error "不支持的架构: $arch"
-        exit 1
-    fi
-    
     # 构建二进制文件路径
     local binary_path="${PLATFORM_DIR}/api"
     
     # 如果是Windows系统，添加.exe后缀
+    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
     if [[ $os == "windows" ]]; then
         binary_path="${binary_path}.exe"
     fi
@@ -98,9 +95,6 @@ else
     info "使用平台特定二进制文件: $BINARY_PATH"
 fi
 
-# 确保数据目录存在
-mkdir -p ./data
-
 # 获取本机IP地址，用于访问信息
 get_local_ip() {
     local ip="127.0.0.1"
@@ -111,25 +105,6 @@ get_local_ip() {
     fi
     
     echo "$ip"
-}
-
-# 彩色输出
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-# 打印彩色信息
-info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-warning() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-error() {
-    echo -e "${RED}[ERROR]${NC} $1"
 }
 
 usage() {
@@ -175,7 +150,6 @@ status() {
         info "======================================="
         info "管理控制台: http://$local_ip:9597"
         info "API服务: http://$local_ip:9598"
-        info "健康检查接口: http://$local_ip:9598/api/v1/health"
         info "======================================="
         return 0
     else
@@ -259,12 +233,10 @@ start() {
         exit 1
     fi
 
-    # 确保数据目录存在
-    mkdir -p "${DATA_DIR}/rules" "${DATA_DIR}/certs" "${DATA_DIR}/redis" "${DATA_DIR}/grafana"
 
     # 直接启动应用程序
     info "启动$APP_NAME..."
-    cd "$(dirname "$0")" && nohup "$BINARY_PATH" --config "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
+    cd "$SCRIPT_DIR" && nohup "$BINARY_PATH" --config "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
     info "$APP_NAME 启动命令已执行，PID: $(cat "$PID_FILE")"
     info "日志文件: $LOG_FILE"
