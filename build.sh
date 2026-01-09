@@ -53,17 +53,7 @@ build_single() {
         return 1
     fi
     
-    # 复制前端文件到平台目录
-    if [ -d "web/dist" ]; then
-        print_info "复制前端文件到 $output_dir/web/dist..."
-        mkdir -p "$output_dir/web"
-        cp -r "web/dist" "$output_dir/web/"
-        if [ $? -ne 0 ]; then
-            print_warning "复制前端文件到 $output_dir/web/dist 失败"
-        else
-            print_success "前端文件复制完成: $output_dir/web/dist"
-        fi
-    fi
+
     
     print_success "$platform/$arch 构建完成: $output_dir/$binary_name"
     return 0
@@ -271,14 +261,6 @@ for platform in "${PLATFORMS[@]}"; do
             multi_platform_valid=false
             continue
         fi
-        
-        # 验证前端文件
-        if [ -d "$output_dir/web/dist" ]; then
-            print_success "$platform/$arch 前端文件验证成功: $output_dir/web/dist"
-        else
-            print_warning "$platform/$arch 前端文件未找到: $output_dir/web/dist"
-            # 前端文件不是必须的，所以不影响构建结果
-        fi
     done
 
 done
@@ -298,15 +280,11 @@ fi
 # 显示构建完成信息
 print_success "========================================"
 print_success "PrerenderShield 编译完成！"
-print_success "========================================"
-print_success "当前平台二进制文件: $APP_BINARY"
 print_success "多平台编译结果: bin/目录下"
 print_success "前端构建文件: web/dist"
 print_success ""
 print_success "接下来的操作:"
 print_success "1. 安装应用: ./install.sh"
-print_success "2. 启动应用: ./start.sh start"
-print_success "3. 查看日志: tail -f ./data/prerender-shield.log"
 print_success "========================================"
 
 # 构建后的验证测试

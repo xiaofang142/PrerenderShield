@@ -12,8 +12,8 @@ import (
 )
 
 func TestCreateSiteHandler_RedirectMode(t *testing.T) {
-	// 创建sitehandler
-	handler := NewHandler(nil)
+	// 创建sitehandler，传递所有必要的参数
+	handler := NewHandler(nil, nil, nil, nil)
 
 	// 创建测试站点配置
 	testSite := config.SiteConfig{
@@ -30,6 +30,7 @@ func TestCreateSiteHandler_RedirectMode(t *testing.T) {
 
 	// 创建实际的监控和日志管理器
 	crawlerLogManager := logging.NewCrawlerLogManager("localhost:6379") // 使用本地Redis URL
+	visitLogManager := logging.NewVisitLogManager("localhost:6379") // 使用本地Redis URL
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false}) // 禁用监控，避免启动不必要的服务
 
 	// 创建HTTP请求和响应记录器
@@ -37,8 +38,8 @@ func TestCreateSiteHandler_RedirectMode(t *testing.T) {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
 	rec := httptest.NewRecorder()
 
-	// 创建站点处理器
-	siteHandler := handler.CreateSiteHandler(testSite, crawlerLogManager, monitor, "/tmp/static")
+	// 创建站点处理器，传递所有必要的参数
+	siteHandler := handler.CreateSiteHandler(testSite, crawlerLogManager, visitLogManager, monitor, "/tmp/static")
 
 	// 处理请求
 	siteHandler.ServeHTTP(rec, req)
