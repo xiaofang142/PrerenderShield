@@ -383,8 +383,21 @@ install_dependencies_linux() {
     # 验证Redis连接
     print_info "验证Redis连接..."
     if command -v redis-cli &> /dev/null; then
+        local redis_requires_auth=false
+        local redis_password=""
+        
+        # 尝试无密码连接
         if redis-cli ping 2>/dev/null | grep -q "PONG"; then
-            print_success "Redis连接正常"
+            print_success "Redis连接正常，无需密码"
+        elif redis-cli ping 2>/dev/null | grep -q "NOAUTH Authentication required"; then
+            print_info "Redis需要密码认证"
+            redis_requires_auth=true
+            # 尝试使用默认密码连接
+            if redis-cli -a "" ping 2>/dev/null | grep -q "PONG"; then
+                print_success "Redis使用空密码连接成功"
+            else
+                print_warning "Redis需要密码，但默认密码连接失败"
+            fi
         else
             print_warning "Redis未响应，可能需要手动检查"
         fi

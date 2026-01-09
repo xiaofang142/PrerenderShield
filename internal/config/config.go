@@ -5,10 +5,10 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/redis"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -270,9 +270,11 @@ type RouteRule struct {
 
 // CacheConfig 缓存配置
 type CacheConfig struct {
-	Type       string `yaml:"type"`
-	RedisURL   string `yaml:"redis_url"`
-	MemorySize int    `yaml:"memory_size"`
+	Type          string `yaml:"type"`
+	RedisURL      string `yaml:"redis_url"`
+	RedisPassword string `yaml:"redis_password"`
+	RedisDB       int    `yaml:"redis_db"`
+	MemorySize    int    `yaml:"memory_size"`
 }
 
 // StorageConfig 存储配置
@@ -519,7 +521,7 @@ func (cm *ConfigManager) SaveConfig() error {
 	// 但是 SaveSitesToRedis 的实现中已经加了锁，所以我们不能在这里调用它
 	// 我们需要提取保存逻辑或者在 SaveConfig 中直接操作
 	defer cm.mutex.Unlock()
-	
+
 	// 1. 保存到 Redis (如果可用)
 	if cm.redisClient != nil {
 		data, err := yaml.Marshal(cm.config.Sites)
@@ -539,7 +541,7 @@ func (cm *ConfigManager) SaveConfig() error {
 	if cm.configPath == "" {
 		return nil // 没有配置文件路径，无法保存到文件
 	}
-    // ... continues with file saving logic ...
+	// ... continues with file saving logic ...
 
 	// 验证配置
 	if err := cm.ValidateConfig(cm.config); err != nil {
@@ -873,9 +875,11 @@ func defaultConfig() *Config {
 			AdminStaticDir: "./web/dist", // 管理控制台静态文件目录
 		},
 		Cache: CacheConfig{
-			Type:       "memory",
-			RedisURL:   "localhost:6379",
-			MemorySize: 1000,
+			Type:          "memory",
+			RedisURL:      "localhost:6379",
+			RedisPassword: "",
+			RedisDB:       0,
+			MemorySize:    1000,
 		},
 		Storage: StorageConfig{
 			Type: "redis",
@@ -907,25 +911,25 @@ func loadFromEnv(cfg *Config) {
 
 	// 缓存配置
 	cfg.Cache.Type = getEnv("CACHE_TYPE", cfg.Cache.Type)
-	
+
 	// 支持细粒度的Redis环境变量
 	redisHost := getEnv("REDIS_HOST", "")
 	if redisHost != "" {
 		redisPort := getEnv("REDIS_PORT", "6379")
 		redisPassword := getEnv("REDIS_PASSWORD", "")
 		redisDB := getEnv("REDIS_DB", "0")
-		
+
 		authPart := ""
 		if redisPassword != "" {
 			authPart = fmt.Sprintf(":%s@", redisPassword)
 		}
-		
+
 		cfg.Cache.RedisURL = fmt.Sprintf("redis://%s%s:%s/%s", authPart, redisHost, redisPort, redisDB)
 	} else {
 		// 回退到 CACHE_REDIS_URL
 		cfg.Cache.RedisURL = getEnv("CACHE_REDIS_URL", cfg.Cache.RedisURL)
 	}
-	
+
 	cfg.Cache.MemorySize = getEnvAsInt("CACHE_MEMORY_SIZE", cfg.Cache.MemorySize)
 
 	// 存储配置

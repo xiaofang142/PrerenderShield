@@ -16,6 +16,12 @@ vendor/
 __pycache__/
 bin/
 
+# 各平台运行时目录
+bin/*/certs/
+bin/*/data/
+bin/*/static/
+bin/*/logs/
+
 # Go编译产生的文件
 *.o
 *.a

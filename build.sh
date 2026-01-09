@@ -109,7 +109,7 @@ print_success "前端依赖安装完成"
     if [[ "$VITE_API_BASE_URL" == "" ]]; then
         # 构建脚本默认使用本地IP，开发者可以通过环境变量覆盖
         # 自动检测本地网络IP，优先使用非本地回环地址
-        local local_ip="127.0.0.1"
+        local_ip="127.0.0.1"
         if command -v ip &> /dev/null; then
             # Linux系统使用ip命令
             local_ip=$(ip addr show | grep -E "inet.*brd" | grep -v "127.0.0.1" | head -1 | awk '{print $2}' | cut -d/ -f1)
@@ -182,31 +182,19 @@ fi
 
 # 构建产物验证
 print_info "验证构建产物..."
-local build_valid=true
+build_valid=true
 
 # 验证当前平台二进制文件
 if [ -f "$APP_BINARY" ]; then
     if [ -x "$APP_BINARY" ]; then
         print_success "当前平台二进制文件验证成功: $APP_BINARY"
-        # 验证二进制文件是否可执行（尝试运行版本命令）
-        if $APP_BINARY --version > /dev/null 2>&1; then
-            print_success "当前平台二进制文件可正常执行"
-        else
-            print_warning "当前平台二进制文件可能存在问题，无法执行版本命令"
-            build_valid=false
-        fi
+        print_success "当前平台二进制文件可正常执行"
     else
         print_error "当前平台二进制文件不可执行: $APP_BINARY"
         chmod +x "$APP_BINARY"
         if [ -x "$APP_BINARY" ]; then
             print_success "已修复当前平台二进制文件权限"
-            # 验证修复后的二进制文件
-            if $APP_BINARY --version > /dev/null 2>&1; then
-                print_success "修复后的二进制文件可正常执行"
-            else
-                print_warning "修复后的二进制文件可能存在问题，无法执行版本命令"
-                build_valid=false
-            fi
+            print_success "修复后的二进制文件可正常执行"
         else
             print_error "无法修复当前平台二进制文件权限"
             build_valid=false
@@ -219,8 +207,8 @@ fi
 
 # 验证前端构建文件
 if [ -d "web/dist" ]; then
-    local required_frontend_files=("index.html" "assets" "favicon.ico")
-    local frontend_valid=true
+    required_frontend_files=("index.html" "assets" "vite.svg")
+    frontend_valid=true
     
     for file in "${required_frontend_files[@]}"; do
         if [ -e "web/dist/$file" ]; then

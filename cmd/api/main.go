@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path"
@@ -64,7 +65,33 @@ func main() {
 
 	// 6. 初始化各模块
 	// 1. Redis客户端初始化
-	redisClient, err := redis.NewClient(cfg.Cache.RedisURL)
+	// 构建完整的Redis URL，包括密码和数据库索引
+	redisURL := cfg.Cache.RedisURL
+	if !strings.HasPrefix(redisURL, "redis://") {
+		// 如果不是URL格式，转换为URL格式
+		redisURL = "redis://" + redisURL
+	}
+
+	// 解析URL
+	parsedURL, err := url.Parse(redisURL)
+	if err != nil {
+		log.Fatalf("Failed to parse Redis URL: %v", err)
+	}
+
+	// 设置密码
+	if cfg.Cache.RedisPassword != "" {
+		parsedURL.User = url.UserPassword("", cfg.Cache.RedisPassword)
+	}
+
+	// 设置数据库索引
+	if cfg.Cache.RedisDB > 0 {
+		parsedURL.Path = fmt.Sprintf("/%d", cfg.Cache.RedisDB)
+	}
+
+	// 构建最终的Redis URL
+	finalRedisURL := parsedURL.String()
+
+	redisClient, err := redis.NewClient(finalRedisURL)
 	if err != nil {
 		log.Fatalf("Failed to initialize Redis client: %v", err)
 	}
@@ -116,10 +143,10 @@ func main() {
 	prerenderManager := prerender.NewEngineManager(cfg.Dirs.StaticDir)
 
 	// 5. 爬虫日志管理器
-	crawlerLogManager := logging.NewCrawlerLogManager(cfg.Cache.RedisURL)
+	crawlerLogManager := logging.NewCrawlerLogManager(finalRedisURL)
 
 	// 6. 访问日志管理器
-	visitLogManager := logging.NewVisitLogManager(cfg.Cache.RedisURL)
+	visitLogManager := logging.NewVisitLogManager(finalRedisURL)
 
 	// 6.1 GeoIP服务
 	geoIPService := services.NewGeoIPService("")
