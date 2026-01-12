@@ -42,26 +42,49 @@ detect_platform() {
     echo "$os $arch"
 }
 
-echo "========================================"
-echo -e "${BLUE}PrerenderShield 服务端构建脚本${NC}"
-echo "========================================"
+# 解析命令行参数，用于前端 API 主机设置
+parse_args() {
+    API_HOST=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --api-host)
+                API_HOST="$2"; shift 2 ;;
+            --api-host=*)
+                API_HOST="${1#*=}"; shift 1 ;;
+            *)
+                break
+        esac
+    done
+}
 
-# 检查Go环境
-if ! command -v go &> /dev/null; then
-    print_error "错误: 未安装Go环境，无法编译Go代码"
-    exit 1
-fi
+# 效验并生效 API_HOST
+apply_api_host() {
+    if [[ -n "$API_HOST" ]]; then
+        local host="$API_HOST"
+        if [[ "$host" != http://* && "$host" != https://* ]]; then
+            host="http://$host"
+        fi
+        # 确保包含 /api/v1 路径
+        if [[ "$host" == */api/v1* ]]; then
+            VITE_API_BASE_URL="$host"
+        else
+            # 未包含 API 路径，追加
+            VITE_API_BASE_URL="${host}/api/v1"
+        fi
+        export VITE_API_BASE_URL
+        # 写入前端生产环境变量，便于容器/离线部署
+        mkdir -p web
+        echo "VITE_API_BASE_URL=$VITE_API_BASE_URL" > web/.env.production
+        print_info "前端 VITE_API_BASE_URL 设置为: $VITE_API_BASE_URL"
+    else
+        # 使用现有环境变量优先级：环境变量优先于默认值
+        :
+    fi
+}
 
-print_info "Go环境版本: $(go version)"
-
-# 检查Node.js环境（用于构建前端）
-if ! command -v npm &> /dev/null; then
-    print_error "错误: 未安装Node.js环境，无法构建前端"
-    exit 1
-fi
-
-print_info "Node.js版本: $(node --version)"
-print_info "npm版本: $(npm --version)"
+# 获取当前脚本参数并应用
+parse_args "$@"
+apply_api_host "$API_HOST" 
 
 # 获取当前平台信息
 platform_info=$(detect_platform)
@@ -106,11 +129,10 @@ fi
 
 print_success "前端依赖安装完成"
 
-# 设置前端API地址
+# 使用环境变量提供的 VITE_API_BASE_URL，若未设置则使用默认
 if [[ -n "${VITE_API_BASE_URL:-}" ]]; then
-    print_info "使用环境变量提供的API地址: ${VITE_API_BASE_URL}"
+    print_info "使用前端 API 地址: ${VITE_API_BASE_URL}"
 else
-    # 使用默认地址以保持自动化友好
     VITE_API_BASE_URL="http://127.0.0.1:9598/api/v1"
     print_info "未设置 VITE_API_BASE_URL，使用默认地址: $VITE_API_BASE_URL"
 fi
