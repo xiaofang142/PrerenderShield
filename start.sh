@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # PrerenderShield 启动脚本
 
 APP_NAME="prerender-shield"
@@ -66,7 +68,7 @@ else
             info "使用当前目录下的二进制文件: $BINARY_PATH"
         else
             error "未找到二进制文件: $BINARY_PATH 或 ./api 或 $NEW_BINARY_PATH"
-            error "请先运行 ./build.sh 编译应用程序"
+            error "请先运行 ./build.sh 构建应用程序"
             exit 1
         fi
     else
@@ -74,7 +76,7 @@ else
     fi
 fi
 
-# 优先使用platform_dir/config/config.yml，然后使用bin/config/config.yml，最后使用configs/config.yml
+# 统一配置与数据路径
 if [ -f "${PLATFORM_DIR}/config/config.yml" ]; then
     CONFIG_FILE="${PLATFORM_DIR}/config/config.yml"
 elif [ -f "${SCRIPT_DIR}/bin/config/config.yml" ]; then
@@ -85,7 +87,6 @@ else
     CONFIG_FILE="${PLATFORM_DIR}/config/config.yml"
 fi
 
-# 使用platform_dir/data或bin/data作为数据目录
 if [ -d "${PLATFORM_DIR}/data" ]; then
     DATA_DIR="${PLATFORM_DIR}/data"
 elif [ -d "${SCRIPT_DIR}/bin/data" ]; then
@@ -162,8 +163,6 @@ status() {
         info "日志文件: $LOG_FILE"
         info "配置文件: $CONFIG_FILE"
         info "二进制文件: $BINARY_PATH"
-        
-        # 输出服务访问信息
         local local_ip=$(get_local_ip)
         info ""
         info "======================================="
@@ -186,37 +185,30 @@ detect_service_started() {
     local timeout=30
     local interval=2
     local count=0
-    
     info "正在检测服务 http://$ip:$port 是否启动..."
-    
     while [[ $count -lt $timeout ]]; do
         if curl -s --connect-timeout 1 http://$ip:$port > /dev/null 2>&1; then
             return 0 # 服务已启动
         fi
-        
         sleep $interval
         count=$((count + interval))
     done
-    
     return 1 # 服务未在指定时间内启动
 }
 
 # 执行服务健康检查
 service_health_check() {
     local ip=$1
-    
     echo ""
     info "执行服务健康检查..."
-    
-    # 检查API服务
+
     if curl -s http://$ip:9598/api/v1/health > /dev/null 2>&1; then
         info "✓ API服务健康检查通过"
     else
         warning "✗ API服务健康检查失败，可能服务尚未完全启动"
         warning "  请稍后使用以下命令检查服务状态: curl http://$ip:9598/api/v1/health"
     fi
-    
-    # 检查管理控制台
+
     if curl -s http://$ip:9597 > /dev/null 2>&1; then
         info "✓ 管理控制台健康检查通过"
     else
@@ -231,13 +223,12 @@ start() {
         return 0
     fi
 
-    # 检查二进制文件是否存在和可执行
     if [ ! -f "$BINARY_PATH" ]; then
         error "未找到二进制文件: $BINARY_PATH"
         error "请先运行 ./build.sh 编译应用程序"
         exit 1
     fi
-    
+
     if [ ! -x "$BINARY_PATH" ]; then
         warning "二进制文件不可执行，添加执行权限"
         chmod +x "$BINARY_PATH"
@@ -247,47 +238,33 @@ start() {
         fi
     fi
 
-    # 检查配置文件是否存在
     if [ ! -f "$CONFIG_FILE" ]; then
         error "配置文件不存在: $CONFIG_FILE"
         error "请先运行 ./install.sh 安装应用程序或检查配置文件路径"
         exit 1
     fi
 
-
-    # 直接启动应用程序
     info "启动$APP_NAME..."
     cd "$SCRIPT_DIR" && nohup "$BINARY_PATH" --config "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
     info "$APP_NAME 启动命令已执行，PID: $(cat "$PID_FILE")"
     info "日志文件: $LOG_FILE"
-    
-    # 获取本机IP地址
     local local_ip=$(get_local_ip)
-    
-    # 检测API服务是否真正启动
     local api_started=false
     local admin_started=false
-    
     if detect_service_started "$local_ip" "9598"; then
         info "API服务已成功启动"
         api_started=true
     else
         warning "API服务可能未成功启动，请检查日志: tail -f $LOG_FILE"
     fi
-    
-    # 检测管理控制台是否真正启动
     if detect_service_started "$local_ip" "9597"; then
         info "管理控制台已成功启动"
         admin_started=true
     else
         warning "管理控制台可能未成功启动，请检查日志: tail -f $LOG_FILE"
     fi
-    
-    # 执行服务健康检查
     service_health_check "$local_ip"
-    
-    # 只有当服务真正启动成功后才输出访问提示
     if $api_started && $admin_started; then
         echo ""
         info "========================================"
@@ -297,7 +274,6 @@ start() {
         info "API服务: http://$local_ip:9598"
         info "健康检查接口: http://$local_ip:9598/api/v1/health"
         info "======================================="
-        
         echo ""
         info "$APP_NAME 启动完成"
         info "访问管理控制台: http://$local_ip:9597"

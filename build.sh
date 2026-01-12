@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # PrerenderShield 服务端构建脚本
 
 # 彩色输出定义
@@ -105,28 +107,15 @@ fi
 print_success "前端依赖安装完成"
 
 # 设置前端API地址
-if [[ "$VITE_API_BASE_URL" == "" ]]; then
-    api_ip=""
-    # Check if IP is provided as command-line argument
-    if [[ -n "$1" ]]; then
-        api_ip="$1"
-        print_info "使用命令行提供的服务器IP地址: $api_ip"
-    else
-        echo -e "\n${BLUE}[i] 请配置前端API地址:${NC}"
-        while [[ -z "$api_ip" ]]; do
-            read -p "  请输入服务器IP地址: " api_ip
-            if [[ -z "$api_ip" ]]; then
-                print_error "IP地址不能为空，请重新输入"
-            fi
-        done
-        print_info "使用手动输入的服务器IP地址: $api_ip"
-    fi
-    export VITE_API_BASE_URL="http://$api_ip:9598/api/v1"
-    print_info "使用构建的API地址: $VITE_API_BASE_URL"
+if [[ -n "${VITE_API_BASE_URL:-}" ]]; then
+    print_info "使用环境变量提供的API地址: ${VITE_API_BASE_URL}"
 else
-    print_info "使用环境变量提供的API地址: $VITE_API_BASE_URL"
+    # 使用默认地址以保持自动化友好
+    VITE_API_BASE_URL="http://127.0.0.1:9598/api/v1"
+    print_info "未设置 VITE_API_BASE_URL，使用默认地址: $VITE_API_BASE_URL"
 fi
-print_info "设置前端API地址为: $VITE_API_BASE_URL"
+export VITE_API_BASE_URL
+print_info "前端API地址为: $VITE_API_BASE_URL"
 
 print_info "开始构建前端..."
 npm run build 
@@ -198,6 +187,6 @@ print_success "========================================"
 print_success "二进制文件: $BINARY_PATH"
 print_success "前端文件: $BIN_WEB_DIR"
 print_success ""
-print_success "接下来的操作:"
+print_success "接下来："
 print_success "1. 安装应用: ./install.sh"
 print_success "========================================"
