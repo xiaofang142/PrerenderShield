@@ -93,6 +93,38 @@ arch=$(echo $platform_info | cut -d' ' -f2)
 
 print_info "当前平台: $platform/$arch"
 
+# 资源优化：为 Node 前端构建配置内存上限，确保在低内存环境也能跑
+get_mem_mb() {
+  local mem_mb=1024
+  if [ "$(uname -s)" = "Darwin" ]; then
+    if command -v sysctl >/dev/null 2>&1; then
+      local mem_bytes=$(sysctl -n hw.memsize 2>/dev/null || echo 0)
+      if [ -n "$mem_bytes" ] && [ "$mem_bytes" -gt 0 ]; then
+        mem_mb=$((mem_bytes / 1024 / 1024))
+      fi
+    fi
+  else
+    if [ -f /proc/meminfo ]; then
+      local mem_kb=$(grep -i MemTotal /proc/meminfo | awk '{print $2}')
+      if [ -n "$mem_kb" ]; then
+        mem_mb=$((mem_kb / 1024))
+      fi
+    fi
+  fi
+  echo "$mem_mb"
+}
+
+MEM_MB=$(get_mem_mb)
+if (( MEM_MB < 1500 )); then
+  NODE_MAX_OLD_SPACE_SIZE=768
+else
+  NODE_MAX_OLD_SPACE_SIZE=1024
+fi
+export NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}"
+# 限制 npm 的并发请求数，降低并发带来的内存峰值
+export npm_config_maxsockets=8
+print_info "Node 内存限制: ${NODE_OPTIONS}，npm 最大并发套接字: ${npm_config_maxsockets}"
+
 # 配置Go模块镜像加速
 export GOPROXY=https://goproxy.cn,direct
 export GO111MODULE=on
@@ -116,7 +148,8 @@ cd web
 
 # 安装前端依赖
 print_info "安装前端依赖..."
-npm install --legacy-peer-deps
+npm config set maxsockets "$npm_config_maxsockets" || true
+npm install --legacy-peer-deps --silent
 if [ $? -ne 0 ]; then
     print_warning "前端依赖安装失败，尝试使用 --force 选项..."
     npm install --force
@@ -167,7 +200,7 @@ print_success "Go依赖安装完成"
 
 # 编译Go应用（仅当前平台）
 print_info "编译Go应用（仅当前平台）..."
-GOOS=$platform GOARCH=$arch go build -o "$BINARY_PATH" ./cmd/api
+GOOS=$platform GOARCH=$arch go build -ldflags "-s -w" -trimpath -o "$BINARY_PATH" ./cmd/api
 if [ $? -ne 0 ]; then
     print_error "Go应用编译失败"
     exit 1
