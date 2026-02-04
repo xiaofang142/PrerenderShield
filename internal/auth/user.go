@@ -64,7 +64,12 @@ func (m *UserManager) CreateUser(username, password string) (*User, error) {
 
 	// 直接保存用户到Redis
 	if m.redisClient != nil {
-		if err := m.redisClient.SaveUser(user.ID, user.Username, user.Password); err != nil {
+		userMap := map[string]interface{}{
+			"id":       user.ID,
+			"username": user.Username,
+			"password": user.Password,
+		}
+		if err := m.redisClient.SaveUser(user.ID, userMap); err != nil {
 			return nil, err
 		}
 	}

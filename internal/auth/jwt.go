@@ -78,7 +78,13 @@ func (m *JWTManager) GenerateToken(userID, username string) (string, error) {
 
 	// 如果Redis客户端可用，保存会话到Redis
 	if m.redisClient != nil {
-		err := m.redisClient.SaveSession(sessionID, userID, m.config.ExpireTime)
+		sessionData := map[string]interface{}{
+			"user_id": userID,
+			"username": username,
+			"session_id": sessionID,
+			"created_at": time.Now(),
+		}
+		err := m.redisClient.SaveSession(sessionID, sessionData, m.config.ExpireTime)
 		if err != nil {
 			return "", err
 		}

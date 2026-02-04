@@ -6,6 +6,25 @@ set -euo pipefail
 
 APP_NAME="prerender-shield"
 
+# 彩色输出
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# 打印彩色信息
+info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+warning() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
 # 获取脚本所在的根目录
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
 
@@ -97,25 +116,6 @@ fi
 
 PID_FILE="${DATA_DIR}/${APP_NAME}.pid"
 LOG_FILE="${DATA_DIR}/${APP_NAME}.log"
-
-# 彩色输出
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-# 打印彩色信息
-info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-warning() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
 
 # 获取本机IP地址，用于访问信息
 get_local_ip() {

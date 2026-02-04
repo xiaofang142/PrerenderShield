@@ -1,11 +1,14 @@
 # 使用官方Go镜像作为构建环境
-FROM golang:1.20-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # 设置工作目录
 WORKDIR /app
 
 # 复制go.mod和go.sum文件
 COPY go.mod go.sum ./
+
+# 设置Go模块代理
+ENV GOPROXY=https://goproxy.cn,direct
 
 # 下载依赖
 RUN go mod download
@@ -46,7 +49,7 @@ COPY --from=frontend-builder /app/web/dist ./web/dist
 COPY configs/config.example.yml ./config.example.yml
 
 # 复制启动脚本
-COPY docker-entrypoint.sh ./
+COPY docker/docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
 # 暴露端口

@@ -89,7 +89,15 @@ func (pm *PushManager) TriggerPush(siteID string) (string, error) {
 	}
 
 	// 保存任务到Redis
-	if err := pm.redisClient.SetPushTask(siteID, task); err != nil {
+	taskMap, err := json.Marshal(task)
+	if err != nil {
+		return "", err
+	}
+	var taskMapInterface map[string]interface{}
+	if err := json.Unmarshal(taskMap, &taskMapInterface); err != nil {
+		return "", err
+	}
+	if err := pm.redisClient.SetPushTask(siteID, taskMapInterface); err != nil {
 		return "", err
 	}
 
@@ -104,7 +112,12 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 	// 更新任务状态为running
 	task.Status = "running"
 	task.StartedAt = time.Now()
-	pm.redisClient.SetPushTask(task.SiteID, task)
+	
+	// 保存任务到Redis
+	taskMap, _ := json.Marshal(task)
+	var taskMapInterface map[string]interface{}
+	json.Unmarshal(taskMap, &taskMapInterface)
+	pm.redisClient.SetPushTask(task.SiteID, taskMapInterface)
 
 	// 获取站点的URL列表
 	allURLs, err := pm.redisClient.GetURLs(siteConfig.ID)
@@ -112,7 +125,12 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 		// 记录错误日志
 		task.Status = "failed"
 		task.CompletedAt = time.Now()
-		pm.redisClient.SetPushTask(task.SiteID, task)
+		
+		// 保存任务到Redis
+		taskMap, _ := json.Marshal(task)
+		var taskMapInterface map[string]interface{}
+		json.Unmarshal(taskMap, &taskMapInterface)
+		pm.redisClient.SetPushTask(task.SiteID, taskMapInterface)
 		return
 	}
 
@@ -139,7 +157,7 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 		var baiduUrlsToPush []string
 
 		// 计算百度本次推送的URL数量
-		baiduStart := pushOffset % len(allURLs)
+		baiduStart := int(pushOffset % int64(len(allURLs)))
 		baiduEnd := baiduStart + pushConfig.BaiduDailyLimit
 
 		// 如果超过URL总数，循环到开头
@@ -174,7 +192,7 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 		var bingUrlsToPush []string
 
 		// 计算必应本次推送的URL数量
-		bingStart := pushOffset % len(allURLs)
+		bingStart := int(pushOffset % int64(len(allURLs)))
 		bingEnd := bingStart + pushConfig.BingDailyLimit
 
 		// 如果超过URL总数，循环到开头
@@ -205,7 +223,7 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 
 	// 更新每日推送计数
 	if totalPushed > 0 {
-		pm.redisClient.IncrDailyPushCount(task.SiteID, totalPushed)
+		pm.redisClient.IncrDailyPushCountWithCount(task.SiteID, totalPushed)
 	}
 
 	// 更新推送进度和日期
@@ -220,8 +238,8 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 		minLimit = 100
 	}
 
-	newOffset := pushOffset + minLimit
-	if newOffset >= len(allURLs) {
+	newOffset := pushOffset + int64(minLimit)
+	if newOffset >= int64(len(allURLs)) {
 		newOffset = 0 // 推送完毕，重置偏移量
 	}
 
@@ -233,10 +251,15 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 	task.CompletedAt = time.Now()
 	task.SuccessCount = successCount
 	task.FailedCount = failedCount
-	pm.redisClient.SetPushTask(task.SiteID, task)
+	
+	// 保存任务到Redis
+	taskMap, _ = json.Marshal(task)
+	json.Unmarshal(taskMap, &taskMapInterface)
+	pm.redisClient.SetPushTask(task.SiteID, taskMapInterface)
 
 	// 更新站点统计
-	pm.redisClient.IncrPushStats(task.SiteID, successCount, failedCount)
+	pm.redisClient.IncrPushStats(task.SiteID, "success")
+	pm.redisClient.IncrPushStats(task.SiteID, "failed")
 }
 
 // buildFullURL 构建完整URL
@@ -378,7 +401,7 @@ func (pm *PushManager) logPushResult(siteID, siteName, url, route, searchEngine,
 	}
 
 	// 保存到Redis
-	pm.redisClient.AddPushLog(siteID, log)
+	pm.redisClient.AddPushLogStruct(siteID, log)
 }
 
 // GetPushStats 获取推送统计

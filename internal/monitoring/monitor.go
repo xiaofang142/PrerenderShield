@@ -1,6 +1,7 @@
 package monitoring
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -12,6 +13,8 @@ import (
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
+
+	"prerender-shield/internal/redis"
 )
 
 // Metrics 监控指标
@@ -79,25 +82,260 @@ var (
 
 // Monitor 监控管理器
 type Monitor struct {
-	isRunning bool
-	config    Config
-	wg        sync.WaitGroup
-	stopCh    chan struct{}
+	isRunning  bool
+	config     Config
+	redisClient *redis.Client
+	alerts     map[string]*AlertStatus // 告警状态
+	alertMutex sync.RWMutex
+	wg         sync.WaitGroup
+	stopCh     chan struct{}
+}
+
+// AlertStatus 告警状态
+type AlertStatus struct {
+	Rule        AlertRule
+	IsFiring    bool
+	FiredAt     time.Time
+	ResolvedAt  time.Time
+	LastChecked time.Time
+	Value       float64
 }
 
 // Config 监控配置
 type Config struct {
 	Enabled           bool
 	PrometheusAddress string
+	Alerting          AlertConfig
+}
+
+// AlertConfig 告警配置
+type AlertConfig struct {
+	Enabled        bool
+	AlertRules     []AlertRule
+	Notification   NotificationConfig
+}
+
+// AlertRule 告警规则
+type AlertRule struct {
+	ID          string
+	Name        string
+	Metric      string // 监控指标名称
+	Operator    string // 操作符: >, <, >=, <=, ==
+	Threshold   float64
+	Duration    time.Duration // 持续时间
+	Severity    string // 严重程度: info, warning, critical
+}
+
+// NotificationConfig 通知配置
+type NotificationConfig struct {
+	Email       EmailConfig
+	Webhook     WebhookConfig
+}
+
+// EmailConfig 邮件配置
+type EmailConfig struct {
+	Enabled     bool
+	SMTPHost    string
+	SMTPPort    int
+	Username    string
+	Password    string
+	From        string
+	To          []string
+}
+
+// WebhookConfig Webhook配置
+type WebhookConfig struct {
+	Enabled     bool
+	URL         string
+	Secret      string
 }
 
 // NewMonitor 创建新的监控管理器
 func NewMonitor(config Config) *Monitor {
 	return &Monitor{
-		isRunning: false,
-		config:    config,
-		stopCh:    make(chan struct{}),
+		isRunning:  false,
+		config:     config,
+		redisClient: nil,
+		alerts:     make(map[string]*AlertStatus),
+		stopCh:     make(chan struct{}),
 	}
+}
+
+// CheckAlerts 检查告警
+func (m *Monitor) CheckAlerts() {
+	if !m.config.Alerting.Enabled {
+		return
+	}
+
+	// 获取当前统计数据
+	stats := m.GetStats()
+
+	// 检查每个告警规则
+	for _, rule := range m.config.Alerting.AlertRules {
+		m.checkAlertRule(rule, stats)
+	}
+}
+
+// checkAlertRule 检查单个告警规则
+func (m *Monitor) checkAlertRule(rule AlertRule, stats map[string]interface{}) {
+	// 获取指标值
+	value, ok := stats[rule.Metric]
+	if !ok {
+		return
+	}
+
+	// 转换为float64
+	floatValue, ok := value.(float64)
+	if !ok {
+		return
+	}
+
+	// 检查是否触发告警
+	isFiring := false
+	switch rule.Operator {
+	case ">":
+		isFiring = floatValue > rule.Threshold
+	case "<":
+		isFiring = floatValue < rule.Threshold
+	case ">=":
+		isFiring = floatValue >= rule.Threshold
+	case "<=":
+		isFiring = floatValue <= rule.Threshold
+	case "==":
+		isFiring = floatValue == rule.Threshold
+	}
+
+	// 更新告警状态
+	m.alertMutex.Lock()
+	defer m.alertMutex.Unlock()
+
+	alertStatus, exists := m.alerts[rule.ID]
+	if !exists {
+		alertStatus = &AlertStatus{
+			Rule:        rule,
+			IsFiring:    false,
+			LastChecked: time.Now(),
+			Value:       floatValue,
+		}
+		m.alerts[rule.ID] = alertStatus
+	}
+
+	// 更新最后检查时间和值
+	alertStatus.LastChecked = time.Now()
+	alertStatus.Value = floatValue
+
+	// 处理告警状态变化
+	if isFiring && !alertStatus.IsFiring {
+		// 告警触发
+		alertStatus.IsFiring = true
+		alertStatus.FiredAt = time.Now()
+		m.sendAlertNotification(alertStatus, "firing")
+	} else if !isFiring && alertStatus.IsFiring {
+		// 告警恢复
+		alertStatus.IsFiring = false
+		alertStatus.ResolvedAt = time.Now()
+		m.sendAlertNotification(alertStatus, "resolved")
+	}
+}
+
+// sendAlertNotification 发送告警通知
+func (m *Monitor) sendAlertNotification(alert *AlertStatus, status string) {
+	// 发送邮件通知
+	if m.config.Alerting.Notification.Email.Enabled {
+		m.sendEmailNotification(alert, status)
+	}
+
+	// 发送Webhook通知
+	if m.config.Alerting.Notification.Webhook.Enabled {
+		m.sendWebhookNotification(alert, status)
+	}
+}
+
+// sendEmailNotification 发送邮件通知
+func (m *Monitor) sendEmailNotification(alert *AlertStatus, status string) {
+	// 邮件发送逻辑
+	// 这里只是一个示例，实际实现需要使用SMTP客户端
+	emailConfig := m.config.Alerting.Notification.Email
+	fmt.Printf("Sending email notification: %s - %s\n", alert.Rule.Name, status)
+	fmt.Printf("To: %v\n", emailConfig.To)
+	fmt.Printf("Subject: [%s] %s - %s\n", alert.Rule.Severity, alert.Rule.Name, status)
+	fmt.Printf("Message: Metric %s is %s threshold %.2f (current value: %.2f)\n", 
+		alert.Rule.Metric, alert.Rule.Operator, alert.Rule.Threshold, alert.Value)
+}
+
+// sendWebhookNotification 发送Webhook通知
+func (m *Monitor) sendWebhookNotification(alert *AlertStatus, status string) {
+	// Webhook发送逻辑
+	// 这里只是一个示例，实际实现需要使用HTTP客户端
+	webhookConfig := m.config.Alerting.Notification.Webhook
+	fmt.Printf("Sending webhook notification: %s - %s\n", alert.Rule.Name, status)
+	fmt.Printf("URL: %s\n", webhookConfig.URL)
+	fmt.Printf("Payload: {\"rule\": \"%s\", \"status\": \"%s\", \"severity\": \"%s\", \"value\": %.2f, \"threshold\": %.2f}\n", 
+		alert.Rule.Name, status, alert.Rule.Severity, alert.Value, alert.Rule.Threshold)
+}
+
+// SetRedisClient 设置Redis客户端
+func (m *Monitor) SetRedisClient(client *redis.Client) {
+	m.redisClient = client
+}
+
+// SaveMetricsToRedis 保存监控指标到Redis
+func (m *Monitor) SaveMetricsToRedis() error {
+	if m.redisClient == nil {
+		return fmt.Errorf("redis client is not set")
+	}
+
+	// 获取当前统计数据
+	stats := m.GetStats()
+
+	// 序列化统计数据
+	statsJSON, err := json.Marshal(stats)
+	if err != nil {
+		return err
+	}
+
+	// 保存到Redis，使用时间戳作为键的一部分
+	timestamp := time.Now().Unix()
+	key := fmt.Sprintf("prerender:metrics:%d", timestamp)
+
+	// 使用Redis的SET命令保存数据，设置过期时间为24小时
+	err = m.redisClient.Set(key, string(statsJSON), 24*time.Hour)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetMetricsFromRedis 从Redis获取监控指标
+func (m *Monitor) GetMetricsFromRedis(startTime, endTime int64) ([]map[string]interface{}, error) {
+	if m.redisClient == nil {
+		return nil, fmt.Errorf("redis client is not set")
+	}
+
+	// 获取所有指标键
+	keys, err := m.redisClient.Keys("prerender:metrics:*")
+	if err != nil {
+		return nil, err
+	}
+
+	// 从Redis中获取每个键对应的数据
+	metrics := make([]map[string]interface{}, 0, len(keys))
+	for _, key := range keys {
+		data, err := m.redisClient.Get(key)
+		if err != nil || data == "" {
+			continue
+		}
+
+		var stat map[string]interface{}
+		if err := json.Unmarshal([]byte(data), &stat); err != nil {
+			continue
+		}
+
+		metrics = append(metrics, stat)
+	}
+
+	return metrics, nil
 }
 
 // Start 启动监控服务
@@ -131,6 +369,49 @@ func (m *Monitor) Start() error {
 		}
 		http.ListenAndServe(addr, nil)
 	}()
+
+	// 启动定时任务，定期保存监控数据到Redis
+	if m.redisClient != nil {
+		go func() {
+			m.wg.Add(1)
+			defer m.wg.Done()
+
+			ticker := time.NewTicker(5 * time.Minute)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ticker.C:
+					err := m.SaveMetricsToRedis()
+					if err != nil {
+						fmt.Printf("Failed to save metrics to Redis: %v\n", err)
+					}
+				case <-m.stopCh:
+					return
+				}
+			}
+		}()
+	}
+
+	// 启动定时任务，定期检查告警
+	if m.config.Alerting.Enabled {
+		go func() {
+			m.wg.Add(1)
+			defer m.wg.Done()
+
+			ticker := time.NewTicker(1 * time.Minute)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ticker.C:
+					m.CheckAlerts()
+				case <-m.stopCh:
+					return
+				}
+			}
+		}()
+	}
 
 	m.isRunning = true
 	return nil

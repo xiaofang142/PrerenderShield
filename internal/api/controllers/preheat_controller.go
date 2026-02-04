@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -115,19 +116,13 @@ func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 			totalCacheSize := int64(0)
 			browserPoolSize := int64(0)
 
-			// 从引擎获取浏览器池大小，使用站点ID作为siteName
-			engine, exists := c.prerenderManager.GetEngine(site.ID)
-			if exists {
-				browserPoolSize = int64(engine.GetConfig().PoolSize)
-			}
-
 			// 检查Redis客户端是否可用
 			if c.redisClient != nil {
 				// 从Redis获取URL总数，使用站点ID作为siteName
 				urlCount, _ = c.redisClient.GetURLCount(site.ID)
 
 				// 从Redis获取缓存数
-				cacheCount, _ = c.redisClient.GetCacheCount(site.ID)
+				cacheCount, _ = c.redisClient.GetCacheCount()
 
 				// 直接计算总缓存大小
 				totalCacheSize = cacheCount * 1024 * 1024 // 假设平均每个缓存1MB
@@ -176,19 +171,13 @@ func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 	totalCacheSize := int64(0)
 	browserPoolSize := int64(0)
 
-	// 从引擎获取浏览器池大小，使用站点ID作为siteName
-	engine, exists := c.prerenderManager.GetEngine(siteId)
-	if exists {
-		browserPoolSize = int64(engine.GetConfig().PoolSize)
-	}
-
 	// 检查Redis客户端是否可用
 	if c.redisClient != nil {
 		// 从Redis获取URL总数，使用站点ID作为siteName
 		urlCount, _ = c.redisClient.GetURLCount(siteId)
 
 		// 从Redis获取缓存数
-		cacheCount, _ = c.redisClient.GetCacheCount(siteId)
+		cacheCount, _ = c.redisClient.GetCacheCount()
 
 		// 直接计算总缓存大小
 		totalCacheSize = cacheCount * 1024 * 1024 // 假设平均每个缓存1MB
@@ -250,51 +239,28 @@ func (c *PreheatController) TriggerPreheat(ctx *gin.Context) {
 		return
 	}
 
-	// 构建正确的baseURL和Domain
-	var baseURL, domain string
-	switch siteConfig.Mode {
-	case "proxy":
-		// 代理模式下，使用代理的目标URL
-		baseURL = siteConfig.Proxy.TargetURL
-		domain = siteConfig.Proxy.TargetURL
-	case "redirect":
-		// 重定向模式下，使用重定向的目标URL
-		baseURL = siteConfig.Redirect.TargetURL
-		domain = siteConfig.Redirect.TargetURL
-	default:
-		// 静态模式下，使用站点的域名和端口
-		if len(siteConfig.Domains) > 0 {
-			domain = fmt.Sprintf("%s:%d", siteConfig.Domains[0], siteConfig.Port)
-			baseURL = fmt.Sprintf("http://%s", domain)
-		} else {
-			// 默认使用localhost
-			domain = fmt.Sprintf("localhost:%d", siteConfig.Port)
-			baseURL = fmt.Sprintf("http://%s", domain)
-		}
-	}
-
-	// 调用引擎的触发预热方法，传递正确的baseURL和Domain
-	_, err := engine.TriggerPreheatWithURL(baseURL, domain)
-	if err != nil {
-		// 检查错误类型，返回更友好的错误信息
-		if strings.Contains(err.Error(), "preheat is already running") {
-			ctx.JSON(http.StatusConflict, gin.H{
-				"code":    http.StatusConflict,
-				"message": "预热任务已在运行中，请稍后再试",
-			})
-		} else if strings.Contains(err.Error(), "redis client is not available") {
-			ctx.JSON(http.StatusServiceUnavailable, gin.H{
-				"code":    http.StatusServiceUnavailable,
-				"message": "Redis服务不可用，无法触发预热",
-			})
-		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{
-				"code":    http.StatusInternalServerError,
-				"message": fmt.Sprintf("触发预热失败: %v", err),
-			})
-		}
+	// 从Redis获取站点的URL列表
+	urls, err := c.redisClient.GetURLs(req.SiteId)
+	if err != nil || len(urls) == 0 {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "无法获取站点URL列表，无法触发预热",
+		})
 		return
 	}
+
+	// 调用引擎的创建预热任务方法
+	taskID, err := engine.CreatePreheatTask(req.SiteId, urls)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": fmt.Sprintf("触发预热失败: %v", err),
+		})
+		return
+	}
+
+	// 存储当前预热任务ID
+	c.redisClient.Set(fmt.Sprintf("site:%s:preheat:current_task", req.SiteId), taskID, 24*time.Hour)
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -399,9 +365,9 @@ func (c *PreheatController) GetPreheatUrls(ctx *gin.Context) {
 		var updatedAt string
 		if c.redisClient != nil {
 			// 使用站点ID作为siteName，路由作为URL
-			urlStatus, err := c.redisClient.GetURLPreheatStatus(siteId, route)
-			if err == nil {
-				updatedAt = urlStatus["updated_at"]
+			status, err := c.redisClient.GetURLPreheatStatus(siteId, route)
+			if err == nil && status != "" {
+				updatedAt = time.Now().Format(time.RFC3339)
 			}
 		}
 
@@ -446,25 +412,18 @@ func (c *PreheatController) GetPreheatTaskStatus(ctx *gin.Context) {
 		return
 	}
 
-	// 获取站点的预渲染引擎
-	engine, exists := c.prerenderManager.GetEngine(siteId)
-	if !exists {
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"code":    http.StatusNotFound,
-			"message": fmt.Sprintf("Site with ID '%s' not found", siteId),
-		})
-		return
+	// 从Redis获取预热运行状态
+	isRunning, err := c.redisClient.IsPreheatRunning(siteId)
+	if err != nil {
+		isRunning = false
 	}
-
-	// 获取预热状态
-	status := engine.GetPreheatStatus()
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
 		"data": gin.H{
 			"siteId":    siteId,
-			"isRunning": status["isRunning"],
+			"isRunning": isRunning,
 			"scheduled": false,
 			"nextRun":   "",
 		},
@@ -533,7 +492,7 @@ func (c *PreheatController) ClearCache(ctx *gin.Context) {
 	}
 
 	// 调用Redis客户端的ClearCache方法清除缓存
-	clearedCount, err := c.redisClient.ClearCache(req.SiteId)
+	err := c.redisClient.ClearCache()
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
@@ -546,7 +505,7 @@ func (c *PreheatController) ClearCache(ctx *gin.Context) {
 		"code":    200,
 		"message": "缓存清除成功",
 		"data": gin.H{
-			"clearedCount": clearedCount,
+			"clearedCount": 0,
 		},
 	})
 }

@@ -27,7 +27,7 @@ func TestConfigAndRedisIntegration(t *testing.T) {
 	assert.NotNil(t, cfg)
 
 	// 测试Redis客户端连接
-	redisClient, err := redis.NewClient(cfg.Cache.RedisURL)
+	redisClient, err := redis.NewClientWithURL(cfg.Cache.RedisURL)
 	assert.NoError(t, err)
 	assert.NotNil(t, redisClient)
 

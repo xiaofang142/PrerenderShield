@@ -63,6 +63,7 @@ func TestValidateConfig(t *testing.T) {
 				ID:      "test-site",
 				Name:    "Test Site",
 				Domains: []string{"example.com"},
+				Port:    8080,
 				Mode:    "static",
 			},
 		},

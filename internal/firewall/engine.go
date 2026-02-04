@@ -1,6 +1,8 @@
 package firewall
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -45,7 +47,14 @@ type ActionHandler interface {
 
 // RuleManager 规则管理器
 type RuleManager struct {
-	rules map[string][]types.Rule
+	rules            map[string][]types.Rule
+	rulesPath        string
+	autoUpdate       bool
+	updateInterval   time.Duration
+	remoteRuleSource string
+	redisClient      *redis.Client
+	stopChan         chan struct{}
+	updateMutex      sync.Mutex
 }
 
 // GetRulesByCategory 根据分类获取规则
@@ -55,15 +64,190 @@ func (rm *RuleManager) GetRulesByCategory(category string) []types.Rule {
 
 // ReloadRules 重新加载规则
 func (rm *RuleManager) ReloadRules() error {
-	// 实现规则重新加载逻辑
+	rm.updateMutex.Lock()
+	defer rm.updateMutex.Unlock()
+
+	// 首先尝试从远程源获取规则
+	if rm.remoteRuleSource != "" {
+		rules, err := rm.fetchRulesFromRemote()
+		if err == nil && len(rules) > 0 {
+			rm.rules = rules
+			// 保存规则到Redis，便于快速加载
+			rm.saveRulesToRedis(rules)
+			return nil
+		}
+	}
+
+	// 尝试从Redis加载规则
+	if rm.redisClient != nil {
+		rules, err := rm.loadRulesFromRedis()
+		if err == nil && len(rules) > 0 {
+			rm.rules = rules
+			return nil
+		}
+	}
+
+	// 从本地文件加载规则
+	if rm.rulesPath != "" {
+		rules, err := rm.loadRulesFromFile()
+		if err == nil && len(rules) > 0 {
+			rm.rules = rules
+			return nil
+		}
+	}
+
+	// 使用默认规则
+	rm.rules = rm.getDefaultRules()
 	return nil
 }
 
-// NewRuleManager 创建新的规则管理器
-func NewRuleManager() *RuleManager {
-	return &RuleManager{
-		rules: make(map[string][]types.Rule),
+// startAutoUpdate 启动自动更新任务
+func (rm *RuleManager) startAutoUpdate() {
+	ticker := time.NewTicker(rm.updateInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			err := rm.ReloadRules()
+			if err != nil {
+				// 记录错误
+				fmt.Printf("Failed to update rules: %v\n", err)
+			}
+		case <-rm.stopChan:
+			return
+		}
 	}
+}
+
+// StopAutoUpdate 停止自动更新任务
+func (rm *RuleManager) StopAutoUpdate() {
+	close(rm.stopChan)
+}
+
+// fetchRulesFromRemote 从远程源获取规则
+func (rm *RuleManager) fetchRulesFromRemote() (map[string][]types.Rule, error) {
+	// 这里实现从远程源获取规则的逻辑
+	// 例如从API接口获取规则
+	// 暂时返回空，实际实现需要根据具体的远程源格式进行调整
+	return nil, fmt.Errorf("remote rule source not implemented")
+}
+
+// saveRulesToRedis 保存规则到Redis
+func (rm *RuleManager) saveRulesToRedis(rules map[string][]types.Rule) error {
+	if rm.redisClient == nil {
+		return fmt.Errorf("redis client not set")
+	}
+
+	// 序列化规则
+	rulesJSON, err := json.Marshal(rules)
+	if err != nil {
+		return err
+	}
+
+	// 保存到Redis，设置过期时间为7天
+	key := "prerender:firewall:rules"
+	err = rm.redisClient.Set(rm.redisClient.Context(), key, rulesJSON, 7*24*time.Hour).Err()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// loadRulesFromRedis 从Redis加载规则
+func (rm *RuleManager) loadRulesFromRedis() (map[string][]types.Rule, error) {
+	if rm.redisClient == nil {
+		return nil, fmt.Errorf("redis client not set")
+	}
+
+	// 从Redis获取规则
+	key := "prerender:firewall:rules"
+	rulesJSON, err := rm.redisClient.Get(rm.redisClient.Context(), key).Bytes()
+	if err != nil {
+		return nil, err
+	}
+
+	// 反序列化规则
+	var rules map[string][]types.Rule
+	err = json.Unmarshal(rulesJSON, &rules)
+	if err != nil {
+		return nil, err
+	}
+
+	return rules, nil
+}
+
+// loadRulesFromFile 从文件加载规则
+func (rm *RuleManager) loadRulesFromFile() (map[string][]types.Rule, error) {
+	// 这里实现从文件加载规则的逻辑
+	// 例如从JSON、YAML文件加载规则
+	// 暂时返回默认规则
+	return rm.getDefaultRules(), nil
+}
+
+// getDefaultRules 获取默认规则
+func (rm *RuleManager) getDefaultRules() map[string][]types.Rule {
+	rules := make(map[string][]types.Rule)
+
+	// 初始化默认规则
+	defaultRules := []types.Rule{
+		{
+			ID:       "rule-1",
+			Name:     "SQL Injection Detection",
+			Category: "injection",
+			Pattern:  "(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)\\s+.*\\s*(FROM|INTO|TABLE|DATABASE)",
+			Severity: "high",
+		},
+		{
+			ID:       "rule-2",
+			Name:     "XSS Detection",
+			Category: "xss",
+			Pattern:  "(?i)<script[^>]*>.*</script>",
+			Severity: "high",
+		},
+		{
+			ID:       "rule-3",
+			Name:     "CSRF Detection",
+			Category: "csrf",
+			Pattern:  "(?i)csrf_token=.*",
+			Severity: "medium",
+		},
+	}
+
+	// 按分类组织规则
+	for _, rule := range defaultRules {
+		rules[rule.Category] = append(rules[rule.Category], rule)
+	}
+
+	return rules
+}
+
+// NewRuleManager 创建新的规则管理器
+func NewRuleManager(rulesPath string, autoUpdate bool, updateInterval time.Duration, remoteRuleSource string, redisClient *redis.Client) *RuleManager {
+	if updateInterval <= 0 {
+		updateInterval = 24 * time.Hour // 默认24小时更新一次
+	}
+
+	rm := &RuleManager{
+		rules:            make(map[string][]types.Rule),
+		rulesPath:        rulesPath,
+		autoUpdate:       autoUpdate,
+		updateInterval:   updateInterval,
+		remoteRuleSource: remoteRuleSource,
+		redisClient:      redisClient,
+		stopChan:         make(chan struct{}),
+	}
+
+	// 初始化加载规则
+	rm.ReloadRules()
+
+	// 启动自动更新任务
+	if autoUpdate {
+		go rm.startAutoUpdate()
+	}
+
+	return rm
 }
 
 // Logger 日志接口
@@ -164,8 +348,14 @@ func (em *EngineManager) ListSites() []string {
 
 // NewEngine 创建新的防火墙引擎
 func NewEngine(siteName string, config Config) (*Engine, error) {
-	// 创建规则管理器
-	ruleManager := NewRuleManager()
+	// 创建规则管理器，启用自动更新
+	ruleManager := NewRuleManager(
+		config.RulesPath,
+		true,               // 启用自动更新
+		24*time.Hour,       // 24小时更新一次
+		"",                 // 远程规则源，暂时为空
+		config.RedisClient, // Redis客户端
+	)
 
 	// 设置默认缓存TTL为60秒
 	cacheTTL := 60 * time.Second
@@ -194,9 +384,22 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 	e.owaspDetectors["sensitive-data"] = detectors.NewSensitiveDataDetector(ruleManager)
 
 	// 初始化核心检测器
-	e.coreDetectors = append(e.coreDetectors, detectors.NewGeoIPDetector(config.GeoIPConfig))
-	e.coreDetectors = append(e.coreDetectors, detectors.NewRateLimitDetector(config.RateLimitConfig))
-	e.coreDetectors = append(e.coreDetectors, detectors.NewFileIntegrityDetector(config.StaticDir, config.FileIntegrityConfig))
+	// 检查GeoIP配置是否为nil
+	if config.GeoIPConfig != nil {
+		e.coreDetectors = append(e.coreDetectors, detectors.NewGeoIPDetector(config.GeoIPConfig))
+	}
+
+	// 检查RateLimit配置是否为nil
+	if config.RateLimitConfig != nil {
+		e.coreDetectors = append(e.coreDetectors, detectors.NewRateLimitDetector(config.RateLimitConfig))
+	}
+
+	// 检查FileIntegrity配置是否为nil
+	if config.FileIntegrityConfig != nil {
+		e.coreDetectors = append(e.coreDetectors, detectors.NewFileIntegrityDetector(config.StaticDir, config.FileIntegrityConfig))
+	}
+
+	// 初始化黑名单检测器
 	e.coreDetectors = append(e.coreDetectors, detectors.NewBlacklistDetector(config.RedisClient, siteName, config.Blacklist, config.Whitelist))
 
 	// 启动缓存清理协程
@@ -386,13 +589,40 @@ func (e *Engine) cleanCacheLoop() {
 
 // cleanExpiredCache 清理过期缓存
 func (e *Engine) cleanExpiredCache() {
-	e.cacheMutex.Lock()
-	defer e.cacheMutex.Unlock()
+	// 改进的缓存清理策略，使用批量清理方式，减少锁持有时间
+	const batchSize = 100 // 每次清理的批次大小
 
-	now := time.Now()
-	for key, result := range e.requestCache {
-		if now.Sub(result.CreatedAt) > e.cacheTTL {
-			delete(e.requestCache, key)
+	// 先获取需要清理的键列表，减少锁持有时间
+	var expiredKeys []string
+	{
+		e.cacheMutex.RLock()
+		now := time.Now()
+		count := 0
+		for key, result := range e.requestCache {
+			if now.Sub(result.CreatedAt) > e.cacheTTL {
+				expiredKeys = append(expiredKeys, key)
+				count++
+				// 限制批次大小，避免一次性处理过多
+				if count >= batchSize {
+					break
+				}
+			}
 		}
+		e.cacheMutex.RUnlock()
+	}
+
+	// 如果有过期键需要清理
+	if len(expiredKeys) > 0 {
+		e.cacheMutex.Lock()
+		now := time.Now()
+		for _, key := range expiredKeys {
+			// 再次检查是否过期，避免在获取键列表和清理之间发生变化
+			if result, exists := e.requestCache[key]; exists {
+				if now.Sub(result.CreatedAt) > e.cacheTTL {
+					delete(e.requestCache, key)
+				}
+			}
+		}
+		e.cacheMutex.Unlock()
 	}
 }

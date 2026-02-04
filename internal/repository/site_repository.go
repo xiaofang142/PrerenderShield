@@ -1,91 +1,200 @@
 package repository
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
-	"prerender-shield/internal/models"
-	redisPkg "prerender-shield/internal/redis"
-
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+
+	"prerender-shield/internal/models"
+	"prerender-shield/internal/redis"
 )
 
-type SiteRepository struct {
-	client *redisPkg.Client
+// SiteRepository 站点存储库接口
+type SiteRepository interface {
+	Create(site *models.Site) error
+	Get(id string) (*models.Site, error)
+	Update(site *models.Site) error
+	Delete(id string) error
+	List() ([]*models.Site, error)
+	GetByDomain(domain string) (*models.Site, error)
 }
 
-func NewSiteRepository(client *redisPkg.Client) *SiteRepository {
-	return &SiteRepository{
-		client: client,
+// siteRepository 站点存储库实现
+type siteRepository struct {
+	redisClient *redis.Client
+}
+
+// NewSiteRepository 创建新的站点存储库
+func NewSiteRepository(redisClient *redis.Client) SiteRepository {
+	return &siteRepository{
+		redisClient: redisClient,
 	}
 }
 
-func (r *SiteRepository) GetSiteByID(id string) (*models.Site, error) {
-	ctx := r.client.Context()
-	key := fmt.Sprintf("site:%s", id)
-
-	data, err := r.client.GetRawClient().Get(ctx, key).Result()
-	if err == redis.Nil {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	var site models.Site
-	if err := json.Unmarshal([]byte(data), &site); err != nil {
-		return nil, err
-	}
-
-	return &site, nil
-}
-
-func (r *SiteRepository) CreateSite(site *models.Site) error {
+// Create 创建新站点
+func (r *siteRepository) Create(site *models.Site) error {
 	if site.ID == "" {
 		site.ID = uuid.New().String()
 	}
+
 	now := time.Now()
 	if site.CreatedAt.IsZero() {
 		site.CreatedAt = now
 	}
 	site.UpdatedAt = now
 
-	return r.saveSite(site)
+	// 存储站点基本信息
+	siteKey := fmt.Sprintf("site:%s", site.ID)
+	siteData := map[string]interface{}{
+		"id":         site.ID,
+		"domain":     site.Domain,
+		"name":       site.Name,
+		"enabled":    site.Enabled,
+		"created_at": site.CreatedAt.Unix(),
+		"updated_at": site.UpdatedAt.Unix(),
+	}
+
+	if err := r.redisClient.HashSetAll(siteKey, siteData); err != nil {
+		return fmt.Errorf("failed to save site: %w", err)
+	}
+
+	// 存储域名到站点ID的映射
+	domainKey := fmt.Sprintf("domain:%s", site.Domain)
+	if err := r.redisClient.Set(domainKey, site.ID, 0); err != nil {
+		return fmt.Errorf("failed to save domain mapping: %w", err)
+	}
+
+	// 将站点ID添加到站点列表
+	if err := r.redisClient.SetAdd("sites", site.ID); err != nil {
+		return fmt.Errorf("failed to add site to list: %w", err)
+	}
+
+	return nil
 }
 
-func (r *SiteRepository) UpdateSite(site *models.Site) error {
+// Get 获取站点信息
+func (r *siteRepository) Get(id string) (*models.Site, error) {
+	siteKey := fmt.Sprintf("site:%s", id)
+	siteData, err := r.redisClient.HashGetAll(siteKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get site: %w", err)
+	}
+
+	if len(siteData) == 0 {
+		return nil, nil
+	}
+
+	site := &models.Site{
+		ID:        siteData["id"],
+		Domain:    siteData["domain"],
+		Name:      siteData["name"],
+		Enabled:   siteData["enabled"] == "1",
+		CreatedAt: time.Unix(parseInt64(siteData["created_at"]), 0),
+		UpdatedAt: time.Unix(parseInt64(siteData["updated_at"]), 0),
+	}
+
+	return site, nil
+}
+
+// Update 更新站点信息
+func (r *siteRepository) Update(site *models.Site) error {
 	site.UpdatedAt = time.Now()
-	return r.saveSite(site)
+
+	siteKey := fmt.Sprintf("site:%s", site.ID)
+	siteData := map[string]interface{}{
+		"domain":     site.Domain,
+		"name":       site.Name,
+		"enabled":    site.Enabled,
+		"updated_at": site.UpdatedAt.Unix(),
+	}
+
+	if err := r.redisClient.HashSetAll(siteKey, siteData); err != nil {
+		return fmt.Errorf("failed to update site: %w", err)
+	}
+
+	// 更新域名到站点ID的映射
+	domainKey := fmt.Sprintf("domain:%s", site.Domain)
+	if err := r.redisClient.Set(domainKey, site.ID, 0); err != nil {
+		return fmt.Errorf("failed to update domain mapping: %w", err)
+	}
+
+	return nil
 }
 
-func (r *SiteRepository) saveSite(site *models.Site) error {
-	ctx := r.client.Context()
-	key := fmt.Sprintf("site:%s", site.ID)
-
-	data, err := json.Marshal(site)
+// Delete 删除站点
+func (r *siteRepository) Delete(id string) error {
+	// 获取站点信息以删除域名映射
+	site, err := r.Get(id)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get site: %w", err)
 	}
 
-	return r.client.GetRawClient().Set(ctx, key, data, 0).Err()
+	if site != nil {
+		// 删除域名到站点ID的映射
+		domainKey := fmt.Sprintf("domain:%s", site.Domain)
+		if err := r.redisClient.Del(domainKey); err != nil {
+			return fmt.Errorf("failed to delete domain mapping: %w", err)
+		}
+	}
+
+	// 从站点列表中移除
+	if err := r.redisClient.Del(fmt.Sprintf("site:%s", id)); err != nil {
+		return fmt.Errorf("failed to delete site: %w", err)
+	}
+
+	// 从站点集合中移除
+	if err := r.redisClient.SetRemove("sites", id); err != nil {
+		return fmt.Errorf("failed to remove site from list: %w", err)
+	}
+
+	// 删除站点相关数据
+	if err := r.redisClient.DeleteSiteData(id); err != nil {
+		return fmt.Errorf("failed to delete site data: %w", err)
+	}
+
+	return nil
 }
 
-// SyncSite ensures the site exists in the database (upsert)
-func (r *SiteRepository) SyncSite(site *models.Site) error {
-	existing, err := r.GetSiteByID(site.ID)
+// List 获取所有站点
+func (r *siteRepository) List() ([]*models.Site, error) {
+	siteIDs, err := r.redisClient.SetMembers("sites")
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to get site list: %w", err)
 	}
 
-	if existing == nil {
-		return r.CreateSite(site)
+	sites := make([]*models.Site, 0, len(siteIDs))
+	for _, id := range siteIDs {
+		site, err := r.Get(id)
+		if err != nil {
+			continue
+		}
+		if site != nil {
+			sites = append(sites, site)
+		}
 	}
 
-	// Update fields
-	existing.Name = site.Name
-	existing.Domain = site.Domain
-	existing.UpdatedAt = time.Now()
+	return sites, nil
+}
 
-	return r.saveSite(existing)
+// GetByDomain 根据域名获取站点
+func (r *siteRepository) GetByDomain(domain string) (*models.Site, error) {
+	domainKey := fmt.Sprintf("domain:%s", domain)
+	siteID, err := r.redisClient.Get(domainKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get site ID by domain: %w", err)
+	}
+
+	if siteID == "" {
+		return nil, nil
+	}
+
+	return r.Get(siteID)
+}
+
+// parseInt64 将字符串转换为int64
+func parseInt64(s string) int64 {
+	var i int64
+	fmt.Sscanf(s, "%d", &i)
+	return i
 }

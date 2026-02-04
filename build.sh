@@ -116,9 +116,9 @@ get_mem_mb() {
 
 MEM_MB=$(get_mem_mb)
 if (( MEM_MB < 1500 )); then
-  NODE_MAX_OLD_SPACE_SIZE=768
+  NODE_MAX_OLD_SPACE_SIZE=1536
 else
-  NODE_MAX_OLD_SPACE_SIZE=1024
+  NODE_MAX_OLD_SPACE_SIZE=2048
 fi
 export NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}"
 # 限制 npm 的并发请求数，降低并发带来的内存峰值

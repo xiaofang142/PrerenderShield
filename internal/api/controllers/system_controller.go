@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	"runtime"
 	appConfig "prerender-shield/internal/config"
 	"prerender-shield/internal/redis"
 	"time"
@@ -36,6 +37,13 @@ func (c *SystemController) Health(ctx *gin.Context) {
 		}
 	}
 
+	// 检查系统资源使用情况
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	
+	// 获取goroutine数量
+	goroutines := runtime.NumGoroutine()
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
@@ -44,6 +52,13 @@ func (c *SystemController) Health(ctx *gin.Context) {
 			"service":      "prerender-shield",
 			"redis_status": redisStatus,
 			"timestamp":    time.Now().Unix(),
+			"health_details": gin.H{
+				"memory_allocated":    m.Alloc,
+				"memory_total_alloc":  m.TotalAlloc,
+				"memory_sys":          m.Sys,
+				"num_goroutines":      goroutines,
+				"gc_cycles":           m.NumGC,
+			},
 		},
 	})
 }

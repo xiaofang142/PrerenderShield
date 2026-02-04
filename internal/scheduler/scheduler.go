@@ -210,14 +210,24 @@ func (s *Scheduler) executePreheat(siteName string) {
 		return
 	}
 	
-	// 简化实现：直接调用引擎的TriggerPreheat方法
-	_, err := engine.TriggerPreheat()
+	// 从Redis获取站点的URL列表
+	urls, err := s.redisClient.GetURLs(siteName)
+	if err != nil || len(urls) == 0 {
+		fmt.Printf("Failed to get URLs for site %s: %v\n", siteName, err)
+		return
+	}
+	
+	// 调用引擎的创建预热任务方法
+	taskID, err := engine.CreatePreheatTask(siteName, urls)
 	if err != nil {
 		fmt.Printf("Failed to trigger preheat for site %s: %v\n", siteName, err)
 		return
 	}
 	
-	fmt.Printf("Preheat completed for site %s\n", siteName)
+	// 存储当前预热任务ID
+	s.redisClient.Set(fmt.Sprintf("site:%s:preheat:current_task", siteName), taskID, 24*time.Hour)
+	
+	fmt.Printf("Preheat triggered for site %s with task ID: %s\n", siteName, taskID)
 }
 
 // executePush 执行站点的推送任务

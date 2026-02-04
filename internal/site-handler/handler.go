@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"prerender-shield/internal/config"
+	"prerender-shield/internal/i18n"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/middleware"
 	"prerender-shield/internal/monitoring"
@@ -26,10 +27,11 @@ import (
 // 管理站点的请求路由、爬虫检测和响应处理
 //
 // 字段:
-//   prerenderManager: 渲染预热引擎管理器，用于处理爬虫请求的渲染
-//   wafRepo: WAF仓库，用于记录WAF日志
-//   redisClient: Redis客户端，用于限流
-//   geoIP: GeoIP服务，用于地理位置访问控制
+//
+//	prerenderManager: 渲染预热引擎管理器，用于处理爬虫请求的渲染
+//	wafRepo: WAF仓库，用于记录WAF日志
+//	redisClient: Redis客户端，用于限流
+//	geoIP: GeoIP服务，用于地理位置访问控制
 type Handler struct {
 	prerenderManager *prerender.EngineManager
 	wafRepo          *repository.WafRepository
@@ -41,10 +43,10 @@ type Handler struct {
 //
 // 参数:
 //
-//	prerenderManager: 渲染预热引擎管理器，用于处理爬虫请求的渲染
-//	wafRepo: WAF仓库
-//	redisClient: Redis客户端
-//  geoIP: GeoIP服务
+//		prerenderManager: 渲染预热引擎管理器，用于处理爬虫请求的渲染
+//		wafRepo: WAF仓库
+//		redisClient: Redis客户端
+//	 geoIP: GeoIP服务
 //
 // 返回值:
 //
@@ -60,6 +62,24 @@ func NewHandler(prerenderManager *prerender.EngineManager, wafRepo *repository.W
 		redisClient:      redisClient,
 		geoIP:            geoIP,
 	}
+}
+
+// getLanguageFromRequest 从请求中获取语言偏好
+func getLanguageFromRequest(c *gin.Context) string {
+	// 从Accept-Language头获取语言
+	acceptLanguage := c.GetHeader("Accept-Language")
+	if acceptLanguage != "" {
+		// 简单处理，获取第一个语言标签
+		parts := strings.Split(acceptLanguage, ",")
+		if len(parts) > 0 {
+			lang := strings.Split(parts[0], ";")[0]
+			// 只取语言代码部分（如zh-CN -> zh）
+			langParts := strings.Split(lang, "-")
+			return langParts[0]
+		}
+	}
+	// 默认返回英文
+	return "en"
 }
 
 // CreateSiteHandler 创建基于站点配置的HTTP处理器
@@ -114,7 +134,8 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 		if isCrawler {
 			// 如果prerenderManager为nil，无法处理爬虫请求，返回500错误
 			if h.prerenderManager == nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Prerender engine not available"})
+				lang := getLanguageFromRequest(c)
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": i18n.T(lang, "error.internal_server_error")})
 				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, 0)
 				c.Abort()
 				return
@@ -141,19 +162,23 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 			// 获取当前站点的渲染预热引擎实例
 			prerenderEngine, exists := h.prerenderManager.GetEngine(site.ID)
 			if !exists {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Prerender engine not found"})
+				lang := getLanguageFromRequest(c)
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": i18n.T(lang, "error.internal_server_error")})
 				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, 0)
 				c.Abort()
 				return
 			}
 
+			// 获取User-Agent信息
+			userAgent := c.Request.UserAgent()
 			// 使用渲染预热引擎渲染页面
-			resultWithCache, err := prerenderEngine.Render(c, fullURL, prerender.RenderOptions{
-				Timeout:   site.Prerender.Timeout,
+			resultWithCache, err := prerenderEngine.RenderWithContext(c, fullURL, prerender.RenderOptions{
+				Timeout:   time.Duration(site.Prerender.Timeout) * time.Second,
 				WaitUntil: "networkidle0",
-			})
+			}, userAgent)
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Prerender failed"})
+				lang := getLanguageFromRequest(c)
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": i18n.T(lang, "error.render_timeout")})
 				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, 0)
 				c.Abort()
 				return
@@ -161,7 +186,8 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 
 			result := resultWithCache.Result
 			if !result.Success {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Prerender result failed"})
+				lang := getLanguageFromRequest(c)
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": i18n.T(lang, "error.render_timeout")})
 				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, 0)
 				c.Abort()
 				return
@@ -225,7 +251,8 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 			// 代理已有应用模式：将请求转发到上游服务
 			proxyURL, err := url.Parse(site.Proxy.TargetURL)
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Invalid upstream URL"})
+				lang := getLanguageFromRequest(c)
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": i18n.T(lang, "error.invalid_request")})
 				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, time.Since(startTime))
 				c.Abort()
 				return
@@ -297,9 +324,10 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 			}
 
 			// 文件不存在，返回404
+			lang := getLanguageFromRequest(c)
 			c.JSON(http.StatusNotFound, gin.H{
 				"code":    404,
-				"message": "File not found",
+				"message": i18n.T(lang, "error.not_found"),
 				"data": gin.H{
 					"site":    site.Name,
 					"domains": site.Domains,
@@ -320,9 +348,10 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 
 		default:
 			// 未知模式，返回500错误
+			lang := getLanguageFromRequest(c)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"code":    500,
-				"message": "Invalid site mode",
+				"message": i18n.T(lang, "error.invalid_request"),
 			})
 			monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, time.Since(startTime))
 			c.Abort()

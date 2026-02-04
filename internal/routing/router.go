@@ -21,6 +21,7 @@ type Matcher interface {
 type Cache interface {
 	Get(key string) interface{}
 	Set(key string, value interface{}, ttl int) error
+	Clear() error
 }
 
 // MemoryCache 内存缓存实现
@@ -74,6 +75,16 @@ func (mc *MemoryCache) Set(key string, value interface{}, ttl int) error {
 		value:      value,
 		expiration: expiration,
 	}
+	
+	return nil
+}
+
+// Clear 清空所有缓存
+func (mc *MemoryCache) Clear() error {
+	mc.mutex.Lock()
+	defer mc.mutex.Unlock()
+	
+	mc.cache = make(map[string]cacheItem)
 	
 	return nil
 }
@@ -140,11 +151,14 @@ func (rm *RegexMatcher) Match(req *http.Request, rule *RouteRule) bool {
 
 // Router 智能流量路由管理器
 type Router struct {
-	rules     []*RouteRule
-	mutex     sync.RWMutex
-	matcher   Matcher
-	cache     Cache
-	handlers  map[string]HandlerFunc
+	rules          []*RouteRule
+	exactRules     map[string]*RouteRule          // 精确匹配规则
+	prefixRules    map[string][]*RouteRule        // 前缀匹配规则
+	regexRules     []*RouteRule                   // 正则匹配规则
+	mutex          sync.RWMutex
+	matcher        Matcher
+	cache          Cache
+	handlers       map[string]HandlerFunc
 }
 
 // RouteRule 路由规则
@@ -170,14 +184,19 @@ type Config struct {
 // NewRouter 创建新的路由管理器
 func NewRouter(config Config) *Router {
 	router := &Router{
-		rules:    config.Rules,
-		cache:    config.Cache,
-		handlers: config.Handlers,
-		matcher:  &RegexMatcher{},
+		rules:       config.Rules,
+		exactRules:  make(map[string]*RouteRule),
+		prefixRules: make(map[string][]*RouteRule),
+		regexRules:  make([]*RouteRule, 0),
+		cache:       config.Cache,
+		handlers:    config.Handlers,
+		matcher:     &RegexMatcher{},
 	}
 	
 	// 按优先级排序规则
 	router.sortRules()
+	// 构建优化的数据结构
+	router.buildRuleIndexes()
 	
 	return router
 }
@@ -187,6 +206,32 @@ func (r *Router) sortRules() {
 	sort.Slice(r.rules, func(i, j int) bool {
 		return r.rules[i].Priority > r.rules[j].Priority
 	})
+}
+
+// buildRuleIndexes 构建路由规则索引
+func (r *Router) buildRuleIndexes() {
+	// 重置索引
+	r.exactRules = make(map[string]*RouteRule)
+	r.prefixRules = make(map[string][]*RouteRule)
+	r.regexRules = make([]*RouteRule, 0)
+	
+	// 分类规则
+	for _, rule := range r.rules {
+		pattern := rule.Pattern
+		
+		// 精确匹配规则
+		if strings.HasPrefix(pattern, "=") {
+			exactPath := strings.TrimPrefix(pattern, "=")
+			r.exactRules[exactPath] = rule
+		} else if strings.HasSuffix(pattern, "*") {
+			// 前缀匹配规则
+			prefix := strings.TrimSuffix(pattern, "*")
+			r.prefixRules[prefix] = append(r.prefixRules[prefix], rule)
+		} else {
+			// 正则匹配规则
+			r.regexRules = append(r.regexRules, rule)
+		}
+	}
 }
 
 // ServeHTTP 路由处理HTTP请求
@@ -214,8 +259,32 @@ func (r *Router) MatchRoute(req *http.Request) *RouteRule {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 	
-	// 遍历规则，找到第一个匹配的
-	for _, rule := range r.rules {
+	path := req.URL.Path
+	
+	// 1. 检查精确匹配
+	if rule, exists := r.exactRules[path]; exists {
+		if r.matcher.Match(req, rule) {
+			// 缓存匹配结果
+			r.cache.Set(cacheKey, rule, 3600)
+			return rule
+		}
+	}
+	
+	// 2. 检查前缀匹配
+	for prefix, rules := range r.prefixRules {
+		if strings.HasPrefix(path, prefix) {
+			for _, rule := range rules {
+				if r.matcher.Match(req, rule) {
+					// 缓存匹配结果
+					r.cache.Set(cacheKey, rule, 3600)
+					return rule
+				}
+			}
+		}
+	}
+	
+	// 3. 检查正则匹配
+	for _, rule := range r.regexRules {
 		if r.matcher.Match(req, rule) {
 			// 缓存匹配结果
 			r.cache.Set(cacheKey, rule, 3600)
@@ -246,6 +315,8 @@ func (r *Router) UpdateRules(rules []*RouteRule) error {
 	r.rules = rules
 	// 重新排序规则
 	r.sortRules()
+	// 重新构建规则索引
+	r.buildRuleIndexes()
 	// 清空路由缓存
 	r.clearRouteCache()
 	
@@ -265,6 +336,8 @@ func (r *Router) AddRule(rule *RouteRule) error {
 	r.rules = append(r.rules, rule)
 	// 重新排序规则
 	r.sortRules()
+	// 重新构建规则索引
+	r.buildRuleIndexes()
 	// 清空路由缓存
 	r.clearRouteCache()
 	
@@ -279,6 +352,8 @@ func (r *Router) DeleteRule(ruleID string) error {
 	for i, rule := range r.rules {
 		if rule.ID == ruleID {
 			r.rules = append(r.rules[:i], r.rules[i+1:]...)
+			// 重新构建规则索引
+			r.buildRuleIndexes()
 			// 清空路由缓存
 			r.clearRouteCache()
 			return nil
@@ -302,8 +377,9 @@ func (r *Router) GetRules() []*RouteRule {
 
 // clearRouteCache 清空路由缓存
 func (r *Router) clearRouteCache() {
-	// 这里可以实现更智能的缓存清理
-	// 暂时简单地忽略，因为内存缓存会自动过期
+	if r.cache != nil {
+		r.cache.Clear()
+	}
 }
 
 // AddHandler 添加路由处理函数

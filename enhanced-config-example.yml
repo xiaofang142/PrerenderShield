@@ -1,0 +1,211 @@
+# PrerenderShield 增强配置示例
+# 包含所有新增的稳定性和监控功能
+
+# 服务器配置
+server:
+  address: "0.0.0.0"
+  api_port: 9598
+  console_port: 9597
+  # API公网地址，用于控制台前端访问API
+  public_api_url: "${API_PUBLIC_URL:-http://localhost:9598}"
+
+# 目录配置
+dirs:
+  data_dir: ./data
+  static_dir: ./static
+  certs_dir: ./certs
+  admin_static_dir: ./web
+
+# 缓存配置
+cache:
+  type: "redis"
+  # Redis连接配置，支持环境变量替换
+  redis_url: "localhost:6379"
+  redis_password: ""
+  redis_db: 0
+  memory_size: 1000
+
+# 存储配置
+storage:
+  type: "redis"
+
+# 监控配置
+monitoring:
+  enabled: true
+  prometheus_address: ":9090"
+
+# 应用配置
+app:
+  version: "1.0.1"
+  official_url: "https://prerender.websitetool.cn"
+
+# 站点配置
+sites:
+  # 示例站点1: 高流量生产站点
+  - id: "prod-website"
+    name: "Production Website"
+    domains:
+      - "example.com"
+      - "www.example.com"
+    port: 8080
+    mode: "proxy"
+    proxy:
+      target_url: "http://backend:3000"
+    firewall:
+      enabled: true
+      rules_path: "./rules"
+      action:
+        default_action: "block"
+        block_message: "Request blocked by security policy"
+      geoip:
+        enabled: true
+        allow_list: ["CN", "US", "JP", "KR"]
+        block_list: ["KP", "IR", "SY", "CU"]
+      rate_limit:
+        enabled: true
+        requests: 200
+        window: 60
+        ban_time: 3600
+      blacklist: 
+        - "192.168.1.100"
+        - "10.0.0.50"
+      whitelist:
+        - "192.168.1.10"
+        - "10.0.0.10"
+    prerender:
+      enabled: true
+      pool_size: 15
+      min_pool_size: 5
+      max_pool_size: 30
+      timeout: 60
+      cache_ttl: 14400
+      idle_timeout: 900
+      dynamic_scaling: true
+      scaling_factor: 0.7
+      scaling_interval: 120
+      preheat:
+        enabled: true
+        sitemap_url: "https://example.com/sitemap.xml"
+        schedule: "0 2 * * *"  # 每天凌晨2点执行
+        concurrency: 10
+        default_priority: 0
+        max_depth: 5
+      push:
+        enabled: false
+        baidu_api: "http://data.zz.baidu.com/urls"
+        baidu_token: ""
+        bing_api: "https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl"
+        bing_token: ""
+        baidu_daily_limit: 1000
+        bing_daily_limit: 1000
+        push_domain: ""
+      crawler_headers:
+        - "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+        - "Mozilla/5.0 (compatible; Bingbot/2.0; +http://www.bing.com/bingbot.htm)"
+        - "Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)"
+        - "Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)"
+        - "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/85.0.4183.92 Mobile/15E148 Safari/604.1"
+      use_default_headers: true
+    routing:
+      rules: []
+    file_integrity:
+      enabled: true
+      check_interval: 300
+      hash_algorithm: "sha256"
+
+  # 示例站点2: API网关
+  - id: "api-gateway"
+    name: "API Gateway"
+    domains:
+      - "api.example.com"
+    port: 8081
+    mode: "proxy"
+    proxy:
+      target_url: "http://api-service:8000"
+    firewall:
+      enabled: true
+      rules_path: "./api-rules"
+      action:
+        default_action: "block"
+        block_message: "API request blocked"
+      geoip:
+        enabled: false
+        allow_list: []
+        block_list: []
+      rate_limit:
+        enabled: true
+        requests: 1000
+        window: 60
+        ban_time: 1800
+      blacklist: []
+      whitelist: []
+    prerender:
+      enabled: false  # API不需要预渲染
+    routing:
+      rules: []
+    file_integrity:
+      enabled: false
+
+  # 示例站点3: 静态资源
+  - id: "static-assets"
+    name: "Static Assets"
+    domains:
+      - "assets.example.com"
+    port: 8082
+    mode: "static"
+    proxy:
+      target_url: ""
+    redirect:
+      status_code: 0
+      target_url: ""
+    firewall:
+      enabled: false  # 静态资源不需要复杂防护
+      rules_path: "./rules"
+      action:
+        default_action: "allow"
+        block_message: "Request blocked"
+      geoip:
+        enabled: false
+        allow_list: []
+        block_list: []
+      rate_limit:
+        enabled: true  # 但仍需要速率限制
+        requests: 500
+        window: 60
+        ban_time: 1800
+      blacklist: []
+      whitelist: []
+    prerender:
+      enabled: false
+    routing:
+      rules: []
+    file_integrity:
+      enabled: true
+      check_interval: 600
+      hash_algorithm: "sha256"
+
+# 健康检查配置 (新增功能)
+health_check:
+  enabled: true
+  interval: 30  # 健康检查间隔（秒）
+  timeout: 10   # 单次检查超时（秒）
+  checks:
+    redis: true
+    memory: true
+    disk_space: false  # 磁盘空间检查暂未实现，设置为false
+    goroutines: true
+
+# 日志配置
+logging:
+  level: "info"
+  retention_days: 7
+  max_size: "128MB"
+  enable_access_log: true
+  enable_crawler_log: true
+  enable_security_log: true
+
+# 系统资源配置
+resources:
+  max_memory_mb: 2048
+  max_cpu_percent: 80
+  graceful_shutdown_timeout: 30  # 优雅关闭超时（秒）

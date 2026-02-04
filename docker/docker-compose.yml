@@ -38,7 +38,7 @@ services:
     # 这样容器内的所有端口直接映射到宿主机，无需手动配置
     network_mode: "host"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:9598/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:9598/api/v1/health"]
       interval: 15s
       timeout: 5s
       retries: 3

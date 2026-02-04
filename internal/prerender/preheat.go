@@ -128,7 +128,9 @@ func (p *PreheatWorker) Start() error {
 				progressMux.Lock()
 				processed++
 				if taskID != "" {
-					p.redisClient.UpdatePreheatTaskProgress(p.siteName, taskID, total, processed, success, failed)
+					// 计算当前进度百分比
+					progress := int((processed * 100) / total)
+					p.redisClient.UpdatePreheatTaskProgress(taskID, progress)
 				}
 				progressMux.Unlock()
 			}()

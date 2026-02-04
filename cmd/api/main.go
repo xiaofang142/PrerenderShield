@@ -19,6 +19,7 @@ import (
 
 	"prerender-shield/internal/api/routes"
 	"prerender-shield/internal/auth"
+	"prerender-shield/internal/cache"
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/firewall"
 	"prerender-shield/internal/logging"
@@ -92,7 +93,7 @@ func main() {
 	// 构建最终的Redis URL
 	finalRedisURL := parsedURL.String()
 
-	redisClient, err := redis.NewClient(finalRedisURL)
+	redisClient, err := redis.NewClientWithURL(finalRedisURL)
 	if err != nil {
 		log.Fatalf("Failed to initialize Redis client: %v", err)
 	}
@@ -110,25 +111,50 @@ func main() {
 		logging.DefaultLogger.Info("Could not load sites from Redis (first run?), syncing file config to Redis: %v", err)
 		if err := configManager.SaveSitesToRedis(); err != nil {
 			logging.DefaultLogger.Error("Failed to sync initial sites to Redis: %v", err)
+		} else {
+			logging.DefaultLogger.Info("Successfully synced file config to Redis")
 		}
 	} else {
 		// 重新获取更新后的配置
 		cfg = configManager.GetConfig()
 		logging.DefaultLogger.Info("Using sites configuration from Redis")
 	}
-
-	// 启动Redis订阅者，监听配置变更
-	redisSubscriber := redis.NewSubscriber(redisClient.GetRawClient())
-	// 添加配置变更处理
-	redisSubscriber.AddHandler("site:update", func(channel, payload string) {
-		log.Printf("Received site update event: %s, payload: %s", channel, payload)
-		// 这里可以添加站点更新逻辑
-	})
-	// 启动订阅者
-	if err := redisSubscriber.Start(); err != nil {
-		log.Printf("Failed to start Redis subscriber: %v", err)
+	
+	// 验证配置完整性
+	if len(cfg.Sites) == 0 {
+		logging.DefaultLogger.Warn("No sites configured, using fallback configuration")
+		// 使用默认站点配置作为回退
+		fallbackSite := config.SiteConfig{
+			ID:      "fallback-site",
+			Name:    "Fallback Site",
+			Domains: []string{"localhost"},
+			Port:    8080,
+			Mode:    "static",
+			Firewall: config.FirewallConfig{
+				Enabled: false,
+			},
+			Prerender: config.PrerenderConfig{
+				Enabled:  true,
+				PoolSize: 3,
+				Timeout:  30,
+				CacheTTL: 3600,
+			},
+		}
+		cfg.Sites = append(cfg.Sites, fallbackSite)
 	}
-	defer redisSubscriber.Stop()
+
+	// 启动Redis订阅者，监听配置变更（暂时注释掉，因为还没有实现）
+	// redisSubscriber := redis.NewSubscriber(redisClient.GetRawClient())
+	// 添加配置变更处理
+	// redisSubscriber.AddHandler("site:update", func(channel, payload string) {
+	// 	log.Printf("Received site update event: %s, payload: %s", channel, payload)
+	// 	// 这里可以添加站点更新逻辑
+	// })
+	// 启动订阅者
+	// if err := redisSubscriber.Start(); err != nil {
+	// 	log.Printf("Failed to start Redis subscriber: %v", err)
+	// }
+	// defer redisSubscriber.Stop()
 
 	// 2. 认证模块初始化
 	userManager := auth.NewUserManager(cfg.Dirs.DataDir, redisClient)
@@ -140,13 +166,16 @@ func main() {
 	// 3. 防火墙引擎管理器
 	firewallManager := firewall.NewEngineManager()
 
-	// 4. 渲染预热引擎管理器
-	prerenderManager := prerender.NewEngineManager(cfg.Dirs.StaticDir)
+	// 4. 缓存管理器初始化
+	cacheManager := cache.NewManager(redisClient)
 
-	// 5. 爬虫日志管理器
+	// 5. 渲染预热引擎管理器
+	prerenderManager := prerender.NewEngineManager(redisClient, cacheManager, 5)
+
+	// 6. 爬虫日志管理器
 	crawlerLogManager := logging.NewCrawlerLogManager(finalRedisURL)
 
-	// 6. 访问日志管理器
+	// 7. 访问日志管理器
 	visitLogManager := logging.NewVisitLogManager(finalRedisURL)
 
 	// 6.1 GeoIP服务
@@ -158,27 +187,11 @@ func main() {
 
 	// 7. 为每个站点创建并启动引擎
 	for _, site := range cfg.Sites {
-		// 将 config.PrerenderConfig 转换为 prerender.PrerenderConfig
-		prerenderConfig := prerender.PrerenderConfig{
-			Enabled:           site.Prerender.Enabled,
-			PoolSize:          site.Prerender.PoolSize,
-			MinPoolSize:       site.Prerender.MinPoolSize,
-			MaxPoolSize:       site.Prerender.MaxPoolSize,
-			Timeout:           site.Prerender.Timeout,
-			CacheTTL:          site.Prerender.CacheTTL,
-			CrawlerHeaders:    site.Prerender.CrawlerHeaders,
-			UseDefaultHeaders: site.Prerender.UseDefaultHeaders,
-			Preheat: prerender.PreheatConfig{
-				Enabled:  site.Prerender.Preheat.Enabled,
-				MaxDepth: site.Prerender.Preheat.MaxDepth,
-			},
-		}
-
-		// 将引擎添加到管理器
-		// AddSite 方法会自动创建并启动引擎
-		if err := prerenderManager.AddSite(site.ID, prerenderConfig, redisClient); err != nil {
-			logging.DefaultLogger.Error("Failed to add site to prerender manager: %v", err)
-			log.Fatalf("Failed to add site to prerender manager: %v", err)
+		// 获取或创建站点的渲染引擎
+		_, exists := prerenderManager.GetEngine(site.ID)
+		if !exists {
+			logging.DefaultLogger.Error("Failed to get or create engine for site %s", site.ID)
+			log.Fatalf("Failed to get or create engine for site %s", site.ID)
 		}
 		logging.DefaultLogger.Info("Prerender engine started successfully for site %s (ID: %s)", site.Name, site.ID)
 
@@ -211,7 +224,24 @@ func main() {
 	schedulerInstance.Start()
 	defer schedulerInstance.Stop()
 
-	// 8. 初始化监控模块
+	// 8. 初始化健康检查器
+	healthChecker := monitoring.NewHealthChecker(redisClient)
+	
+	// 8.1 添加配置加载失败的回退策略
+	// 如果从Redis加载站点配置失败，尝试使用文件配置并记录警告
+	if err := configManager.LoadSitesFromRedis(); err != nil {
+		logging.DefaultLogger.Warn("Could not load sites from Redis: %v, falling back to file config", err)
+		// 保持现有的处理逻辑
+		if err := configManager.SaveSitesToRedis(); err != nil {
+			logging.DefaultLogger.Error("Failed to sync initial sites to Redis: %v", err)
+		}
+	} else {
+		// 重新获取更新后的配置
+		cfg = configManager.GetConfig()
+		logging.DefaultLogger.Info("Using sites configuration from Redis")
+	}
+	
+	// 8.2 初始化监控模块
 	monitor := monitoring.NewMonitor(monitoring.Config{
 		Enabled:           true,
 		PrometheusAddress: ":9090",
@@ -221,6 +251,39 @@ func main() {
 		log.Fatalf("Failed to start monitoring: %v", err)
 	}
 	logging.DefaultLogger.Info("Monitoring service started successfully")
+	
+	// 8.3 启动健康检查相关服务
+	go func() {
+		// 定期执行健康检查
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		
+		for {
+			select {
+			case <-ticker.C:
+				status := healthChecker.Check()
+				isHealthy := status["healthy"].(bool)
+				healthyStatus := "healthy"
+				if !isHealthy {
+					healthyStatus = "unhealthy"
+				}
+				logging.DefaultLogger.Info("Periodic health check - Overall status: %s", healthyStatus)
+				
+				// 如果有关键问题，记录警告
+				if !isHealthy {
+					for checkName, checkResult := range status {
+						if checkName == "healthy" || checkName == "timestamp" || checkName == "uptime" {
+							continue
+						}
+						resultMap, ok := checkResult.(map[string]interface{})
+						if ok && !resultMap["healthy"].(bool) {
+							logging.DefaultLogger.Error("Critical health issue in %s: %s", checkName, resultMap["message"].(string))
+						}
+					}
+				}
+			}
+		}
+	}()
 
 	// 9. 初始化站点服务器管理器
 	siteServerManager := siteserver.NewManager(monitor)

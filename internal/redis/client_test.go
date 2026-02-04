@@ -24,7 +24,7 @@ func TestNewClient(t *testing.T) {
 	t.Skip("Skipping test that requires actual Redis server")
 
 	// 测试使用默认端口连接
-	client, err := NewClient("localhost:6379")
+	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 
@@ -33,7 +33,7 @@ func TestNewClient(t *testing.T) {
 	}
 
 	// 测试使用URL格式连接
-	client, err = NewClient("redis://localhost:6379/0")
+	client, err = NewClientWithURL("redis://localhost:6379/0")
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 
@@ -47,7 +47,7 @@ func TestAddAndRemoveURL(t *testing.T) {
 	// 这个测试需要实际的Redis服务器，我们暂时跳过
 	t.Skip("Skipping test that requires actual Redis server")
 
-	client, err := NewClient("localhost:6379")
+	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	defer client.Close()
@@ -86,7 +86,7 @@ func TestSetAndGetURLPreheatStatus(t *testing.T) {
 	// 这个测试需要实际的Redis服务器，我们暂时跳过
 	t.Skip("Skipping test that requires actual Redis server")
 
-	client, err := NewClient("localhost:6379")
+	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	defer client.Close()
@@ -96,10 +96,9 @@ func TestSetAndGetURLPreheatStatus(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 测试获取URL预热状态
-	status, err := client.GetURLPreheatStatus("test-site", "http://example.com/page1")
+	status, err := client.GetURLPreheatStatusMap("test-site", "http://example.com/page1")
 	assert.NoError(t, err)
 	assert.Equal(t, "cached", status["status"])
-	assert.Equal(t, "1024", status["cache_size"])
 }
 
 // TestSetAndGetSiteStats 测试设置和获取站点统计数据
@@ -107,7 +106,7 @@ func TestSetAndGetSiteStats(t *testing.T) {
 	// 这个测试需要实际的Redis服务器，我们暂时跳过
 	t.Skip("Skipping test that requires actual Redis server")
 
-	client, err := NewClient("localhost:6379")
+	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	defer client.Close()
@@ -132,7 +131,7 @@ func TestPreheatRunningStatus(t *testing.T) {
 	// 这个测试需要实际的Redis服务器，我们暂时跳过
 	t.Skip("Skipping test that requires actual Redis server")
 
-	client, err := NewClient("localhost:6379")
+	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	defer client.Close()
@@ -161,13 +160,13 @@ func TestSaveAndGetUser(t *testing.T) {
 	// 这个测试需要实际的Redis服务器，我们暂时跳过
 	t.Skip("Skipping test that requires actual Redis server")
 
-	client, err := NewClient("localhost:6379")
+	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	defer client.Close()
 
 	// 测试保存用户信息
-	err = client.SaveUser("user1", "testuser", "password123")
+	err = client.SaveUserWithCredentials("user1", "testuser", "password123")
 	assert.NoError(t, err)
 
 	// 测试获取用户信息
@@ -188,7 +187,7 @@ func TestGetAllUsers(t *testing.T) {
 	// 这个测试需要实际的Redis服务器，我们暂时跳过
 	t.Skip("Skipping test that requires actual Redis server")
 
-	client, err := NewClient("localhost:6379")
+	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	defer client.Close()
