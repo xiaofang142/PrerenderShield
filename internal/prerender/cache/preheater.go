@@ -320,7 +320,7 @@ func (i *Invalidator) Invalidate(key string) error {
 	}
 
 	// 删除缓存
-	return i.cache.Delete(context.Background(), key)
+	return i.cache.Delete(key)
 }
 
 // InvalidatePattern 按模式使缓存失效
@@ -351,7 +351,7 @@ func (i *Invalidator) SetWithVersion(ctx context.Context, key string, value []by
 		"version": version,
 	}
 
-	return i.cache.SetWithMetadata(ctx, key, value, ttl, metadata)
+	return i.cache.SetWithMetadata(key, value, ttl, metadata)
 }
 
 // matchPattern 简单通配符匹配

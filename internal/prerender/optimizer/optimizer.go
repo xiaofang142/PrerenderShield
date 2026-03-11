@@ -2,7 +2,6 @@ package optimizer
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -113,21 +112,9 @@ func (o *Optimizer) setupResourceBlocking(ctx context.Context, actions *[]chrome
 	// 使用 chromedp 的 Network 设置来阻止资源
 	*actions = append(*actions,
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			// 启用 Network 域
-			if err := chromedp.Run(ctx,
-				chromedp.ActionFunc(func(ctx context.Context) error {
-					_, _, _, err := chromedp.PageEnable().Do(ctx)
-					return err
-				}),
-			); err != nil {
-				return fmt.Errorf("启用 Page 域失败：%w", err)
-			}
-
-			// 设置资源拦截
-			for _, resourceType := range o.config.BlockedResources {
-				o.logger.Debug("设置资源阻止", zap.String("type", resourceType))
-			}
-
+			// 设置资源拦截 - 简化实现
+			// 实际使用时，可以在请求级别通过 SetRequestInterception 实现
+			o.logger.Debug("配置资源阻止", zap.Strings("types", o.config.BlockedResources))
 			return nil
 		}),
 	)
