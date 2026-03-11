@@ -186,3 +186,125 @@ func TestAverage(t *testing.T) {
 	values := []float64{1, 2, 3, 4, 5}
 	assert.Equal(t, 3.0, average(values))
 }
+
+func TestStatisticalDetector(t *testing.T) {
+	config := &StatisticalConfig{
+		ZScoreThreshold:    3.0,
+		ModifiedZThreshold: 3.5,
+		IQRMultiplier:      1.5,
+		EnableIQR:          true,
+		EnableZScore:       true,
+	}
+	detector := NewStatisticalDetector(config)
+
+	// 生成正常数据
+	for i := 0; i < 50; i++ {
+		entry := &LogEntry{
+			SourceType: "access",
+			Fields: map[string]interface{}{
+				"request_time_ms": 100.0 + float64(i%10),
+				"status_int":      200,
+			},
+		}
+		_, err := detector.Process(context.Background(), entry)
+		assert.Nil(t, err)
+	}
+
+	// 异常数据（Z-Score 应该超过 3）
+	anomalyEntry := &LogEntry{
+		SourceType: "access",
+		Fields: map[string]interface{}{
+			"request_time_ms": 5000.0, // 远高于正常值
+			"status_int":      200,
+		},
+	}
+	result, err := detector.Process(context.Background(), anomalyEntry)
+	assert.Nil(t, err)
+
+	// 检查是否标记为异常
+	if val, ok := result.Fields["has_statistical_anomaly"]; ok {
+		assert.True(t, toBool(val))
+	}
+}
+
+func TestIsolationForest_Basic(t *testing.T) {
+	featureNames := []string{"status", "bytes", "latency", "is_bot", "threat_score", "is_anomaly"}
+	forest := NewIsolationForest(&IFConfig{
+		NTrees:        50,
+		SampleSize:    128,
+		MaxHeight:     6,
+		Contamination: 0.1,
+		NumFeatures:   6,
+	}, featureNames)
+
+	// 生成正常训练数据
+	normalData := make([][]float64, 200)
+	for i := 0; i < 200; i++ {
+		normalData[i] = []float64{
+			200,                                    // status
+			float64(1000 + i%100),                  // bytes
+			float64(50 + i%50),                     // latency
+			0,                                      // is_bot
+			float64(i % 10),                        // threat_score
+			0,                                      // is_anomaly
+		}
+	}
+
+	// 训练模型
+	forest.Fit(normalData)
+	assert.True(t, forest.trained)
+
+	// 测试正常样本
+	normalSample := []float64{200, 1050, 75, 0, 5, 0}
+	normalResult := forest.Predict(normalSample)
+	assert.False(t, normalResult.IsAnomaly)
+
+	// 测试异常样本（延迟极高）
+	anomalySample := []float64{200, 1000, 10000, 0, 5, 0}
+	anomalyResult := forest.Predict(anomalySample)
+	assert.Greater(t, anomalyResult.Score, normalResult.Score)
+}
+
+func TestLogEntryToFeatures(t *testing.T) {
+	entry := &LogEntry{
+		SourceType: "access",
+		Fields: map[string]interface{}{
+			"status_int":      200,
+			"body_bytes_int":  1024,
+			"request_time_ms": 150.5,
+			"is_bot":          true,
+			"threat_score":    25.0,
+			"is_anomaly":      false,
+		},
+	}
+
+	features := LogEntryToFeatures(entry)
+	assert.Len(t, features, 6)
+	assert.Equal(t, float64(200), features[0])
+	assert.Equal(t, float64(1024), features[1])
+	assert.Equal(t, 150.5, features[2])
+	assert.Equal(t, float64(1), features[3]) // is_bot = true
+}
+
+func TestAnomalyDetectorProcessor(t *testing.T) {
+	processor := NewAnomalyDetectorProcessor([]string{"status", "bytes", "latency", "is_bot", "threat", "anomaly"})
+
+	// 发送一些日志进行训练
+	for i := 0; i < 100; i++ {
+		entry := &LogEntry{
+			SourceType: "access",
+			Fields: map[string]interface{}{
+				"status_int":      200,
+				"body_bytes_int":  1000 + i,
+				"request_time_ms": 100.0,
+				"is_bot":          false,
+				"threat_score":    0.0,
+			},
+		}
+		_, err := processor.Process(context.Background(), entry)
+		assert.Nil(t, err)
+	}
+
+	stats := processor.GetModelStats()
+	assert.NotNil(t, stats)
+}
