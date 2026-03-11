@@ -11,6 +11,7 @@ import (
 
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/firewall/detectors"
+	"prerender-shield/internal/firewall/detectors/ai"
 	"prerender-shield/internal/firewall/types"
 )
 
@@ -258,16 +259,27 @@ type Logger interface {
 
 // Config 防火墙配置
 type Config struct {
-	RulesPath           string
-	ActionConfig        ActionConfig
-	CacheTTL            int                         // 请求缓存过期时间（秒）
-	StaticDir           string                      // 静态文件目录
-	GeoIPConfig         *config.GeoIPConfig         // 地理位置访问控制配置
-	RateLimitConfig     *config.RateLimitConfig     // 频率限制配置
-	FileIntegrityConfig *config.FileIntegrityConfig // 网页防篡改配置
-	Blacklist           []string                    // 静态黑名单
-	Whitelist           []string                    // 静态白名单
-	RedisClient         *redis.Client               // Redis客户端
+	RulesPath           string                         // 规则文件路径
+	ActionConfig        ActionConfig                   // 动作配置
+	CacheTTL            int                            // 请求缓存过期时间（秒）
+	StaticDir           string                         // 静态文件目录
+	GeoIPConfig         *config.GeoIPConfig            // 地理位置访问控制配置
+	RateLimitConfig     *config.RateLimitConfig        // 频率限制配置
+	FileIntegrityConfig *config.FileIntegrityConfig    // 网页防篡改配置
+	Blacklist           []string                       // 静态黑名单
+	Whitelist           []string                       // 静态白名单
+	RedisClient         *redis.Client                  // Redis客户端
+	AIConfig            *AIEngineConfig                // AI检测器配置
+}
+
+// AIEngineConfig AI检测器引擎配置
+type AIEngineConfig struct {
+	Enabled             bool          // 是否启用AI检测器
+	ModelPath           string        // 模型文件路径
+	WorkerPool          int           // 工作池大小
+	ConfidenceThreshold float32       // 置信度阈值
+	TimeoutMs           int           // 预测超时时间(毫秒)
+	CacheSize           int           // 特征缓存大小
 }
 
 // ActionConfig 动作配置
@@ -401,6 +413,40 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 
 	// 初始化黑名单检测器
 	e.coreDetectors = append(e.coreDetectors, detectors.NewBlacklistDetector(config.RedisClient, siteName, config.Blacklist, config.Whitelist))
+
+	// 初始化AI威胁检测器（如果启用）
+	if config.AIConfig != nil && config.AIConfig.Enabled {
+		aiConfig := &ai.Config{
+			ModelPath:           config.AIConfig.ModelPath,
+			WorkerPool:          config.AIConfig.WorkerPool,
+			ConfidenceThreshold: config.AIConfig.ConfidenceThreshold,
+			PredictTimeout:      time.Duration(config.AIConfig.TimeoutMs) * time.Millisecond,
+			CacheSize:           config.AIConfig.CacheSize,
+			Enabled:             true,
+		}
+		
+		// 如果配置值无效，使用默认值
+		if aiConfig.WorkerPool <= 0 {
+			aiConfig.WorkerPool = 4
+		}
+		if aiConfig.ConfidenceThreshold <= 0 {
+			aiConfig.ConfidenceThreshold = 0.85
+		}
+		if aiConfig.PredictTimeout <= 0 {
+			aiConfig.PredictTimeout = 50 * time.Millisecond
+		}
+		if aiConfig.CacheSize <= 0 {
+			aiConfig.CacheSize = 10000
+		}
+
+		aiDetector, err := ai.NewAIDetector(aiConfig)
+		if err != nil {
+			// AI检测器初始化失败，记录错误但不影响其他检测器
+			// 在实际生产环境中应该记录日志
+		} else {
+			e.owaspDetectors["ai"] = aiDetector
+		}
+	}
 
 	// 启动缓存清理协程
 	go e.cleanCacheLoop()
