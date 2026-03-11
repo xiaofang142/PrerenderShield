@@ -15,7 +15,7 @@ import (
 )
 
 // 模拟域名解析器
- type mockDomainResolver struct {
+type mockDomainResolver struct {
 	resolveMap map[string]string
 }
 

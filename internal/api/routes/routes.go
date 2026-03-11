@@ -69,7 +69,7 @@ func NewRouter(
 // RegisterRoutes 注册所有API路由
 func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 	// 添加全局错误处理中间件 (Recovery)
-	ginRouter.Use(gin.Recovery()) // Gin自带的Recovery
+	ginRouter.Use(gin.Recovery())                  // Gin自带的Recovery
 	ginRouter.Use(middleware.GlobalErrorHandler()) // 自定义的错误处理，虽然Gin自带了，但我们可以自定义响应格式
 
 	// 添加安全头中间件

@@ -21,11 +21,11 @@ func NewGeoIPDetector(geoIPConfig *config.GeoIPConfig) *GeoIPDetector {
 	// 这里假设数据库文件在配置目录中，或者使用默认路径
 	// 由于环境限制，我们这里实现一个容错机制：
 	// 如果无法加载数据库，我们将使用模拟模式
-	
+
 	var reader *geoip2.Reader
 	// 实际项目中应该从配置文件读取路径
 	dbPath := "./rules/GeoLite2-Country.mmdb"
-	
+
 	r, err := geoip2.Open(dbPath)
 	if err != nil {
 		// Log error but continue with nil reader (will use fallback/mock)
@@ -57,7 +57,7 @@ func (d *GeoIPDetector) Detect(req *http.Request) ([]types.Threat, error) {
 
 	// 获取国家/地区代码
 	countryCode := "UNKNOWN"
-	
+
 	if d.reader != nil {
 		// 使用数据库查询
 		// net.ParseIP(ip)

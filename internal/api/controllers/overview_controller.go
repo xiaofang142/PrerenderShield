@@ -52,10 +52,10 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	endTime := time.Now()
 	startTime := endTime.Add(-24 * time.Hour)
 	wafStats, err := c.wafRepo.GetGlobalStats(startTime.Format("2006-01-02 15:04:05"), endTime.Format("2006-01-02 15:04:05"))
-	
+
 	totalRequests := int64(stats["totalRequests"].(float64))
 	blockedRequests := int64(stats["blockedRequests"].(float64))
-	
+
 	// 如果WAF stats可用，优先使用 DB 中的数据
 	if err == nil && wafStats != nil {
 		totalRequests = wafStats.TotalRequests
@@ -74,12 +74,12 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 
 	// 获取流量趋势数据
 	trafficData := c.visitLogMgr.GetTrafficTrend(time.Now(), time.Now())
-	
+
 	// 简单的流量趋势补充：爬虫和拦截请求（按比例分配或者简单的平均，因为暂时没有小时级的爬虫/拦截统计）
 	// TODO: 实现小时级的爬虫和拦截统计
 	crawlerTotal := int64(stats["crawlerRequests"].(float64))
 	blockedTotal := blockedRequests
-	
+
 	// 将总数分配到各个时间段（平滑分配，仅作为展示）
 	// 注意：这是一个临时的展示策略，直到我们有真实的时间序列数据
 	if len(trafficData) > 0 {
@@ -103,7 +103,7 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 			"lng":   item["lng"],
 			"count": item["count"],
 		})
-		
+
 		var countryName string
 		// 优先使用 CountryCode 进行映射
 		if code, ok := item["country_code"].(string); ok && code != "" {

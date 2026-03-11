@@ -99,7 +99,7 @@ func (c *Crawler) Start() error {
 	if err := c.redisClient.AddURL(c.siteName, initialRoute); err != nil {
 		return fmt.Errorf("failed to add initial URL to redis: %v", err)
 	}
-	
+
 	// 设置初始URL的初始状态和更新时间
 	if err := c.redisClient.SetURLPreheatStatus(c.siteName, initialRoute, "pending", 0); err != nil {
 		// 记录错误但不中断爬取
@@ -145,7 +145,7 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 
 	// 使用Fetcher获取页面内容
 	logging.DefaultLogger.Debug("Fetching %s (depth: %d)", urlStr, depth)
-	
+
 	htmlContent, err := c.fetcher(urlStr)
 	if err != nil {
 		logging.DefaultLogger.Error("Failed to fetch %s: %v", urlStr, err)
@@ -180,13 +180,13 @@ func (c *Crawler) crawl(urlStr string, depth int) {
 
 		// 提取URL的路由部分（去除域名）
 		route := c.extractRoute(link)
-		
+
 		// 添加到Redis，只存储路由部分
 		if err := c.redisClient.AddURL(c.siteName, route); err != nil {
 			logging.DefaultLogger.Warn("Failed to add URL to redis %s: %v", route, err)
 			continue
 		}
-		
+
 		// 设置URL的初始状态和更新时间
 		if err := c.redisClient.SetURLPreheatStatus(c.siteName, route, "pending", 0); err != nil {
 			logging.DefaultLogger.Warn("Failed to set URL preheat status %s: %v", route, err)
@@ -359,7 +359,7 @@ func (c *Crawler) extractRoute(urlStr string) string {
 	if err != nil {
 		return urlStr
 	}
-	
+
 	// 保留路由部分，包括path、rawquery和fragment
 	route := parsed.EscapedPath()
 	if parsed.RawQuery != "" {
@@ -368,12 +368,12 @@ func (c *Crawler) extractRoute(urlStr string) string {
 	if parsed.Fragment != "" {
 		route += "#" + parsed.Fragment
 	}
-	
+
 	// 确保路由以/开头
 	if !strings.HasPrefix(route, "/") {
 		route = "/" + route
 	}
-	
+
 	return route
 }
 

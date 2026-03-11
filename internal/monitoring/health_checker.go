@@ -3,10 +3,12 @@ package monitoring
 import (
 	"fmt"
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 
 	"prerender-shield/internal/redis"
+	"prerender-shield/internal/ssl"
 )
 
 // HealthChecker 健康检查器接口
@@ -19,11 +21,12 @@ type HealthChecker interface {
 
 // healthChecker 健康检查器实现
 type healthChecker struct {
-	redisClient    *redis.Client
-	checks         map[string]func() (bool, string)
-	lastCheckTime  time.Time
+	redisClient     *redis.Client
+	checks          map[string]func() (bool, string)
+	lastCheckTime   time.Time
 	lastCheckResult map[string]interface{}
-	mutex          sync.RWMutex
+	mutex           sync.RWMutex
+	acmeClient      *ssl.ACMEClient
 }
 
 // NewHealthChecker 创建新的健康检查器
@@ -37,8 +40,15 @@ func NewHealthChecker(redisClient *redis.Client) HealthChecker {
 	// 注册默认检查
 	checker.RegisterCheck("redis", checker.checkRedis)
 	checker.RegisterCheck("system", checker.checkSystem)
+	checker.RegisterCheck("memory", checker.checkMemory)
 
 	return checker
+}
+
+// SetACMEClient 设置 ACME 客户端用于 SSL 证书检查
+func (h *healthChecker) SetACMEClient(client *ssl.ACMEClient) {
+	h.acmeClient = client
+	h.RegisterCheck("ssl", h.checkSSL)
 }
 
 // Check 执行健康检查
@@ -61,12 +71,55 @@ func (h *healthChecker) Check() map[string]interface{} {
 	results["timestamp"] = time.Now().Unix()
 	results["uptime"] = time.Since(h.lastCheckTime).Seconds()
 
+	// 添加系统资源信息
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	results["memory"] = map[string]interface{}{
+		"allocated":   m.Alloc,
+		"total_alloc": m.TotalAlloc,
+		"sys":         m.Sys,
+		"num_gc":      m.NumGC,
+	}
+	results["goroutines"] = runtime.NumGoroutine()
+
 	h.mutex.Lock()
 	h.lastCheckResult = results
 	h.lastCheckTime = time.Now()
 	h.mutex.Unlock()
 
 	return results
+}
+
+// checkSSL 检查 SSL 证书状态
+func (h *healthChecker) checkSSL() (bool, string) {
+	if h.acmeClient == nil {
+		return true, "SSL not configured"
+	}
+
+	// 获取即将过期的证书
+	expiringCerts, err := h.acmeClient.GetExpiringCertificates(30)
+	if err != nil {
+		return false, fmt.Sprintf("Failed to check SSL certificates: %v", err)
+	}
+
+	if len(expiringCerts) > 0 {
+		return false, fmt.Sprintf("%d certificate(s) expiring soon", len(expiringCerts))
+	}
+
+	return true, "SSL certificates are healthy"
+}
+
+// checkMemory 检查内存使用情况
+func (h *healthChecker) checkMemory() (bool, string) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	// 如果内存使用超过 1GB，认为不健康
+	if m.Alloc > 1024*1024*1024 {
+		return false, fmt.Sprintf("High memory usage: %d MB", m.Alloc/1024/1024)
+	}
+
+	return true, fmt.Sprintf("Memory usage: %d MB", m.Alloc/1024/1024)
 }
 
 // IsHealthy 检查系统是否健康

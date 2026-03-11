@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/chromedp/chromedp"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"prerender-shield/internal/cache"
@@ -65,9 +65,10 @@ type Engine interface {
 
 // engine 渲染引擎实现
 type engine struct {
-	redisClient *redis.Client
-	cacheManager cache.Manager
-	maxConcurrent int
+	redisClient          *redis.Client
+	cacheManager         cache.Manager
+	maxConcurrent        int
+	concurrencyManager   *ConcurrencyManager
 }
 
 // NewEngine 创建新的渲染引擎
@@ -76,10 +77,14 @@ func NewEngine(redisClient *redis.Client, cacheManager cache.Manager, maxConcurr
 		maxConcurrent = 5
 	}
 
+	// 创建动态并发管理器
+	concurrencyManager := NewConcurrencyManager(2, maxConcurrent*2, maxConcurrent)
+
 	return &engine{
-		redisClient: redisClient,
-		cacheManager: cacheManager,
-		maxConcurrent: maxConcurrent,
+		redisClient:        redisClient,
+		cacheManager:       cacheManager,
+		maxConcurrent:      maxConcurrent,
+		concurrencyManager: concurrencyManager,
 	}
 }
 
@@ -130,10 +135,10 @@ func (e *engine) CreatePreheatTask(siteID string, urls []string) (string, error)
 
 	// 创建任务信息
 	task := map[string]interface{}{
-		"task_id":      taskID,
-		"site_id":      siteID,
-		"urls":         urls,
-		"total_urls":   len(urls),
+		"task_id":        taskID,
+		"site_id":        siteID,
+		"urls":           urls,
+		"total_urls":     len(urls),
 		"completed_urls": 0,
 		"failed_urls":    0,
 		"status":         "pending",

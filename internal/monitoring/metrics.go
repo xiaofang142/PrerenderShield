@@ -113,7 +113,7 @@ func (m *metricsCollector) GetMetrics() map[string]interface{} {
 			avg /= time.Duration(len(durations))
 
 			timerStats[name] = map[string]interface{}{
-				"count": len(durations),
+				"count":  len(durations),
 				"avg_ms": float64(avg.Milliseconds()),
 				"min_ms": float64(min.Milliseconds()),
 				"max_ms": float64(max.Milliseconds()),

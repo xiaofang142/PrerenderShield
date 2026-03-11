@@ -13,7 +13,9 @@ type SensitiveDataDetector struct {
 }
 
 // NewSensitiveDataDetector 创建新的敏感数据检测器
-func NewSensitiveDataDetector(ruleManager interface{ GetRulesByCategory(category string) []types.Rule }) *SensitiveDataDetector {
+func NewSensitiveDataDetector(ruleManager interface {
+	GetRulesByCategory(category string) []types.Rule
+}) *SensitiveDataDetector {
 	return &SensitiveDataDetector{
 		rules: ruleManager.GetRulesByCategory("sensitive-data"),
 	}

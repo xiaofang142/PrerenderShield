@@ -14,7 +14,9 @@ type XSSDetector struct {
 }
 
 // NewXSSDetector 创建新的XSS检测器
-func NewXSSDetector(ruleManager interface{ GetRulesByCategory(category string) []types.Rule }) *XSSDetector {
+func NewXSSDetector(ruleManager interface {
+	GetRulesByCategory(category string) []types.Rule
+}) *XSSDetector {
 	return &XSSDetector{
 		rules: ruleManager.GetRulesByCategory("xss"),
 	}

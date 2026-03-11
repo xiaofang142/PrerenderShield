@@ -414,8 +414,6 @@ func (c *Client) CreatePreheatTask(taskID string, task map[string]interface{}) e
 	return c.SaveJSON(key, task, 24*time.Hour)
 }
 
-
-
 // SaveUser 保存用户信息
 func (c *Client) SaveUser(userID string, user map[string]interface{}) error {
 	key := fmt.Sprintf("user:%s", userID)
@@ -423,13 +421,13 @@ func (c *Client) SaveUser(userID string, user map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// 保存用户名到用户ID的映射
 	if username, ok := user["username"].(string); ok {
 		usernameKey := fmt.Sprintf("username:%s", username)
 		err = c.Set(usernameKey, userID, 0)
 	}
-	
+
 	return err
 }
 
@@ -461,13 +459,13 @@ func (c *Client) GetAllUsers() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	users := make([]string, 0, len(keys))
 	for _, key := range keys {
 		userID := key[5:] // 移除 "user:" 前缀
 		users = append(users, userID)
 	}
-	
+
 	return users, nil
 }
 
@@ -542,7 +540,7 @@ func (c *Client) GetPushStatsWithURLCounts(siteID string) (map[string]interface{
 // GetLast15DaysPushCount 获取最近15天的推送计数
 func (c *Client) GetLast15DaysPushCount(siteID string) (map[string]int64, error) {
 	result := make(map[string]int64)
-	
+
 	// 生成最近15天的日期
 	for i := 0; i < 15; i++ {
 		date := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
@@ -550,20 +548,20 @@ func (c *Client) GetLast15DaysPushCount(siteID string) (map[string]int64, error)
 		count, _ := c.client.Get(c.ctx, key).Int64()
 		result[date] = count
 	}
-	
+
 	return result, nil
 }
 
 // GetPushLogs 获取推送日志
 func (c *Client) GetPushLogs(siteID string, limit, offset int) ([]interface{}, error) {
 	key := fmt.Sprintf("site:%s:push:logs", siteID)
-	
+
 	// 获取日志列表
 	logs, err := c.client.LRange(c.ctx, key, int64(offset), int64(offset+limit-1)).Result()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 转换为interface{}切片
 	result := make([]interface{}, len(logs))
 	for i, log := range logs {
@@ -574,7 +572,7 @@ func (c *Client) GetPushLogs(siteID string, limit, offset int) ([]interface{}, e
 			result[i] = log
 		}
 	}
-	
+
 	return result, nil
 }
 

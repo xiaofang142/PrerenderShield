@@ -252,7 +252,7 @@ func GetCountryName(codeOrName string) string {
 	if name, ok := CodeToName[strings.ToUpper(codeOrName)]; ok {
 		return name
 	}
-	
+
 	// If input is already a full name, we might need to verify or return as is
 	// For now, we return it as is, or we could do a reverse lookup if needed
 	return codeOrName

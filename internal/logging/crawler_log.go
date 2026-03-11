@@ -28,7 +28,7 @@ type CrawlerLog struct {
 	Method     string    `json:"method"`
 	CacheTTL   int       `json:"cache_ttl"`
 	RenderTime float64   `json:"render_time"`
-	
+
 	// GeoIP fields
 	Country     string  `json:"country,omitempty"`
 	CountryCode string  `json:"country_code,omitempty"`
@@ -191,12 +191,12 @@ func (clm *CrawlerLogManager) saveLog(crawlerLog CrawlerLog) {
 // GetUnwashedLogs 获取待清洗日志（批量）
 func (clm *CrawlerLogManager) GetUnwashedLogs(count int64) ([]CrawlerLog, error) {
 	unwashedKey := "crawler_logs:unwashed"
-	
+
 	// 从列表中弹出count个元素
 	// 由于Redis没有直接弹出N个元素的命令，我们可以用LRange + LTrim，或者循环LPop
 	// 为了原子性，循环LPop比较简单，或者使用Pipeline
 	// 这里为了简单，先用LPop循环
-	
+
 	var logs []CrawlerLog
 	for i := int64(0); i < count; i++ {
 		logJSON, err := clm.redisClient.LPop(clm.ctx, unwashedKey).Result()
@@ -206,14 +206,14 @@ func (clm *CrawlerLogManager) GetUnwashedLogs(count int64) ([]CrawlerLog, error)
 		if err != nil {
 			return logs, err
 		}
-		
+
 		var l CrawlerLog
 		if err := json.Unmarshal([]byte(logJSON), &l); err != nil {
 			continue
 		}
 		logs = append(logs, l)
 	}
-	
+
 	return logs, nil
 }
 
@@ -236,15 +236,15 @@ func (clm *CrawlerLogManager) UpdateLog(oldLog, newLog CrawlerLog) error {
 
 	// 使用Pipeline执行原子操作
 	pipe := clm.redisClient.Pipeline()
-	
+
 	// 更新站点日志
 	pipe.ZRem(clm.ctx, siteKey, oldJSON)
 	pipe.ZAdd(clm.ctx, siteKey, &redis.Z{Score: score, Member: newJSON})
-	
+
 	// 更新总日志
 	pipe.ZRem(clm.ctx, totalKey, oldJSON)
 	pipe.ZAdd(clm.ctx, totalKey, &redis.Z{Score: score, Member: newJSON})
-	
+
 	_, err = pipe.Exec(clm.ctx)
 	return err
 }
@@ -348,7 +348,7 @@ func (clm *CrawlerLogManager) cleanupOldLogs() {
 		if currentSize+usage > maxSizeBytes {
 			// 删除总日志
 			clm.redisClient.Del(clm.ctx, key)
-			
+
 			// Extract date from key
 			parts := strings.Split(key, ":")
 			if len(parts) > 0 {

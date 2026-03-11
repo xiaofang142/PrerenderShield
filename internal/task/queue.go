@@ -16,10 +16,10 @@ type TaskType string
 
 // 任务类型常量
 const (
-	TaskTypePreheat  TaskType = "preheat"
-	TaskTypeSSL      TaskType = "ssl"
-	TaskTypeCleanup  TaskType = "cleanup"
-	TaskTypeMonitor  TaskType = "monitor"
+	TaskTypePreheat TaskType = "preheat"
+	TaskTypeSSL     TaskType = "ssl"
+	TaskTypeCleanup TaskType = "cleanup"
+	TaskTypeMonitor TaskType = "monitor"
 )
 
 // TaskStatus 任务状态
@@ -27,11 +27,11 @@ type TaskStatus string
 
 // 任务状态常量
 const (
-	TaskStatusPending    TaskStatus = "pending"
-	TaskStatusRunning    TaskStatus = "running"
-	TaskStatusCompleted  TaskStatus = "completed"
-	TaskStatusFailed     TaskStatus = "failed"
-	TaskStatusCancelled  TaskStatus = "cancelled"
+	TaskStatusPending   TaskStatus = "pending"
+	TaskStatusRunning   TaskStatus = "running"
+	TaskStatusCompleted TaskStatus = "completed"
+	TaskStatusFailed    TaskStatus = "failed"
+	TaskStatusCancelled TaskStatus = "cancelled"
 )
 
 // Task 任务接口
@@ -77,10 +77,10 @@ func (q *queue) Enqueue(task Task) error {
 
 	// 创建任务信息
 	taskInfo := map[string]interface{}{
-		"id":        taskID,
-		"type":      task.Type(),
-		"status":    task.Status(),
-		"priority":  task.Priority(),
+		"id":         taskID,
+		"type":       task.Type(),
+		"status":     task.Status(),
+		"priority":   task.Priority(),
 		"created_at": time.Now().Unix(),
 		"updated_at": time.Now().Unix(),
 	}
@@ -265,14 +265,14 @@ func (q *queue) Cleanup() error {
 
 // BaseTask 基础任务结构
 type BaseTask struct {
-	IDValue     string     `json:"id"`
-	TypeValue   TaskType   `json:"type"`
-	StatusValue TaskStatus `json:"status"`
-	PriorityValue int       `json:"priority"`
-	CreatedAt   int64      `json:"created_at"`
-	UpdatedAt   int64      `json:"updated_at"`
-	Retries     int        `json:"retries"`
-	MaxRetries  int        `json:"max_retries"`
+	IDValue       string     `json:"id"`
+	TypeValue     TaskType   `json:"type"`
+	StatusValue   TaskStatus `json:"status"`
+	PriorityValue int        `json:"priority"`
+	CreatedAt     int64      `json:"created_at"`
+	UpdatedAt     int64      `json:"updated_at"`
+	Retries       int        `json:"retries"`
+	MaxRetries    int        `json:"max_retries"`
 }
 
 // NewBaseTask 创建新的基础任务

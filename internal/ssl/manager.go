@@ -33,11 +33,11 @@ type Manager interface {
 
 // manager SSL证书管理器实现
 type manager struct {
-	redisClient  *redis.Client
-	acmeClient   *acme.Client
-	certDir      string
-	email        string
-	production   bool
+	redisClient *redis.Client
+	acmeClient  *acme.Client
+	certDir     string
+	email       string
+	production  bool
 }
 
 // NewManager 创建新的SSL证书管理器
@@ -106,12 +106,12 @@ func (m *manager) RequestCertificate(domain string) error {
 
 	// 存储证书信息到Redis
 	certInfo := map[string]interface{}{
-		"domain":      domain,
-		"cert_path":   certPath,
-		"key_path":    keyPath,
-		"created_at":  time.Now().Unix(),
-		"expires_at":  time.Now().Add(90 * 24 * time.Hour).Unix(),
-		"status":      "active",
+		"domain":     domain,
+		"cert_path":  certPath,
+		"key_path":   keyPath,
+		"created_at": time.Now().Unix(),
+		"expires_at": time.Now().Add(90 * 24 * time.Hour).Unix(),
+		"status":     "active",
 	}
 
 	if err := m.redisClient.SaveJSON(fmt.Sprintf("ssl:cert:%s", domain), certInfo, 0); err != nil {
@@ -230,13 +230,13 @@ func (m *manager) ImportCertificate(domain, certPath, keyPath string) error {
 
 	// 存储证书信息到Redis
 	certInfo := map[string]interface{}{
-		"domain":      domain,
-		"cert_path":   newCertPath,
-		"key_path":    newKeyPath,
-		"created_at":  time.Now().Unix(),
-		"expires_at":  cert.NotAfter.Unix(),
-		"status":      "active",
-		"imported":    true,
+		"domain":     domain,
+		"cert_path":  newCertPath,
+		"key_path":   newKeyPath,
+		"created_at": time.Now().Unix(),
+		"expires_at": cert.NotAfter.Unix(),
+		"status":     "active",
+		"imported":   true,
 	}
 
 	if err := m.redisClient.SaveJSON(fmt.Sprintf("ssl:cert:%s", domain), certInfo, 0); err != nil {
@@ -432,11 +432,11 @@ func (m *manager) createSelfSignedCertificate(domain string, privateKey *rsa.Pri
 		Subject: pkix.Name{
 			CommonName: domain,
 		},
-		DNSNames: []string{domain},
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().Add(90 * 24 * time.Hour),
-		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:              []string{domain},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(90 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 	}
 
@@ -459,7 +459,7 @@ func (m *manager) createSelfSignedCertificate(domain string, privateKey *rsa.Pri
 func (m *manager) requestCertificateWithACME(domain string, privateKey *rsa.PrivateKey, csr *x509.CertificateRequest) ([]byte, error) {
 	// 注意：这是一个简化的实现，实际ACME流程需要更复杂的处理
 	// 包括账户注册、挑战验证、订单创建等步骤
-	
+
 	// 这里我们将使用自签名证书作为示例
 	// 完整的ACME实现需要：
 	// 1. 注册ACME账户
@@ -467,7 +467,7 @@ func (m *manager) requestCertificateWithACME(domain string, privateKey *rsa.Priv
 	// 3. 处理HTTP-01或DNS-01挑战
 	// 4. 验证挑战
 	// 5. 下载证书
-	
+
 	// 存储ACME挑战信息到Redis，供HTTP服务器使用
 	challengeKey := fmt.Sprintf("acme:challenge:%s", domain)
 	challengeValue := "test-challenge-value"

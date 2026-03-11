@@ -30,7 +30,7 @@ func TestCreateSiteHandler_RedirectMode(t *testing.T) {
 
 	// 创建实际的监控和日志管理器
 	crawlerLogManager := logging.NewCrawlerLogManager("localhost:6379") // 使用本地Redis URL
-	visitLogManager := logging.NewVisitLogManager("localhost:6379") // 使用本地Redis URL
+	visitLogManager := logging.NewVisitLogManager("localhost:6379")     // 使用本地Redis URL
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false}) // 禁用监控，避免启动不必要的服务
 
 	// 创建HTTP请求和响应记录器

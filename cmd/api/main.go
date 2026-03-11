@@ -119,7 +119,7 @@ func main() {
 		cfg = configManager.GetConfig()
 		logging.DefaultLogger.Info("Using sites configuration from Redis")
 	}
-	
+
 	// 验证配置完整性
 	if len(cfg.Sites) == 0 {
 		logging.DefaultLogger.Warn("No sites configured, using fallback configuration")
@@ -226,7 +226,7 @@ func main() {
 
 	// 8. 初始化健康检查器
 	healthChecker := monitoring.NewHealthChecker(redisClient)
-	
+
 	// 8.1 添加配置加载失败的回退策略
 	// 如果从Redis加载站点配置失败，尝试使用文件配置并记录警告
 	if err := configManager.LoadSitesFromRedis(); err != nil {
@@ -240,7 +240,7 @@ func main() {
 		cfg = configManager.GetConfig()
 		logging.DefaultLogger.Info("Using sites configuration from Redis")
 	}
-	
+
 	// 8.2 初始化监控模块
 	monitor := monitoring.NewMonitor(monitoring.Config{
 		Enabled:           true,
@@ -251,13 +251,13 @@ func main() {
 		log.Fatalf("Failed to start monitoring: %v", err)
 	}
 	logging.DefaultLogger.Info("Monitoring service started successfully")
-	
+
 	// 8.3 启动健康检查相关服务
 	go func() {
 		// 定期执行健康检查
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ticker.C:
@@ -268,7 +268,7 @@ func main() {
 					healthyStatus = "unhealthy"
 				}
 				logging.DefaultLogger.Info("Periodic health check - Overall status: %s", healthyStatus)
-				
+
 				// 如果有关键问题，记录警告
 				if !isHealthy {
 					for checkName, checkResult := range status {

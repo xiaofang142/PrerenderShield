@@ -62,7 +62,6 @@ func TestInjectionDetector_Detect(t *testing.T) {
 	})
 }
 
-
 func TestInjectionDetector_Name(t *testing.T) {
 	// 创建mock规则管理器
 	mockRuleManager := &MockRuleManager{

@@ -36,7 +36,7 @@ func (c *FirewallController) GetWafConfig(ctx *gin.Context) {
 	}
 
 	if config == nil {
-		// Return empty default or 404? 
+		// Return empty default or 404?
 		// Return a default structure if not found, or create one on the fly.
 		// For now return empty object
 		ctx.JSON(http.StatusOK, gin.H{
@@ -86,7 +86,7 @@ func (c *FirewallController) UpdateWafConfig(ctx *gin.Context) {
 		config = &models.WafConfig{
 			SiteID: siteID,
 		}
-		// Create immediately to ensure ID is generated if needed, 
+		// Create immediately to ensure ID is generated if needed,
 		// but UpdateWafConfig below will save it anyway.
 	}
 
@@ -126,7 +126,7 @@ func (c *FirewallController) UpdateWafConfig(ctx *gin.Context) {
 		})
 	}
 	config.IPBlacklist = blacklistIPs
-	
+
 	if err := c.wafRepo.UpdateWafConfig(config); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update WAF config"})
 		return

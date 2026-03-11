@@ -112,7 +112,7 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 	// 更新任务状态为running
 	task.Status = "running"
 	task.StartedAt = time.Now()
-	
+
 	// 保存任务到Redis
 	taskMap, _ := json.Marshal(task)
 	var taskMapInterface map[string]interface{}
@@ -125,7 +125,7 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 		// 记录错误日志
 		task.Status = "failed"
 		task.CompletedAt = time.Now()
-		
+
 		// 保存任务到Redis
 		taskMap, _ := json.Marshal(task)
 		var taskMapInterface map[string]interface{}
@@ -251,7 +251,7 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 	task.CompletedAt = time.Now()
 	task.SuccessCount = successCount
 	task.FailedCount = failedCount
-	
+
 	// 保存任务到Redis
 	taskMap, _ = json.Marshal(task)
 	json.Unmarshal(taskMap, &taskMapInterface)

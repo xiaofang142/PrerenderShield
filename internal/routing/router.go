@@ -46,12 +46,12 @@ func NewMemoryCache() *MemoryCache {
 func (mc *MemoryCache) Get(key string) interface{} {
 	mc.mutex.RLock()
 	defer mc.mutex.RUnlock()
-	
+
 	item, exists := mc.cache[key]
 	if !exists {
 		return nil
 	}
-	
+
 	if time.Now().After(item.expiration) {
 		// 缓存过期，删除
 		mc.mutex.RUnlock()
@@ -61,7 +61,7 @@ func (mc *MemoryCache) Get(key string) interface{} {
 		mc.mutex.RLock()
 		return nil
 	}
-	
+
 	return item.value
 }
 
@@ -69,13 +69,13 @@ func (mc *MemoryCache) Get(key string) interface{} {
 func (mc *MemoryCache) Set(key string, value interface{}, ttl int) error {
 	mc.mutex.Lock()
 	defer mc.mutex.Unlock()
-	
+
 	expiration := time.Now().Add(time.Duration(ttl) * time.Second)
 	mc.cache[key] = cacheItem{
 		value:      value,
 		expiration: expiration,
 	}
-	
+
 	return nil
 }
 
@@ -83,14 +83,14 @@ func (mc *MemoryCache) Set(key string, value interface{}, ttl int) error {
 func (mc *MemoryCache) Clear() error {
 	mc.mutex.Lock()
 	defer mc.mutex.Unlock()
-	
+
 	mc.cache = make(map[string]cacheItem)
-	
+
 	return nil
 }
 
 // RegexMatcher 正则表达式匹配器
-type RegexMatcher struct {}
+type RegexMatcher struct{}
 
 // Match 使用正则表达式匹配路由规则
 func (rm *RegexMatcher) Match(req *http.Request, rule *RouteRule) bool {
@@ -101,7 +101,7 @@ func (rm *RegexMatcher) Match(req *http.Request, rule *RouteRule) bool {
 		if idx := strings.LastIndex(host, ":"); idx != -1 {
 			host = host[:idx]
 		}
-		
+
 		// 域名匹配逻辑
 		if rule.Domain == "*" {
 			// 通配符匹配，匹配所有域名
@@ -124,41 +124,41 @@ func (rm *RegexMatcher) Match(req *http.Request, rule *RouteRule) bool {
 			}
 		}
 	}
-	
+
 	// 2. 路径匹配
 	pattern := rule.Pattern
-	
+
 	// 如果是精确匹配
 	if strings.HasPrefix(pattern, "=") {
 		exactPath := strings.TrimPrefix(pattern, "=")
 		return req.URL.Path == exactPath
 	}
-	
+
 	// 如果是前缀匹配
 	if strings.HasSuffix(pattern, "*") {
 		prefix := strings.TrimSuffix(pattern, "*")
 		return strings.HasPrefix(req.URL.Path, prefix)
 	}
-	
+
 	// 否则使用正则表达式匹配
 	matched, err := regexp.MatchString(pattern, req.URL.Path)
 	if err != nil {
 		return false
 	}
-	
+
 	return matched
 }
 
 // Router 智能流量路由管理器
 type Router struct {
-	rules          []*RouteRule
-	exactRules     map[string]*RouteRule          // 精确匹配规则
-	prefixRules    map[string][]*RouteRule        // 前缀匹配规则
-	regexRules     []*RouteRule                   // 正则匹配规则
-	mutex          sync.RWMutex
-	matcher        Matcher
-	cache          Cache
-	handlers       map[string]HandlerFunc
+	rules       []*RouteRule
+	exactRules  map[string]*RouteRule   // 精确匹配规则
+	prefixRules map[string][]*RouteRule // 前缀匹配规则
+	regexRules  []*RouteRule            // 正则匹配规则
+	mutex       sync.RWMutex
+	matcher     Matcher
+	cache       Cache
+	handlers    map[string]HandlerFunc
 }
 
 // RouteRule 路由规则
@@ -192,12 +192,12 @@ func NewRouter(config Config) *Router {
 		handlers:    config.Handlers,
 		matcher:     &RegexMatcher{},
 	}
-	
+
 	// 按优先级排序规则
 	router.sortRules()
 	// 构建优化的数据结构
 	router.buildRuleIndexes()
-	
+
 	return router
 }
 
@@ -214,11 +214,11 @@ func (r *Router) buildRuleIndexes() {
 	r.exactRules = make(map[string]*RouteRule)
 	r.prefixRules = make(map[string][]*RouteRule)
 	r.regexRules = make([]*RouteRule, 0)
-	
+
 	// 分类规则
 	for _, rule := range r.rules {
 		pattern := rule.Pattern
-		
+
 		// 精确匹配规则
 		if strings.HasPrefix(pattern, "=") {
 			exactPath := strings.TrimPrefix(pattern, "=")
@@ -243,7 +243,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.executeHandler(w, req, rule)
 		return
 	}
-	
+
 	// 没有匹配的规则，返回404
 	http.NotFound(w, req)
 }
@@ -255,12 +255,12 @@ func (r *Router) MatchRoute(req *http.Request) *RouteRule {
 	if cachedRule, ok := r.cache.Get(cacheKey).(*RouteRule); ok {
 		return cachedRule
 	}
-	
+
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	
+
 	path := req.URL.Path
-	
+
 	// 1. 检查精确匹配
 	if rule, exists := r.exactRules[path]; exists {
 		if r.matcher.Match(req, rule) {
@@ -269,7 +269,7 @@ func (r *Router) MatchRoute(req *http.Request) *RouteRule {
 			return rule
 		}
 	}
-	
+
 	// 2. 检查前缀匹配
 	for prefix, rules := range r.prefixRules {
 		if strings.HasPrefix(path, prefix) {
@@ -282,7 +282,7 @@ func (r *Router) MatchRoute(req *http.Request) *RouteRule {
 			}
 		}
 	}
-	
+
 	// 3. 检查正则匹配
 	for _, rule := range r.regexRules {
 		if r.matcher.Match(req, rule) {
@@ -291,7 +291,7 @@ func (r *Router) MatchRoute(req *http.Request) *RouteRule {
 			return rule
 		}
 	}
-	
+
 	return nil
 }
 
@@ -303,7 +303,7 @@ func (r *Router) executeHandler(w http.ResponseWriter, req *http.Request, rule *
 		http.Error(w, fmt.Sprintf("No handler for action: %s", rule.Action), http.StatusInternalServerError)
 		return
 	}
-	
+
 	handler(w, req, rule)
 }
 
@@ -311,7 +311,7 @@ func (r *Router) executeHandler(w http.ResponseWriter, req *http.Request, rule *
 func (r *Router) UpdateRules(rules []*RouteRule) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	
+
 	r.rules = rules
 	// 重新排序规则
 	r.sortRules()
@@ -319,7 +319,7 @@ func (r *Router) UpdateRules(rules []*RouteRule) error {
 	r.buildRuleIndexes()
 	// 清空路由缓存
 	r.clearRouteCache()
-	
+
 	return nil
 }
 
@@ -327,12 +327,12 @@ func (r *Router) UpdateRules(rules []*RouteRule) error {
 func (r *Router) AddRule(rule *RouteRule) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	
+
 	// 生成唯一ID
 	if rule.ID == "" {
 		rule.ID = uuid.New().String()
 	}
-	
+
 	r.rules = append(r.rules, rule)
 	// 重新排序规则
 	r.sortRules()
@@ -340,7 +340,7 @@ func (r *Router) AddRule(rule *RouteRule) error {
 	r.buildRuleIndexes()
 	// 清空路由缓存
 	r.clearRouteCache()
-	
+
 	return nil
 }
 
@@ -348,7 +348,7 @@ func (r *Router) AddRule(rule *RouteRule) error {
 func (r *Router) DeleteRule(ruleID string) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	
+
 	for i, rule := range r.rules {
 		if rule.ID == ruleID {
 			r.rules = append(r.rules[:i], r.rules[i+1:]...)
@@ -359,7 +359,7 @@ func (r *Router) DeleteRule(ruleID string) error {
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("rule not found: %s", ruleID)
 }
 
@@ -367,11 +367,11 @@ func (r *Router) DeleteRule(ruleID string) error {
 func (r *Router) GetRules() []*RouteRule {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	
+
 	// 返回规则副本
 	rules := make([]*RouteRule, len(r.rules))
 	copy(rules, r.rules)
-	
+
 	return rules
 }
 
@@ -386,11 +386,11 @@ func (r *Router) clearRouteCache() {
 func (r *Router) AddHandler(action string, handler HandlerFunc) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	
+
 	if r.handlers == nil {
 		r.handlers = make(map[string]HandlerFunc)
 	}
-	
+
 	r.handlers[action] = handler
 }
 
@@ -398,6 +398,6 @@ func (r *Router) AddHandler(action string, handler HandlerFunc) {
 func (r *Router) RemoveHandler(action string) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	
+
 	delete(r.handlers, action)
 }

@@ -35,4 +35,3 @@ func TestEngine_UpdateRules(t *testing.T) {
 	err = engine.UpdateRules()
 	assert.NoError(t, err)
 }
-

@@ -14,29 +14,29 @@ import (
 //
 // 字段:
 //
-// 	engines: 引擎实例映射，键为站点ID，值为对应的渲染引擎
-// 	redisClient: Redis客户端，用于共享数据
-// 	cacheManager: 缓存管理器，用于共享缓存
-// 	mutex: 互斥锁，用于并发安全
-// 	maxConcurrent: 最大并发渲染数
-// 	timeout: 默认渲染超时时间
+//	engines: 引擎实例映射，键为站点ID，值为对应的渲染引擎
+//	redisClient: Redis客户端，用于共享数据
+//	cacheManager: 缓存管理器，用于共享缓存
+//	mutex: 互斥锁，用于并发安全
+//	maxConcurrent: 最大并发渲染数
+//	timeout: 默认渲染超时时间
 //
 // 方法:
 //
-// 	NewEngineManager: 创建引擎管理器实例
-// 	GetEngine: 获取或创建指定站点的渲染引擎
-// 	RemoveEngine: 移除指定站点的渲染引擎
-// 	Cleanup: 清理所有引擎实例
-// 	SetMaxConcurrent: 设置最大并发渲染数
-// 	SetTimeout: 设置默认渲染超时时间
-// 	IsCrawlerRequest: 检测请求是否来自爬虫
-// 	Render: 渲染指定URL
+//	NewEngineManager: 创建引擎管理器实例
+//	GetEngine: 获取或创建指定站点的渲染引擎
+//	RemoveEngine: 移除指定站点的渲染引擎
+//	Cleanup: 清理所有引擎实例
+//	SetMaxConcurrent: 设置最大并发渲染数
+//	SetTimeout: 设置默认渲染超时时间
+//	IsCrawlerRequest: 检测请求是否来自爬虫
+//	Render: 渲染指定URL
 //
 // 示例:
 //
-// 	manager := NewEngineManager(redisClient, cacheManager, 5)
-// 	engine, _ := manager.GetEngine("site1")
-// 	result, _ := engine.Render("https://example.com")
+//	manager := NewEngineManager(redisClient, cacheManager, 5)
+//	engine, _ := manager.GetEngine("site1")
+//	result, _ := engine.Render("https://example.com")
 type EngineManager struct {
 	engines       map[string]Engine
 	redisClient   *redis.Client
@@ -50,17 +50,17 @@ type EngineManager struct {
 //
 // 参数:
 //
-// 	redisClient: Redis客户端，用于共享数据
-// 	cacheManager: 缓存管理器，用于共享缓存
-// 	maxConcurrent: 最大并发渲染数
+//	redisClient: Redis客户端，用于共享数据
+//	cacheManager: 缓存管理器，用于共享缓存
+//	maxConcurrent: 最大并发渲染数
 //
 // 返回值:
 //
-// 	*EngineManager: 渲染引擎管理器实例
+//	*EngineManager: 渲染引擎管理器实例
 //
 // 示例:
 //
-// 	manager := NewEngineManager(redisClient, cacheManager, 5)
+//	manager := NewEngineManager(redisClient, cacheManager, 5)
 func NewEngineManager(redisClient *redis.Client, cacheManager cache.Manager, maxConcurrent int) *EngineManager {
 	return &EngineManager{
 		engines:       make(map[string]Engine),
@@ -75,19 +75,19 @@ func NewEngineManager(redisClient *redis.Client, cacheManager cache.Manager, max
 //
 // 参数:
 //
-// 	siteID: 站点ID
+//	siteID: 站点ID
 //
 // 返回值:
 //
-// 	Engine: 渲染引擎实例
-// 	error: 错误信息
+//	Engine: 渲染引擎实例
+//	error: 错误信息
 //
 // 示例:
 //
-// 	engine, err := manager.GetEngine("site1")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+//	engine, err := manager.GetEngine("site1")
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 func (m *EngineManager) GetEngine(siteID string) (Engine, bool) {
 	m.mutex.RLock()
 	engine, exists := m.engines[siteID]
@@ -116,11 +116,11 @@ func (m *EngineManager) GetEngine(siteID string) (Engine, bool) {
 //
 // 参数:
 //
-// 	siteID: 站点ID
+//	siteID: 站点ID
 //
 // 示例:
 //
-// 	manager.RemoveEngine("site1")
+//	manager.RemoveEngine("site1")
 func (m *EngineManager) RemoveEngine(siteID string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -132,7 +132,7 @@ func (m *EngineManager) RemoveEngine(siteID string) {
 //
 // 示例:
 //
-// 	manager.Cleanup()
+//	manager.Cleanup()
 func (m *EngineManager) Cleanup() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -144,11 +144,11 @@ func (m *EngineManager) Cleanup() {
 //
 // 参数:
 //
-// 	maxConcurrent: 最大并发渲染数
+//	maxConcurrent: 最大并发渲染数
 //
 // 示例:
 //
-// 	manager.SetMaxConcurrent(10)
+//	manager.SetMaxConcurrent(10)
 func (m *EngineManager) SetMaxConcurrent(maxConcurrent int) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -160,11 +160,11 @@ func (m *EngineManager) SetMaxConcurrent(maxConcurrent int) {
 //
 // 参数:
 //
-// 	timeout: 默认渲染超时时间
+//	timeout: 默认渲染超时时间
 //
 // 示例:
 //
-// 	manager.SetTimeout(60 * time.Second)
+//	manager.SetTimeout(60 * time.Second)
 func (m *EngineManager) SetTimeout(timeout time.Duration) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -176,15 +176,15 @@ func (m *EngineManager) SetTimeout(timeout time.Duration) {
 //
 // 参数:
 //
-// 	userAgent: 用户代理字符串
+//	userAgent: 用户代理字符串
 //
 // 返回值:
 //
-// 	bool: 是否为爬虫请求
+//	bool: 是否为爬虫请求
 //
 // 示例:
 //
-// 	isCrawler := manager.IsCrawlerRequest("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html")
+//	isCrawler := manager.IsCrawlerRequest("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html")
 func (m *EngineManager) IsCrawlerRequest(userAgent string) bool {
 	// 简单的爬虫检测逻辑
 	crawlerKeywords := []string{
@@ -226,14 +226,14 @@ func (m *EngineManager) IsCrawlerRequest(userAgent string) bool {
 //
 // 返回值:
 //
-// 	[]string: 站点ID列表
+//	[]string: 站点ID列表
 //
 // 示例:
 //
-// 	siteIDs := manager.ListSites()
-// 	for _, siteID := range siteIDs {
-// 		fmt.Println(siteID)
-// 	}
+//	siteIDs := manager.ListSites()
+//	for _, siteID := range siteIDs {
+//		fmt.Println(siteID)
+//	}
 func (m *EngineManager) ListSites() []string {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
@@ -245,5 +245,3 @@ func (m *EngineManager) ListSites() []string {
 
 	return siteIDs
 }
-
-

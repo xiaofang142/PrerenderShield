@@ -93,7 +93,7 @@ func (c *SitesController) GetSite(ctx *gin.Context) {
 func (c *SitesController) GetSiteConfig(ctx *gin.Context) {
 	id := ctx.Param("id")
 	configType := ctx.Query("type") // prerender 或 push
-	
+
 	if c.redisClient == nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -101,7 +101,7 @@ func (c *SitesController) GetSiteConfig(ctx *gin.Context) {
 		})
 		return
 	}
-	
+
 	var configKey string
 	switch configType {
 	case "prerender":
@@ -117,7 +117,7 @@ func (c *SitesController) GetSiteConfig(ctx *gin.Context) {
 		})
 		return
 	}
-	
+
 	config, err := c.redisClient.GetSiteStats(configKey)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -126,7 +126,7 @@ func (c *SitesController) GetSiteConfig(ctx *gin.Context) {
 		})
 		return
 	}
-	
+
 	if len(config) == 0 {
 		ctx.JSON(http.StatusNotFound, gin.H{
 			"code":    404,
@@ -134,7 +134,7 @@ func (c *SitesController) GetSiteConfig(ctx *gin.Context) {
 		})
 		return
 	}
-	
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
@@ -245,17 +245,17 @@ func (c *SitesController) AddSite(ctx *gin.Context) {
 
 		// 保存WAF配置
 		wafConfig := map[string]interface{}{
-			"firewall_enabled":    site.Firewall.Enabled,
-			"default_action":      site.Firewall.ActionConfig.DefaultAction,
-			"block_message":       site.Firewall.ActionConfig.BlockMessage,
-			"geoip_enabled":       site.Firewall.GeoIPConfig.Enabled,
-			"geoip_block_list":    strings.Join(site.Firewall.GeoIPConfig.BlockList, ","),
-			"ratelimit_enabled":   site.Firewall.RateLimitConfig.Enabled,
-			"ratelimit_requests":  site.Firewall.RateLimitConfig.Requests,
-			"ratelimit_window":    site.Firewall.RateLimitConfig.Window,
-			"ratelimit_ban_time":  site.Firewall.RateLimitConfig.BanTime,
-			"blacklist":           strings.Join(site.Firewall.Blacklist, ","),
-			"whitelist":           strings.Join(site.Firewall.Whitelist, ","),
+			"firewall_enabled":   site.Firewall.Enabled,
+			"default_action":     site.Firewall.ActionConfig.DefaultAction,
+			"block_message":      site.Firewall.ActionConfig.BlockMessage,
+			"geoip_enabled":      site.Firewall.GeoIPConfig.Enabled,
+			"geoip_block_list":   strings.Join(site.Firewall.GeoIPConfig.BlockList, ","),
+			"ratelimit_enabled":  site.Firewall.RateLimitConfig.Enabled,
+			"ratelimit_requests": site.Firewall.RateLimitConfig.Requests,
+			"ratelimit_window":   site.Firewall.RateLimitConfig.Window,
+			"ratelimit_ban_time": site.Firewall.RateLimitConfig.BanTime,
+			"blacklist":          strings.Join(site.Firewall.Blacklist, ","),
+			"whitelist":          strings.Join(site.Firewall.Whitelist, ","),
 		}
 		if err := c.redisClient.SetSiteStats(site.ID+"_waf", wafConfig); err != nil {
 			logging.DefaultLogger.Warn("Failed to save WAF config to Redis: %v", err)
@@ -431,17 +431,17 @@ func (c *SitesController) UpdateSite(ctx *gin.Context) {
 
 		// 保存WAF配置
 		wafConfig := map[string]interface{}{
-			"firewall_enabled":    updatedSite.Firewall.Enabled,
-			"default_action":      updatedSite.Firewall.ActionConfig.DefaultAction,
-			"block_message":       updatedSite.Firewall.ActionConfig.BlockMessage,
-			"geoip_enabled":       updatedSite.Firewall.GeoIPConfig.Enabled,
-			"geoip_block_list":    strings.Join(updatedSite.Firewall.GeoIPConfig.BlockList, ","),
-			"ratelimit_enabled":   updatedSite.Firewall.RateLimitConfig.Enabled,
-			"ratelimit_requests":  updatedSite.Firewall.RateLimitConfig.Requests,
-			"ratelimit_window":    updatedSite.Firewall.RateLimitConfig.Window,
-			"ratelimit_ban_time":  updatedSite.Firewall.RateLimitConfig.BanTime,
-			"blacklist":           strings.Join(updatedSite.Firewall.Blacklist, ","),
-			"whitelist":           strings.Join(updatedSite.Firewall.Whitelist, ","),
+			"firewall_enabled":   updatedSite.Firewall.Enabled,
+			"default_action":     updatedSite.Firewall.ActionConfig.DefaultAction,
+			"block_message":      updatedSite.Firewall.ActionConfig.BlockMessage,
+			"geoip_enabled":      updatedSite.Firewall.GeoIPConfig.Enabled,
+			"geoip_block_list":   strings.Join(updatedSite.Firewall.GeoIPConfig.BlockList, ","),
+			"ratelimit_enabled":  updatedSite.Firewall.RateLimitConfig.Enabled,
+			"ratelimit_requests": updatedSite.Firewall.RateLimitConfig.Requests,
+			"ratelimit_window":   updatedSite.Firewall.RateLimitConfig.Window,
+			"ratelimit_ban_time": updatedSite.Firewall.RateLimitConfig.BanTime,
+			"blacklist":          strings.Join(updatedSite.Firewall.Blacklist, ","),
+			"whitelist":          strings.Join(updatedSite.Firewall.Whitelist, ","),
 		}
 		if err := c.redisClient.SetSiteStats(updatedSite.ID+"_waf", wafConfig); err != nil {
 			logging.DefaultLogger.Warn("Failed to save WAF config to Redis: %v", err)
@@ -495,13 +495,13 @@ func (c *SitesController) UpdateSitePrerenderConfig(ctx *gin.Context) {
 	for i, s := range currentConfig.Sites {
 		if s.ID == id {
 			oldSite = &s
-			
+
 			// 仅更新预渲染相关配置，保留推送配置(Push)
 			// 注意：前端传来的 prerenderUpdates 中 Push 可能为空或默认值，所以我们需要手动保留原有的 Push 配置
 			originalPush := currentConfig.Sites[i].Prerender.Push
 			currentConfig.Sites[i].Prerender = prerenderUpdates
 			currentConfig.Sites[i].Prerender.Push = originalPush
-			
+
 			updatedSite = &currentConfig.Sites[i]
 			break
 		}
@@ -679,17 +679,17 @@ func (c *SitesController) UpdateSiteFirewallConfig(ctx *gin.Context) {
 
 	if c.redisClient != nil {
 		wafConfig := map[string]interface{}{
-			"firewall_enabled":    updatedSite.Firewall.Enabled,
-			"default_action":      updatedSite.Firewall.ActionConfig.DefaultAction,
-			"block_message":       updatedSite.Firewall.ActionConfig.BlockMessage,
-			"geoip_enabled":       updatedSite.Firewall.GeoIPConfig.Enabled,
-			"geoip_block_list":    strings.Join(updatedSite.Firewall.GeoIPConfig.BlockList, ","),
-			"ratelimit_enabled":   updatedSite.Firewall.RateLimitConfig.Enabled,
-			"ratelimit_requests":  updatedSite.Firewall.RateLimitConfig.Requests,
-			"ratelimit_window":    updatedSite.Firewall.RateLimitConfig.Window,
-			"ratelimit_ban_time":  updatedSite.Firewall.RateLimitConfig.BanTime,
-			"blacklist":           strings.Join(updatedSite.Firewall.Blacklist, ","),
-			"whitelist":           strings.Join(updatedSite.Firewall.Whitelist, ","),
+			"firewall_enabled":   updatedSite.Firewall.Enabled,
+			"default_action":     updatedSite.Firewall.ActionConfig.DefaultAction,
+			"block_message":      updatedSite.Firewall.ActionConfig.BlockMessage,
+			"geoip_enabled":      updatedSite.Firewall.GeoIPConfig.Enabled,
+			"geoip_block_list":   strings.Join(updatedSite.Firewall.GeoIPConfig.BlockList, ","),
+			"ratelimit_enabled":  updatedSite.Firewall.RateLimitConfig.Enabled,
+			"ratelimit_requests": updatedSite.Firewall.RateLimitConfig.Requests,
+			"ratelimit_window":   updatedSite.Firewall.RateLimitConfig.Window,
+			"ratelimit_ban_time": updatedSite.Firewall.RateLimitConfig.BanTime,
+			"blacklist":          strings.Join(updatedSite.Firewall.Blacklist, ","),
+			"whitelist":          strings.Join(updatedSite.Firewall.Whitelist, ","),
 		}
 		if err := c.redisClient.SetSiteStats(updatedSite.ID+"_waf", wafConfig); err != nil {
 			logging.DefaultLogger.Warn("Failed to save WAF config to Redis: %v", err)
@@ -1279,7 +1279,7 @@ func (c *SitesController) BatchDeleteStaticFiles(ctx *gin.Context) {
 			failedPaths = append(failedPaths, fmt.Sprintf("%s (invalid path)", path))
 			continue
 		}
-		
+
 		// 构建完整的文件路径
 		// 确保 path 不以 / 开头，或者如果以 / 开头，Join 会正确处理（通常 Join 会把 / 当作根，所以最好去掉前导 /）
 		// 在这里，假设前端传递的是相对于站点静态目录的路径

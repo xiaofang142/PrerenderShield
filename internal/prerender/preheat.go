@@ -99,8 +99,8 @@ func (p *PreheatWorker) Start() error {
 	}
 
 	// 初始化进度统计
-	var ( 
-		total       = int64(len(urls))
+	var (
+		total             = int64(len(urls))
 		processed   int64 = 0
 		success     int64 = 0
 		failed      int64 = 0
@@ -123,7 +123,7 @@ func (p *PreheatWorker) Start() error {
 			defer func() {
 				<-p.semaphore
 				p.wg.Done()
-				
+
 				// 更新进度
 				progressMux.Lock()
 				processed++
@@ -137,7 +137,7 @@ func (p *PreheatWorker) Start() error {
 
 			// 预热URL
 			status := p.preheatURL(url)
-			
+
 			// 更新成功/失败计数
 			progressMux.Lock()
 			if status {

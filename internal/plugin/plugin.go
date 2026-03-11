@@ -279,19 +279,19 @@ func (pm *PluginManager) GetPluginMetrics() map[string]map[string]interface{} {
 //   UnloadPlugin(): 卸载单个插件
 
 type PluginLoader struct {
-	pluginDir      string
-	pluginManager  *PluginManager
-	loadedPlugins  map[string]bool
-	loadMutex      sync.Mutex
+	pluginDir     string
+	pluginManager *PluginManager
+	loadedPlugins map[string]bool
+	loadMutex     sync.Mutex
 }
 
 // NewPluginLoader 创建新的插件加载器
 func NewPluginLoader(pluginDir string, pluginManager *PluginManager) *PluginLoader {
 	return &PluginLoader{
-		pluginDir:      pluginDir,
-		pluginManager:  pluginManager,
-		loadedPlugins:  make(map[string]bool),
-		loadMutex:      sync.Mutex{},
+		pluginDir:     pluginDir,
+		pluginManager: pluginManager,
+		loadedPlugins: make(map[string]bool),
+		loadMutex:     sync.Mutex{},
 	}
 }
 

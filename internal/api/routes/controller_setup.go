@@ -11,11 +11,12 @@ import (
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/repository"
 	"prerender-shield/internal/scheduler"
+	"prerender-shield/internal/ssl"
 	sitehandler "prerender-shield/internal/site-handler"
 	siteserver "prerender-shield/internal/site-server"
 )
 
-// Controllers 包含所有API控制器实例
+// Controllers 包含所有 API 控制器实例
 type Controllers struct {
 	AuthController       *controllers.AuthController
 	OverviewController   *controllers.OverviewController
@@ -26,6 +27,7 @@ type Controllers struct {
 	PushController       *controllers.PushController
 	SitesController      *controllers.SitesController
 	SystemController     *controllers.SystemController
+	SSLController        *controllers.SSLController
 }
 
 // SetupControllers 创建并配置所有控制器实例
@@ -47,6 +49,48 @@ func SetupControllers(
 	// 创建推送管理器
 	pushManager := push.NewPushManager(cfg, redisClient)
 
+	// 创建 SSL 管理器和 ACME 客户端
+	sslConfig := ssl.ACMEConfig{
+		Email:      cfg.SSL.Email,
+		CertDir:    cfg.Dirs.CertsDir,
+		Production: cfg.SSL.Production,
+		HTTPPort:   cfg.SSL.HTTPPort,
+	}
+
+	var acmeClient *ssl.ACMEClient
+	var autoRenewer *ssl.AutoRenewer
+
+	// 如果 SSL 启用，则初始化 ACME 客户端
+	if cfg.SSL.Enabled {
+		var err error
+		acmeClient, err = ssl.NewACMEClient(sslConfig)
+		if err != nil {
+			logging.DefaultLogger.Warn("Failed to initialize ACME client: %v", err)
+		} else {
+			logging.DefaultLogger.Info("ACME client initialized successfully")
+
+			// 如果配置了 DNS 提供商，设置 DNS 挑战
+			if cfg.SSL.DNS.Provider != "" {
+				err = acmeClient.SetDNSProvider(cfg.SSL.DNS.Provider, cfg.SSL.DNS.Credentials)
+				if err != nil {
+					logging.DefaultLogger.Warn("Failed to set DNS provider: %v", err)
+				}
+			}
+
+			// 创建自动续签器
+			autoRenewConfig := ssl.AutoRenewConfig{
+				Enabled:         cfg.SSL.AutoRenew,
+				CheckInterval:   cfg.SSL.CheckInterval,
+				RenewBeforeDays: cfg.SSL.RenewBeforeDays,
+				MaxRetries:      cfg.SSL.MaxRetries,
+				RetryDelay:      cfg.SSL.RetryDelay,
+				WebhookURL:      cfg.SSL.WebhookURL,
+			}
+			autoRenewer = ssl.NewAutoRenewer(acmeClient, redisClient, autoRenewConfig)
+			autoRenewer.Start()
+		}
+	}
+
 	// 创建控制器实例
 	return &Controllers{
 		AuthController:       controllers.NewAuthController(userManager, jwtManager),
@@ -58,5 +102,6 @@ func SetupControllers(
 		PushController:       controllers.NewPushController(pushManager, redisClient, cfg),
 		SitesController:      controllers.NewSitesController(configManager, siteServerMgr, siteHandler, redisClient, monitor, crawlerLogMgr, visitLogMgr, cfg),
 		SystemController:     controllers.NewSystemController(redisClient),
+		SSLController:        controllers.NewSSLController(acmeClient, autoRenewer),
 	}
 }

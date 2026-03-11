@@ -14,7 +14,9 @@ type DeserializationDetector struct {
 }
 
 // NewDeserializationDetector 创建新的反序列化检测器
-func NewDeserializationDetector(ruleManager interface{ GetRulesByCategory(category string) []types.Rule }) *DeserializationDetector {
+func NewDeserializationDetector(ruleManager interface {
+	GetRulesByCategory(category string) []types.Rule
+}) *DeserializationDetector {
 	return &DeserializationDetector{
 		rules: ruleManager.GetRulesByCategory("deserialization"),
 	}

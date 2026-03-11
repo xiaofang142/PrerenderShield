@@ -31,8 +31,8 @@ type VisitLog struct {
 	CountryCode string  `json:"country_code,omitempty"` // ISO 3166-1 alpha-2
 	City        string  `json:"city,omitempty"`
 	Latitude    float64 `json:"latitude,omitempty"`
-	Longitude float64 `json:"longitude,omitempty"`
-	Washed    bool    `json:"washed"` // 是否已清洗
+	Longitude   float64 `json:"longitude,omitempty"`
+	Washed      bool    `json:"washed"` // 是否已清洗
 }
 
 // VisitLogManager 访问日志管理器

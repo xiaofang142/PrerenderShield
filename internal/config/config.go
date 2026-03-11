@@ -167,8 +167,31 @@ type Config struct {
 	Monitoring MonitoringConfig `yaml:"monitoring"`
 	// 应用配置
 	App AppConfig `yaml:"app"`
+	// SSL 配置
+	SSL SSLConfig `yaml:"ssl"`
 	// 站点列表
 	Sites []SiteConfig `yaml:"sites"`
+}
+
+// SSLConfig SSL 证书配置
+type SSLConfig struct {
+	Enabled         bool          `yaml:"enabled" json:"enabled"`                   // 是否启用 SSL
+	AutoRenew       bool          `yaml:"auto_renew" json:"auto_renew"`             // 自动续签
+	Email           string        `yaml:"email" json:"email"`                       // ACME 账户邮箱
+	Production      bool          `yaml:"production" json:"production"`             // 是否使用生产环境（Let's Encrypt）
+	HTTPPort        int           `yaml:"http_port" json:"http_port"`               // HTTP-01 挑战监听端口
+	CheckInterval   time.Duration `yaml:"check_interval" json:"check_interval"`     // 检查间隔
+	RenewBeforeDays int           `yaml:"renew_before_days" json:"renew_before_days"` // 提前多少天续签
+	MaxRetries      int           `yaml:"max_retries" json:"max_retries"`           // 最大重试次数
+	RetryDelay      time.Duration `yaml:"retry_delay" json:"retry_delay"`           // 重试间隔
+	WebhookURL      string        `yaml:"webhook_url" json:"webhook_url"`           // 通知 Webhook
+	DNS             DNSConfig     `yaml:"dns" json:"dns"`                           // DNS 配置（用于 DNS-01 挑战）
+}
+
+// DNSConfig DNS 配置
+type DNSConfig struct {
+	Provider    string            `yaml:"provider" json:"provider"`       // DNS 服务商：cloudflare, aliyun, tencentcloud 等
+	Credentials map[string]string `yaml:"credentials" json:"credentials"` // API 凭证
 }
 
 // AppConfig 应用全局配置
@@ -179,10 +202,10 @@ type AppConfig struct {
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
-	Address       string `yaml:"address"`
-	APIPort       int    `yaml:"api_port"`
-	ConsolePort   int    `yaml:"console_port"`
-	PublicAPIURL  string `yaml:"public_api_url"`
+	Address      string `yaml:"address"`
+	APIPort      int    `yaml:"api_port"`
+	ConsolePort  int    `yaml:"console_port"`
+	PublicAPIURL string `yaml:"public_api_url"`
 }
 
 // FirewallConfig 防火墙配置
@@ -475,16 +498,16 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 	if config.Server.Address == "" {
 		config.Server.Address = "0.0.0.0" // 使用默认地址
 	}
-	
+
 	// 验证端口号
 	if config.Server.APIPort <= 0 || config.Server.APIPort > 65535 {
 		config.Server.APIPort = 9598 // 使用默认端口
 	}
-	
+
 	if config.Server.ConsolePort <= 0 || config.Server.ConsolePort > 65535 {
 		config.Server.ConsolePort = 9597 // 使用默认端口
 	}
-	
+
 	// 验证 PublicAPIURL
 	if config.Server.PublicAPIURL == "" {
 		config.Server.PublicAPIURL = fmt.Sprintf("http://%s:%d", config.Server.Address, config.Server.APIPort)
@@ -494,15 +517,15 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 	if config.Dirs.DataDir == "" {
 		config.Dirs.DataDir = "./data"
 	}
-	
+
 	if config.Dirs.StaticDir == "" {
 		config.Dirs.StaticDir = "./static"
 	}
-	
+
 	if config.Dirs.CertsDir == "" {
 		config.Dirs.CertsDir = "./certs"
 	}
-	
+
 	if config.Dirs.AdminStaticDir == "" {
 		config.Dirs.AdminStaticDir = "./web"
 	}
@@ -512,13 +535,13 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 	if !validCacheTypes[config.Cache.Type] {
 		config.Cache.Type = "memory" // 使用默认缓存类型
 	}
-	
+
 	if config.Cache.Type == "redis" {
 		if config.Cache.RedisURL == "" {
 			config.Cache.RedisURL = "localhost:6379"
 		}
 	}
-	
+
 	if config.Cache.MemorySize <= 0 {
 		config.Cache.MemorySize = 1000 // 使用默认内存大小
 	}
@@ -555,7 +578,7 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 		if len(site.Domains) == 0 {
 			return fmt.Errorf("site %s has no domains", site.ID)
 		}
-		
+
 		// 验证域名格式
 		for _, domain := range site.Domains {
 			if domain == "" {
@@ -584,7 +607,7 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 			if site.Redirect.TargetURL == "" {
 				return fmt.Errorf("site %s is in redirect mode but has no target URL", site.ID)
 			}
-			
+
 			if site.Redirect.StatusCode < 300 || site.Redirect.StatusCode >= 400 {
 				site.Redirect.StatusCode = 301 // 使用默认重定向状态码
 			}
@@ -595,36 +618,36 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 			if site.Prerender.PoolSize < 1 {
 				site.Prerender.PoolSize = 5 // 使用默认池大小
 			}
-			
+
 			if site.Prerender.MinPoolSize < 0 {
 				site.Prerender.MinPoolSize = 2 // 使用默认最小池大小
 			}
-			
+
 			if site.Prerender.MaxPoolSize < site.Prerender.PoolSize {
 				site.Prerender.MaxPoolSize = 20 // 使用默认最大池大小
 			}
-			
+
 			if site.Prerender.Timeout <= 0 {
 				site.Prerender.Timeout = 30 // 使用默认超时时间
 			}
-			
+
 			if site.Prerender.CacheTTL <= 0 {
 				site.Prerender.CacheTTL = 3600 // 使用默认缓存TTL
 			}
-			
+
 			if site.Prerender.IdleTimeout <= 0 {
 				site.Prerender.IdleTimeout = 300 // 使用默认空闲超时时间
 			}
-			
+
 			if site.Prerender.ScalingInterval <= 0 {
 				site.Prerender.ScalingInterval = 60 // 使用默认缩放间隔
 			}
-			
+
 			if site.Prerender.Preheat.Enabled {
 				if site.Prerender.Preheat.MaxDepth <= 0 {
 					site.Prerender.Preheat.MaxDepth = 3 // 使用默认爬取深度
 				}
-				
+
 				if site.Prerender.Preheat.Concurrency <= 0 {
 					site.Prerender.Preheat.Concurrency = 5 // 使用默认并发数
 				}
@@ -636,25 +659,25 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 			if site.Firewall.RulesPath == "" {
 				site.Firewall.RulesPath = "./rules"
 			}
-			
+
 			validActions := map[string]bool{"block": true, "allow": true}
 			if !validActions[site.Firewall.ActionConfig.DefaultAction] {
 				site.Firewall.ActionConfig.DefaultAction = "block" // 使用默认动作
 			}
-			
+
 			if site.Firewall.ActionConfig.BlockMessage == "" {
 				site.Firewall.ActionConfig.BlockMessage = "Request blocked by firewall"
 			}
-			
+
 			if site.Firewall.RateLimitConfig.Enabled {
 				if site.Firewall.RateLimitConfig.Requests <= 0 {
 					site.Firewall.RateLimitConfig.Requests = 100 // 使用默认请求数
 				}
-				
+
 				if site.Firewall.RateLimitConfig.Window <= 0 {
 					site.Firewall.RateLimitConfig.Window = 60 // 使用默认时间窗口
 				}
-				
+
 				if site.Firewall.RateLimitConfig.BanTime <= 0 {
 					site.Firewall.RateLimitConfig.BanTime = 3600 // 使用默认封禁时间
 				}
@@ -666,11 +689,11 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 			if rule.ID == "" {
 				return fmt.Errorf("site %s has route rule at index %d with no ID", site.ID, j)
 			}
-			
+
 			if rule.Pattern == "" {
 				return fmt.Errorf("site %s has route rule %s with no pattern", site.ID, rule.ID)
 			}
-			
+
 			if rule.Action == "" {
 				return fmt.Errorf("site %s has route rule %s with no action", site.ID, rule.ID)
 			}
@@ -681,7 +704,7 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 			if site.FileIntegrityConfig.CheckInterval <= 0 {
 				site.FileIntegrityConfig.CheckInterval = 300 // 使用默认检查间隔
 			}
-			
+
 			validHashAlgorithms := map[string]bool{"md5": true, "sha256": true}
 			if !validHashAlgorithms[site.FileIntegrityConfig.HashAlgorithm] {
 				site.FileIntegrityConfig.HashAlgorithm = "sha256" // 使用默认哈希算法
@@ -1103,10 +1126,10 @@ func defaultConfig() *Config {
 
 	return &Config{
 		Server: ServerConfig{
-			Address:       "0.0.0.0",
-			APIPort:       9598,
-			ConsolePort:   9597,
-			PublicAPIURL:  "http://localhost:9598",
+			Address:      "0.0.0.0",
+			APIPort:      9598,
+			ConsolePort:  9597,
+			PublicAPIURL: "http://localhost:9598",
 		},
 		Dirs: DirsConfig{
 			DataDir:        "./data",   // 数据目录
@@ -1226,25 +1249,25 @@ func getEnvAsFloat(key string, defaultValue float64) float64 {
 func replaceEnvVars(s string) string {
 	// 正则表达式匹配环境变量占位符
 	pattern := regexp.MustCompile(`\$\{([^}:]+)(?::-([^}]+))?\}`)
-	
+
 	return pattern.ReplaceAllStringFunc(s, func(m string) string {
 		// 提取环境变量名和默认值
 		matches := pattern.FindStringSubmatch(m)
 		if len(matches) < 2 {
 			return m
 		}
-		
+
 		key := matches[1]
 		defaultValue := ""
 		if len(matches) > 2 {
 			defaultValue = matches[2]
 		}
-		
+
 		// 查找环境变量
 		if value, exists := os.LookupEnv(key); exists {
 			return value
 		}
-		
+
 		// 返回默认值
 		return defaultValue
 	})
@@ -1254,41 +1277,41 @@ func replaceEnvVars(s string) string {
 func replaceConfigEnvVars(cfg *Config) {
 	// 替换服务器配置中的环境变量
 	cfg.Server.PublicAPIURL = replaceEnvVars(cfg.Server.PublicAPIURL)
-	
+
 	// 替换目录配置中的环境变量
 	cfg.Dirs.DataDir = replaceEnvVars(cfg.Dirs.DataDir)
 	cfg.Dirs.StaticDir = replaceEnvVars(cfg.Dirs.StaticDir)
 	cfg.Dirs.CertsDir = replaceEnvVars(cfg.Dirs.CertsDir)
 	cfg.Dirs.AdminStaticDir = replaceEnvVars(cfg.Dirs.AdminStaticDir)
-	
+
 	// 替换缓存配置中的环境变量
 	cfg.Cache.RedisURL = replaceEnvVars(cfg.Cache.RedisURL)
 	cfg.Cache.RedisPassword = replaceEnvVars(cfg.Cache.RedisPassword)
-	
+
 	// 替换应用配置中的环境变量
 	cfg.App.Version = replaceEnvVars(cfg.App.Version)
 	cfg.App.OfficialURL = replaceEnvVars(cfg.App.OfficialURL)
-	
+
 	// 替换站点配置中的环境变量
 	for i := range cfg.Sites {
 		site := &cfg.Sites[i]
 		site.Name = replaceEnvVars(site.Name)
-		
+
 		// 替换域名列表中的环境变量
 		for j := range site.Domains {
 			site.Domains[j] = replaceEnvVars(site.Domains[j])
 		}
-		
+
 		// 替换代理配置中的环境变量
 		site.Proxy.TargetURL = replaceEnvVars(site.Proxy.TargetURL)
-		
+
 		// 替换重定向配置中的环境变量
 		site.Redirect.TargetURL = replaceEnvVars(site.Redirect.TargetURL)
-		
+
 		// 替换防火墙配置中的环境变量
 		site.Firewall.RulesPath = replaceEnvVars(site.Firewall.RulesPath)
 		site.Firewall.ActionConfig.BlockMessage = replaceEnvVars(site.Firewall.ActionConfig.BlockMessage)
-		
+
 		// 替换渲染预热配置中的环境变量
 		site.Prerender.Preheat.SitemapURL = replaceEnvVars(site.Prerender.Preheat.SitemapURL)
 		site.Prerender.Push.BaiduAPI = replaceEnvVars(site.Prerender.Push.BaiduAPI)
@@ -1296,12 +1319,12 @@ func replaceConfigEnvVars(cfg *Config) {
 		site.Prerender.Push.BingAPI = replaceEnvVars(site.Prerender.Push.BingAPI)
 		site.Prerender.Push.BingToken = replaceEnvVars(site.Prerender.Push.BingToken)
 		site.Prerender.Push.PushDomain = replaceEnvVars(site.Prerender.Push.PushDomain)
-		
+
 		// 替换爬虫协议头中的环境变量
 		for j := range site.Prerender.CrawlerHeaders {
 			site.Prerender.CrawlerHeaders[j] = replaceEnvVars(site.Prerender.CrawlerHeaders[j])
 		}
-		
+
 		// 替换路由规则中的环境变量
 		for j := range site.Routing.Rules {
 			rule := &site.Routing.Rules[j]

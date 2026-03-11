@@ -82,13 +82,13 @@ var (
 
 // Monitor 监控管理器
 type Monitor struct {
-	isRunning  bool
-	config     Config
+	isRunning   bool
+	config      Config
 	redisClient *redis.Client
-	alerts     map[string]*AlertStatus // 告警状态
-	alertMutex sync.RWMutex
-	wg         sync.WaitGroup
-	stopCh     chan struct{}
+	alerts      map[string]*AlertStatus // 告警状态
+	alertMutex  sync.RWMutex
+	wg          sync.WaitGroup
+	stopCh      chan struct{}
 }
 
 // AlertStatus 告警状态
@@ -110,54 +110,54 @@ type Config struct {
 
 // AlertConfig 告警配置
 type AlertConfig struct {
-	Enabled        bool
-	AlertRules     []AlertRule
-	Notification   NotificationConfig
+	Enabled      bool
+	AlertRules   []AlertRule
+	Notification NotificationConfig
 }
 
 // AlertRule 告警规则
 type AlertRule struct {
-	ID          string
-	Name        string
-	Metric      string // 监控指标名称
-	Operator    string // 操作符: >, <, >=, <=, ==
-	Threshold   float64
-	Duration    time.Duration // 持续时间
-	Severity    string // 严重程度: info, warning, critical
+	ID        string
+	Name      string
+	Metric    string // 监控指标名称
+	Operator  string // 操作符: >, <, >=, <=, ==
+	Threshold float64
+	Duration  time.Duration // 持续时间
+	Severity  string        // 严重程度: info, warning, critical
 }
 
 // NotificationConfig 通知配置
 type NotificationConfig struct {
-	Email       EmailConfig
-	Webhook     WebhookConfig
+	Email   EmailConfig
+	Webhook WebhookConfig
 }
 
 // EmailConfig 邮件配置
 type EmailConfig struct {
-	Enabled     bool
-	SMTPHost    string
-	SMTPPort    int
-	Username    string
-	Password    string
-	From        string
-	To          []string
+	Enabled  bool
+	SMTPHost string
+	SMTPPort int
+	Username string
+	Password string
+	From     string
+	To       []string
 }
 
 // WebhookConfig Webhook配置
 type WebhookConfig struct {
-	Enabled     bool
-	URL         string
-	Secret      string
+	Enabled bool
+	URL     string
+	Secret  string
 }
 
 // NewMonitor 创建新的监控管理器
 func NewMonitor(config Config) *Monitor {
 	return &Monitor{
-		isRunning:  false,
-		config:     config,
+		isRunning:   false,
+		config:      config,
 		redisClient: nil,
-		alerts:     make(map[string]*AlertStatus),
-		stopCh:     make(chan struct{}),
+		alerts:      make(map[string]*AlertStatus),
+		stopCh:      make(chan struct{}),
 	}
 }
 
@@ -259,7 +259,7 @@ func (m *Monitor) sendEmailNotification(alert *AlertStatus, status string) {
 	fmt.Printf("Sending email notification: %s - %s\n", alert.Rule.Name, status)
 	fmt.Printf("To: %v\n", emailConfig.To)
 	fmt.Printf("Subject: [%s] %s - %s\n", alert.Rule.Severity, alert.Rule.Name, status)
-	fmt.Printf("Message: Metric %s is %s threshold %.2f (current value: %.2f)\n", 
+	fmt.Printf("Message: Metric %s is %s threshold %.2f (current value: %.2f)\n",
 		alert.Rule.Metric, alert.Rule.Operator, alert.Rule.Threshold, alert.Value)
 }
 
@@ -270,7 +270,7 @@ func (m *Monitor) sendWebhookNotification(alert *AlertStatus, status string) {
 	webhookConfig := m.config.Alerting.Notification.Webhook
 	fmt.Printf("Sending webhook notification: %s - %s\n", alert.Rule.Name, status)
 	fmt.Printf("URL: %s\n", webhookConfig.URL)
-	fmt.Printf("Payload: {\"rule\": \"%s\", \"status\": \"%s\", \"severity\": \"%s\", \"value\": %.2f, \"threshold\": %.2f}\n", 
+	fmt.Printf("Payload: {\"rule\": \"%s\", \"status\": \"%s\", \"severity\": \"%s\", \"value\": %.2f, \"threshold\": %.2f}\n",
 		alert.Rule.Name, status, alert.Rule.Severity, alert.Value, alert.Rule.Threshold)
 }
 
@@ -357,8 +357,9 @@ func (m *Monitor) Start() error {
 	)
 
 	// 启动Prometheus服务器
+	m.wg.Add(1)
 	go func() {
-		m.wg.Add(1)
+
 		defer m.wg.Done()
 
 		http.Handle("/metrics", promhttp.Handler())
@@ -372,8 +373,8 @@ func (m *Monitor) Start() error {
 
 	// 启动定时任务，定期保存监控数据到Redis
 	if m.redisClient != nil {
+		m.wg.Add(1)
 		go func() {
-			m.wg.Add(1)
 			defer m.wg.Done()
 
 			ticker := time.NewTicker(5 * time.Minute)
@@ -395,8 +396,8 @@ func (m *Monitor) Start() error {
 
 	// 启动定时任务，定期检查告警
 	if m.config.Alerting.Enabled {
+		m.wg.Add(1)
 		go func() {
-			m.wg.Add(1)
 			defer m.wg.Done()
 
 			ticker := time.NewTicker(1 * time.Minute)

@@ -13,7 +13,9 @@ type CSRFDetector struct {
 }
 
 // NewCSRFDetector 创建新的CSRF检测器
-func NewCSRFDetector(ruleManager interface{ GetRulesByCategory(category string) []types.Rule }) *CSRFDetector {
+func NewCSRFDetector(ruleManager interface {
+	GetRulesByCategory(category string) []types.Rule
+}) *CSRFDetector {
 	return &CSRFDetector{
 		rules: ruleManager.GetRulesByCategory("csrf"),
 	}

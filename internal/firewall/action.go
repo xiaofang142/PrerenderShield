@@ -36,10 +36,10 @@ func (h *DefaultActionHandler) Handle(w http.ResponseWriter, req *http.Request, 
 	// 路径：staticDir/siteName/waf_block.html
 	// 或者是全局的？用户需求是"站点管理 -> WAF设置"，所以是站点级别的。
 	// 我们假设上传的文件名为 waf_block.html
-	
+
 	// 如果配置中指定了BlockPage路径，也可以使用
 	// 但ActionConfig目前只有BlockMessage。
-	
+
 	customPagePath := filepath.Join(h.staticDir, h.siteName, "waf_block.html")
 	if content, err := os.ReadFile(customPagePath); err == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -49,7 +49,7 @@ func (h *DefaultActionHandler) Handle(w http.ResponseWriter, req *http.Request, 
 
 	// 使用默认拦截页面
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	
+
 	message := h.config.BlockMessage
 	if message == "" {
 		message = "Access Denied by WAF"

@@ -6,12 +6,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterAllRoutes 注册所有API路由
+// RegisterAllRoutes 注册所有 API 路由
 func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManager *auth.JWTManager) {
-	// 注册API路由
+	// 注册 API 路由
 	apiGroup := ginRouter.Group("/api/v1")
 	{
-		// 认证相关API - 不需要JWT验证
+		// 认证相关 API - 不需要 JWT 验证
 		authGroup := apiGroup.Group("/auth")
 		{
 			// 检查是否是首次运行
@@ -24,35 +24,60 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 			authGroup.POST("/logout", controllers.AuthController.Logout)
 		}
 
-		// 系统相关API - 不需要JWT验证
+		// 系统相关 API - 不需要 JWT 验证
 		apiGroup.GET("/health", controllers.SystemController.Health)
 		apiGroup.GET("/version", controllers.SystemController.Version)
 
-		// 需要JWT验证的API组
+		// SSL 证书管理 API - 部分不需要 JWT 验证
+		sslGroup := apiGroup.Group("/ssl")
+		{
+			// 公开 API - 获取证书状态
+			sslGroup.GET("/certificates/:domain", controllers.SSLController.GetCertStatus)
+			sslGroup.GET("/certificates", controllers.SSLController.ListCerts)
+			sslGroup.GET("/certificates/expiring", controllers.SSLController.GetExpiringCerts)
+
+			// 需要 JWT 验证的 API
+			sslGroupProtected := sslGroup.Group("")
+			sslGroupProtected.Use(auth.JWTAuthMiddleware(jwtManager))
+			{
+				// 申请证书
+				sslGroupProtected.POST("/certificates", controllers.SSLController.RequestCert)
+				// 续签证书
+				sslGroupProtected.POST("/certificates/:domain/renew", controllers.SSLController.RenewCert)
+				// 删除证书
+				sslGroupProtected.DELETE("/certificates/:domain", controllers.SSLController.DeleteCert)
+				// 申请通配符证书
+				sslGroupProtected.POST("/certificates/wildcard", controllers.SSLController.RequestWildcardCert)
+				// 获取续签历史
+				sslGroupProtected.GET("/certificates/:domain/renewal-history", controllers.SSLController.GetRenewalHistory)
+			}
+		}
+
+		// 需要 JWT 验证的 API 组
 		protectedGroup := apiGroup.Group("")
 		protectedGroup.Use(auth.JWTAuthMiddleware(jwtManager))
 		{
-			// 系统配置API
+			// 系统配置 API
 			protectedGroup.GET("/system/config", controllers.SystemController.GetSystemConfig)
 			protectedGroup.POST("/system/config", controllers.SystemController.UpdateSystemConfig)
 
-			// 概览API
+			// 概览 API
 			protectedGroup.GET("/overview", controllers.OverviewController.GetOverview)
 
-			// 监控API
+			// 监控 API
 			protectedGroup.GET("/monitoring/stats", controllers.MonitoringController.GetStats)
 
-			// 访问日志API
+			// 访问日志 API
 			protectedGroup.GET("/logs", controllers.FirewallController.GetAccessLogs)
 			protectedGroup.GET("/firewall/attacks", controllers.FirewallController.GetAttackLogs)
 			protectedGroup.POST("/firewall/whitelist", controllers.FirewallController.AddToWhitelist)
 			protectedGroup.POST("/firewall/blacklist", controllers.FirewallController.AddToBlacklist)
 
-			// 爬虫日志API
+			// 爬虫日志 API
 			protectedGroup.GET("/crawler/logs", controllers.CrawlerController.GetCrawlerLogs)
 			protectedGroup.GET("/crawler/stats", controllers.CrawlerController.GetCrawlerStats)
 
-			// 预热API
+			// 预热 API
 			protectedGroup.GET("/preheat/sites", controllers.PreheatController.GetPreheatSites)
 			protectedGroup.GET("/preheat/stats", controllers.PreheatController.GetPreheatStats)
 			protectedGroup.POST("/preheat/trigger", controllers.PreheatController.TriggerPreheat)
@@ -61,7 +86,7 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 			protectedGroup.GET("/preheat/crawler-headers", controllers.PreheatController.GetCrawlerHeaders)
 			protectedGroup.POST("/preheat/clear-cache", controllers.PreheatController.ClearCache)
 
-			// 推送API
+			// 推送 API
 			protectedGroup.GET("/push/sites", controllers.PushController.GetSites)
 			protectedGroup.GET("/push/stats", controllers.PushController.GetPushStats)
 			protectedGroup.GET("/push/logs", controllers.PushController.GetPushLogs)
@@ -69,7 +94,7 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 			protectedGroup.GET("/push/config", controllers.PushController.GetPushConfig)
 			protectedGroup.POST("/push/config", controllers.PushController.UpdatePushConfig)
 
-			// 站点管理API
+			// 站点管理 API
 			sitesGroup := protectedGroup.Group("/sites")
 			{
 				// 获取站点列表
@@ -78,7 +103,7 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 				// 获取单个站点信息
 				sitesGroup.GET("/:id", controllers.SitesController.GetSite)
 
-				// 获取站点的Redis配置（预渲染或推送配置）
+				// 获取站点的 Redis 配置（预渲染或推送配置）
 				sitesGroup.GET("/:id/config", controllers.SitesController.GetSiteConfig)
 
 				// WAF Configuration
@@ -99,7 +124,7 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 				// 删除站点
 				sitesGroup.DELETE("/:id", controllers.SitesController.DeleteSite)
 
-				// 静态资源管理API
+				// 静态资源管理 API
 				// 获取站点的静态资源文件列表
 				sitesGroup.GET("/:id/static", controllers.SitesController.GetStaticFiles)
 
@@ -111,11 +136,11 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 
 				// 删除静态资源文件
 				sitesGroup.DELETE("/:id/static", controllers.SitesController.DeleteStaticFile)
-				
+
 				// 批量删除静态资源文件
 				sitesGroup.POST("/:id/static/batch-delete", controllers.SitesController.BatchDeleteStaticFiles)
-	
-		}
+
+			}
 		}
 	}
 }

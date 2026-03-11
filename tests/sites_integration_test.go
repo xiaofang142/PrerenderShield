@@ -62,16 +62,16 @@ func setupTestEnv(t *testing.T) (*gin.Engine, *controllers.SitesController, stri
 
 	// Initialize Dependencies
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false})
-	
-	// Use empty string to avoid connection attempts if not needed, 
+
+	// Use empty string to avoid connection attempts if not needed,
 	// or localhost if we want to try (but might fail)
-	crawlerLogMgr := logging.NewCrawlerLogManager("") 
+	crawlerLogMgr := logging.NewCrawlerLogManager("")
 	visitLogMgr := logging.NewVisitLogManager("")
 
 	// Initialize SiteHandler with nil dependencies (PrerenderManager, WafRepo, RedisClient, GeoIP)
 	// This is risky but works for basic CRUD tests where we don't trigger WAF blocking or Prerender
 	siteHandler := sitehandler.NewHandler(nil, nil, nil, nil)
-	
+
 	siteServerMgr := siteserver.NewManager(monitor)
 
 	// Initialize Controller
@@ -89,7 +89,7 @@ func setupTestEnv(t *testing.T) (*gin.Engine, *controllers.SitesController, stri
 	// Setup Gin
 	gin.SetMode(gin.TestMode)
 	r := gin.Default()
-	
+
 	// Register Routes
 	r.GET("/api/v1/sites", sitesController.GetSites)
 	r.POST("/api/v1/sites", sitesController.AddSite)
@@ -121,12 +121,12 @@ func TestSitesCRUD(t *testing.T) {
 
 	// Assert Add Site
 	assert.Equal(t, http.StatusOK, w.Code)
-	
+
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, 200.0, response["code"])
-	
+
 	siteData := response["data"].(map[string]interface{})
 	siteID := siteData["id"].(string)
 	assert.NotEmpty(t, siteID)
@@ -168,7 +168,7 @@ func TestSitesCRUD(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	
+
 	// Verify deletion
 	req, _ = http.NewRequest("GET", "/api/v1/sites", nil)
 	w = httptest.NewRecorder()

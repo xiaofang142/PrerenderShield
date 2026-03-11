@@ -14,7 +14,9 @@ type InjectionDetector struct {
 }
 
 // NewInjectionDetector 创建新的注入攻击检测器
-func NewInjectionDetector(ruleManager interface{ GetRulesByCategory(category string) []types.Rule }) *InjectionDetector {
+func NewInjectionDetector(ruleManager interface {
+	GetRulesByCategory(category string) []types.Rule
+}) *InjectionDetector {
 	return &InjectionDetector{
 		rules: ruleManager.GetRulesByCategory("injection"),
 	}

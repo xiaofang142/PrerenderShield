@@ -79,8 +79,8 @@ func (m *JWTManager) GenerateToken(userID, username string) (string, error) {
 	// 如果Redis客户端可用，保存会话到Redis
 	if m.redisClient != nil {
 		sessionData := map[string]interface{}{
-			"user_id": userID,
-			"username": username,
+			"user_id":    userID,
+			"username":   username,
 			"session_id": sessionID,
 			"created_at": time.Now(),
 		}
@@ -145,7 +145,7 @@ func (m *JWTManager) RevokeToken(tokenString string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	if m.redisClient != nil {
 		return m.redisClient.DeleteSession(claims.SessionID)
 	}

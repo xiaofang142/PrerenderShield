@@ -37,14 +37,14 @@ func (d *BlacklistDetector) Name() string {
 // Detect 检测请求
 func (d *BlacklistDetector) Detect(req *http.Request) ([]types.Threat, error) {
 	ip := logging.GetClientIP(req)
-	
+
 	// 1. 检查静态白名单
 	for _, allowed := range d.whitelist {
 		if allowed == ip {
 			return nil, nil // 放行
 		}
 	}
-	
+
 	// 2. 检查静态黑名单
 	for _, blocked := range d.blacklist {
 		if blocked == ip {
@@ -56,7 +56,7 @@ func (d *BlacklistDetector) Detect(req *http.Request) ([]types.Threat, error) {
 			}}, nil
 		}
 	}
-	
+
 	// 3. 检查动态黑名单 (Redis)
 	if d.redisClient != nil {
 		key := fmt.Sprintf("firewall:%s:blacklist", d.siteID)
@@ -74,6 +74,6 @@ func (d *BlacklistDetector) Detect(req *http.Request) ([]types.Threat, error) {
 			}}, nil
 		}
 	}
-	
+
 	return nil, nil
 }
