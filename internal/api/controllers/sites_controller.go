@@ -601,6 +601,13 @@ func (c *SitesController) UpdateSitePushConfig(ctx *gin.Context) {
 		return
 	}
 
+	if c.configManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Configuration manager not available",
+		})
+		return
+	}
 	currentConfig := c.configManager.GetConfig()
 	var updatedSite *config.SiteConfig
 	var oldSite *config.SiteConfig
@@ -671,6 +678,13 @@ func (c *SitesController) UpdateSiteFirewallConfig(ctx *gin.Context) {
 		return
 	}
 
+	if c.configManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Configuration manager not available",
+		})
+		return
+	}
 	currentConfig := c.configManager.GetConfig()
 	var updatedSite *config.SiteConfig
 	var oldSite *config.SiteConfig

@@ -374,3 +374,123 @@ func TestSitesController_UpdateSitePrerenderConfig_NoConfigManager(t *testing.T)
 	// 没有 configManager 时返回 500
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func TestSitesController_UpdateSitePushConfig_InvalidRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+	}
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.PUT("/sites/:id/push", controller.UpdateSitePushConfig)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/sites/test-site-1/push", bytes.NewBufferString("invalid json"))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSitesController_UpdateSitePushConfig_NoConfigManager(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+	}
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.PUT("/sites/:id/push", controller.UpdateSitePushConfig)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/sites/test-site-1/push", bytes.NewBufferString(`{"enabled": true}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSitesController_UpdateSiteFirewallConfig_InvalidRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+	}
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.PUT("/sites/:id/firewall", controller.UpdateSiteFirewallConfig)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/sites/test-site-1/firewall", bytes.NewBufferString("invalid json"))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSitesController_UpdateSiteFirewallConfig_NoConfigManager(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+	}
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.PUT("/sites/:id/firewall", controller.UpdateSiteFirewallConfig)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/sites/test-site-1/firewall", bytes.NewBufferString(`{"enabled": true}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
