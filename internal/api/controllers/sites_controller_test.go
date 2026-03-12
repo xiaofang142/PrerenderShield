@@ -3,6 +3,7 @@ package controllers
 import (
 	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -489,6 +490,120 @@ func TestSitesController_UpdateSiteFirewallConfig_NoConfigManager(t *testing.T) 
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("PUT", "/sites/test-site-1/firewall", bytes.NewBufferString(`{"enabled": true}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSitesController_UploadStaticFile_NoFile(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+		Dirs: config.DirsConfig{
+			StaticDir: "/tmp/test-static",
+		},
+	}
+
+	os.MkdirAll(cfg.Dirs.StaticDir, 0755)
+	defer os.RemoveAll(cfg.Dirs.StaticDir)
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.POST("/sites/:id/static", controller.UploadStaticFile)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/sites/test-site-1/static", nil)
+	router.ServeHTTP(w, req)
+
+	// 没有 configManager 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSitesController_UploadStaticFile_NoConfigManager(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+		Dirs: config.DirsConfig{
+			StaticDir: "/tmp/test-static",
+		},
+	}
+
+	os.MkdirAll(cfg.Dirs.StaticDir, 0755)
+	defer os.RemoveAll(cfg.Dirs.StaticDir)
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.POST("/sites/:id/static", controller.UploadStaticFile)
+
+	w := httptest.NewRecorder()
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "test.txt")
+	part.Write([]byte("test content"))
+	writer.Close()
+
+	req, _ := http.NewRequest("POST", "/sites/test-site-1/static", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSitesController_ExtractFile_NoConfigManager(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+		Dirs: config.DirsConfig{
+			StaticDir: "/tmp/test-static",
+		},
+	}
+
+	os.MkdirAll(cfg.Dirs.StaticDir, 0755)
+	defer os.RemoveAll(cfg.Dirs.StaticDir)
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.POST("/sites/:id/static/extract", controller.ExtractFile)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/sites/test-site-1/static/extract", bytes.NewBufferString(`{"file": "test.zip"}`))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 

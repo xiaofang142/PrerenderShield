@@ -945,7 +945,13 @@ func (c *SitesController) UploadStaticFile(ctx *gin.Context) {
 	id := ctx.Param("id")
 	path := ctx.PostForm("path")
 
-	// 从配置管理器获取当前配置
+	if c.configManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Configuration manager not available",
+		})
+		return
+	}
 	currentConfig := c.configManager.GetConfig()
 
 	// 查找指定站点
@@ -1011,7 +1017,13 @@ func (c *SitesController) ExtractFile(ctx *gin.Context) {
 	fileName := ctx.PostForm("filename")
 	path := ctx.PostForm("path")
 
-	// 从配置管理器获取当前配置
+	if c.configManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Configuration manager not available",
+		})
+		return
+	}
 	currentConfig := c.configManager.GetConfig()
 
 	// 查找指定站点
