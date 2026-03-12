@@ -166,3 +166,33 @@ func TestNewOverviewController(t *testing.T) {
 	assert.Equal(t, visitLogMgr, controller.visitLogMgr)
 	assert.Equal(t, wafRepo, controller.wafRepo)
 }
+
+func TestOverviewController_GetOverview_WithWafRepo(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{ID: "site1", Name: "Test Site 1", Firewall: config.FirewallConfig{Enabled: true}, Prerender: config.PrerenderConfig{Enabled: true}},
+		},
+	}
+
+	monitor := monitoring.NewMonitor(monitoring.Config{})
+	visitLogMgr := logging.NewVisitLogManager("")
+
+	controller := NewOverviewController(cfg, monitor, visitLogMgr, nil)
+
+	router := gin.New()
+	router.GET("/overview", controller.GetOverview)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/overview", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	assert.Equal(t, float64(200), response["code"])
+}
