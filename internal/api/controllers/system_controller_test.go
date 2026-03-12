@@ -158,3 +158,69 @@ func TestNewSystemController(t *testing.T) {
 	assert.NotNil(t, controller)
 	assert.Nil(t, controller.redisClient)
 }
+
+func TestSystemController_Health_Details(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	controller := NewSystemController(nil)
+
+	router := gin.New()
+	router.GET("/health", controller.Health)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/health", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	data, ok := response["data"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, "running", data["status"])
+	assert.Equal(t, "prerender-shield", data["service"])
+	assert.NotNil(t, data["health_details"])
+}
+
+func TestSystemController_Version_Details(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	controller := NewSystemController(nil)
+
+	router := gin.New()
+	router.GET("/version", controller.Version)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/version", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	data, ok := response["data"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.NotEmpty(t, data["version"])
+	assert.Equal(t, "prerender-shield", data["name"])
+}
+
+func TestSystemController_UpdateSystemConfig_EmptyConfig(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	controller := NewSystemController(nil)
+
+	router := gin.New()
+	router.POST("/system/config", controller.UpdateSystemConfig)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/system/config", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	// Redis 不可用时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
