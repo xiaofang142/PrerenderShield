@@ -377,6 +377,89 @@ func TestSitesController_AddSite_ReservedPort(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestSitesController_UpdateSite_InvalidDomain(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+		Dirs: config.DirsConfig{
+			StaticDir: "/tmp/test-static",
+		},
+	}
+
+	os.MkdirAll(cfg.Dirs.StaticDir, 0755)
+	defer os.RemoveAll(cfg.Dirs.StaticDir)
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.PUT("/sites/:id", controller.UpdateSite)
+
+	site := map[string]interface{}{
+		"name":    "Updated Site",
+		"domains": []string{"example.com"},
+		"port":    8080,
+		"mode":    "static",
+	}
+	body, _ := json.Marshal(site)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/sites/test-site-1", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSitesController_UpdateSite_NoConfigManager(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+	}
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.PUT("/sites/:id", controller.UpdateSite)
+
+	site := map[string]interface{}{
+		"name":    "Updated Site",
+		"domains": []string{"127.0.0.1"},
+		"port":    8080,
+		"mode":    "static",
+	}
+	body, _ := json.Marshal(site)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/sites/test-site-1", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	// configManager 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
 func TestSitesController_AddSite_InvalidRequest(t *testing.T) {
 	_, router, _ := setupSitesController()
 
