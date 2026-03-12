@@ -277,6 +277,106 @@ func TestIsPortAvailable_PortInRange(t *testing.T) {
 	assert.True(t, isPortAvailable(50000), "Port 50000 should be available")
 }
 
+func TestSitesController_GetSites_WithConfigManager(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+		Dirs: config.DirsConfig{
+			StaticDir: "/tmp/test-static",
+		},
+	}
+
+	os.MkdirAll(cfg.Dirs.StaticDir, 0755)
+	defer os.RemoveAll(cfg.Dirs.StaticDir)
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.GET("/sites", controller.GetSites)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/sites", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestSitesController_GetSite_NotFound_WithConfigManager(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+	}
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.GET("/sites/:id", controller.GetSite)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/sites/non-existent", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestSitesController_AddSite_ReservedPort(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{},
+		Dirs: config.DirsConfig{
+			StaticDir: "/tmp/test-static",
+		},
+	}
+
+	os.MkdirAll(cfg.Dirs.StaticDir, 0755)
+	defer os.RemoveAll(cfg.Dirs.StaticDir)
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.POST("/sites", controller.AddSite)
+
+	site := map[string]interface{}{
+		"name":    "Test Site",
+		"domains": []string{"127.0.0.1"},
+		"port":    80,
+		"mode":    "static",
+	}
+	body, _ := json.Marshal(site)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/sites", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestSitesController_AddSite_InvalidRequest(t *testing.T) {
 	_, router, _ := setupSitesController()
 
