@@ -128,15 +128,153 @@ func TestSitesController_GetSiteConfig_NoRedis(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
-func TestSitesController_GetSiteConfig_InvalidType(t *testing.T) {
-	_, router, _ := setupSitesController()
+func TestSitesController_AddSite_MissingName(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{},
+		Dirs: config.DirsConfig{
+			StaticDir: "/tmp/test-static",
+		},
+	}
+
+	os.MkdirAll(cfg.Dirs.StaticDir, 0755)
+	defer os.RemoveAll(cfg.Dirs.StaticDir)
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.POST("/sites", controller.AddSite)
+
+	site := map[string]interface{}{
+		"domains": []string{"127.0.0.1"},
+		"port":    9000,
+		"mode":    "static",
+	}
+	body, _ := json.Marshal(site)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/sites/test-site-1/config?type=invalid", nil)
+	req, _ := http.NewRequest("POST", "/sites", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	// 由于没有 redisClient，会先返回 500
+	// 缺少 name 字段返回 400
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSitesController_UpdateSite_MissingName(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+		Dirs: config.DirsConfig{
+			StaticDir: "/tmp/test-static",
+		},
+	}
+
+	os.MkdirAll(cfg.Dirs.StaticDir, 0755)
+	defer os.RemoveAll(cfg.Dirs.StaticDir)
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.PUT("/sites/:id", controller.UpdateSite)
+
+	site := map[string]interface{}{
+		"domains": []string{"127.0.0.1"},
+		"port":    8080,
+		"mode":    "static",
+	}
+	body, _ := json.Marshal(site)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/sites/test-site-1", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	// 没有 configManager 时返回 500
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSitesController_DeleteSite_NoConfigManager(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+	}
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.DELETE("/sites/:id", controller.DeleteSite)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("DELETE", "/sites/test-site-1", nil)
+	router.ServeHTTP(w, req)
+
+	// 没有 configManager 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSitesController_GetSiteConfig_MissingType(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+	}
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.GET("/sites/:id/config", controller.GetSiteConfig)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/sites/test-site-1/config", nil)
+	router.ServeHTTP(w, req)
+
+	// redisClient 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestIsPortAvailable_PortInRange(t *testing.T) {
+	// 测试端口范围检查 (1-65535 是有效范围)
+	// isPortAvailable 检查端口是否在保留端口列表中
+	// 端口 0 通常是可用的（虽然不推荐使用）
+	assert.True(t, isPortAvailable(0), "Port 0 should be available")
+	// 测试一个高位端口应该是可用的
+	assert.True(t, isPortAvailable(50000), "Port 50000 should be available")
 }
 
 func TestSitesController_AddSite_InvalidRequest(t *testing.T) {
