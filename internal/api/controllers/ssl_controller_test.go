@@ -302,3 +302,89 @@ func TestSSLController_DeleteCert_WithAutoRenewer(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func TestSSLController_GetCertStatus_MissingDomain(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controller := NewSSLController(nil, nil)
+	router := gin.New()
+	router.GET("/ssl/certificates/:domain", controller.GetCertStatus)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/ssl/certificates/", nil)
+	router.ServeHTTP(w, req)
+
+	// autoRenewer 为 nil 时返回 500 或 404
+	assert.Contains(t, []int{http.StatusInternalServerError, http.StatusNotFound}, w.Code)
+}
+
+func TestSSLController_ListCerts_QueryParams(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controller := NewSSLController(nil, nil)
+	router := gin.New()
+	router.GET("/ssl/certificates", controller.ListCerts)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/ssl/certificates?page=1&pageSize=10", nil)
+	router.ServeHTTP(w, req)
+
+	// autoRenewer 为 nil 时返回空列表或 500
+	assert.Contains(t, []int{http.StatusOK, http.StatusInternalServerError}, w.Code)
+}
+
+func TestSSLController_GetExpiringCerts_WithDays(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controller := NewSSLController(nil, nil)
+	router := gin.New()
+	router.GET("/ssl/certificates/expiring", controller.GetExpiringCerts)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/ssl/certificates/expiring?days=30", nil)
+	router.ServeHTTP(w, req)
+
+	// autoRenewer 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSSLController_GetRenewalHistory_WithPagination(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controller := NewSSLController(nil, nil)
+	router := gin.New()
+	router.GET("/ssl/certificates/:domain/history", controller.GetRenewalHistory)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/ssl/certificates/example.com/history?page=1&pageSize=10", nil)
+	router.ServeHTTP(w, req)
+
+	// autoRenewer 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSSLController_RequestCert_EmptyDomains(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controller := NewSSLController(nil, nil)
+	router := gin.New()
+	router.POST("/ssl/certificates", controller.RequestCert)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/ssl/certificates", bytes.NewBufferString(`{"domains":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	// acmeClient 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSSLController_RequestWildcardCert_EmptyBaseDomain(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controller := NewSSLController(nil, nil)
+	router := gin.New()
+	router.POST("/ssl/certificates/wildcard", controller.RequestWildcardCert)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/ssl/certificates/wildcard", bytes.NewBufferString(`{"base_domain":""}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	// acmeClient 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
