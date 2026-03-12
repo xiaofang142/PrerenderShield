@@ -412,9 +412,16 @@ func (c *PreheatController) GetPreheatTaskStatus(ctx *gin.Context) {
 		return
 	}
 
-	// 从Redis获取预热运行状态
-	isRunning, err := c.redisClient.IsPreheatRunning(siteId)
-	if err != nil {
+	var isRunning bool
+	var err error
+
+	// 从 Redis 获取预热运行状态
+	if c.redisClient != nil {
+		isRunning, err = c.redisClient.IsPreheatRunning(siteId)
+		if err != nil {
+			isRunning = false
+		}
+	} else {
 		isRunning = false
 	}
 

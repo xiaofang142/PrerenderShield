@@ -6,16 +6,25 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"prerender-shield/internal/models"
-	"prerender-shield/internal/repository"
 )
+
+// WafRepository defines the interface for WAF repository operations
+type WafRepository interface {
+	GetWafConfigBySiteID(siteID string) (*models.WafConfig, error)
+	UpdateWafConfig(config *models.WafConfig) error
+	GetAccessLogs(siteID string, page, limit int) ([]models.AccessLog, int64, error)
+	GetAttackLogs(siteID string, page, limit int) ([]models.AccessLog, int64, error)
+	AddIPToWhitelist(siteID, ip string) error
+	AddIPToBlacklist(siteID, ip string) error
+}
 
 // FirewallController handles WAF configuration requests
 type FirewallController struct {
-	wafRepo *repository.WafRepository
+	wafRepo WafRepository
 }
 
 // NewFirewallController creates a new FirewallController
-func NewFirewallController(wafRepo *repository.WafRepository) *FirewallController {
+func NewFirewallController(wafRepo WafRepository) *FirewallController {
 	return &FirewallController{
 		wafRepo: wafRepo,
 	}

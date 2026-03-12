@@ -48,18 +48,20 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	// 获取真实监控数据
 	stats := c.monitor.GetStats()
 
-	// 获取WAF统计数据 (最近24小时)
+	// 获取 WAF 统计数据 (最近 24 小时)
 	endTime := time.Now()
 	startTime := endTime.Add(-24 * time.Hour)
-	wafStats, err := c.wafRepo.GetGlobalStats(startTime.Format("2006-01-02 15:04:05"), endTime.Format("2006-01-02 15:04:05"))
 
 	totalRequests := int64(stats["totalRequests"].(float64))
 	blockedRequests := int64(stats["blockedRequests"].(float64))
 
-	// 如果WAF stats可用，优先使用 DB 中的数据
-	if err == nil && wafStats != nil {
-		totalRequests = wafStats.TotalRequests
-		blockedRequests = wafStats.BlockedRequests
+	// 如果 WAF stats 可用，优先使用 DB 中的数据
+	if c.wafRepo != nil {
+		wafStats, err := c.wafRepo.GetGlobalStats(startTime.Format("2006-01-02 15:04:05"), endTime.Format("2006-01-02 15:04:05"))
+		if err == nil && wafStats != nil {
+			totalRequests = wafStats.TotalRequests
+			blockedRequests = wafStats.BlockedRequests
+		}
 	}
 
 	// 获取站点统计数据

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"prerender-shield/internal/models"
@@ -349,4 +350,113 @@ func (r *WafRepository) GetTrafficStats(startTime, endTime string) ([]map[string
 	})
 
 	return data, nil
+}
+
+// WafRepositoryInMemory is an in-memory implementation of WafRepository for testing
+type WafRepositoryInMemory struct {
+	configs      map[string]*models.WafConfig
+	accessLogs   map[string][]models.AccessLog
+	attackLogs   map[string][]models.AccessLog
+	ipWhitelists map[string][]models.IPWhitelist
+	ipBlacklists map[string][]models.IPBlacklist
+	mu           sync.RWMutex
+}
+
+// NewWafRepositoryInMemory creates a new in-memory WafRepository
+func NewWafRepositoryInMemory() *WafRepositoryInMemory {
+	return &WafRepositoryInMemory{
+		configs:      make(map[string]*models.WafConfig),
+		accessLogs:   make(map[string][]models.AccessLog),
+		attackLogs:   make(map[string][]models.AccessLog),
+		ipWhitelists: make(map[string][]models.IPWhitelist),
+		ipBlacklists: make(map[string][]models.IPBlacklist),
+	}
+}
+
+// GetWafConfigBySiteID retrieves the WAF configuration for a specific site
+func (r *WafRepositoryInMemory) GetWafConfigBySiteID(siteID string) (*models.WafConfig, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if config, ok := r.configs[siteID]; ok {
+		return config, nil
+	}
+	return nil, nil
+}
+
+// UpdateWafConfig updates an existing WAF configuration
+func (r *WafRepositoryInMemory) UpdateWafConfig(config *models.WafConfig) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.configs[config.SiteID] = config
+	return nil
+}
+
+// GetAccessLogs retrieves access logs with pagination
+func (r *WafRepositoryInMemory) GetAccessLogs(siteID string, page, limit int) ([]models.AccessLog, int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	logs, ok := r.accessLogs[siteID]
+	if !ok {
+		return []models.AccessLog{}, 0, nil
+	}
+	start := (page - 1) * limit
+	end := start + limit
+	if start >= len(logs) {
+		return []models.AccessLog{}, 0, nil
+	}
+	if end > len(logs) {
+		end = len(logs)
+	}
+	return logs[start:end], int64(len(logs)), nil
+}
+
+// GetAttackLogs retrieves attack logs with pagination
+func (r *WafRepositoryInMemory) GetAttackLogs(siteID string, page, limit int) ([]models.AccessLog, int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	logs, ok := r.attackLogs[siteID]
+	if !ok {
+		return []models.AccessLog{}, 0, nil
+	}
+	start := (page - 1) * limit
+	end := start + limit
+	if start >= len(logs) {
+		return []models.AccessLog{}, 0, nil
+	}
+	if end > len(logs) {
+		end = len(logs)
+	}
+	return logs[start:end], int64(len(logs)), nil
+}
+
+// AddIPToWhitelist adds an IP to the whitelist
+func (r *WafRepositoryInMemory) AddIPToWhitelist(siteID, ip string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ipWhitelists[siteID] = append(r.ipWhitelists[siteID], models.IPWhitelist{IPAddress: ip})
+	// Remove from blacklist if present
+	var newBlacklist []models.IPBlacklist
+	for _, item := range r.ipBlacklists[siteID] {
+		if item.IPAddress != ip {
+			newBlacklist = append(newBlacklist, item)
+		}
+	}
+	r.ipBlacklists[siteID] = newBlacklist
+	return nil
+}
+
+// AddIPToBlacklist adds an IP to the blacklist
+func (r *WafRepositoryInMemory) AddIPToBlacklist(siteID, ip string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ipBlacklists[siteID] = append(r.ipBlacklists[siteID], models.IPBlacklist{IPAddress: ip})
+	// Remove from whitelist if present
+	var newWhitelist []models.IPWhitelist
+	for _, item := range r.ipWhitelists[siteID] {
+		if item.IPAddress != ip {
+			newWhitelist = append(newWhitelist, item)
+		}
+	}
+	r.ipWhitelists[siteID] = newWhitelist
+	return nil
 }

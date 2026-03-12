@@ -141,6 +141,14 @@ func (c *PushController) GetPushStats(ctx *gin.Context) {
 
 // GetPushLogs 获取推送日志
 func (c *PushController) GetPushLogs(ctx *gin.Context) {
+	if c.pushManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "Push service not initialized",
+		})
+		return
+	}
+
 	siteID := ctx.Query("siteId")
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
@@ -182,6 +190,14 @@ func (c *PushController) GetPushLogs(ctx *gin.Context) {
 
 // GetPushTrend 获取推送趋势
 func (c *PushController) GetPushTrend(ctx *gin.Context) {
+	if c.pushManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "Push service not initialized",
+		})
+		return
+	}
+
 	siteID := ctx.Query("siteId")
 
 	if siteID == "" {
@@ -211,6 +227,14 @@ func (c *PushController) GetPushTrend(ctx *gin.Context) {
 
 // GetPushConfig 获取推送配置
 func (c *PushController) GetPushConfig(ctx *gin.Context) {
+	if c.pushManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "Push service not initialized",
+		})
+		return
+	}
+
 	siteID := ctx.Query("siteId")
 
 	if siteID == "" {
@@ -240,6 +264,14 @@ func (c *PushController) GetPushConfig(ctx *gin.Context) {
 
 // UpdatePushConfig 更新推送配置
 func (c *PushController) UpdatePushConfig(ctx *gin.Context) {
+	if c.pushManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "Push service not initialized",
+		})
+		return
+	}
+
 	var req struct {
 		SiteId string            `json:"siteId" binding:"required"`
 		Config config.PushConfig `json:"config" binding:"required"`

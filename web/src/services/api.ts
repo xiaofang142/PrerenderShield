@@ -1,13 +1,13 @@
 import axios, { AxiosInstance } from 'axios'
 
-// 定义API响应类型
+// 定义 API 响应类型
 export interface ApiResponse<T = any> {
   code: number
   message: string
   data: T
 }
 
-// 创建axios实例
+// 创建 axios 实例
 const api: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
   timeout: 10000,
@@ -16,50 +16,52 @@ const api: AxiosInstance = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
-    // 获取当前请求URL
+    // 获取当前请求 URL
     const url = config.url || ''
-    
-    // 从localStorage获取token
+
+    // 从 localStorage 获取 token
     const token = localStorage.getItem('token')
-    
-    // 检查是否是登录相关API（不需要携带token）
-    // 登录相关API包括：/auth/开头的所有API，/auth/first-run, /auth/login
-    // 注意：url可能是相对路径，比如"/sites"而不是"/api/v1/sites"
-    const isAuthApi = 
-      url.startsWith('/auth/') || 
-      url === '/auth/first-run' || 
+
+    // 检查是否是登录相关 API（不需要携带 token）
+    // 登录相关 API 包括：/auth/开头的所有 API，/auth/first-run, /auth/login
+    // 注意：url 可能是相对路径，比如"/sites"而不是"/api/v1/sites"
+    const isAuthApi =
+      url.startsWith('/auth/') ||
+      url === '/auth/first-run' ||
       url === '/auth/login' ||
       // 处理相对路径情况
       url === '/first-run' ||
       url === '/login'
-    
-    // 非登录API需要携带token
+
+    // 非登录 API 需要携带 token
     if (token) {
-      // 为所有非登录API添加Authorization头
+      // 为所有非登录 API 添加 Authorization 头
       if (!isAuthApi) {
-        // 使用axios的headers.set方法确保Authorization头被正确设置
+        // 使用 axios 的 headers.set 方法确保 Authorization 头被正确设置
         if (config.headers.set) {
           config.headers.set('Authorization', `Bearer ${token}`)
         } else {
-          // 兼容不同的headers对象类型
+          // 兼容不同的 headers 对象类型
           config.headers.Authorization = `Bearer ${token}`
         }
       }
     }
-    
-    console.log('=== API Request Debug ===');
-    console.log('Request URL:', url);
-    console.log('Full URL with baseURL:', config.baseURL + url);
-    console.log('Token found in localStorage:', !!token);
-    console.log('Token value:', token ? '***' + token.slice(-8) : 'null'); // 只显示token的最后8位
-    console.log('Is Auth API:', isAuthApi);
-    console.log('Authorization Header:', config.headers.Authorization || config.headers.get?.('Authorization'));
-    
+
+    // 开发环境调试日志
+    if (import.meta.env.DEV) {
+      console.log('=== API Request Debug ===')
+      console.log('Request URL:', url)
+      console.log('Token found:', !!token)
+      console.log('Is Auth API:', isAuthApi)
+    }
+
     return config
   },
   (error) => {
-    console.error('=== API Request Error ===');
-    console.error('Error:', error);
+    if (import.meta.env.DEV) {
+      console.error('=== API Request Error ===')
+      console.error('Error:', error)
+    }
     return Promise.reject(error)
   }
 )
@@ -67,44 +69,40 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
-    console.log('=== API Response Debug ===');
-    console.log('Response URL:', response.config.url);
-    console.log('Response Status:', response.status);
-    console.log('Response Data:', response.data);
+    // 开发环境调试日志
+    if (import.meta.env.DEV) {
+      console.log('=== API Response Debug ===')
+      console.log('Response URL:', response.config.url)
+      console.log('Response Status:', response.status)
+    }
     return response.data
   },
   (error) => {
-    console.error('=== API Response Error Debug ===');
-    console.error('Error URL:', error.config?.url);
-    console.error('Error Status:', error.response?.status);
-    console.error('Error Headers:', error.response?.headers);
-    console.error('Error Data:', error.response?.data);
-    console.error('Error Message:', error.message);
-    console.error('Request Config:', error.config);
-    
-    // 处理401未授权错误
+    // 开发环境调试日志
+    if (import.meta.env.DEV) {
+      console.error('=== API Response Error Debug ===')
+      console.error('Error URL:', error.config?.url)
+      console.error('Error Status:', error.response?.status)
+      console.error('Error Message:', error.message)
+    }
+
+    // 处理 401 未授权错误
     if (error.response && error.response.status === 401) {
-      console.error('=== 401 Unauthorized Error ===');
-      console.error('Token in localStorage:', localStorage.getItem('token') ? '***' + localStorage.getItem('token')?.slice(-8) : 'null');
-      console.error('Request had Authorization header:', error.config?.headers?.Authorization ? 'Yes' : 'No');
-      
-      // 清除本地存储的token
+      // 清除本地存储的 token
       localStorage.removeItem('token')
       localStorage.removeItem('username')
-      
+
       // 检查当前是否已经在登录页面，如果不在则跳转到登录页面
-      // 避免登录失败时页面刷新
       if (!window.location.pathname.includes('/login')) {
-        console.log('Redirecting to login page...');
         window.location.href = '/login'
       }
     }
-    
+
     return Promise.reject(error)
   }
 )
 
-// 重新定义axios方法的类型
+// 重新定义 axios 方法的类型
 declare module 'axios' {
   interface AxiosInstance {
     get<T = any>(url: string, config?: any): Promise<ApiResponse<T>>
@@ -114,17 +112,17 @@ declare module 'axios' {
   }
 }
 
-// 概览API
+// 概览 API
 export const overviewApi = {
   getStats: () => api.get('/overview'),
 }
 
-// 防火墙API
+// 防火墙 API
 export const firewallApi = {
   getWafConfig: (siteId: string) => api.get(`/sites/${siteId}/waf`),
   updateWafConfig: (siteId: string, config: any) => api.put(`/sites/${siteId}/waf`, config),
   getAccessLogs: (params: { site_id?: string; page?: number; limit?: number }) => api.get('/logs', { params }),
-  // 为了兼容Firewall.tsx增加的方法
+  // 为了兼容 Firewall.tsx 增加的方法
   getAttackLogs: (params: { site_id: string; page: number; limit: number }) => api.get('/firewall/attacks', { params }),
   addToWhitelist: (siteId: string, ip: string) => api.post(`/firewall/whitelist`, { site_id: siteId, ip }),
   addToBlacklist: (siteId: string, ip: string) => api.post(`/firewall/blacklist`, { site_id: siteId, ip }),
@@ -133,13 +131,13 @@ export const firewallApi = {
   scan: (data: { site: string; url: string }) => api.post(`/sites/${data.site}/scan`, data),
 }
 
-// 渲染预热API
+// 渲染预热 API
 export const prerenderApi = {
   getStatus: (site?: string) => api.get('/prerender/status', { params: site ? { site } : {} }),
   render: (data: { site: string; url: string }) => api.post('/prerender/render', data),
   preheat: (data: { site: string }) => api.post('/prerender/preheat', data),
   updateConfig: (site: string, config: any) => api.put('/prerender/config', { site, config }),
-  // 渲染预热扩展API
+  // 渲染预热扩展 API
   getPreheatStats: (siteId?: string) => api.get('/preheat/stats', { params: siteId ? { siteId } : {} }),
   triggerPreheat: (siteId: string) => api.post('/preheat/trigger', { siteId }),
   getUrls: (siteId?: string, page: number = 1, pageSize: number = 20) => api.get('/preheat/urls', { params: { siteId, page, pageSize } }),
@@ -147,20 +145,20 @@ export const prerenderApi = {
   clearCache: (siteId: string) => api.post('/preheat/clear-cache', { siteId }),
 }
 
-// 路由API
+// 路由 API
 export const routingApi = {
   getRules: () => api.get('/routing/rules'),
   addRule: (rule: any) => api.post('/routing/rules', rule),
   deleteRule: (id: string) => api.delete(`/routing/rules/${id}`),
 }
 
-// 监控API
+// 监控 API
 export const monitoringApi = {
   getStats: () => api.get('/monitoring/stats'),
   getLogs: () => api.get('/monitoring/logs'),
 }
 
-// 站点管理API
+// 站点管理 API
 export const sitesApi = {
   getSites: () => api.get('/sites'),
   getSite: (id: string) => api.get(`/sites/${id}`),
@@ -171,7 +169,7 @@ export const sitesApi = {
   updatePushConfig: (id: string, config: any) => api.put(`/sites/${id}/push`, config),
   updateFirewallConfig: (id: string, config: any) => api.put(`/sites/${id}/firewall`, config),
   deleteSite: (id: string) => api.delete(`/sites/${id}`),
-  // 静态资源管理API
+  // 静态资源管理 API
   getFileList: (siteId: string, path: string) => api.get(`/sites/${siteId}/static`, { params: { path } }),
   uploadFile: (siteId: string, file: any, path: string, onUploadProgress?: (progressEvent: any) => void) => {
     const formData = new FormData()
@@ -189,13 +187,13 @@ export const sitesApi = {
   batchDeleteStaticResources: (siteId: string, paths: string[]) => api.post(`/sites/${siteId}/static/batch-delete`, { paths }),
 }
 
-// 爬虫日志API
+// 爬虫日志 API
 export const crawlerApi = {
   getLogs: (params: { site?: string; startTime: string; endTime: string; page: number; pageSize: number }) => api.get('/crawler/logs', { params }),
   getStats: (params: { site?: string; startTime: string; endTime: string; granularity: string }) => api.get('/crawler/stats', { params }),
 }
 
-// 推送API
+// 推送 API
 export const pushApi = {
   getStats: (siteId?: string) => api.get('/push/stats', { params: siteId ? { siteId } : {} }),
   getLogs: (siteId?: string, page: number = 1, pageSize: number = 20) => api.get('/push/logs', { params: { siteId, page, pageSize } }),
@@ -205,7 +203,7 @@ export const pushApi = {
   getSites: () => api.get('/push/sites'),
 }
 
-// 系统API
+// 系统 API
 export const systemApi = {
   health: () => api.get('/health'),
   version: () => api.get('/version'),
