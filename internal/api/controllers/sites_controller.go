@@ -60,6 +60,15 @@ func NewSitesController(
 // GetSites 获取站点列表
 func (c *SitesController) GetSites(ctx *gin.Context) {
 	// 从配置管理器获取当前配置
+	if c.configManager == nil {
+		// 如果没有 configManager，使用 cfg 中的 Sites
+		ctx.JSON(http.StatusOK, gin.H{
+			"code":    200,
+			"message": "success",
+			"data":    c.cfg.Sites,
+		})
+		return
+	}
 	currentConfig := c.configManager.GetConfig()
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -72,8 +81,14 @@ func (c *SitesController) GetSites(ctx *gin.Context) {
 func (c *SitesController) GetSite(ctx *gin.Context) {
 	id := ctx.Param("id")
 	// 从配置管理器获取当前配置
-	currentConfig := c.configManager.GetConfig()
-	for _, site := range currentConfig.Sites {
+	var sites []config.SiteConfig
+	if c.configManager == nil {
+		sites = c.cfg.Sites
+	} else {
+		currentConfig := c.configManager.GetConfig()
+		sites = currentConfig.Sites
+	}
+	for _, site := range sites {
 		if site.ID == id {
 			ctx.JSON(http.StatusOK, gin.H{
 				"code":    200,
@@ -310,6 +325,13 @@ func (c *SitesController) UpdateSite(ctx *gin.Context) {
 	}
 
 	// 从配置管理器获取当前配置
+	if c.configManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Configuration manager not available",
+		})
+		return
+	}
 	currentConfig := c.configManager.GetConfig()
 
 	// 查找并更新指定站点
@@ -486,6 +508,13 @@ func (c *SitesController) UpdateSitePrerenderConfig(ctx *gin.Context) {
 	}
 
 	// 从配置管理器获取当前配置
+	if c.configManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Configuration manager not available",
+		})
+		return
+	}
 	currentConfig := c.configManager.GetConfig()
 
 	// 查找并更新指定站点
@@ -708,6 +737,13 @@ func (c *SitesController) DeleteSite(ctx *gin.Context) {
 	id := ctx.Param("id")
 
 	// 从配置管理器获取当前配置并更新
+	if c.configManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Configuration manager not initialized",
+		})
+		return
+	}
 	currentConfig := c.configManager.GetConfig()
 
 	// 查找并删除指定站点
@@ -716,7 +752,7 @@ func (c *SitesController) DeleteSite(ctx *gin.Context) {
 			// 停止站点服务器
 			c.siteServerMgr.StopSiteServer(site.ID)
 
-			// 删除Redis中的站点数据
+			// 删除 Redis 中的站点数据
 			if c.redisClient != nil {
 				if err := c.redisClient.DeleteSiteData(site.ID); err != nil {
 					logging.DefaultLogger.Warn("Failed to delete site data from Redis for site %s: %v", site.Name, err)
@@ -786,6 +822,13 @@ func (c *SitesController) GetStaticFiles(ctx *gin.Context) {
 	path := ctx.Query("path")
 
 	// 从配置管理器获取当前配置
+	if c.configManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Configuration manager not initialized",
+		})
+		return
+	}
 	currentConfig := c.configManager.GetConfig()
 
 	// 查找指定站点
@@ -1191,6 +1234,13 @@ func (c *SitesController) DeleteStaticFile(ctx *gin.Context) {
 	path := ctx.Query("path")
 
 	// 从配置管理器获取当前配置
+	if c.configManager == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Configuration manager not initialized",
+		})
+		return
+	}
 	currentConfig := c.configManager.GetConfig()
 
 	// 查找指定站点
@@ -1213,8 +1263,44 @@ func (c *SitesController) DeleteStaticFile(ctx *gin.Context) {
 	// 构建静态资源目录路径
 	siteStaticDir := filepath.Join(c.cfg.Dirs.StaticDir, site.ID)
 
+	// 安全检查：防止路径遍历攻击
+	cleanPath := filepath.Clean(path)
+	if strings.Contains(cleanPath, "..") {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "Invalid path",
+		})
+		return
+	}
+
 	// 构建完整的文件路径
-	filePath := filepath.Join(siteStaticDir, path)
+	filePath := filepath.Join(siteStaticDir, cleanPath)
+
+	// 双重检查：确保最终路径在站点静态目录下
+	absFilePath, err := filepath.Abs(filePath)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Path error",
+		})
+		return
+	}
+	absSiteDir, err := filepath.Abs(siteStaticDir)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "Server configuration error",
+		})
+		return
+	}
+
+	if !strings.HasPrefix(absFilePath, absSiteDir) {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "Forbidden path",
+		})
+		return
+	}
 
 	// 删除文件或目录
 	if err := os.RemoveAll(filePath); err != nil {
