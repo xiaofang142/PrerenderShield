@@ -333,3 +333,87 @@ func TestPreheatController_ClearCache_MissingSiteId(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+func TestPreheatController_GetPreheatStats_AllSites(t *testing.T) {
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"localhost"},
+				Port:    8080,
+			},
+			{
+				ID:      "test-site-2",
+				Name:    "Test Site 2",
+				Domains: []string{"localhost"},
+				Port:    8081,
+			},
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	controller := NewPreheatController(nil, nil, cfg)
+
+	router := gin.New()
+	router.GET("/preheat/stats", controller.GetPreheatStats)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/preheat/stats", nil)
+	router.ServeHTTP(w, req)
+
+	// prerenderManager 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPreheatController_GetPreheatStats_SingleSite(t *testing.T) {
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"localhost"},
+				Port:    8080,
+			},
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	controller := NewPreheatController(nil, nil, cfg)
+
+	router := gin.New()
+	router.GET("/preheat/stats", controller.GetPreheatStats)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/preheat/stats?siteId=test-site-1", nil)
+	router.ServeHTTP(w, req)
+
+	// prerenderManager 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPreheatController_GetPreheatStats_NonExistentSite(t *testing.T) {
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"localhost"},
+				Port:    8080,
+			},
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	controller := NewPreheatController(nil, nil, cfg)
+
+	router := gin.New()
+	router.GET("/preheat/stats", controller.GetPreheatStats)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/preheat/stats?siteId=non-existent", nil)
+	router.ServeHTTP(w, req)
+
+	// prerenderManager 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
