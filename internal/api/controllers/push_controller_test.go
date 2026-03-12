@@ -315,3 +315,167 @@ func TestPushController_GetPushStats_MissingSiteId(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func TestPushController_GetPushStats_AllSites(t *testing.T) {
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"localhost"},
+				Port:    8080,
+			},
+			{
+				ID:      "test-site-2",
+				Name:    "Test Site 2",
+				Domains: []string{"localhost"},
+				Port:    8081,
+			},
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	controller := NewPushController(nil, nil, cfg)
+
+	router := gin.New()
+	router.GET("/push/stats", controller.GetPushStats)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/push/stats", nil)
+	router.ServeHTTP(w, req)
+
+	// pushManager 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPushController_GetPushStats_SingleSite(t *testing.T) {
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"localhost"},
+				Port:    8080,
+			},
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	controller := NewPushController(nil, nil, cfg)
+
+	router := gin.New()
+	router.GET("/push/stats", controller.GetPushStats)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/push/stats?siteId=test-site-1", nil)
+	router.ServeHTTP(w, req)
+
+	// pushManager 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPushController_GetPushLogs_MissingSiteId_WithConfig(t *testing.T) {
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"localhost"},
+				Port:    8080,
+			},
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	controller := NewPushController(nil, nil, cfg)
+
+	router := gin.New()
+	router.GET("/push/logs", controller.GetPushLogs)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/push/logs", nil)
+	router.ServeHTTP(w, req)
+
+	// pushManager 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPushController_GetPushTrend_MissingSiteId_WithConfig(t *testing.T) {
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"localhost"},
+				Port:    8080,
+			},
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	controller := NewPushController(nil, nil, cfg)
+
+	router := gin.New()
+	router.GET("/push/trend", controller.GetPushTrend)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/push/trend", nil)
+	router.ServeHTTP(w, req)
+
+	// pushManager 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPushController_GetPushConfig_MissingSiteId_WithConfig(t *testing.T) {
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"localhost"},
+				Port:    8080,
+			},
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	controller := NewPushController(nil, nil, cfg)
+
+	router := gin.New()
+	router.GET("/push/config", controller.GetPushConfig)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/push/config", nil)
+	router.ServeHTTP(w, req)
+
+	// pushManager 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPushController_UpdatePushConfig_MissingSiteId_WithConfig(t *testing.T) {
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"localhost"},
+				Port:    8080,
+			},
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	controller := NewPushController(nil, nil, cfg)
+
+	router := gin.New()
+	router.POST("/push/config", controller.UpdatePushConfig)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/push/config",
+		bytes.NewBufferString(`{"enabled":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	// pushManager 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
