@@ -224,3 +224,57 @@ func TestSystemController_UpdateSystemConfig_EmptyConfig(t *testing.T) {
 	// Redis 不可用时返回 500
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func TestSystemController_Health_RedisStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	controller := NewSystemController(nil)
+
+	router := gin.New()
+	router.GET("/health", controller.Health)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/health", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	data, ok := response["data"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, "unknown", data["redis_status"])
+}
+
+func TestSystemController_GetSystemConfig_InvalidResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	controller := NewSystemController(nil)
+
+	router := gin.New()
+	router.GET("/system/config", controller.GetSystemConfig)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/system/config", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSystemController_UpdateSystemConfig_MissingFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	controller := NewSystemController(nil)
+
+	router := gin.New()
+	router.POST("/system/config", controller.UpdateSystemConfig)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/system/config", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
