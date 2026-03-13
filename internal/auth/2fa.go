@@ -27,6 +27,9 @@ func NewTwoFactorAuth(redisClient *redis.Client, issuer string) *TwoFactorAuth {
 
 // Enable2FA 启用 2FA
 func (t *TwoFactorAuth) Enable2FA(userID string) (secret, qrCodeURL string, err error) {
+	if t.redisClient == nil {
+		return "", "", fmt.Errorf("redis client is nil")
+	}
 	// 生成密钥
 	secret, err = t.totpManager.GenerateSecret()
 	if err != nil {
@@ -50,6 +53,9 @@ func (t *TwoFactorAuth) Enable2FA(userID string) (secret, qrCodeURL string, err 
 
 // Confirm2FA 确认启用 2FA
 func (t *TwoFactorAuth) Confirm2FA(userID, code string) error {
+	if t.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	// 获取临时密钥
 	key := fmt.Sprintf("2fa:pending:%s", userID)
 	secret, err := t.redisClient.Get(key)
@@ -82,6 +88,9 @@ func (t *TwoFactorAuth) Confirm2FA(userID, code string) error {
 
 // Disable2FA 禁用 2FA
 func (t *TwoFactorAuth) Disable2FA(userID, code string) error {
+	if t.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	// 验证当前 TOTP 码
 	if err := t.Verify2FA(userID, code); err != nil {
 		return fmt.Errorf("invalid verification code: %w", err)
@@ -102,6 +111,9 @@ func (t *TwoFactorAuth) Disable2FA(userID, code string) error {
 
 // Verify2FA 验证 2FA 码
 func (t *TwoFactorAuth) Verify2FA(userID, code string) error {
+	if t.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	// 获取用户 2FA 状态
 	userKey := fmt.Sprintf("user:%s", userID)
 	enabled, _ := t.redisClient.HashGet(userKey, "2fa_enabled")
@@ -126,6 +138,9 @@ func (t *TwoFactorAuth) Verify2FA(userID, code string) error {
 
 // Is2FAEnabled 检查用户是否启用 2FA
 func (t *TwoFactorAuth) Is2FAEnabled(userID string) (bool, error) {
+	if t.redisClient == nil {
+		return false, fmt.Errorf("redis client is nil")
+	}
 	userKey := fmt.Sprintf("user:%s", userID)
 	enabled, err := t.redisClient.HashGet(userKey, "2fa_enabled")
 	if err != nil {
@@ -136,6 +151,9 @@ func (t *TwoFactorAuth) Is2FAEnabled(userID string) (bool, error) {
 
 // GenerateBackupCodes 生成备用码
 func (t *TwoFactorAuth) GenerateBackupCodes(userID string) ([]string, error) {
+	if t.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	// 验证 2FA 状态
 	enabled, err := t.Is2FAEnabled(userID)
 	if err != nil || !enabled {
@@ -163,6 +181,9 @@ func (t *TwoFactorAuth) GenerateBackupCodes(userID string) ([]string, error) {
 
 // VerifyBackupCode 验证备用码
 func (t *TwoFactorAuth) VerifyBackupCode(userID, code string) error {
+	if t.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	backupKey := fmt.Sprintf("2fa:backup:%s", userID)
 	backupData := make(map[string]interface{})
 	if err := t.redisClient.GetJSON(backupKey, &backupData); err != nil {
