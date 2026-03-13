@@ -58,6 +58,11 @@ type PushLog struct {
 
 // TriggerPush 触发推送
 func (pm *PushManager) TriggerPush(siteID string) (string, error) {
+	// 检查配置是否为 nil
+	if pm.config == nil {
+		return "", fmt.Errorf("config is nil")
+	}
+
 	// 获取站点配置
 	var siteConfig *config.SiteConfig
 	for _, site := range pm.config.Sites {
@@ -388,6 +393,9 @@ func (pm *PushManager) pushToBing(url, route string, pushConfig config.PushConfi
 
 // logPushResult 记录推送结果
 func (pm *PushManager) logPushResult(siteID, siteName, url, route, searchEngine, status, message string) {
+	if pm.redisClient == nil {
+		return
+	}
 	log := PushLog{
 		ID:           fmt.Sprintf("log-%s-%d", siteID, time.Now().UnixNano()),
 		SiteID:       siteID,
@@ -406,16 +414,25 @@ func (pm *PushManager) logPushResult(siteID, siteName, url, route, searchEngine,
 
 // GetPushStats 获取推送统计
 func (pm *PushManager) GetPushStats(siteID string) (map[string]interface{}, error) {
+	if pm.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	return pm.redisClient.GetPushStatsWithURLCounts(siteID)
 }
 
 // GetPushTrend 获取最近15天的推送趋势
 func (pm *PushManager) GetPushTrend(siteID string) (map[string]int64, error) {
+	if pm.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	return pm.redisClient.GetLast15DaysPushCount(siteID)
 }
 
 // GetPushLogs 获取推送日志
 func (pm *PushManager) GetPushLogs(siteID string, limit, offset int) ([]PushLog, error) {
+	if pm.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	// 从Redis获取日志
 	logInterfaces, err := pm.redisClient.GetPushLogs(siteID, limit, offset)
 	if err != nil {
