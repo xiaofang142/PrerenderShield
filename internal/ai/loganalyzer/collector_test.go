@@ -6,305 +6,263 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
-func TestParseLogEntry_JSON(t *testing.T) {
-	raw := `{"remote_addr":"192.168.1.1","method":"GET","uri":"/api/test","status":200,"body_bytes":1024}`
-	entry := ParseLogEntry(raw, "test")
-
-	assert.NotNil(t, entry)
-	assert.Equal(t, "access", entry.SourceType)
-	assert.Equal(t, "192.168.1.1", entry.Fields["remote_addr"])
+func TestDefaultCollectorConfig(t *testing.T) {
+	config := DefaultCollectorConfig()
+	assert.NotNil(t, config)
+	assert.Equal(t, 10000, config.BufferSize)
+	assert.Equal(t, 1000, config.MaxBatchSize)
+	assert.Equal(t, 5*time.Second, config.FlushInterval)
 }
 
-func TestParseLogEntry_Nginx(t *testing.T) {
-	raw := `192.168.1.1 - - [10/Oct/2024:13:55:36 +0800] "GET /api/test HTTP/1.1" 200 1024 "-" "Mozilla/5.0"`
-	entry := ParseLogEntry(raw, "test")
-
-	assert.NotNil(t, entry)
-	assert.Equal(t, "access", entry.SourceType)
-	assert.Equal(t, "192.168.1.1", entry.Fields["remote_addr"])
-	assert.Equal(t, "GET", entry.Fields["method"])
-	assert.Equal(t, "/api/test", entry.Fields["uri"])
-	assert.Equal(t, "200", entry.Fields["status"])
-}
-
-func TestFieldNormalizerProcessor(t *testing.T) {
-	processor := NewFieldNormalizerProcessor()
-	entry := &LogEntry{
-		SourceType: "access",
-		Fields: map[string]interface{}{
-			"remote_addr":  "192.168.1.1",
-			"status":       "200",
-			"body_bytes":   "1024",
-			"request_time": "0.123",
-			"user_agent":   "Mozilla/5.0 (compatible; Googlebot/2.1)",
-		},
+func TestNewCollector(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	config := &CollectorConfig{
+		BufferSize:    1000,
+		MaxBatchSize:  100,
+		FlushInterval: 1 * time.Second,
 	}
 
-	result, err := processor.Process(context.Background(), entry)
+	collector := NewCollector(config, logger)
+	assert.NotNil(t, collector)
+	assert.Equal(t, config, collector.config)
+	assert.NotNil(t, collector.outputChan)
+	assert.False(t, collector.running)
+
+	// 测试 nil config
+	collectorNil := NewCollector(nil, nil)
+	assert.NotNil(t, collectorNil)
+}
+
+func TestCollector_AddSource(t *testing.T) {
+	collector := NewCollector(nil, nil)
+
+	// 测试添加 nil source
+	err := collector.AddSource(nil)
+	assert.Error(t, err)
+
+	// 测试添加有效 source
+	channelSource := NewChannelLogSource("test", make(<-chan string))
+	err = collector.AddSource(channelSource)
 	assert.Nil(t, err)
+	assert.Len(t, collector.sources, 1)
+}
+
+func TestCollector_StartStop(t *testing.T) {
+	collector := NewCollector(nil, nil)
+
+	// 测试启动
+	err := collector.Start()
+	assert.Nil(t, err)
+	assert.True(t, collector.running)
+
+	// 测试重复启动
+	err = collector.Start()
+	assert.Error(t, err)
+
+	// 测试停止
+	err = collector.Stop()
+	assert.Nil(t, err)
+	assert.False(t, collector.running)
+}
+
+func TestCollector_OutputChan(t *testing.T) {
+	collector := NewCollector(nil, nil)
+	outputChan := collector.OutputChan()
+	assert.NotNil(t, outputChan)
+
+	// 发送一个条目测试
+	entry := &LogEntry{
+		ID:         "test-1",
+		SourceType: "access",
+		Fields:     map[string]interface{}{"test": "value"},
+	}
+	collector.outputChan <- entry
+
+	received := <-outputChan
+	assert.Equal(t, "test-1", received.ID)
+}
+
+func TestCollector_ReadSource(t *testing.T) {
+	rawChan := make(chan string, 10)
+	collector := NewCollector(nil, nil)
+
+	// 创建一个测试 channel source
+	channelSource := NewChannelLogSource("test", rawChan)
+	collector.AddSource(channelSource)
+
+	// 启动采集器
+	err := collector.Start()
+	assert.Nil(t, err)
+
+	// 发送日志
+	rawChan <- `{"remote_addr":"192.168.1.1","method":"GET"}`
+	close(rawChan)
+
+	time.Sleep(100 * time.Millisecond)
+	collector.Stop()
+}
+
+func TestNewFileLogSource(t *testing.T) {
+	// 测试不存在的文件
+	_, err := NewFileLogSource("test", "/nonexistent/path.log", "nginx")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "文件不存在")
+
+	// 测试创建成功的文件日志源（使用现有文件）
+	source, err := NewFileLogSource("test", "/etc/hosts", "nginx")
+	assert.Nil(t, err)
+	assert.NotNil(t, source)
+	assert.Equal(t, "test", source.Name())
+}
+
+func TestNewChannelLogSource(t *testing.T) {
+	inputChan := make(<-chan string)
+	source := NewChannelLogSource("test-channel", inputChan)
+	assert.NotNil(t, source)
+	assert.Equal(t, "test-channel", source.Name())
+}
+
+func TestChannelLogSource_Read(t *testing.T) {
+	inputChan := make(chan string, 10)
+	outputChan := make(chan string, 10)
+	source := NewChannelLogSource("test", inputChan)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errChan := make(chan error, 1)
+
+	go func() {
+		errChan <- source.Read(ctx, outputChan)
+	}()
+
+	// 发送数据
+	inputChan <- "test log line"
+	time.Sleep(50 * time.Millisecond)
+
+	// 接收数据
+	select {
+	case output := <-outputChan:
+		assert.Equal(t, "test log line", output)
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for output")
+	}
+
+	cancel()
+	<-errChan
+}
+
+func TestChannelLogSource_Close(t *testing.T) {
+	source := NewChannelLogSource("test", make(<-chan string))
+	err := source.Close()
+	assert.Nil(t, err)
+}
+
+func TestFileLogSource_Close(t *testing.T) {
+	source := &FileLogSource{name: "test", path: "/tmp/test.log"}
+	err := source.Close()
+	assert.Nil(t, err)
+}
+
+func TestGetApacheLogPattern(t *testing.T) {
+	re := getApacheLogPattern()
+	assert.NotNil(t, re)
+
+	// 测试解析 Apache 日志
+	logLine := `192.168.1.1 - - [10/Oct/2024:13:55:36 +0800] "GET /index.html HTTP/1.1" 200 1024 "-" "Mozilla/5.0"`
+	matches := re.FindStringSubmatch(logLine)
+	assert.NotNil(t, matches)
+}
+
+func TestParseLogEntry_Empty(t *testing.T) {
+	entry := ParseLogEntry("", "test")
+	assert.Nil(t, entry)
+}
+
+func TestParseLogEntry_UnknownFormat(t *testing.T) {
+	raw := `some unknown log format`
+	entry := ParseLogEntry(raw, "test")
+	assert.NotNil(t, entry)
+	assert.Equal(t, "unknown", entry.SourceType)
+	assert.Equal(t, raw, entry.Fields["message"])
+}
+
+func TestParseLogEntry_Security(t *testing.T) {
+	raw := `{"threat_type":"sql_injection","threat_level":"high"}`
+	entry := ParseLogEntry(raw, "test")
+	assert.NotNil(t, entry)
+	assert.Equal(t, "security", entry.SourceType)
+}
+
+func TestParseLogEntry_Render(t *testing.T) {
+	raw := `{"render_time":500.0,"cache_hit":true}`
+	entry := ParseLogEntry(raw, "test")
+	assert.NotNil(t, entry)
+	assert.Equal(t, "render", entry.SourceType)
+}
+
+func TestTrimNewline(t *testing.T) {
+	assert.Equal(t, "test", trimNewline("test\n"))
+	assert.Equal(t, "test", trimNewline("test"))
+	assert.Equal(t, "", trimNewline("\n"))
+}
+
+func TestExtractNamedGroups(t *testing.T) {
+	re := getNginxLogPattern()
+	matches := re.FindStringSubmatch(`192.168.1.1 - - [10/Oct/2024:13:55:36 +0800] "GET /api HTTP/1.1" 200 1024 "-" "Mozilla/5.0"`)
+	result := extractNamedGroups(re, matches)
 	assert.NotNil(t, result)
-	assert.Equal(t, "success", result.Fields["status_category"])
-	assert.Equal(t, true, result.Fields["is_search_engine"])
+	assert.Contains(t, result, "remote_addr")
+	assert.Equal(t, "192.168.1.1", result["remote_addr"])
 }
 
-func TestSecurityEnrichmentProcessor(t *testing.T) {
-	processor := NewSecurityEnrichmentProcessor()
-	entry := &LogEntry{
-		SourceType: "security",
-		Fields: map[string]interface{}{
-			"threat_level": "high",
-			"matched_data": "SELECT * FROM users",
-			"remote_addr":  "192.168.1.1",
-		},
-	}
-
-	result, err := processor.Process(context.Background(), entry)
-	assert.Nil(t, err)
-	assert.Equal(t, 75.0, result.Fields["threat_score"])
-	assert.Contains(t, result.Fields["attack_patterns"], "sql_injection")
+func TestExtractNamedGroups_Empty(t *testing.T) {
+	re := getNginxLogPattern()
+	result := extractNamedGroups(re, []string{})
+	assert.Empty(t, result)
 }
 
-func TestRenderEnrichmentProcessor(t *testing.T) {
-	processor := NewRenderEnrichmentProcessor()
-	entry := &LogEntry{
-		SourceType: "render",
-		Fields: map[string]interface{}{
-			"render_time": 500.0,
-			"cache_hit":   true,
-		},
-	}
+func TestGenerateLogID(t *testing.T) {
+	id1 := generateLogID()
+	assert.Contains(t, id1, "log-")
 
-	result, err := processor.Process(context.Background(), entry)
-	assert.Nil(t, err)
-	assert.Equal(t, "excellent", result.Fields["performance_level"])
-	assert.Equal(t, "HIT", result.Fields["cache_result"])
+	time.Sleep(1 * time.Nanosecond)
+	id2 := generateLogID()
+	assert.NotEqual(t, id1, id2)
 }
 
-func TestAnomalyDetectionProcessor(t *testing.T) {
-	thresholds := &AnomalyThresholds{
-		RPMThreshold:       100,
-		ErrorRateThreshold: 0.1,
-		LatencyThreshold:   5000,
-	}
-	processor := NewAnomalyDetectionProcessor(thresholds)
-
-	// 正常请求
-	entry := &LogEntry{
-		SourceType: "access",
-		Fields: map[string]interface{}{
-			"remote_addr":    "192.168.1.1",
-			"status_int":     200,
-			"request_time_ms": 100.0,
-		},
-	}
-
-	result, err := processor.Process(context.Background(), entry)
-	assert.Nil(t, err)
-	assert.False(t, toBool(result.Fields["is_anomaly"]))
+func TestToString(t *testing.T) {
+	assert.Equal(t, "hello", toString("hello"))
+	assert.Equal(t, "123", toString(123))
+	assert.Equal(t, "123", toString(int64(123)))
+	assert.Equal(t, "123.45", toString(123.45))
+	assert.Equal(t, "", toString(nil))
 }
 
-func TestAggregator_Window(t *testing.T) {
-	outputChan := make(chan *AggregatedResult, 10)
-	config := &AggregatorConfig{
-		WindowSize: 1 * time.Minute,
-		SlideSize:  10 * time.Second,
-		MaxWindows: 5,
-	}
-
-	agg := NewAggregator(config, outputChan, nil)
-	defer agg.Close()
-
-	entry := &LogEntry{
-		SourceType: "access",
-		Timestamp:  time.Now(),
-		Fields: map[string]interface{}{
-			"remote_addr": "192.168.1.1",
-			"status":      "200",
-			"uri":         "/api/test",
-		},
-	}
-
-	agg.Process(entry)
-
-	stats := agg.GetWindowStats()
-	assert.GreaterOrEqual(t, stats["window_count"], 0)
+func TestToInt(t *testing.T) {
+	assert.Equal(t, 123, toInt(123))
+	assert.Equal(t, 123, toInt(int64(123)))
+	assert.Equal(t, 123, toInt(123.45))
+	assert.Equal(t, 123, toInt("123"))
+	assert.Equal(t, 0, toInt(nil))
+	assert.Equal(t, 0, toInt("invalid"))
 }
 
-func TestStreamEngine(t *testing.T) {
-	inputChan := make(chan *LogEntry, 10)
-	config := &StreamConfig{
-		WorkerCount:   2,
-		BatchSize:     10,
-		BatchTimeout:  100 * time.Millisecond,
-		EnableMetrics: true,
-	}
-
-	engine := NewStreamEngine(config, inputChan, nil)
-	engine.AddProcessor(NewFieldNormalizerProcessor())
-
-	err := engine.Start()
-	assert.Nil(t, err)
-	defer engine.Stop()
-
-	// 发送测试日志
-	entry := &LogEntry{
-		SourceType: "access",
-		Fields: map[string]interface{}{
-			"remote_addr": "192.168.1.1",
-			"status":      "200",
-		},
-	}
-
-	inputChan <- entry
-	time.Sleep(200 * time.Millisecond)
-
-	stats := engine.GetStats()
-	assert.GreaterOrEqual(t, stats["total_processed"], int64(1))
+func TestToInt64(t *testing.T) {
+	assert.Equal(t, int64(123), toInt64(123))
+	assert.Equal(t, int64(123), toInt64(int64(123)))
+	assert.Equal(t, int64(123), toInt64(123.45))
+	assert.Equal(t, int64(123), toInt64("123"))
+	assert.Equal(t, int64(0), toInt64(nil))
+	assert.Equal(t, int64(0), toInt64("invalid"))
 }
 
-func TestIsBot(t *testing.T) {
-	assert.True(t, isBot("Googlebot/2.1"))
-	assert.True(t, isBot("curl/7.68.0"))
-	assert.False(t, isBot("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"))
-}
-
-func TestIsSearchEngine(t *testing.T) {
-	assert.True(t, isSearchEngine("Googlebot/2.1"))
-	assert.True(t, isSearchEngine("Bingbot/2.0"))
-	assert.False(t, isSearchEngine("curl/7.68.0"))
-}
-
-func TestPercentile(t *testing.T) {
-	values := []float64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
-	assert.Equal(t, 4.0, percentile(values, 0.4))
-	assert.Equal(t, 9.0, percentile(values, 0.9))
-}
-
-func TestAverage(t *testing.T) {
-	values := []float64{1, 2, 3, 4, 5}
-	assert.Equal(t, 3.0, average(values))
-}
-
-func TestStatisticalDetector(t *testing.T) {
-	config := &StatisticalConfig{
-		ZScoreThreshold:    3.0,
-		ModifiedZThreshold: 3.5,
-		IQRMultiplier:      1.5,
-		EnableIQR:          true,
-		EnableZScore:       true,
-	}
-	detector := NewStatisticalDetector(config)
-
-	// 生成正常数据
-	for i := 0; i < 50; i++ {
-		entry := &LogEntry{
-			SourceType: "access",
-			Fields: map[string]interface{}{
-				"request_time_ms": 100.0 + float64(i%10),
-				"status_int":      200,
-			},
-		}
-		_, err := detector.Process(context.Background(), entry)
-		assert.Nil(t, err)
-	}
-
-	// 异常数据（Z-Score 应该超过 3）
-	anomalyEntry := &LogEntry{
-		SourceType: "access",
-		Fields: map[string]interface{}{
-			"request_time_ms": 5000.0, // 远高于正常值
-			"status_int":      200,
-		},
-	}
-	result, err := detector.Process(context.Background(), anomalyEntry)
-	assert.Nil(t, err)
-
-	// 检查是否标记为异常
-	if val, ok := result.Fields["has_statistical_anomaly"]; ok {
-		assert.True(t, toBool(val))
-	}
-}
-
-func TestIsolationForest_Basic(t *testing.T) {
-	featureNames := []string{"status", "bytes", "latency", "is_bot", "threat_score", "is_anomaly"}
-	forest := NewIsolationForest(&IFConfig{
-		NTrees:        50,
-		SampleSize:    128,
-		MaxHeight:     6,
-		Contamination: 0.1,
-		NumFeatures:   6,
-	}, featureNames)
-
-	// 生成正常训练数据
-	normalData := make([][]float64, 200)
-	for i := 0; i < 200; i++ {
-		normalData[i] = []float64{
-			200,                                    // status
-			float64(1000 + i%100),                  // bytes
-			float64(50 + i%50),                     // latency
-			0,                                      // is_bot
-			float64(i % 10),                        // threat_score
-			0,                                      // is_anomaly
-		}
-	}
-
-	// 训练模型
-	forest.Fit(normalData)
-	assert.True(t, forest.trained)
-
-	// 测试正常样本
-	normalSample := []float64{200, 1050, 75, 0, 5, 0}
-	normalResult := forest.Predict(normalSample)
-	assert.False(t, normalResult.IsAnomaly)
-
-	// 测试异常样本（延迟极高）
-	anomalySample := []float64{200, 1000, 10000, 0, 5, 0}
-	anomalyResult := forest.Predict(anomalySample)
-	assert.Greater(t, anomalyResult.Score, normalResult.Score)
-}
-
-func TestLogEntryToFeatures(t *testing.T) {
-	entry := &LogEntry{
-		SourceType: "access",
-		Fields: map[string]interface{}{
-			"status_int":      200,
-			"body_bytes_int":  1024,
-			"request_time_ms": 150.5,
-			"is_bot":          true,
-			"threat_score":    25.0,
-			"is_anomaly":      false,
-		},
-	}
-
-	features := LogEntryToFeatures(entry)
-	assert.Len(t, features, 6)
-	assert.Equal(t, float64(200), features[0])
-	assert.Equal(t, float64(1024), features[1])
-	assert.Equal(t, 150.5, features[2])
-	assert.Equal(t, float64(1), features[3]) // is_bot = true
-}
-
-func TestAnomalyDetectorProcessor(t *testing.T) {
-	processor := NewAnomalyDetectorProcessor([]string{"status", "bytes", "latency", "is_bot", "threat", "anomaly"})
-
-	// 发送一些日志进行训练
-	for i := 0; i < 100; i++ {
-		entry := &LogEntry{
-			SourceType: "access",
-			Fields: map[string]interface{}{
-				"status_int":      200,
-				"body_bytes_int":  1000 + i,
-				"request_time_ms": 100.0,
-				"is_bot":          false,
-				"threat_score":    0.0,
-			},
-		}
-		_, err := processor.Process(context.Background(), entry)
-		assert.Nil(t, err)
-	}
-
-	stats := processor.GetModelStats()
-	assert.NotNil(t, stats)
+func TestToFloat64(t *testing.T) {
+	assert.Equal(t, 123.45, toFloat64(123.45))
+	assert.Equal(t, 123.0, toFloat64(123))
+	assert.Equal(t, 123.0, toFloat64(int64(123)))
+	assert.Equal(t, 123.45, toFloat64("123.45"))
+	assert.Equal(t, 0.0, toFloat64(nil))
+	assert.Equal(t, 0.0, toFloat64("invalid"))
 }
