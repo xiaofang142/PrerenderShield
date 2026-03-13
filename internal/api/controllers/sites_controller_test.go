@@ -930,3 +930,72 @@ func TestSitesController_ExtractFile_NoConfigManager(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func TestSitesController_GetSites_NilConfig(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+
+	router := gin.New()
+	router.GET("/sites", controller.GetSites)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/sites", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestSitesController_GetSite_NilConfig(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+
+	router := gin.New()
+	router.GET("/sites/:id", controller.GetSite)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/sites/test-site", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestSitesController_AddSite_NilConfig(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Dirs: config.DirsConfig{
+			StaticDir: "/tmp/test-static",
+		},
+	}
+
+	os.MkdirAll(cfg.Dirs.StaticDir, 0755)
+	defer os.RemoveAll(cfg.Dirs.StaticDir)
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.POST("/sites", controller.AddSite)
+
+	site := map[string]interface{}{
+		"name":    "Test Site",
+		"domains": []string{"127.0.0.1"},
+		"port":    9000,
+		"mode":    "static",
+	}
+	body, _ := json.Marshal(site)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/sites", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}

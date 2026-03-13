@@ -62,10 +62,14 @@ func (c *SitesController) GetSites(ctx *gin.Context) {
 	// 从配置管理器获取当前配置
 	if c.configManager == nil {
 		// 如果没有 configManager，使用 cfg 中的 Sites
+		sites := []config.SiteConfig{}
+		if c.cfg != nil {
+			sites = c.cfg.Sites
+		}
 		ctx.JSON(http.StatusOK, gin.H{
 			"code":    200,
 			"message": "success",
-			"data":    c.cfg.Sites,
+			"data":    sites,
 		})
 		return
 	}
