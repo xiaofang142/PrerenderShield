@@ -182,6 +182,9 @@ type OTLPExporter struct {
 
 // NewOTLPExporter 创建 OTLP 导出器
 func NewOTLPExporter(cfg *ExporterConfig, log *zap.Logger) *OTLPExporter {
+	if cfg == nil {
+		cfg = DefaultExporterConfig()
+	}
 	return &OTLPExporter{
 		client: &http.Client{
 			Timeout: cfg.OTLPTimeout,

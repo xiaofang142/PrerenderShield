@@ -362,6 +362,9 @@ func GetMetricsRegistry(reg *prometheus.Registry) *prometheus.Registry {
 
 // RecordHTTPRequest 记录 HTTP 请求指标
 func RecordHTTPRequest(method, path, status, handler string, duration float64, size int) {
+	if metricsInstance == nil {
+		return
+	}
 	labels := prometheus.Labels{
 		"method":  method,
 		"path":    path,
@@ -396,6 +399,9 @@ func RecordHTTPRequest(method, path, status, handler string, duration float64, s
 
 // RecordWAFBlock 记录 WAF 拦截事件
 func RecordWAFBlock(rule, reason, action string) {
+	if metricsInstance == nil {
+		return
+	}
 	metricsInstance.WAFBlockedTotal.With(prometheus.Labels{
 		"rule":   rule,
 		"reason": reason,
@@ -405,6 +411,9 @@ func RecordWAFBlock(rule, reason, action string) {
 
 // RecordDDoSDetection 记录 DDoS 检测事件
 func RecordDDoSDetection(detector, attackType, severity string) {
+	if metricsInstance == nil {
+		return
+	}
 	metricsInstance.DDoSDetectedTotal.With(prometheus.Labels{
 		"detector":   detector,
 		"attack_type": attackType,
@@ -414,21 +423,33 @@ func RecordDDoSDetection(detector, attackType, severity string) {
 
 // RecordCacheHit 记录缓存命中
 func RecordCacheHit() {
+	if metricsInstance == nil {
+		return
+	}
 	metricsInstance.CacheHitTotal.With(prometheus.Labels{}).Inc()
 }
 
 // RecordCacheMiss 记录缓存未命中
 func RecordCacheMiss() {
+	if metricsInstance == nil {
+		return
+	}
 	metricsInstance.CacheMissTotal.With(prometheus.Labels{}).Inc()
 }
 
 // SetCrawlerQueueSize 设置爬虫队列大小
 func SetCrawlerQueueSize(size int) {
+	if metricsInstance == nil {
+		return
+	}
 	metricsInstance.CrawlerQueueSize.With(prometheus.Labels{}).Set(float64(size))
 }
 
 // RecordRenderDuration 记录渲染延迟
 func RecordRenderDuration(url, status, cacheHit string, duration float64) {
+	if metricsInstance == nil {
+		return
+	}
 	metricsInstance.RenderDuration.With(prometheus.Labels{
 		"url":       url,
 		"status":    status,
@@ -438,6 +459,9 @@ func RecordRenderDuration(url, status, cacheHit string, duration float64) {
 
 // RecordRenderError 记录渲染错误
 func RecordRenderError(url, errorType string) {
+	if metricsInstance == nil {
+		return
+	}
 	metricsInstance.RenderErrorTotal.With(prometheus.Labels{
 		"url":       url,
 		"error_type": errorType,
@@ -446,6 +470,9 @@ func RecordRenderError(url, errorType string) {
 
 // SetSSLCertExpiryDays 设置 SSL 证书过期天数
 func SetSSLCertExpiryDays(domain, issuer string, days float64) {
+	if metricsInstance == nil {
+		return
+	}
 	metricsInstance.SSLCertExpiryDays.With(prometheus.Labels{
 		"domain": domain,
 		"issuer": issuer,
@@ -454,11 +481,17 @@ func SetSSLCertExpiryDays(domain, issuer string, days float64) {
 
 // IncActiveRequests 增加活跃请求数
 func IncActiveRequests() {
+	if metricsInstance == nil {
+		return
+	}
 	metricsInstance.HTTPActiveRequests.With(prometheus.Labels{}).Inc()
 }
 
 // DecActiveRequests 减少活跃请求数
 func DecActiveRequests() {
+	if metricsInstance == nil {
+		return
+	}
 	metricsInstance.HTTPActiveRequests.With(prometheus.Labels{}).Dec()
 }
 
