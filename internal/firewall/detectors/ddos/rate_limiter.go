@@ -2,6 +2,7 @@ package ddos
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,6 +14,8 @@ type RateLimiter struct {
 	ipWindows        map[string]*SlidingWindow
 	cleanupInterval  time.Duration
 	lastCleanupTime  time.Time
+	stopChan         chan struct{}
+	stopped          atomic.Bool
 }
 
 // SlidingWindow 滑动窗口
@@ -29,6 +32,7 @@ func NewRateLimiter(rateThreshold, burstThreshold int) *RateLimiter {
 		ipWindows:       make(map[string]*SlidingWindow),
 		cleanupInterval: 1 * time.Minute,
 		lastCleanupTime: time.Now(),
+		stopChan:        make(chan struct{}),
 	}
 
 	// 启动后台清理协程
@@ -71,6 +75,7 @@ func (rl *RateLimiter) IsRateLimited(ip string) bool {
 	rl.mu.RLock()
 	window, exists := rl.ipWindows[ip]
 	if !exists {
+		rl.mu.RUnlock()
 		return false
 	}
 	rl.mu.RUnlock()
@@ -111,6 +116,7 @@ func (rl *RateLimiter) GetRequestRate(ip string) int {
 	rl.mu.RLock()
 	window, exists := rl.ipWindows[ip]
 	if !exists {
+		rl.mu.RUnlock()
 		return 0
 	}
 	rl.mu.RUnlock()
@@ -135,6 +141,7 @@ func (rl *RateLimiter) GetBurstCount(ip string) int {
 	rl.mu.RLock()
 	window, exists := rl.ipWindows[ip]
 	if !exists {
+		rl.mu.RUnlock()
 		return 0
 	}
 	rl.mu.RUnlock()
@@ -184,9 +191,22 @@ func (rl *RateLimiter) startCleanup() {
 	ticker := time.NewTicker(rl.cleanupInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		rl.CleanupExpired()
+	for {
+		select {
+		case <-ticker.C:
+			rl.CleanupExpired()
+		case <-rl.stopChan:
+			return
+		}
 	}
+}
+
+// Stop 停止清理协程
+func (rl *RateLimiter) Stop() {
+	if rl.stopped.Swap(true) {
+		return // Already stopped
+	}
+	close(rl.stopChan)
 }
 
 // GetStats 获取统计信息

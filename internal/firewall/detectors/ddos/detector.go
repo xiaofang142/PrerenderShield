@@ -304,6 +304,9 @@ func (d *Detector) cleanupExpired() {
 // Stop 停止检测器
 func (d *Detector) Stop() {
 	close(d.cleanupStopSig)
+	if d.rateLimiter != nil {
+		d.rateLimiter.Stop()
+	}
 }
 
 // getDefaultConfig 获取默认配置

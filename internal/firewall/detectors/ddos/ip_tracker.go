@@ -265,6 +265,7 @@ func (t *IPTracker) GetSuspiciousScore(ip string) float64 {
 	t.mu.RLock()
 	record, exists := t.ipRecords[ip]
 	if !exists {
+		t.mu.RUnlock()
 		return 0
 	}
 	t.mu.RUnlock()
