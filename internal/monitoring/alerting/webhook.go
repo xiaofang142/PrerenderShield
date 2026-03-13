@@ -217,7 +217,7 @@ func (h *WebhookHandler) isSlackWebhook() bool {
 
 // isDingtalkWebhook 是否是钉钉 webhook
 func (h *WebhookHandler) isDingtalkWebhook() bool {
-	return h.config.URL != "" && (len(h.config.URL) >= 27 && h.config.URL[:27] == "https://oapi.dingtalk.com")
+	return h.config.URL != "" && (len(h.config.URL) >= 25 && h.config.URL[:25] == "https://oapi.dingtalk.com")
 }
 
 // severityToColor 严重程度转颜色
