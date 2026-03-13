@@ -6,15 +6,24 @@
 *.so
 *.dylib
 prerender-shield
-api
+/api
 
 # 依赖包目录
 gopkg.in/
 vendor/
 
-# 编译产生的目录
+# 编译产物
 __pycache__/
 bin/
+
+# 编译产生的目录
+# 注意：不忽略测试文件
+api/
+!api/*_test.go
+!internal/api/
+!internal/api/*_test.go
+!internal/api/routes/
+!internal/api/routes/*_test.go
 
 # 各平台运行时目录
 bin/*/certs/
