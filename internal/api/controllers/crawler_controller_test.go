@@ -145,3 +145,33 @@ func TestNewCrawlerController(t *testing.T) {
 	assert.NotNil(t, controller)
 	assert.NotNil(t, controller.crawlerLogMgr)
 }
+
+func TestCrawlerController_GetCrawlerLogs_DefaultPagination(t *testing.T) {
+	_, router := setupCrawlerController()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/crawler/logs", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestCrawlerController_GetCrawlerStats_MissingSite(t *testing.T) {
+	_, router := setupCrawlerController()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/crawler/stats", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestCrawlerController_GetCrawlerLogs_EmptySite(t *testing.T) {
+	_, router := setupCrawlerController()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/crawler/logs?site=", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
