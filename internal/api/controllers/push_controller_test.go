@@ -154,7 +154,84 @@ func TestPushController_GetPushTrend_MissingSiteId(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/push/trend", nil)
 	router.ServeHTTP(w, req)
 
-	// pushManager 为 nil 时返回 500，不会到 validation 那一步
+	// pushManager 为 nil 时返回 500
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPushController_GetPushLogs_InvalidLimit_WithConfig(t *testing.T) {
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"localhost"},
+				Port:    8080,
+			},
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	controller := NewPushController(nil, nil, cfg)
+
+	router := gin.New()
+	router.GET("/push/logs", controller.GetPushLogs)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/push/logs?siteId=test-site-1&limit=invalid", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPushController_GetPushTrend_InvalidGranularity(t *testing.T) {
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"localhost"},
+				Port:    8080,
+			},
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	controller := NewPushController(nil, nil, cfg)
+
+	router := gin.New()
+	router.GET("/push/trend", controller.GetPushTrend)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/push/trend?siteId=test-site-1&granularity=invalid", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPushController_UpdatePushConfig_InvalidJSON_WithConfig(t *testing.T) {
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"localhost"},
+				Port:    8080,
+			},
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	controller := NewPushController(nil, nil, cfg)
+
+	router := gin.New()
+	router.POST("/push/config", controller.UpdatePushConfig)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/push/config?siteId=test-site-1",
+		bytes.NewBufferString("invalid json"))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
