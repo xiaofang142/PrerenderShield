@@ -69,6 +69,9 @@ func NewQueue(redisClient *redis.Client) Queue {
 
 // Enqueue 入队任务
 func (q *queue) Enqueue(task Task) error {
+	if q.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	// 生成任务ID
 	taskID := task.ID()
 	if taskID == "" {
@@ -118,6 +121,9 @@ func (q *queue) Enqueue(task Task) error {
 
 // Dequeue 出队任务
 func (q *queue) Dequeue(taskType TaskType) (Task, error) {
+	if q.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	// 从队列中获取任务
 	queueKey := fmt.Sprintf("queue:%s", taskType)
 	taskID, err := q.redisClient.ListPop(queueKey)
@@ -145,6 +151,9 @@ func (q *queue) Dequeue(taskType TaskType) (Task, error) {
 
 // GetTask 获取任务
 func (q *queue) GetTask(taskID string) (Task, error) {
+	if q.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	// 获取任务数据
 	taskData, err := q.redisClient.Get(fmt.Sprintf("task:%s:data", taskID))
 	if err != nil {
@@ -166,6 +175,9 @@ func (q *queue) GetTask(taskID string) (Task, error) {
 
 // UpdateTaskStatus 更新任务状态
 func (q *queue) UpdateTaskStatus(taskID string, status TaskStatus) error {
+	if q.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	// 获取任务信息
 	taskInfo := make(map[string]interface{})
 	if err := q.redisClient.GetJSON(fmt.Sprintf("task:%s", taskID), &taskInfo); err != nil {
@@ -201,6 +213,9 @@ func (q *queue) UpdateTaskStatus(taskID string, status TaskStatus) error {
 
 // ListTasks 列出任务
 func (q *queue) ListTasks(status TaskStatus) ([]Task, error) {
+	if q.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	// 获取状态集合中的任务ID
 	statusKey := fmt.Sprintf("tasks:%s", status)
 	taskIDs, err := q.redisClient.SetMembers(statusKey)
@@ -223,6 +238,9 @@ func (q *queue) ListTasks(status TaskStatus) ([]Task, error) {
 
 // Cleanup 清理任务
 func (q *queue) Cleanup() error {
+	if q.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	// 获取所有任务
 	keys, err := q.redisClient.Keys("task:*")
 	if err != nil {

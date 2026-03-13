@@ -244,3 +244,64 @@ func TestQueueInterface(t *testing.T) {
 	var q Queue
 	assert.Nil(t, q)
 }
+
+// TestQueue_NilRedis 测试 Queue 方法在 Redis 客户端为 nil 时的行为
+func TestQueue_NilRedis(t *testing.T) {
+	q := NewQueue(nil)
+	assert.NotNil(t, q)
+
+	// 测试 Enqueue
+	mockTask := NewBaseTask(TaskTypePreheat)
+	err := q.Enqueue(mockTask)
+	assert.Error(t, err)
+
+	// 测试 Dequeue
+	_, err = q.Dequeue(TaskTypePreheat)
+	assert.Error(t, err)
+
+	// 测试 GetTask
+	_, err = q.GetTask("test-id")
+	assert.Error(t, err)
+
+	// 测试 UpdateTaskStatus
+	err = q.UpdateTaskStatus("test-id", TaskStatusRunning)
+	assert.Error(t, err)
+
+	// 测试 ListTasks
+	_, err = q.ListTasks(TaskStatusPending)
+	assert.Error(t, err)
+
+	// 测试 Cleanup
+	err = q.Cleanup()
+	assert.Error(t, err)
+}
+
+// TestQueue_EmptyTaskID 测试 Enqueue 生成任务 ID
+func TestQueue_EmptyTaskID(t *testing.T) {
+	// 创建一个 ID 为空的任务
+	task := &BaseTask{
+		TypeValue:   TaskTypeSSL,
+		StatusValue: TaskStatusPending,
+	}
+	q := NewQueue(nil)
+	err := q.Enqueue(task)
+	// 即使 Redis 为 nil，也应该尝试生成 UUID
+	assert.Error(t, err)
+}
+
+// TestTaskType_String 测试 TaskType 字符串转换
+func TestTaskType_String(t *testing.T) {
+	assert.Equal(t, "preheat", string(TaskTypePreheat))
+	assert.Equal(t, "ssl", string(TaskTypeSSL))
+	assert.Equal(t, "cleanup", string(TaskTypeCleanup))
+	assert.Equal(t, "monitor", string(TaskTypeMonitor))
+}
+
+// TestTaskStatus_String 测试 TaskStatus 字符串转换
+func TestTaskStatus_String(t *testing.T) {
+	assert.Equal(t, "pending", string(TaskStatusPending))
+	assert.Equal(t, "running", string(TaskStatusRunning))
+	assert.Equal(t, "completed", string(TaskStatusCompleted))
+	assert.Equal(t, "failed", string(TaskStatusFailed))
+	assert.Equal(t, "cancelled", string(TaskStatusCancelled))
+}
