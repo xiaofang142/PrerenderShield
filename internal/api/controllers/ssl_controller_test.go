@@ -388,3 +388,43 @@ func TestSSLController_RequestWildcardCert_EmptyBaseDomain(t *testing.T) {
 	// acmeClient 为 nil 时返回 500
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func TestSSLController_ListCerts_WithEmptyParams(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controller := NewSSLController(nil, nil)
+	router := gin.New()
+	router.GET("/ssl/certificates", controller.ListCerts)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/ssl/certificates?page=&pageSize=", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Contains(t, []int{http.StatusOK, http.StatusInternalServerError}, w.Code)
+}
+
+func TestSSLController_DeleteCert_MissingDomain(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controller := NewSSLController(nil, nil)
+	router := gin.New()
+	router.DELETE("/ssl/certificates/:domain", controller.DeleteCert)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("DELETE", "/ssl/certificates/", nil)
+	router.ServeHTTP(w, req)
+
+	// autoRenewer 为 nil 时返回 404 或 500
+	assert.Contains(t, []int{http.StatusNotFound, http.StatusInternalServerError}, w.Code)
+}
+
+func TestSSLController_GetExpiringCerts_InvalidDays(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controller := NewSSLController(nil, nil)
+	router := gin.New()
+	router.GET("/ssl/certificates/expiring", controller.GetExpiringCerts)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/ssl/certificates/expiring?days=invalid", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
