@@ -196,3 +196,39 @@ func TestOverviewController_GetOverview_WithWafRepo(t *testing.T) {
 
 	assert.Equal(t, float64(200), response["code"])
 }
+
+func TestOverviewController_GetOverview_MultipleSites(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{ID: "site1", Name: "Site 1", Firewall: config.FirewallConfig{Enabled: true}, Prerender: config.PrerenderConfig{Enabled: false}},
+			{ID: "site2", Name: "Site 2", Firewall: config.FirewallConfig{Enabled: false}, Prerender: config.PrerenderConfig{Enabled: true}},
+			{ID: "site3", Name: "Site 3", Firewall: config.FirewallConfig{Enabled: true}, Prerender: config.PrerenderConfig{Enabled: true}},
+		},
+	}
+
+	monitor := monitoring.NewMonitor(monitoring.Config{})
+	visitLogMgr := logging.NewVisitLogManager("")
+
+	controller := NewOverviewController(cfg, monitor, visitLogMgr, nil)
+
+	router := gin.New()
+	router.GET("/overview", controller.GetOverview)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/overview", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	data, ok := response["data"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, float64(3), data["activeSites"])
+	assert.Equal(t, true, data["firewallEnabled"])
+	assert.Equal(t, true, data["prerenderEnabled"])
+}
