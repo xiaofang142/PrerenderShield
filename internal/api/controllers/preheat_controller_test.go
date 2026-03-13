@@ -359,11 +359,22 @@ func TestPreheatController_GetPreheatStats_AllSites(t *testing.T) {
 	router.GET("/preheat/stats", controller.GetPreheatStats)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/preheat/stats", nil)
+	req, _ := http.NewRequest("GET", "/preheat/stats?siteId=non-existent", nil)
 	router.ServeHTTP(w, req)
 
 	// prerenderManager 为 nil 时返回 500
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPreheatController_TriggerPreheat_MissingSiteId(t *testing.T) {
+	_, router := setupPreheatController()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/preheat/trigger", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestPreheatController_GetPreheatStats_SingleSite(t *testing.T) {
