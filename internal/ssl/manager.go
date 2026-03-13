@@ -68,6 +68,9 @@ func NewManager(redisClient *redis.Client, certDir, email string, production boo
 
 // RequestCertificate 申请SSL证书
 func (m *manager) RequestCertificate(domain string) error {
+	if m.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	// 生成域名密钥
 	domainKey, err := generatePrivateKey()
 	if err != nil {
@@ -124,6 +127,9 @@ func (m *manager) RequestCertificate(domain string) error {
 
 // RenewCertificate 续签SSL证书
 func (m *manager) RenewCertificate(domain string) error {
+	if m.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	// 检查证书是否存在
 	certInfo := make(map[string]interface{})
 	if err := m.redisClient.GetJSON(fmt.Sprintf("ssl:cert:%s", domain), &certInfo); err != nil {
@@ -193,6 +199,9 @@ func (m *manager) checkAndRenewCertificates() {
 
 // ImportCertificate 导入SSL证书
 func (m *manager) ImportCertificate(domain, certPath, keyPath string) error {
+	if m.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	// 读取证书文件
 	certData, err := ioutil.ReadFile(certPath)
 	if err != nil {
@@ -249,6 +258,9 @@ func (m *manager) ImportCertificate(domain, certPath, keyPath string) error {
 
 // GetCertificate 获取SSL证书
 func (m *manager) GetCertificate(domain string) (*tls.Certificate, error) {
+	if m.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	// 检查证书是否存在
 	certInfo := make(map[string]interface{})
 	if err := m.redisClient.GetJSON(fmt.Sprintf("ssl:cert:%s", domain), &certInfo); err != nil {
@@ -277,6 +289,9 @@ func (m *manager) GetCertificate(domain string) (*tls.Certificate, error) {
 
 // GetCertificateStatus 获取SSL证书状态
 func (m *manager) GetCertificateStatus(domain string) (map[string]interface{}, error) {
+	if m.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	// 检查证书是否存在
 	certInfo := make(map[string]interface{})
 	if err := m.redisClient.GetJSON(fmt.Sprintf("ssl:cert:%s", domain), &certInfo); err != nil {
@@ -300,6 +315,9 @@ func (m *manager) GetCertificateStatus(domain string) (map[string]interface{}, e
 
 // ListCertificates 列出所有SSL证书
 func (m *manager) ListCertificates() (map[string]map[string]interface{}, error) {
+	if m.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	// 获取所有证书域名
 	certDomains, err := m.redisClient.SetMembers("ssl:certs")
 	if err != nil {
@@ -320,6 +338,9 @@ func (m *manager) ListCertificates() (map[string]map[string]interface{}, error) 
 
 // DeleteCertificate 删除SSL证书
 func (m *manager) DeleteCertificate(domain string) error {
+	if m.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	// 检查证书是否存在
 	certInfo := make(map[string]interface{})
 	if err := m.redisClient.GetJSON(fmt.Sprintf("ssl:cert:%s", domain), &certInfo); err != nil {
@@ -346,6 +367,9 @@ func (m *manager) DeleteCertificate(domain string) error {
 
 // CheckExpiration 检查过期的证书
 func (m *manager) CheckExpiration() ([]string, error) {
+	if m.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	// 获取所有证书
 	certificates, err := m.ListCertificates()
 	if err != nil {
