@@ -36,6 +36,9 @@ func NewDetector(redisClient *redis.Client) Detector {
 
 // IsCrawler 检测请求是否来自爬虫
 func (d *detector) IsCrawler(r *http.Request) (bool, error) {
+	if d.redisClient == nil {
+		return false, fmt.Errorf("redis client is nil")
+	}
 	// 获取客户端IP
 	clientIP := d.getClientIP(r)
 
@@ -115,45 +118,72 @@ func (d *detector) isCrawlerUserAgent(userAgent string) (bool, error) {
 
 // AddCrawlerUserAgent 添加爬虫User-Agent模式
 func (d *detector) AddCrawlerUserAgent(pattern string) error {
+	if d.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	return d.redisClient.SetAdd("crawler:user_agents", pattern)
 }
 
 // RemoveCrawlerUserAgent 移除爬虫User-Agent模式
 func (d *detector) RemoveCrawlerUserAgent(pattern string) error {
+	if d.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	return d.redisClient.SetRemove("crawler:user_agents", pattern)
 }
 
 // AddCrawlerIP 添加爬虫IP
 func (d *detector) AddCrawlerIP(ip string) error {
+	if d.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	return d.redisClient.SetAdd("crawler:ips", ip)
 }
 
 // RemoveCrawlerIP 移除爬虫IP
 func (d *detector) RemoveCrawlerIP(ip string) error {
+	if d.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	return d.redisClient.SetRemove("crawler:ips", ip)
 }
 
 // AddWhitelistIP 添加白名单IP
 func (d *detector) AddWhitelistIP(ip string) error {
+	if d.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	return d.redisClient.SetAdd("crawler:whitelist:ips", ip)
 }
 
 // RemoveWhitelistIP 移除白名单IP
 func (d *detector) RemoveWhitelistIP(ip string) error {
+	if d.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
 	return d.redisClient.SetRemove("crawler:whitelist:ips", ip)
 }
 
 // ListCrawlerUserAgents 列出所有爬虫User-Agent模式
 func (d *detector) ListCrawlerUserAgents() ([]string, error) {
+	if d.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	return d.redisClient.SetMembers("crawler:user_agents")
 }
 
 // ListCrawlerIPs 列出所有爬虫IP
 func (d *detector) ListCrawlerIPs() ([]string, error) {
+	if d.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	return d.redisClient.SetMembers("crawler:ips")
 }
 
 // ListWhitelistIPs 列出所有白名单IP
 func (d *detector) ListWhitelistIPs() ([]string, error) {
+	if d.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
 	return d.redisClient.SetMembers("crawler:whitelist:ips")
 }

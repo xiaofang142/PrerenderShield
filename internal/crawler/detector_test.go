@@ -108,8 +108,217 @@ func toLower(s string) string {
 }
 
 func TestNewDetector(t *testing.T) {
-	// 由于 NewDetector 需要真实的 Redis 客户端，我们只测试它返回非 nil 值
-	// 实际功能测试通过集成测试进行
+	// 由于 NewDetector 需要真实的 Redis 客户端，只测试它返回非 nil 值
 	d := NewDetector(nil)
 	assert.NotNil(t, d)
+}
+
+// TestDetector_GetClientIP_EdgeCases 测试 getClientIP 边界情况
+func TestDetector_GetClientIP_EdgeCases(t *testing.T) {
+	d := &detector{}
+
+	// Test empty X-Forwarded-For
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-Forwarded-For", "")
+	ip := d.getClientIP(req)
+	// 应该回退到 RemoteAddr
+	assert.NotEmpty(t, ip)
+
+	// Test X-Forwarded-For with spaces
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-Forwarded-For", "  192.168.1.1  , 192.168.1.2  ")
+	ip = d.getClientIP(req)
+	assert.Equal(t, "192.168.1.1", ip)
+
+	// Test X-Real-IP takes precedence over RemoteAddr
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-Real-IP", "10.0.0.1")
+	req.RemoteAddr = "192.168.1.1:12345"
+	ip = d.getClientIP(req)
+	assert.Equal(t, "10.0.0.1", ip)
+
+	// Test X-Forwarded-For takes precedence over X-Real-IP
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-Forwarded-For", "10.0.0.2")
+	req.Header.Set("X-Real-IP", "10.0.0.1")
+	ip = d.getClientIP(req)
+	assert.Equal(t, "10.0.0.2", ip)
+
+	// Test IPv6 RemoteAddr
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.RemoteAddr = "[2001:db8::1]:12345"
+	ip = d.getClientIP(req)
+	assert.Equal(t, "[2001", ip) // 代码使用 strings.Split 所以在第一个冒号处分割
+}
+
+// TestDetector_IsCrawler_NilRedis 测试 Redis 为 nil 时 IsCrawler 的行为
+func TestDetector_IsCrawler_NilRedis(t *testing.T) {
+	d := NewDetector(nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.RemoteAddr = "192.168.1.1:12345"
+
+	// Redis 为 nil 时应该返回错误
+	isCrawler, err := d.IsCrawler(req)
+	assert.Error(t, err)
+	assert.False(t, isCrawler)
+}
+
+// TestDetector_IsCrawler_WithCrawlerUserAgent 测试爬虫 User-Agent 检测
+func TestDetector_IsCrawler_WithCrawlerUserAgent(t *testing.T) {
+	d := &detector{}
+
+	// 测试常见的爬虫 User-Agent
+	crawlerUserAgents := []string{
+		"Googlebot/2.1 (+http://www.google.com/bot.html)",
+		"Mozilla/5.0 (compatible; Googlebot/2.1)",
+		"Mozilla/5.0 (compatible; Bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+		"Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)",
+		"Sogou web spider/4.0(+http://www.sogou.com/docs/help/webmasters.htm)",
+		"Mozilla/5.0 (compatible; Baiduspider/2.0)",
+	}
+
+	for _, ua := range crawlerUserAgents {
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req.Header.Set("User-Agent", ua)
+		req.RemoteAddr = "192.168.1.1:12345"
+
+		// 由于 Redis 为 nil，会返回错误
+		isCrawler, err := d.IsCrawler(req)
+		assert.Error(t, err)
+		assert.False(t, isCrawler)
+	}
+}
+
+// TestDetector_IsCrawler_WithNormalUserAgent 测试正常 User-Agent 检测
+func TestDetector_IsCrawler_WithNormalUserAgent(t *testing.T) {
+	d := &detector{}
+
+	normalUserAgents := []string{
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15",
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X)",
+		"curl/7.68.0",
+		"PostmanRuntime/7.28.0",
+	}
+
+	for _, ua := range normalUserAgents {
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req.Header.Set("User-Agent", ua)
+		req.RemoteAddr = "192.168.1.1:12345"
+
+		isCrawler, err := d.IsCrawler(req)
+		assert.Error(t, err) // Redis 为 nil 会返回错误
+		assert.False(t, isCrawler)
+	}
+}
+
+// TestDetector_AddCrawlerUserAgent_NilRedis 测试 Redis 为 nil 时添加爬虫 User-Agent
+func TestDetector_AddCrawlerUserAgent_NilRedis(t *testing.T) {
+	d := NewDetector(nil)
+
+	err := d.AddCrawlerUserAgent("Googlebot")
+	assert.Error(t, err)
+}
+
+// TestDetector_RemoveCrawlerUserAgent_NilRedis 测试 Redis 为 nil 时移除爬虫 User-Agent
+func TestDetector_RemoveCrawlerUserAgent_NilRedis(t *testing.T) {
+	d := NewDetector(nil)
+
+	err := d.RemoveCrawlerUserAgent("Googlebot")
+	assert.Error(t, err)
+}
+
+// TestDetector_AddCrawlerIP_NilRedis 测试 Redis 为 nil 时添加爬虫 IP
+func TestDetector_AddCrawlerIP_NilRedis(t *testing.T) {
+	d := NewDetector(nil)
+
+	err := d.AddCrawlerIP("192.168.1.1")
+	assert.Error(t, err)
+}
+
+// TestDetector_RemoveCrawlerIP_NilRedis 测试 Redis 为 nil 时移除爬虫 IP
+func TestDetector_RemoveCrawlerIP_NilRedis(t *testing.T) {
+	d := NewDetector(nil)
+
+	err := d.RemoveCrawlerIP("192.168.1.1")
+	assert.Error(t, err)
+}
+
+// TestDetector_AddWhitelistIP_NilRedis 测试 Redis 为 nil 时添加白名单 IP
+func TestDetector_AddWhitelistIP_NilRedis(t *testing.T) {
+	d := NewDetector(nil)
+
+	err := d.AddWhitelistIP("10.0.0.1")
+	assert.Error(t, err)
+}
+
+// TestDetector_RemoveWhitelistIP_NilRedis 测试 Redis 为 nil 时移除白名单 IP
+func TestDetector_RemoveWhitelistIP_NilRedis(t *testing.T) {
+	d := NewDetector(nil)
+
+	err := d.RemoveWhitelistIP("10.0.0.1")
+	assert.Error(t, err)
+}
+
+// TestDetector_ListCrawlerUserAgents_NilRedis 测试 Redis 为 nil 时列出爬虫 User-Agent
+func TestDetector_ListCrawlerUserAgents_NilRedis(t *testing.T) {
+	d := NewDetector(nil)
+
+	userAgents, err := d.ListCrawlerUserAgents()
+	assert.Error(t, err)
+	assert.Nil(t, userAgents)
+}
+
+// TestDetector_ListCrawlerIPs_NilRedis 测试 Redis 为 nil 时列出爬虫 IP
+func TestDetector_ListCrawlerIPs_NilRedis(t *testing.T) {
+	d := NewDetector(nil)
+
+	ips, err := d.ListCrawlerIPs()
+	assert.Error(t, err)
+	assert.Nil(t, ips)
+}
+
+// TestDetector_ListWhitelistIPs_NilRedis 测试 Redis 为 nil 时列出白名单 IP
+func TestDetector_ListWhitelistIPs_NilRedis(t *testing.T) {
+	d := NewDetector(nil)
+
+	ips, err := d.ListWhitelistIPs()
+	assert.Error(t, err)
+	assert.Nil(t, ips)
+}
+
+// TestDetector_Interface 测试 Detector 接口实现
+func TestDetector_Interface(t *testing.T) {
+	var _ Detector = (*detector)(nil)
+}
+
+// TestDetector_GetClientIP_AllHeaders 测试所有 IP 头的优先级
+func TestDetector_GetClientIP_AllHeaders(t *testing.T) {
+	d := &detector{}
+
+	// 测试优先级：X-Forwarded-For > X-Real-IP > RemoteAddr
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-Forwarded-For", "1.1.1.1")
+	req.Header.Set("X-Real-IP", "2.2.2.2")
+	req.RemoteAddr = "3.3.3.3:12345"
+
+	ip := d.getClientIP(req)
+	assert.Equal(t, "1.1.1.1", ip)
+
+	// 没有 X-Forwarded-For 时，使用 X-Real-IP
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-Real-IP", "2.2.2.2")
+	req.RemoteAddr = "3.3.3.3:12345"
+
+	ip = d.getClientIP(req)
+	assert.Equal(t, "2.2.2.2", ip)
+
+	// 都没有时，使用 RemoteAddr
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.RemoteAddr = "3.3.3.3:12345"
+
+	ip = d.getClientIP(req)
+	assert.Equal(t, "3.3.3.3", ip)
 }
