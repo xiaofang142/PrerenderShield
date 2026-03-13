@@ -269,7 +269,7 @@ type TieredCache struct {
 	l1queue   []string // 用于 LRU  eviction
 
 	// L2: Redis 缓存
-	redisClient *redis.Client
+	redisClient RedisClientForTieredCache
 
 	// 回写队列（写回模式）
 	writeBackChan chan *writeBackTask
@@ -282,8 +282,19 @@ type writeBackTask struct {
 	timestamp time.Time
 }
 
+// RedisClientForTieredCache 是 redis.Client 的接口，用于测试
+type RedisClientForTieredCache interface {
+	Get(ctx context.Context, key string) *redis.StringCmd
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	Del(ctx context.Context, keys ...string) *redis.IntCmd
+	Keys(ctx context.Context, pattern string) *redis.StringSliceCmd
+}
+
+// Ensure redis.Client implements the interface
+var _ RedisClientForTieredCache = (*redis.Client)(nil)
+
 // NewTieredCache 创建多级缓存
-func NewTieredCache(config Config, redisClient *redis.Client, logger *zap.Logger) *TieredCache {
+func NewTieredCache(config Config, redisClient RedisClientForTieredCache, logger *zap.Logger) *TieredCache {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
