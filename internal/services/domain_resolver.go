@@ -3,9 +3,20 @@ package services
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"prerender-shield/internal/redis"
 )
+
+// RedisClientForDomainResolver defines the interface for Redis operations used by DomainResolver
+type RedisClientForDomainResolver interface {
+	Get(key string) (string, error)
+	Set(key string, value interface{}, expiration time.Duration) error
+	Del(key string) error
+	SetAdd(key string, members ...interface{}) error
+	SetMembers(key string) ([]string, error)
+	SetRemove(key string, members ...interface{}) error
+}
 
 // DomainResolver 域名解析器接口
 type DomainResolver interface {
@@ -17,11 +28,18 @@ type DomainResolver interface {
 
 // domainResolver 域名解析器实现
 type domainResolver struct {
-	redisClient *redis.Client
+	redisClient RedisClientForDomainResolver
 }
 
 // NewDomainResolver 创建新的域名解析器
-func NewDomainResolver(redisClient *redis.Client) DomainResolver {
+func NewDomainResolver(redisClient RedisClientForDomainResolver) DomainResolver {
+	return &domainResolver{
+		redisClient: redisClient,
+	}
+}
+
+// NewDomainResolverWithClient 使用具体 redis.Client 创建域名解析器
+func NewDomainResolverWithClient(redisClient *redis.Client) DomainResolver {
 	return &domainResolver{
 		redisClient: redisClient,
 	}
