@@ -139,6 +139,44 @@ func TestAuthController_Login_MissingFields(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestAuthController_Login_MissingPassword(t *testing.T) {
+	_, router := setupAuthController()
+
+	loginData := map[string]string{
+		"password": "password123",
+	}
+	body, _ := json.Marshal(loginData)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/auth/login", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAuthController_Logout_WithToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	userManager := auth.NewUserManager("", nil)
+	jwtManager := auth.NewJWTManager(&auth.JWTConfig{
+		SecretKey:  "test-secret-key-for-testing-only-32bytes",
+		ExpireTime: 3600000000000,
+	}, nil)
+
+	controller := NewAuthController(userManager, jwtManager)
+
+	router := gin.New()
+	router.POST("/auth/logout", controller.Logout)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer test-token")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
 func TestNewAuthController(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
