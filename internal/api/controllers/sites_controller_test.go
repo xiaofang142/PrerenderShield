@@ -997,5 +997,6 @@ func TestSitesController_AddSite_NilConfig(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	// configManager 为 nil 时返回 400（端口验证会失败）
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
