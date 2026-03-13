@@ -282,6 +282,47 @@ func TestNewFirewallController(t *testing.T) {
 	assert.NotNil(t, controller)
 	assert.NotNil(t, controller.wafRepo)
 }
+
+func TestFirewallController_GetWafConfig_EmptySiteID(t *testing.T) {
+	_, router := setupFirewallController()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/sites//waf", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestFirewallController_UpdateWafConfig_NoSiteID(t *testing.T) {
+	_, router := setupFirewallController()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/sites//waf", bytes.NewBufferString(`{"enabled":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestFirewallController_GetAccessLogs_WithPagination(t *testing.T) {
+	_, router := setupFirewallController()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/logs?site=test&page=1&pageSize=10", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestFirewallController_GetAttackLogs_WithPagination(t *testing.T) {
+	_, router := setupFirewallController()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/firewall/attacks?site=test&page=1&pageSize=10", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
 func TestWafRepositoryInMemory(t *testing.T) {
 	repo := repository.NewWafRepositoryInMemory()
 
