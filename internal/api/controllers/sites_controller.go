@@ -87,7 +87,10 @@ func (c *SitesController) GetSite(ctx *gin.Context) {
 	// 从配置管理器获取当前配置
 	var sites []config.SiteConfig
 	if c.configManager == nil {
-		sites = c.cfg.Sites
+		sites = []config.SiteConfig{}
+		if c.cfg != nil {
+			sites = c.cfg.Sites
+		}
 	} else {
 		currentConfig := c.configManager.GetConfig()
 		sites = currentConfig.Sites
