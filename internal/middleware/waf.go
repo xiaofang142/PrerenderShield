@@ -28,10 +28,11 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 		userAgent := c.Request.UserAgent()
 		method := c.Request.Method
 		requestID := uuid.New().String()
+		startTime := time.Now()
 
 		// Helper to log and block
 		block := func(reason, ruleID string) {
-			// Log to DB
+			// 记录 WAF 阻断日志
 			log := models.AccessLog{
 				ID:          uuid.New().String(),
 				SiteID:      site.ID,
@@ -46,7 +47,8 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 				Reason:      reason,
 				CreatedAt:   time.Now(),
 			}
-			// Use a goroutine to avoid blocking the response
+
+			// 使用 goroutine 异步记录日志，不阻塞响应
 			go func() {
 				if wafRepo != nil {
 					if err := wafRepo.CreateAccessLog(&log); err != nil {
@@ -55,25 +57,32 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 				}
 			}()
 
-			// Return response
+			// 记录请求持续时间
+			duration := time.Since(startTime).Milliseconds()
+
+			// 返回响应
 			c.JSON(http.StatusForbidden, gin.H{
-				"code":    403,
-				"message": site.Firewall.ActionConfig.BlockMessage,
-				"reason":  reason,
+				"code":       403,
+				"message":    site.Firewall.ActionConfig.BlockMessage,
+				"reason":     reason,
+				"request_id": requestID,
 			})
 			c.Abort()
+
+			// 输出日志
+			fmt.Printf("[WAF Blocked] [%dms] %s %s from %s - %s (Rule: %s)\n",
+				duration, method, requestPath, clientIP, reason, ruleID)
 		}
 
-		// 1. Whitelist Check
+		// 1. Whitelist Check - 白名单直接放行
 		for _, ip := range site.Firewall.Whitelist {
 			if ip == clientIP {
-				// Allowed, skip other checks
 				c.Next()
 				return
 			}
 		}
 
-		// 2. Blacklist Check
+		// 2. Blacklist Check - 黑名单直接阻断
 		for _, ip := range site.Firewall.Blacklist {
 			if ip == clientIP {
 				block("IP is in blacklist", "ip_blacklist")
@@ -81,7 +90,7 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 			}
 		}
 
-		// 3. GeoIP Check
+		// 3. GeoIP Check - 地理位置检查
 		if site.Firewall.GeoIPConfig.Enabled && geoIP != nil {
 			countryCode, err := geoIP.LookupCountryISO(clientIP)
 			if err == nil && countryCode != "" {
@@ -110,23 +119,19 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 			}
 		}
 
-		// 4. Rate Limiting
+		// 4. Rate Limiting - 频率限制
 		if site.Firewall.RateLimitConfig.Enabled && redisClient != nil {
 			limit := site.Firewall.RateLimitConfig.Requests
 			window := site.Firewall.RateLimitConfig.Window
-			// banTime := site.Firewall.RateLimitConfig.BanTime
 
 			key := fmt.Sprintf("ratelimit:%s:%s", site.ID, clientIP)
-
-			// Simple counter implementation
-			// In production, use a sliding window or token bucket
-			// Use GetRawClient() to access underlying redis client methods
 			rdb := redisClient.GetRawClient()
 			ctx := redisClient.Context()
 
 			count, err := rdb.Incr(ctx, key).Result()
 			if err == nil {
 				if count == 1 {
+					// 设置过期时间
 					rdb.Expire(ctx, key, time.Duration(window)*time.Second)
 				}
 				if int(count) > limit {
@@ -136,7 +141,7 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 			}
 		}
 
-		// If passed all checks
+		// If passed all checks - 通过所有检查，放行
 		c.Next()
 	}
 }
