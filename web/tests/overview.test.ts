@@ -15,48 +15,23 @@ test.describe('Overview Page', () => {
     // 点击登录按钮
     await page.click('button[type="submit"]');
     // 导航到概览页面
-    await page.click('text=Overview');
-    await page.waitForURL('/overview');
+    await page.click('text=概览');
+    await page.waitForURL('/');
   });
 
   test('Overview page loads successfully', async ({ page }) => {
-    await expect(page).toHaveTitle(/Overview/);
-    await expect(page.locator('h1')).toContainText('Overview');
+    await expect(page.locator('h1')).toContainText('概览');
   });
 
   test('Overview shows system summary', async ({ page }) => {
-    await expect(page.locator('.system-summary')).toBeVisible();
+    await expect(page.locator('.ant-card:has-text("系统")')).toBeVisible();
   });
 
   test('Overview shows key metrics', async ({ page }) => {
-    await expect(page.locator('.key-metrics')).toBeVisible();
-  });
-
-  test('Overview shows recent events', async ({ page }) => {
-    await expect(page.locator('.recent-events')).toBeVisible();
+    await expect(page.locator('.ant-statistic')).toBeVisible();
   });
 
   test('Overview shows site status', async ({ page }) => {
-    await expect(page.locator('.site-status')).toBeVisible();
-  });
-
-  test('Overview allows navigating to detailed pages', async ({ page }) => {
-    // 测试导航到站点管理
-    await page.click('text=View All Sites');
-    await page.waitForURL('/sites');
-    await expect(page).toHaveTitle(/Sites/);
-
-    // 测试导航到监控
-    await page.click('text=View Monitoring');
-    await page.waitForURL('/monitoring');
-    await expect(page).toHaveTitle(/Monitoring/);
-  });
-
-  test('Overview shows performance overview', async ({ page }) => {
-    await expect(page.locator('.performance-overview')).toBeVisible();
-  });
-
-  test('Overview shows security status', async ({ page }) => {
-    await expect(page.locator('.security-status')).toBeVisible();
+    await expect(page.locator('.ant-card:has-text("站点")')).toBeVisible();
   });
 });

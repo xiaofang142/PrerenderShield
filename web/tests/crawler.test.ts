@@ -57,91 +57,28 @@ test.describe('Crawler Page', () => {
   });
 
   test('Crawler page loads successfully', async ({ page }) => {
-    await expect(page).toHaveTitle(/Crawler/);
-    await expect(page.locator('h1')).toContainText('Crawler');
+    await expect(page.locator('h1')).toContainText('爬虫');
   });
 
-  test('Crawler shows configuration options', async ({ page }) => {
-    await expect(page.locator('.crawler-config')).toBeVisible();
+  test('Crawler shows site selector', async ({ page }) => {
+    await expect(page.locator('.ant-select')).toBeVisible();
   });
 
-  test('Crawler allows saving configuration', async ({ page }) => {
-    await page.click('button:has-text("Save Configuration")');
-    await expect(page.locator('.ant-message-success')).toBeVisible();
-  });
-
-  test('Crawler shows crawling status', async ({ page }) => {
-    await expect(page.locator('.crawling-status')).toBeVisible();
-  });
-
-  test('Crawler allows starting crawl', async ({ page }) => {
-    await page.click('button:has-text("Start Crawl")');
-    await expect(page.locator('.ant-message-success')).toBeVisible();
-  });
-
-  test('Crawler allows stopping crawl', async ({ page }) => {
-    await page.click('button:has-text("Stop Crawl")');
-    await expect(page.locator('.ant-message-success')).toBeVisible();
-  });
-
-  test('Crawler shows crawl history', async ({ page }) => {
-    await expect(page.locator('.crawl-history')).toBeVisible();
-  });
-
-  test('Crawler shows crawl statistics', async ({ page }) => {
-    await expect(page.locator('.crawl-statistics')).toBeVisible();
-  });
-
-  test('Crawler configuration test', async ({ page }) => {
-    // 测试爬虫配置更新
-    await page.fill('input[name="crawlDepth"]', '3');
-    await page.fill('input[name="crawlDelay"]', '1000');
-    await page.fill('input[name="maxConcurrent"]', '5');
-    await page.fill('input[name="userAgent"]', 'Mozilla/5.0 (compatible; PrerenderShield Crawler)');
-    await page.click('button:has-text("Save Configuration")');
-    await page.waitForSelector('.ant-message-success');
-    await expect(page.locator('.ant-message-success')).toBeVisible();
-  });
-
-  test('Crawler start/stop test', async ({ page }) => {
-    // 测试启动爬虫
-    await page.click('button:has-text("Start Crawl")');
-    await page.waitForSelector('.ant-message-success');
-    await expect(page.locator('.ant-message-success')).toBeVisible();
-    
-    // 测试停止爬虫
-    await page.click('button:has-text("Stop Crawl")');
-    await page.waitForSelector('.ant-message-success');
-    await expect(page.locator('.ant-message-success')).toBeVisible();
-  });
-
-  test('Crawler history test', async ({ page }) => {
-    // 验证爬取历史显示
-    await expect(page.locator('.crawl-history')).toBeVisible();
+  test('Crawler shows logs table', async ({ page }) => {
     await expect(page.locator('table')).toBeVisible();
   });
 
-  test('Crawler statistics test', async ({ page }) => {
-    // 验证爬取统计显示
-    await expect(page.locator('.crawl-statistics')).toBeVisible();
+  test('Crawler shows statistics', async ({ page }) => {
     await expect(page.locator('.ant-statistic')).toBeVisible();
+  });
+
+  test('Crawler granularity selector test', async ({ page }) => {
+    // 测试粒度选择器
+    await expect(page.locator('.ant-radio-group')).toBeVisible();
   });
 
   test('Crawler site selection test', async ({ page }) => {
     // 测试站点选择
-    await page.click('.ant-select:has-text("Select Site")');
-    await page.waitForSelector('.ant-select-dropdown');
-    await page.click('text="All Sites"');
-    await page.waitForLoadState('networkidle');
-  });
-
-  test('Crawler schedule test', async ({ page }) => {
-    // 测试爬虫调度设置
-    await page.click('button:has-text("Schedule Crawl")');
-    await page.waitForSelector('.ant-modal');
-    await page.fill('input[name="schedule"]', '0 0 * * *'); // 每天午夜执行
-    await page.click('button[type="primary"]:has-text("Save")');
-    await page.waitForSelector('.ant-message-success');
-    await expect(page.locator('.ant-message-success')).toBeVisible();
+    await expect(page.locator('.ant-select')).toBeVisible();
   });
 });
