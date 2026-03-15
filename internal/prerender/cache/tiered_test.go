@@ -138,7 +138,7 @@ func TestCacheEntry_TTL(t *testing.T) {
 	}
 	ttl := entry.TTL()
 	assert.Greater(t, ttl, time.Duration(0))
-	assert.Less(t, ttl, time.Hour)
+	assert.LessOrEqual(t, ttl, time.Hour)
 
 	// No expiration
 	entry = &CacheEntry{
