@@ -15,19 +15,21 @@ import (
 
 // OverviewController 概览控制器
 type OverviewController struct {
-	cfg         *config.Config
-	monitor     *monitoring.Monitor
-	visitLogMgr *logging.VisitLogManager
-	wafRepo     *repository.WafRepository
+	cfg             *config.Config
+	monitor         *monitoring.Monitor
+	visitLogMgr     *logging.VisitLogManager
+	crawlerLogMgr   *logging.CrawlerLogManager
+	wafRepo         *repository.WafRepository
 }
 
 // NewOverviewController 创建概览控制器实例
-func NewOverviewController(cfg *config.Config, monitor *monitoring.Monitor, visitLogMgr *logging.VisitLogManager, wafRepo *repository.WafRepository) *OverviewController {
+func NewOverviewController(cfg *config.Config, monitor *monitoring.Monitor, visitLogMgr *logging.VisitLogManager, crawlerLogMgr *logging.CrawlerLogManager, wafRepo *repository.WafRepository) *OverviewController {
 	return &OverviewController{
-		cfg:         cfg,
-		monitor:     monitor,
-		visitLogMgr: visitLogMgr,
-		wafRepo:     wafRepo,
+		cfg:           cfg,
+		monitor:       monitor,
+		visitLogMgr:   visitLogMgr,
+		crawlerLogMgr: crawlerLogMgr,
+		wafRepo:       wafRepo,
 	}
 }
 
@@ -53,14 +55,12 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	startTime := endTime.Add(-24 * time.Hour)
 
 	totalRequests := int64(stats["totalRequests"].(float64))
-	blockedRequests := int64(stats["blockedRequests"].(float64))
 
 	// 如果 WAF stats 可用，优先使用 DB 中的数据
 	if c.wafRepo != nil {
 		wafStats, err := c.wafRepo.GetGlobalStats(startTime.Format("2006-01-02 15:04:05"), endTime.Format("2006-01-02 15:04:05"))
 		if err == nil && wafStats != nil {
 			totalRequests = wafStats.TotalRequests
-			blockedRequests = wafStats.BlockedRequests
 		}
 	}
 
@@ -77,21 +77,31 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	// 获取流量趋势数据
 	trafficData := c.visitLogMgr.GetTrafficTrend(time.Now(), time.Now())
 
-	// 简单的流量趋势补充：爬虫和拦截请求（按比例分配或者简单的平均，因为暂时没有小时级的爬虫/拦截统计）
-	// TODO: 实现小时级的爬虫和拦截统计
-	crawlerTotal := int64(stats["crawlerRequests"].(float64))
-	blockedTotal := blockedRequests
+	// 使用 CrawlerLogManager 获取真实的爬虫和拦截统计数据
+	var crawlerTotal, blockedTotal int64
+	if c.crawlerLogMgr != nil {
+		crawlerTrafficData := c.crawlerLogMgr.GetTrafficTrend(startTime, endTime)
 
-	// 将总数分配到各个时间段（平滑分配，仅作为展示）
-	// 注意：这是一个临时的展示策略，直到我们有真实的时间序列数据
-	if len(trafficData) > 0 {
-		avgCrawler := crawlerTotal / int64(len(trafficData))
-		avgBlocked := blockedTotal / int64(len(trafficData))
-		for i := range trafficData {
-			// 如果该时段有总请求，则显示爬虫和拦截（但不超过总请求）
-			// 这里仅仅是简单的模拟分布，真实数据需要 CrawlerLogManager 支持 GetTrafficTrend
-			trafficData[i].CrawlerRequests = avgCrawler
-			trafficData[i].BlockedRequests = avgBlocked
+		// 计算爬虫请求总数和拦截总数
+		for _, data := range crawlerTrafficData {
+			crawlerTotal += data.CrawlerRequests
+			blockedTotal += data.BlockedRequests
+		}
+
+		// 合并流量趋势数据
+		if len(trafficData) == len(crawlerTrafficData) {
+			for i := range trafficData {
+				trafficData[i].CrawlerRequests = crawlerTrafficData[i].CrawlerRequests
+				trafficData[i].BlockedRequests = crawlerTrafficData[i].BlockedRequests
+			}
+		} else if len(trafficData) > 0 && len(crawlerTrafficData) > 0 {
+			// 如果长度不匹配，使用第一个数据作为参考
+			for i := range trafficData {
+				if i < len(crawlerTrafficData) {
+					trafficData[i].CrawlerRequests = crawlerTrafficData[i].CrawlerRequests
+					trafficData[i].BlockedRequests = crawlerTrafficData[i].BlockedRequests
+				}
+			}
 		}
 	}
 

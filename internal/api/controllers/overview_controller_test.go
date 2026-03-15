@@ -27,11 +27,13 @@ func TestOverviewController_GetOverview(t *testing.T) {
 
 	monitor := monitoring.NewMonitor(monitoring.Config{})
 	visitLogMgr := logging.NewVisitLogManager("")
+	crawlerLogMgr := logging.NewCrawlerLogManager("")
 
 	controller := &OverviewController{
-		cfg:         cfg,
-		monitor:     monitor,
-		visitLogMgr: visitLogMgr,
+		cfg:           cfg,
+		monitor:       monitor,
+		visitLogMgr:   visitLogMgr,
+		crawlerLogMgr: crawlerLogMgr,
 		wafRepo:     nil, // 使用 nil wafRepo 进行测试
 	}
 
@@ -156,14 +158,16 @@ func TestNewOverviewController(t *testing.T) {
 
 	monitor := monitoring.NewMonitor(monitoring.Config{})
 	visitLogMgr := logging.NewVisitLogManager("")
+	crawlerLogMgr := logging.NewCrawlerLogManager("")
 	wafRepo := &repository.WafRepository{}
 
-	controller := NewOverviewController(cfg, monitor, visitLogMgr, wafRepo)
+	controller := NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, wafRepo)
 
 	assert.NotNil(t, controller)
 	assert.Equal(t, cfg, controller.cfg)
 	assert.Equal(t, monitor, controller.monitor)
 	assert.Equal(t, visitLogMgr, controller.visitLogMgr)
+	assert.Equal(t, crawlerLogMgr, controller.crawlerLogMgr)
 	assert.Equal(t, wafRepo, controller.wafRepo)
 }
 
@@ -178,8 +182,9 @@ func TestOverviewController_GetOverview_WithWafRepo(t *testing.T) {
 
 	monitor := monitoring.NewMonitor(monitoring.Config{})
 	visitLogMgr := logging.NewVisitLogManager("")
+	crawlerLogMgr := logging.NewCrawlerLogManager("")
 
-	controller := NewOverviewController(cfg, monitor, visitLogMgr, nil)
+	controller := NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, nil)
 
 	router := gin.New()
 	router.GET("/overview", controller.GetOverview)
@@ -210,8 +215,9 @@ func TestOverviewController_GetOverview_MultipleSites(t *testing.T) {
 
 	monitor := monitoring.NewMonitor(monitoring.Config{})
 	visitLogMgr := logging.NewVisitLogManager("")
+	crawlerLogMgr := logging.NewCrawlerLogManager("")
 
-	controller := NewOverviewController(cfg, monitor, visitLogMgr, nil)
+	controller := NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, nil)
 
 	router := gin.New()
 	router.GET("/overview", controller.GetOverview)

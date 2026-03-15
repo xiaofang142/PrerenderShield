@@ -94,7 +94,7 @@ func SetupControllers(
 	// 创建控制器实例
 	return &Controllers{
 		AuthController:       controllers.NewAuthController(userManager, jwtManager),
-		OverviewController:   controllers.NewOverviewController(cfg, monitor, visitLogMgr, wafRepo),
+		OverviewController:   controllers.NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, wafRepo),
 		MonitoringController: controllers.NewMonitoringController(monitor),
 		FirewallController:   controllers.NewFirewallController(wafRepo),
 		CrawlerController:    controllers.NewCrawlerController(crawlerLogMgr),

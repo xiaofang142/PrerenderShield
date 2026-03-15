@@ -47,20 +47,20 @@ type CrawlerLogManager struct {
 
 // NewCrawlerLogManager 创建爬虫日志管理器
 func NewCrawlerLogManager(redisURL string) *CrawlerLogManager {
-	// 创建Redis客户端选项，支持两种格式的Redis URL
+	// 创建 Redis 客户端选项，支持两种格式的 Redis URL
 	opt := &redis.Options{}
 
-	// 如果redisURL是纯主机名或IP地址，使用默认端口
+	// 如果 redisURL 是纯主机名或 IP 地址，使用默认端口
 	if !strings.Contains(redisURL, "://") {
 		opt.Addr = redisURL
 		if !strings.Contains(opt.Addr, ":") {
 			opt.Addr = fmt.Sprintf("%s:6379", opt.Addr)
 		}
 	} else {
-		// 否则尝试解析URL
+		// 否则尝试解析 URL
 		parsed, err := url.Parse(redisURL)
 		if err != nil {
-			log.Printf("解析Redis URL失败: %v", err)
+			log.Printf("解析 Redis URL 失败：%v", err)
 			opt = &redis.Options{
 				Addr: "localhost:6379",
 			}
@@ -84,13 +84,13 @@ func NewCrawlerLogManager(redisURL string) *CrawlerLogManager {
 		}
 	}
 
-	// 创建Redis客户端
+	// 创建 Redis 客户端
 	client := redis.NewClient(opt)
 
 	// 测试连接
 	ctx := context.Background()
 	if err := client.Ping(ctx).Err(); err != nil {
-		log.Printf("连接Redis失败: %v", err)
+		log.Printf("连接 Redis 失败：%v", err)
 	}
 
 	// 创建日志管理器
@@ -133,9 +133,9 @@ func (clm *CrawlerLogManager) processLogs() {
 	}
 }
 
-// saveLog 保存日志到Redis或内存存储
+// saveLog 保存日志到 Redis 或内存存储
 func (clm *CrawlerLogManager) saveLog(crawlerLog CrawlerLog) {
-	// 生成ID
+	// 生成 ID
 	id := fmt.Sprintf("%d_%s", crawlerLog.Time.UnixNano(), crawlerLog.IP)
 	crawlerLog.ID = id
 
@@ -147,23 +147,23 @@ func (clm *CrawlerLogManager) saveLog(crawlerLog CrawlerLog) {
 	// 序列化日志
 	logJSON, err := json.Marshal(crawlerLog)
 	if err != nil {
-		log.Printf("序列化日志失败: %v", err)
+		log.Printf("序列化日志失败：%v", err)
 		return
 	}
 
-	// 保存到Redis有序集合，使用时间戳作为分数，便于排序
+	// 保存到 Redis 有序集合，使用时间戳作为分数，便于排序
 	if err := clm.redisClient.ZAdd(clm.ctx, siteKey, &redis.Z{
 		Score:  float64(crawlerLog.Time.UnixNano()),
 		Member: logJSON,
 	}).Err(); err != nil {
-		log.Printf("保存日志到Redis失败: %v", err)
+		log.Printf("保存日志到 Redis 失败：%v", err)
 		return
 	}
 
-	// 设置过期时间: 15天
+	// 设置过期时间：15 天
 	expireTime := 15 * 24 * time.Hour
 	if err := clm.redisClient.Expire(clm.ctx, siteKey, expireTime).Err(); err != nil {
-		log.Printf("设置日志过期时间失败: %v", err)
+		log.Printf("设置日志过期时间失败：%v", err)
 	}
 
 	// 同时添加到总日志集合，用于全局查询
@@ -171,19 +171,19 @@ func (clm *CrawlerLogManager) saveLog(crawlerLog CrawlerLog) {
 		Score:  float64(crawlerLog.Time.UnixNano()),
 		Member: logJSON,
 	}).Err(); err != nil {
-		log.Printf("保存日志到总集合失败: %v", err)
+		log.Printf("保存日志到总集合失败：%v", err)
 		return
 	}
 
 	if err := clm.redisClient.Expire(clm.ctx, totalKey, expireTime).Err(); err != nil {
-		log.Printf("设置总日志集合过期时间失败: %v", err)
+		log.Printf("设置总日志集合过期时间失败：%v", err)
 	}
 
 	// 如果日志未清洗，添加到待清洗队列
 	if !crawlerLog.Washed {
 		unwashedKey := "crawler_logs:unwashed"
 		if err := clm.redisClient.RPush(clm.ctx, unwashedKey, logJSON).Err(); err != nil {
-			log.Printf("添加到待清洗队列失败: %v", err)
+			log.Printf("添加到待清洗队列失败：%v", err)
 		}
 	}
 }
@@ -192,10 +192,9 @@ func (clm *CrawlerLogManager) saveLog(crawlerLog CrawlerLog) {
 func (clm *CrawlerLogManager) GetUnwashedLogs(count int64) ([]CrawlerLog, error) {
 	unwashedKey := "crawler_logs:unwashed"
 
-	// 从列表中弹出count个元素
-	// 由于Redis没有直接弹出N个元素的命令，我们可以用LRange + LTrim，或者循环LPop
-	// 为了原子性，循环LPop比较简单，或者使用Pipeline
-	// 这里为了简单，先用LPop循环
+	// 从列表中弹出 count 个元素
+	// 由于 Redis 没有直接弹出 N 个元素的命令，我们可以用 LRange + LTrim，或者循环 LPop
+	// 为了简单，循环 LPop
 
 	var logs []CrawlerLog
 	for i := int64(0); i < count; i++ {
@@ -234,7 +233,7 @@ func (clm *CrawlerLogManager) UpdateLog(oldLog, newLog CrawlerLog) error {
 
 	score := float64(newLog.Time.UnixNano())
 
-	// 使用Pipeline执行原子操作
+	// 使用 Pipeline 执行原子操作
 	pipe := clm.redisClient.Pipeline()
 
 	// 更新站点日志
@@ -266,7 +265,7 @@ func (clm *CrawlerLogManager) startCleanupTask() {
 	}
 }
 
-// cleanupOldLogs 清理旧日志（超过15天）
+// cleanupOldLogs 清理旧日志（超过 15 天）
 func (clm *CrawlerLogManager) cleanupOldLogs() {
 	// 1. 获取配置
 	config, err := clm.redisClient.HGetAll(clm.ctx, "config:system").Result()
@@ -290,7 +289,7 @@ func (clm *CrawlerLogManager) cleanupOldLogs() {
 	}
 
 	// 2. 按天数清理
-	// 扫描所有爬虫日志key
+	// 扫描所有爬虫日志 key
 	// Pattern: crawler_logs:all:*
 	iter := clm.redisClient.Scan(clm.ctx, 0, "crawler_logs:all:*", 0).Iterator()
 	var allLogKeys []string
@@ -326,7 +325,7 @@ func (clm *CrawlerLogManager) cleanupOldLogs() {
 	}
 
 	// 3. 按大小清理
-	// 获取最近保留天数内的所有日志key，按时间倒序排列（最新的在前）
+	// 获取最近保留天数内的所有日志 key，按时间倒序排列（最新的在前）
 	var validLogKeys []string
 	for i := 0; i < retentionDays; i++ {
 		dateStr := time.Now().AddDate(0, 0, -i).Format("2006-01-02")
@@ -338,7 +337,7 @@ func (clm *CrawlerLogManager) cleanupOldLogs() {
 	maxSizeBytes := int64(maxSizeMB) * 1024 * 1024
 
 	for _, key := range validLogKeys {
-		// 获取key的内存占用
+		// 获取 key 的内存占用
 		usage, err := clm.redisClient.MemoryUsage(clm.ctx, key).Result()
 		if err != nil {
 			continue
@@ -497,7 +496,7 @@ func (clm *CrawlerLogManager) GetCrawlerStats(site string, startTime, endTime ti
 			cacheHits++
 		}
 
-		// 统计UA
+		// 统计 UA
 		topUAs[log.UA]++
 	}
 
@@ -508,7 +507,7 @@ func (clm *CrawlerLogManager) GetCrawlerStats(site string, startTime, endTime ti
 		cacheHitRate = float64(int(cacheHitRate*100)) / 100 // 保留两位小数
 	}
 
-	// 转换topUAs为数组格式
+	// 转换 topUAs 为数组格式
 	topUAsArray := make([]map[string]interface{}, 0, len(topUAs))
 	for ua, count := range topUAs {
 		topUAsArray = append(topUAsArray, map[string]interface{}{
@@ -521,7 +520,7 @@ func (clm *CrawlerLogManager) GetCrawlerStats(site string, startTime, endTime ti
 	var trafficData []map[string]interface{}
 	switch granularity {
 	case "day":
-		// 日粒度：返回24小时数据
+		// 日粒度：返回 24 小时数据
 		trafficData = make([]map[string]interface{}, 24)
 		// 根据小时统计数据
 		hourlyData := make(map[int]map[string]int64)
@@ -548,7 +547,7 @@ func (clm *CrawlerLogManager) GetCrawlerStats(site string, startTime, endTime ti
 				}
 			}
 			trafficData[i] = map[string]interface{}{
-				"time":          fmt.Sprintf("%02d:00", i), // 格式化为HH:00
+				"time":          fmt.Sprintf("%02d:00", i), // 格式化为 HH:00
 				"totalRequests": data["totalRequests"],
 				"cacheHits":     data["cacheHits"],
 				"cacheMisses":   data["totalRequests"] - data["cacheHits"],
@@ -556,7 +555,7 @@ func (clm *CrawlerLogManager) GetCrawlerStats(site string, startTime, endTime ti
 			}
 		}
 	case "week":
-		// 周粒度：返回7天数据
+		// 周粒度：返回 7 天数据
 		daysOfWeek := []string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
 		trafficData = make([]map[string]interface{}, 7)
 		// 根据星期几统计数据
@@ -592,14 +591,14 @@ func (clm *CrawlerLogManager) GetCrawlerStats(site string, startTime, endTime ti
 			}
 		}
 	case "month":
-		// 月粒度：返回30天数据
+		// 月粒度：返回 30 天数据
 		trafficData = make([]map[string]interface{}, 30)
 		// 根据日期统计数据
 		monthlyData := make(map[int]map[string]int64)
 		for _, log := range allLogs {
-			day := log.Time.Day() - 1 // 转换为0-29索引
+			day := log.Time.Day() - 1 // 转换为 0-29 索引
 			if day >= 30 {
-				continue // 跳过31日
+				continue // 跳过 31 日
 			}
 			if monthlyData[day] == nil {
 				monthlyData[day] = map[string]int64{
@@ -657,7 +656,7 @@ func (clm *CrawlerLogManager) GetCrawlerStats(site string, startTime, endTime ti
 				}
 			}
 			trafficData[i] = map[string]interface{}{
-				"time":          fmt.Sprintf("%02d:00", i), // 格式化为HH:00
+				"time":          fmt.Sprintf("%02d:00", i), // 格式化为 HH:00
 				"totalRequests": data["totalRequests"],
 				"cacheHits":     data["cacheHits"],
 				"cacheMisses":   data["totalRequests"] - data["cacheHits"],
@@ -677,34 +676,126 @@ func (clm *CrawlerLogManager) GetCrawlerStats(site string, startTime, endTime ti
 	return stats, nil
 }
 
-// GetClientIP 获取客户端真实IP
+// GetTrafficTrend 获取爬虫流量趋势（按小时统计）
+// 复用 visit_log.go 中定义的 TrafficData 结构体
+func (clm *CrawlerLogManager) GetTrafficTrend(startTime, endTime time.Time) []TrafficData {
+	// 获取时间范围内的所有日期
+	days := int(endTime.Sub(startTime).Hours()/24) + 1
+	keyPrefix := "crawler_logs:all:"
+
+	startScore := float64(startTime.UnixNano())
+	endScore := float64(endTime.UnixNano())
+
+	// 按小时聚合数据
+	hourlyData := make(map[int]*TrafficData)
+	for i := 0; i < 24; i++ {
+		hourlyData[i] = &TrafficData{
+			Time:            fmt.Sprintf("%02d:00", i),
+			TotalRequests:   0,
+			CrawlerRequests: 0,
+			BlockedRequests: 0,
+		}
+	}
+
+	// 遍历所有日期
+	for i := 0; i < days; i++ {
+		date := startTime.AddDate(0, 0, i)
+		dateStr := date.Format("2006-01-02")
+		key := keyPrefix + dateStr
+
+		// 获取该日期的所有日志
+		logJSONs, err := clm.redisClient.ZRangeByScore(clm.ctx, key, &redis.ZRangeBy{
+			Min: fmt.Sprintf("%f", startScore),
+			Max: fmt.Sprintf("%f", endScore),
+		}).Result()
+		if err != nil {
+			continue
+		}
+
+		// 处理每条日志
+		for _, logJSON := range logJSONs {
+			var log CrawlerLog
+			if err := json.Unmarshal([]byte(logJSON), &log); err != nil {
+				continue
+			}
+
+			hour := log.Time.Hour()
+			if hourlyData[hour] == nil {
+				hourlyData[hour] = &TrafficData{
+					Time:            fmt.Sprintf("%02d:00", hour),
+					TotalRequests:   0,
+					CrawlerRequests: 0,
+					BlockedRequests: 0,
+				}
+			}
+
+			hourlyData[hour].TotalRequests++
+			hourlyData[hour].CrawlerRequests++
+
+			// 如果状态码表示被阻止（如 403, 429 等），则计入 BlockedRequests
+			if log.Status == 403 || log.Status == 429 {
+				hourlyData[hour].BlockedRequests++
+			}
+		}
+	}
+
+	// 将 hourlyData 转换为数组，按照前端期望的格式（每 4 小时一个点）
+	result := make([]TrafficData, 0)
+	points := []string{"00", "04", "08", "12", "16", "20"}
+
+	for _, p := range points {
+		startHour, _ := strconv.Atoi(p)
+		var totalRequests, crawlerRequests, blockedRequests int64
+
+		// 聚合 4 小时窗口
+		for i := 0; i < 4; i++ {
+			hour := (startHour + i) % 24
+			if data := hourlyData[hour]; data != nil {
+				totalRequests += data.TotalRequests
+				crawlerRequests += data.CrawlerRequests
+				blockedRequests += data.BlockedRequests
+			}
+		}
+
+		result = append(result, TrafficData{
+			Time:            fmt.Sprintf("%s:00", p),
+			TotalRequests:   totalRequests,
+			CrawlerRequests: crawlerRequests,
+			BlockedRequests: blockedRequests,
+		})
+	}
+
+	return result
+}
+
+// GetClientIP 获取客户端真实 IP
 func GetClientIP(r *http.Request) string {
-	// 从X-Forwarded-For头获取真实IP
+	// 从 X-Forwarded-For 头获取真实 IP
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// X-Forwarded-For格式: client, proxy1, proxy2
+		// X-Forwarded-For 格式：client, proxy1, proxy2
 		if idx := strings.Index(xff, ","); idx != -1 {
 			return strings.TrimSpace(xff[:idx])
 		}
 		return strings.TrimSpace(xff)
 	}
 
-	// 从X-Real-IP头获取真实IP
+	// 从 X-Real-IP 头获取真实 IP
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
 		return strings.TrimSpace(xri)
 	}
 
-	// 直接获取RemoteAddr
+	// 直接获取 RemoteAddr
 	ip := r.RemoteAddr
 
-	// 处理IPv6地址，格式为 [::1]:51234
+	// 处理 IPv6 地址，格式为 [::1]:51234
 	if strings.HasPrefix(ip, "[") {
-		// 查找IPv6地址的结束位置
+		// 查找 IPv6 地址的结束位置
 		if idx := strings.Index(ip, "]"); idx != -1 {
-			return ip[1:idx] // 提取[和]之间的部分
+			return ip[1:idx] // 提取 [和] 之间的部分
 		}
 	}
 
-	// 处理IPv4地址，格式为 127.0.0.1:51234
+	// 处理 IPv4 地址，格式为 127.0.0.1:51234
 	if idx := strings.Index(ip, ":"); idx != -1 {
 		return ip[:idx]
 	}
