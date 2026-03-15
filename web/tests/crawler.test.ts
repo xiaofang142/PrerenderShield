@@ -5,50 +5,52 @@ test.describe('Crawler Page', () => {
     // 登录
     await page.goto('/login');
     // 等待页面完全加载
-    await page.waitForLoadState('networkidle');
-    
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2000);
+
     // 检查是否显示系统初始化向导
-    if (await page.locator('h1:has-text("系统初始化向导")').count() > 0) {
+    const firstRunTitle = page.locator('h1:has-text("系统初始化向导"), h2:has-text("系统初始化向导"), div:has-text("系统初始化向导")');
+    if (await firstRunTitle.count() > 0) {
       // 处理系统初始化向导
       // 点击同意使用声明复选框
       await page.click('input[type="checkbox"]');
-      
+
       // 点击下一步按钮
       await page.click('button:has-text("下一步")');
-      
+
       // 等待设置管理员页面
-      await page.waitForSelector('input[name="username"]');
-      
+      await page.waitForSelector('input[placeholder="Username"]');
+
       // 填写管理员信息
-      await page.fill('input[name="username"]', 'admin');
-      await page.fill('input[name="password"]', '123456');
-      await page.fill('input[name="confirmPassword"]', '123456');
-      await page.fill('input[name="email"]', 'admin@example.com');
-      await page.fill('input[name="company"]', 'Test Company');
-      
+      await page.fill('input[placeholder="Username"]', 'admin');
+      await page.fill('input[placeholder="Password"]', '123456');
+      await page.fill('input[placeholder="Confirm Password"]', '123456');
+      await page.fill('input[placeholder="Email"]', 'admin@example.com');
+      await page.fill('input[placeholder="Company"]', 'Test Company');
+
       // 点击下一步按钮
       await page.click('button:has-text("下一步")');
-      
+
       // 等待完成页面
       await page.waitForSelector('button:has-text("完成")');
-      
+
       // 点击完成按钮
       await page.click('button:has-text("完成")');
-      
+
       // 等待页面跳转
       await page.waitForURL('/');
     } else {
       // 等待登录表单出现
-      await page.waitForSelector('form[name="login"]');
+      await page.waitForSelector('input[placeholder="Username"]');
       // 填写登录表单
-      await page.fill('form[name="login"] input[name="username"]', 'admin');
-      await page.fill('form[name="login"] input[name="password"]', '123456');
+      await page.fill('input[placeholder="Username"]', 'admin');
+      await page.fill('input[placeholder="Password"]', '123456');
       // 点击登录按钮
-      await page.click('form[name="login"] button[type="submit"]');
+      await page.click('button[type="submit"]');
       // 等待导航到首页
       await page.waitForURL('/');
     }
-    
+
     // 导航到爬虫页面
     await page.goto('/crawler');
     await page.waitForURL('/crawler');

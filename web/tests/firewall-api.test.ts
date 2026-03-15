@@ -10,7 +10,7 @@ test.describe('Firewall API Tests', () => {
     const loginResponse = await request.post('/api/v1/auth/login', {
       data: {
         username: 'admin',
-        password: 'password123'
+        password: '123456'
       }
     })
     const loginData = await loginResponse.json()

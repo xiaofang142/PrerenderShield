@@ -37,10 +37,10 @@ test.describe('API Integration Tests', () => {
     })
 
     test('should login with valid credentials', async ({ request }) => {
-      const response = await request.post('/api/v1/auth/login', {
+      const response = await request.post('http://localhost:9598/api/v1/auth/login', {
         data: {
           username: 'admin',
-          password: 'password123'
+          password: '123456'
         }
       })
       expect(response.ok()).toBeTruthy()
@@ -73,10 +73,10 @@ test.describe('API Integration Tests', () => {
   test.describe('Overview APIs', () => {
     test('should get overview statistics', async ({ request }) => {
       // 先登录获取 token
-      const loginResponse = await request.post('/api/v1/auth/login', {
+      const loginResponse = await request.post('http://localhost:9598/api/v1/auth/login', {
         data: {
           username: 'admin',
-          password: 'password123'
+          password: '123456'
         }
       })
       const loginData = await loginResponse.json()
@@ -105,10 +105,10 @@ test.describe('API Integration Tests', () => {
 
     test.beforeEach(async ({ request }) => {
       // 获取认证 token
-      const loginResponse = await request.post('/api/v1/auth/login', {
+      const loginResponse = await request.post('http://localhost:9598/api/v1/auth/login', {
         data: {
           username: 'admin',
-          password: 'password123'
+          password: '123456'
         }
       })
       const loginData = await loginResponse.json()
@@ -130,9 +130,9 @@ test.describe('API Integration Tests', () => {
 
     test('should add new site', async ({ request }) => {
       const newSite = {
-        name: 'Test Site',
+        name: 'Test Site ' + Date.now(),
         domains: ['127.0.0.1'],
-        port: 8081,
+        port: 8000 + Math.floor(Math.random() * 1000),
         mode: 'static',
         prerender: {
           enabled: false
@@ -150,11 +150,11 @@ test.describe('API Integration Tests', () => {
         data: newSite
       })
       expect(response.ok()).toBeTruthy()
-      
+
       const data = await response.json()
       expect(data.code).toBe(200)
       expect(data.data).toHaveProperty('id')
-      expect(data.data.name).toBe('Test Site')
+      expect(data.data.name).toBe(newSite.name)
     })
 
     test('should reject site with invalid domain', async ({ request }) => {
@@ -183,10 +183,10 @@ test.describe('API Integration Tests', () => {
 
     test.beforeEach(async ({ request }) => {
       // 获取认证 token 和站点
-      const loginResponse = await request.post('/api/v1/auth/login', {
+      const loginResponse = await request.post('http://localhost:9598/api/v1/auth/login', {
         data: {
           username: 'admin',
-          password: 'password123'
+          password: '123456'
         }
       })
       const loginData = await loginResponse.json()
@@ -251,10 +251,10 @@ test.describe('API Integration Tests', () => {
     let authToken: string
 
     test.beforeEach(async ({ request }) => {
-      const loginResponse = await request.post('/api/v1/auth/login', {
+      const loginResponse = await request.post('http://localhost:9598/api/v1/auth/login', {
         data: {
           username: 'admin',
-          password: 'password123'
+          password: '123456'
         }
       })
       const loginData = await loginResponse.json()
@@ -293,10 +293,10 @@ test.describe('API Integration Tests', () => {
     let authToken: string
 
     test.beforeEach(async ({ request }) => {
-      const loginResponse = await request.post('/api/v1/auth/login', {
+      const loginResponse = await request.post('http://localhost:9598/api/v1/auth/login', {
         data: {
           username: 'admin',
-          password: 'password123'
+          password: '123456'
         }
       })
       const loginData = await loginResponse.json()
@@ -333,10 +333,10 @@ test.describe('API Integration Tests', () => {
     let authToken: string
 
     test.beforeEach(async ({ request }) => {
-      const loginResponse = await request.post('/api/v1/auth/login', {
+      const loginResponse = await request.post('http://localhost:9598/api/v1/auth/login', {
         data: {
           username: 'admin',
-          password: 'password123'
+          password: '123456'
         }
       })
       const loginData = await loginResponse.json()
@@ -373,10 +373,10 @@ test.describe('API Integration Tests', () => {
     let authToken: string
 
     test.beforeEach(async ({ request }) => {
-      const loginResponse = await request.post('/api/v1/auth/login', {
+      const loginResponse = await request.post('http://localhost:9598/api/v1/auth/login', {
         data: {
           username: 'admin',
-          password: 'password123'
+          password: '123456'
         }
       })
       const loginData = await loginResponse.json()
@@ -402,10 +402,10 @@ test.describe('API Integration Tests', () => {
     let authToken: string
 
     test.beforeEach(async ({ request }) => {
-      const loginResponse = await request.post('/api/v1/auth/login', {
+      const loginResponse = await request.post('http://localhost:9598/api/v1/auth/login', {
         data: {
           username: 'admin',
-          password: 'password123'
+          password: '123456'
         }
       })
       const loginData = await loginResponse.json()

@@ -7,12 +7,12 @@ test.describe('WAF Settings Page', () => {
     // 等待页面完全加载
     await page.waitForLoadState('networkidle');
     // 等待登录表单出现
-    await page.waitForSelector('form[name="login"]');
+    await page.waitForSelector('input[placeholder="Username"]');
     // 填写登录表单
-    await page.fill('form[name="login"] input[name="username"]', 'admin');
-    await page.fill('form[name="login"] input[name="password"]', '123456');
+    await page.fill('input[placeholder="Username"]', 'admin');
+    await page.fill('input[placeholder="Password"]', '123456');
     // 点击登录按钮
-    await page.click('form[name="login"] button[type="submit"]');
+    await page.click('button[type="submit"]');
     // 导航到WAF设置页面
     await page.click('text=WAF Settings');
     await page.waitForURL('/waf-settings');
