@@ -1,10 +1,12 @@
 package detectors
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -117,4 +119,63 @@ func TestBlacklistDetector_NilLists(t *testing.T) {
 	threats, err := detector.Detect(req)
 	assert.NoError(t, err)
 	assert.Empty(t, threats)
+}
+
+// TestBlacklistDetector_Detect_DynamicBlacklist 测试动态黑名单 (Redis)
+func TestBlacklistDetector_Detect_DynamicBlacklist(t *testing.T) {
+	// 使用 mock Redis 客户端
+	mockRedis := &mockRedisBlacklistClient{isMember: true}
+	detector := NewBlacklistDetector(mockRedis, "site1", []string{}, []string{})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	// GetClientIP 返回带端口的 IP
+	req.RemoteAddr = "192.168.1.100:12345"
+
+	threats, err := detector.Detect(req)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, threats)
+	assert.Equal(t, "blacklist", threats[0].Type)
+	assert.Contains(t, threats[0].Message, "matches dynamic blacklist")
+	assert.Equal(t, "dynamic", threats[0].Details["source"])
+}
+
+// TestBlacklistDetector_Detect_DynamicBlacklist_NotMember 测试不在动态黑名单中
+func TestBlacklistDetector_Detect_DynamicBlacklist_NotMember(t *testing.T) {
+	mockRedis := &mockRedisBlacklistClient{isMember: false}
+	detector := NewBlacklistDetector(mockRedis, "site1", []string{}, []string{})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.RemoteAddr = "192.168.1.100:12345"
+
+	threats, err := detector.Detect(req)
+	assert.NoError(t, err)
+	assert.Empty(t, threats)
+}
+
+// TestBlacklistDetector_Detect_DynamicBlacklist_Error 测试 Redis 错误
+func TestBlacklistDetector_Detect_DynamicBlacklist_Error(t *testing.T) {
+	mockRedis := &mockRedisBlacklistClient{err: assert.AnError}
+	detector := NewBlacklistDetector(mockRedis, "site1", []string{}, []string{})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.RemoteAddr = "192.168.1.100:12345"
+
+	threats, err := detector.Detect(req)
+	assert.Error(t, err)
+	assert.Empty(t, threats)
+}
+
+// mockRedisBlacklistClient 模拟 Redis 客户端
+type mockRedisBlacklistClient struct {
+	isMember bool
+	err      error
+}
+
+func (m *mockRedisBlacklistClient) SIsMember(ctx context.Context, key string, member interface{}) *redis.BoolCmd {
+	cmd := redis.NewBoolCmd(ctx)
+	cmd.SetVal(m.isMember)
+	if m.err != nil {
+		cmd.SetErr(m.err)
+	}
+	return cmd
 }

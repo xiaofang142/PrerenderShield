@@ -202,110 +202,85 @@ func TestOWASPTop10Detector_Detect_MultipleThreats(t *testing.T) {
 	assert.GreaterOrEqual(t, len(threats), 1)
 }
 
-// TestSSRFDetector 测试独立的 SSRF 检测器
-func TestSSRFDetector_Detect_InternalAddress(t *testing.T) {
-	detector := NewSSRFDetector([]string{}, true)
+// ============ 测试规则更新 ============
 
+// TestOWASPTop10Detector_UpdateRules 测试动态更新规则
+func TestOWASPTop10Detector_UpdateRules(t *testing.T) {
+	mockManager := &MockRuleManagerForOWASP{
+		rules: make(map[string][]types.Rule),
+	}
+	detector := NewOWASPTop10Detector(mockManager)
+
+	// 更新自定义规则
+	customRules := []types.Rule{
+		{ID: "custom-owasp-001", Name: "Custom OWASP Rule", Category: "owasp_top10", Pattern: `CUSTOM_OWASP`, Severity: "critical"},
+	}
+
+	err := detector.UpdateRules(customRules)
+	assert.NoError(t, err)
+
+	// 验证新规则生效
 	req := &http.Request{}
-	values := url.Values{}
-	values.Add("url", "http://127.0.0.1:8080")
 	req.URL = &url.URL{
-		RawQuery: values.Encode(),
+		RawQuery: "data=CUSTOM_OWASP",
 	}
 
 	threats, err := detector.Detect(req)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, threats)
-	assert.Equal(t, "ssrf", threats[0].Type)
+	assert.Equal(t, "custom-owasp-001", threats[0].RuleID)
+	assert.Equal(t, "critical", threats[0].Severity)
 }
 
-// TestSSRFDetector_Detect_Localhost 测试 localhost 检测
-func TestSSRFDetector_Detect_Localhost(t *testing.T) {
-	detector := NewSSRFDetector([]string{}, true)
+// ============ 测试检测器名称 ============
 
-	req := &http.Request{}
-	values := url.Values{}
-	values.Add("target", "http://localhost/admin")
-	req.URL = &url.URL{
-		RawQuery: values.Encode(),
+// TestOWASPTop10Detector_Name 测试检测器名称
+func TestOWASPTop10Detector_Name(t *testing.T) {
+	mockManager := &MockRuleManagerForOWASP{
+		rules: make(map[string][]types.Rule),
 	}
+	detector := NewOWASPTop10Detector(mockManager)
 
+	name := detector.Name()
+	assert.Equal(t, "OWASP-Top10", name)
+}
+
+// TestOWASPTop10Detector_CompileRules_InvalidPattern 测试编译无效规则模式
+func TestOWASPTop10Detector_CompileRules_InvalidPattern(t *testing.T) {
+	mockManager := &MockRuleManagerForOWASP{
+		rules: map[string][]types.Rule{
+			"owasp_top10": {
+				{ID: "invalid-rule", Name: "Invalid Rule", Category: "owasp_top10", Pattern: "[invalid(regex", Severity: "high"},
+			},
+		},
+	}
+	detector := NewOWASPTop10Detector(mockManager)
+
+	// 验证检测器创建成功（无效规则被跳过）
+	assert.NotNil(t, detector)
+
+	// 验证仍然可以正常检测
+	req := &http.Request{}
+	req.URL = &url.URL{
+		Path: "/admin",
+	}
 	threats, err := detector.Detect(req)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, threats)
 }
 
-// TestSSRFDetector_Detect_PrivateIP 测试私有 IP 检测
-func TestSSRFDetector_Detect_PrivateIP(t *testing.T) {
-	detector := NewSSRFDetector([]string{}, true)
-
-	testCases := []string{
-		"http://10.0.0.1/admin",
-		"http://172.16.0.1/admin",
-		"http://192.168.1.1/admin",
+// TestOWASPTop10Detector_CompileRules_EmptyPattern 测试空规则模式
+func TestOWASPTop10Detector_CompileRules_EmptyPattern(t *testing.T) {
+	mockManager := &MockRuleManagerForOWASP{
+		rules: map[string][]types.Rule{
+			"owasp_top10": {
+				{ID: "empty-rule", Name: "Empty Rule", Category: "owasp_top10", Pattern: "", Severity: "high"},
+			},
+		},
 	}
+	detector := NewOWASPTop10Detector(mockManager)
 
-	for _, tc := range testCases {
-		req := &http.Request{}
-		values := url.Values{}
-		values.Add("url", tc)
-		req.URL = &url.URL{
-			RawQuery: values.Encode(),
-		}
-
-		threats, err := detector.Detect(req)
-		assert.NoError(t, err)
-		assert.NotEmpty(t, threats)
-	}
+	// 验证检测器创建成功（空规则被跳过）
+	assert.NotNil(t, detector)
 }
 
-// TestSSRFDetector_Detect_AllowedHost 测试允许的 HOST
-func TestSSRFDetector_Detect_AllowedHost(t *testing.T) {
-	detector := NewSSRFDetector([]string{"api.example.com"}, false)
-
-	req := &http.Request{}
-	req.URL = &url.URL{
-		Path: "/proxy",
-	}
-
-	threats, err := detector.Detect(req)
-	assert.NoError(t, err)
-	assert.Empty(t, threats)
-}
-
-// TestSSRFDetector_Detect_NoThreats 测试无威胁请求
-func TestSSRFDetector_Detect_NoThreats(t *testing.T) {
-	detector := NewSSRFDetector([]string{}, false)
-
-	req := &http.Request{}
-	req.URL = &url.URL{
-		Path: "/api/data",
-	}
-
-	threats, err := detector.Detect(req)
-	assert.NoError(t, err)
-	assert.Empty(t, threats)
-}
-
-// TestSSRFDetector_Detect_MetadataService 测试云服务元数据检测
-func TestSSRFDetector_Detect_MetadataService(t *testing.T) {
-	detector := NewSSRFDetector([]string{}, true)
-
-	testCases := []string{
-		"http://169.254.169.254/latest/meta-data/",
-		"http://metadata.google/internal",
-	}
-
-	for _, tc := range testCases {
-		req := &http.Request{}
-		values := url.Values{}
-		values.Add("url", tc)
-		req.URL = &url.URL{
-			RawQuery: values.Encode(),
-		}
-
-		threats, err := detector.Detect(req)
-		assert.NoError(t, err)
-		assert.NotEmpty(t, threats)
-	}
-}

@@ -110,6 +110,55 @@ func TestBlacklist_IsBlacklistedWithReason(t *testing.T) {
 	assert.Equal(t, "", reason2)
 }
 
+// TestBlacklist_IsBlacklistedWithReason_Expired 测试 IsBlacklistedWithReason 过期条目
+func TestBlacklist_IsBlacklistedWithReason_Expired(t *testing.T) {
+	bl := NewBlacklist(10 * time.Minute)
+
+	// 手动添加一个已过期的条目
+	bl.mu.Lock()
+	bl.blockedIPs["192.168.1.100"] = &BlacklistEntry{
+		IP:        "192.168.1.100",
+		Reason:    "expired reason",
+		BlockedAt: time.Now().Add(-2 * time.Minute),
+		ExpiresAt: time.Now().Add(-1 * time.Second), // 已过期
+		Hits:      1,
+	}
+	bl.mu.Unlock()
+
+	// 应该返回 false, ""
+	blocked, reason := bl.IsBlacklistedWithReason("192.168.1.100")
+	assert.False(t, blocked)
+	assert.Equal(t, "", reason)
+
+	// 验证条目已被删除
+	bl.mu.RLock()
+	_, exists := bl.blockedIPs["192.168.1.100"]
+	bl.mu.RUnlock()
+	assert.False(t, exists)
+}
+
+// TestBlacklist_BlacklistMiddleware 测试 BlacklistMiddleware
+func TestBlacklist_BlacklistMiddleware(t *testing.T) {
+	bl := NewBlacklist(10 * time.Minute)
+
+	// 创建中间件
+	middleware := bl.BlacklistMiddleware(func(ip, reason string) interface{} {
+		return map[string]interface{}{
+			"status": "blocked",
+			"ip":     ip,
+			"reason": reason,
+		}
+	})
+
+	assert.NotNil(t, middleware)
+
+	// 测试中间件函数
+	ctx := map[string]interface{}{"ip": "192.168.1.1"}
+	result, err := middleware(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, ctx, result)
+}
+
 // TestBlacklist_IsBlacklisted_Expired 测试过期自动移除
 func TestBlacklist_IsBlacklisted_Expired(t *testing.T) {
 	bl := NewBlacklist(50 * time.Millisecond)
@@ -208,6 +257,23 @@ func TestBlacklist_GetStats(t *testing.T) {
 	assert.NotNil(t, stats)
 	assert.GreaterOrEqual(t, stats.Total, 1)
 	assert.Equal(t, 10*time.Minute, stats.Duration)
+}
+
+// TestBlacklist_GetStats_WithExpired 测试 GetStats 包含过期条目
+func TestBlacklist_GetStats_WithExpired(t *testing.T) {
+	bl := NewBlacklist(50 * time.Millisecond)
+
+	// 添加一个会过期的条目
+	bl.AddWithDuration("192.168.1.100", "test", 50*time.Millisecond)
+
+	// 等待过期
+	time.Sleep(60 * time.Millisecond)
+
+	stats := bl.GetStats()
+	assert.NotNil(t, stats)
+	assert.Equal(t, 1, stats.Total)
+	assert.Equal(t, 0, stats.Active)
+	assert.Equal(t, 1, stats.Expired)
 }
 
 // TestBlacklist_Block_Unblock 测试 Block/Unblock 方法
@@ -331,4 +397,39 @@ func TestBlacklistStats(t *testing.T) {
 	assert.Equal(t, 80, stats.Active)
 	assert.Equal(t, 20, stats.Expired)
 	assert.Equal(t, 10*time.Minute, stats.Duration)
+}
+
+// TestBlacklist_GetBlockedAt_NotExists 测试 GetBlockedAt 在不存在的 IP 时的行为
+func TestBlacklist_GetBlockedAt_NotExists(t *testing.T) {
+	bl := NewBlacklist(10 * time.Minute)
+
+	blockedAt := bl.GetBlockedAt("192.168.1.100")
+	assert.Equal(t, time.Time{}, blockedAt)
+}
+
+// TestBlacklist_GetExpiresAt_NotExists 测试 GetExpiresAt 在不存在的 IP 时的行为
+func TestBlacklist_GetExpiresAt_NotExists(t *testing.T) {
+	bl := NewBlacklist(10 * time.Minute)
+
+	expiresAt := bl.GetExpiresAt("192.168.1.100")
+	assert.Equal(t, time.Time{}, expiresAt)
+}
+
+// TestBlacklist_GetRemainingTime_Expired 测试 GetRemainingTime 在过期条目时的行为
+func TestBlacklist_GetRemainingTime_Expired(t *testing.T) {
+	bl := NewBlacklist(10 * time.Minute)
+
+	// 手动添加一个已过期的条目
+	bl.mu.Lock()
+	bl.blockedIPs["192.168.1.100"] = &BlacklistEntry{
+		IP:        "192.168.1.100",
+		Reason:    "expired",
+		BlockedAt: time.Now().Add(-2 * time.Minute),
+		ExpiresAt: time.Now().Add(-1 * time.Minute),
+		Hits:      1,
+	}
+	bl.mu.Unlock()
+
+	remaining := bl.GetRemainingTime("192.168.1.100")
+	assert.Equal(t, time.Duration(0), remaining)
 }

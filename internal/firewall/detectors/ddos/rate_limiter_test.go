@@ -1,6 +1,7 @@
 package ddos
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -228,4 +229,99 @@ func TestRateLimiterStats(t *testing.T) {
 	assert.Equal(t, 10, stats.LimitedIPs)
 	assert.Equal(t, 100, stats.Threshold)
 	assert.Equal(t, 50, stats.BurstLimit)
+}
+
+// TestRateLimiter_CleanupExpired 测试 CleanupExpired 方法
+func TestRateLimiter_CleanupExpired(t *testing.T) {
+	rl := NewRateLimiter(100, 50)
+	defer rl.Stop()
+
+	// 添加一个空窗口（没有请求）
+	rl.mu.Lock()
+	rl.ipWindows["192.168.30.1"] = &SlidingWindow{
+		requests: []time.Time{}, // 空请求列表
+		mu:       sync.Mutex{},
+	}
+	rl.mu.Unlock()
+
+	// 清理应该删除空窗口
+	rl.CleanupExpired()
+
+	// 验证已清理
+	rl.mu.RLock()
+	_, exists := rl.ipWindows["192.168.30.1"]
+	rl.mu.RUnlock()
+	assert.False(t, exists)
+}
+
+// TestRateLimiter_GetStats_WithLimitedIP 测试 GetStats 包含被限制的 IP
+func TestRateLimiter_GetStats_WithLimitedIP(t *testing.T) {
+	rl := NewRateLimiter(10, 5) // 设置较低的阈值
+	defer rl.Stop()
+
+	ip := "192.168.30.100"
+
+	// 发送大量请求以触发频率限制
+	for i := 0; i < 20; i++ {
+		rl.RecordRequest(ip)
+	}
+
+	stats := rl.GetStats()
+	assert.NotNil(t, stats)
+	assert.GreaterOrEqual(t, stats.LimitedIPs, 1)
+}
+
+// TestRateLimiter_CleanupExpired_EmptyWindow 测试 CleanupExpired 空窗口
+func TestRateLimiter_CleanupExpired_EmptyWindow(t *testing.T) {
+	rl := NewRateLimiter(100, 50)
+	defer rl.Stop()
+
+	// 添加一个空窗口（只创建窗口但没有请求）
+	rl.mu.Lock()
+	rl.ipWindows["192.168.30.200"] = &SlidingWindow{
+		requests: []time.Time{}, // 空请求列表
+		mu:       sync.Mutex{},
+	}
+	rl.mu.Unlock()
+
+	// 清理应该能处理空窗口
+	assert.NotPanics(t, func() {
+		rl.CleanupExpired()
+	})
+}
+
+// TestRateLimiter_startCleanup 测试 startCleanup 协程
+func TestRateLimiter_startCleanup(t *testing.T) {
+	rl := NewRateLimiterWithInterval(100, 50, 100*time.Millisecond)
+
+	// 等待清理协程运行
+	time.Sleep(150 * time.Millisecond)
+
+	// 停止不应该 panic
+	assert.NotPanics(t, func() {
+		rl.Stop()
+	})
+}
+
+// TestTokenBucket_New_InvalidParams 测试 NewTokenBucket 无效参数
+func TestTokenBucket_New_InvalidParams(t *testing.T) {
+	tb := NewTokenBucket(0, 0)
+	assert.NotNil(t, tb)
+}
+
+// TestTokenBucket_GetTokens_AfterRefill 测试 GetTokens 在补充后
+func TestTokenBucket_GetTokens_AfterRefill(t *testing.T) {
+	tb := NewTokenBucket(10, 1000) // 高速补充
+
+	// 消耗所有令牌
+	for i := 0; i < 10; i++ {
+		tb.Allow()
+	}
+
+	// 等待补充
+	time.Sleep(20 * time.Millisecond)
+
+	// 应该有新的令牌
+	tokens := tb.GetTokens()
+	assert.Greater(t, tokens, 0)
 }

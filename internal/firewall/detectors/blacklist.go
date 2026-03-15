@@ -11,16 +11,21 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
+// RedisBlacklistClient defines the interface for Redis blacklist operations
+type RedisBlacklistClient interface {
+	SIsMember(ctx context.Context, key string, member interface{}) *redis.BoolCmd
+}
+
 // BlacklistDetector 黑白名单检测器
 type BlacklistDetector struct {
-	redisClient *redis.Client
+	redisClient RedisBlacklistClient
 	siteID      string
 	blacklist   []string // 静态黑名单
 	whitelist   []string // 静态白名单
 }
 
 // NewBlacklistDetector 创建黑白名单检测器
-func NewBlacklistDetector(redisClient *redis.Client, siteID string, blacklist, whitelist []string) *BlacklistDetector {
+func NewBlacklistDetector(redisClient RedisBlacklistClient, siteID string, blacklist, whitelist []string) *BlacklistDetector {
 	return &BlacklistDetector{
 		redisClient: redisClient,
 		siteID:      siteID,

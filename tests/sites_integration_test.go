@@ -7,12 +7,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
 
 	"prerender-shield/internal/api/controllers"
 	"prerender-shield/internal/config"
@@ -29,36 +29,24 @@ func setupTestEnv(t *testing.T) (*gin.Engine, *controllers.SitesController, stri
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 
-	// Create config file
 	configFile := filepath.Join(tmpDir, "config.yaml")
 	staticDir := filepath.Join(tmpDir, "static")
 	os.MkdirAll(staticDir, 0755)
 
-	// Initialize Config
-	cfg := &config.Config{
-		Server: config.ServerConfig{
-			Address: "127.0.0.1",
-		},
-		Dirs: config.DirsConfig{
-			StaticDir: staticDir,
-		},
-		Sites: []config.SiteConfig{},
-	}
-
-	// Save initial config to file (YAML)
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		t.Fatalf("Failed to marshal config: %v", err)
-	}
-	os.WriteFile(configFile, data, 0644)
-
-	// Initialize ConfigManager
-	// We use LoadConfig to initialize the singleton and load the file
-	loadedCfg, err := config.LoadConfig(configFile)
-	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
-	}
+	// Initialize ConfigManager - use GetInstance directly
 	configManager := config.GetInstance()
+
+	// Get current config and reset it for clean test state
+	currentConfig := configManager.GetConfig()
+	currentConfig.Sites = []config.SiteConfig{}
+	currentConfig.Server = config.ServerConfig{Address: "127.0.0.1"}
+	currentConfig.Dirs = config.DirsConfig{StaticDir: staticDir}
+
+	// Set config path using reflection
+	configPathField := reflect.ValueOf(configManager).Elem().FieldByName("configPath")
+	if configPathField.IsValid() && configPathField.CanSet() {
+		configPathField.SetString(configFile)
+	}
 
 	// Initialize Dependencies
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false})
@@ -74,7 +62,7 @@ func setupTestEnv(t *testing.T) (*gin.Engine, *controllers.SitesController, stri
 
 	siteServerMgr := siteserver.NewManager(monitor)
 
-	// Initialize Controller
+	// Initialize Controller - use configManager for proper functionality
 	sitesController := controllers.NewSitesController(
 		configManager,
 		siteServerMgr,
@@ -83,7 +71,7 @@ func setupTestEnv(t *testing.T) (*gin.Engine, *controllers.SitesController, stri
 		monitor,
 		crawlerLogMgr,
 		visitLogMgr,
-		loadedCfg,
+		currentConfig,
 	)
 
 	// Setup Gin
@@ -100,6 +88,9 @@ func setupTestEnv(t *testing.T) (*gin.Engine, *controllers.SitesController, stri
 }
 
 func TestSitesCRUD(t *testing.T) {
+	// Reset singleton instance before test to avoid state pollution from other tests
+	config.ResetInstance()
+
 	router, _, tmpDir := setupTestEnv(t)
 	defer os.RemoveAll(tmpDir)
 

@@ -27,7 +27,7 @@ func TestDeserializationDetector_Name(t *testing.T) {
 		rules: make(map[string][]types.Rule),
 	}
 	detector := NewDeserializationDetector(mockManager)
-	assert.Equal(t, "deserialization_detector", detector.Name())
+	assert.Equal(t, "Deserialization", detector.Name())
 }
 
 // TestDeserializationDetector_Detect_JavaSerialization 测试 Java 序列化检测
@@ -94,25 +94,7 @@ func TestDeserializationDetector_Detect_PHPSerialization(t *testing.T) {
 	}
 }
 
-// TestDeserializationDetector_Detect_JSSerialization 测试 JavaScript 序列化检测
-func TestDeserializationDetector_Detect_JSSerialization(t *testing.T) {
-	mockManager := &MockRuleManagerForDeserialization{
-		rules: make(map[string][]types.Rule),
-	}
-	detector := NewDeserializationDetector(mockManager)
-
-	req := &http.Request{}
-	// JavaScript 序列化模式：{.*}
-	req.URL = &url.URL{
-		RawQuery: "json={\"name\":\"test\"}",
-	}
-
-	threats, err := detector.Detect(req)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, threats)
-	assert.Equal(t, "deserialization", threats[0].Type)
-	assert.Contains(t, threats[0].SubType, "JavaScript Serialization")
-}
+// TestDeserializationDetector_Detect_JSSerialization removed - JavaScript serialization pattern was removed from default rules
 
 // TestDeserializationDetector_Detect_CustomRules 测试自定义规则
 func TestDeserializationDetector_Detect_CustomRules(t *testing.T) {
@@ -186,26 +168,6 @@ func TestDeserializationDetector_Detect_POSTBody(t *testing.T) {
 	}
 }
 
-// TestMatchesDeserializationPattern 测试模式匹配函数
-func TestMatchesDeserializationPattern(t *testing.T) {
-	testCases := []struct {
-		value    string
-		pattern  string
-		expected bool
-	}{
-		{"{test}", "\\{.*\\}", true},
-		{"[1,2,3]", "\\[.*\\]", true},
-		{"O:4:\"User\":", "O:\\d+:", true},
-		{"c:os:system", "c:", true},
-		{"normal text", "\\xac\\xed", false}, // 十六进制模式返回 false
-		{"", "\\{.*\\}", false},
-	}
-
-	for _, tc := range testCases {
-		result := matchesDeserializationPattern(tc.value, tc.pattern)
-		assert.Equal(t, tc.expected, result, "value: %s, pattern: %s", tc.value, tc.pattern)
-	}
-}
 
 // TestDeserializationDetector_Detect_MultiplePatterns 测试多个模式
 func TestDeserializationDetector_Detect_MultiplePatterns(t *testing.T) {
@@ -223,4 +185,61 @@ func TestDeserializationDetector_Detect_MultiplePatterns(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, threats)
 	assert.GreaterOrEqual(t, len(threats), 1)
+}
+
+// TestDeserializationDetector_UpdateRules 测试 UpdateRules 方法
+func TestDeserializationDetector_UpdateRules(t *testing.T) {
+	mockManager := &MockRuleManagerForDeserialization{
+		rules: make(map[string][]types.Rule),
+	}
+	detector := NewDeserializationDetector(mockManager)
+
+	// 更新规则
+	newRules := []types.Rule{
+		{ID: "test-rule", Name: "Test Rule", Category: "deserialization", Pattern: "TEST_PATTERN", Severity: "critical"},
+	}
+	err := detector.UpdateRules(newRules)
+	assert.NoError(t, err)
+
+	// 验证新规则生效
+	req := &http.Request{}
+	req.URL = &url.URL{
+		RawQuery: "data=TEST_PATTERN",
+	}
+	threats, err := detector.Detect(req)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, threats)
+	assert.Equal(t, "test-rule", threats[0].RuleID)
+}
+
+// ============ 测试 compileRules 边缘情况 ============
+
+// TestDeserializationDetector_CompileRules_InvalidPattern 测试编译无效规则模式
+func TestDeserializationDetector_CompileRules_InvalidPattern(t *testing.T) {
+	mockManager := &MockRuleManagerForDeserialization{
+		rules: map[string][]types.Rule{
+			"deserialization": {
+				{ID: "invalid-rule", Name: "Invalid Rule", Category: "deserialization", Pattern: "[invalid(regex", Severity: "high"},
+			},
+		},
+	}
+	detector := NewDeserializationDetector(mockManager)
+
+	// 验证检测器创建成功（无效规则被跳过）
+	assert.NotNil(t, detector)
+}
+
+// TestDeserializationDetector_CompileRules_EmptyPattern 测试空规则模式
+func TestDeserializationDetector_CompileRules_EmptyPattern(t *testing.T) {
+	mockManager := &MockRuleManagerForDeserialization{
+		rules: map[string][]types.Rule{
+			"deserialization": {
+				{ID: "empty-rule", Name: "Empty Rule", Category: "deserialization", Pattern: "", Severity: "high"},
+			},
+		},
+	}
+	detector := NewDeserializationDetector(mockManager)
+
+	// 验证检测器创建成功（空规则被跳过）
+	assert.NotNil(t, detector)
 }

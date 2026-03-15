@@ -260,12 +260,22 @@ func TestStreamEngine_Worker_BatchProcessing(t *testing.T) {
 	engine.Stop()
 	close(inputChan)
 
-	// 验证输出
+	// 验证输出 - 使用超时避免阻塞
 	count := 0
-	for range outputChan {
-		count++
+	timeout := time.After(1 * time.Second)
+loop:
+	for {
+		select {
+		case _, ok := <-outputChan:
+			if !ok {
+				break loop
+			}
+			count++
+		case <-timeout:
+			break loop
+		}
 	}
-	assert.GreaterOrEqual(t, count, 1)
+	assert.GreaterOrEqual(t, count, 1, "Should have at least one output")
 }
 
 // TestStreamEngine_Worker_BatchTimeout 测试批量超时
@@ -299,12 +309,22 @@ func TestStreamEngine_Worker_BatchTimeout(t *testing.T) {
 	engine.Stop()
 	close(inputChan)
 
-	// 应该至少有 1 条输出
+	// 应该至少有 1 条输出 - 使用超时避免阻塞
 	count := 0
-	for range outputChan {
-		count++
+	timeout := time.After(1 * time.Second)
+loop:
+	for {
+		select {
+		case _, ok := <-outputChan:
+			if !ok {
+				break loop
+			}
+			count++
+		case <-timeout:
+			break loop
+		}
 	}
-	assert.GreaterOrEqual(t, count, 1)
+	assert.GreaterOrEqual(t, count, 1, "Should have at least one output")
 }
 
 // TestStreamEngine_ProcessEntry_ProcessorError 测试处理器错误
@@ -339,12 +359,22 @@ func TestStreamEngine_ProcessEntry_ProcessorError(t *testing.T) {
 	engine.Stop()
 	close(inputChan)
 
-	// 即使处理器出错，日志也应该被发送到输出
+	// 即使处理器出错，日志也应该被发送到输出 - 使用超时避免阻塞
 	count := 0
-	for range outputChan {
-		count++
+	timeout := time.After(1 * time.Second)
+loop:
+	for {
+		select {
+		case _, ok := <-outputChan:
+			if !ok {
+				break loop
+			}
+			count++
+		case <-timeout:
+			break loop
+		}
 	}
-	assert.GreaterOrEqual(t, count, 1)
+	assert.GreaterOrEqual(t, count, 1, "Should have at least one output")
 }
 
 // TestStreamEngine_ProcessEntry_MultipleProcessors 测试多个处理器
@@ -419,12 +449,22 @@ func TestStreamEngine_SendToOutputs_FullChannel(t *testing.T) {
 	engine.Stop()
 	close(inputChan)
 
-	// 由于通道容量小，会有部分日志被丢弃
+	// 由于通道容量小，会有部分日志被丢弃 - 使用超时避免阻塞
 	count := 0
-	for range outputChan {
-		count++
+	timeout := time.After(1 * time.Second)
+loop:
+	for {
+		select {
+		case _, ok := <-outputChan:
+			if !ok {
+				break loop
+			}
+			count++
+		case <-timeout:
+			break loop
+		}
 	}
-	assert.GreaterOrEqual(t, count, 1)
+	assert.GreaterOrEqual(t, count, 1, "Should have at least one output")
 }
 
 // TestStreamEngine_GetMetrics 测试获取指标

@@ -294,7 +294,9 @@ func avgSlice(s []float32) float32 {
 }
 
 // Close 关闭模型
-func (m *LightweightModel) Close() {}
+func (m *LightweightModel) Close() {
+	// LightweightModel 无需清理资源，此方法仅为实现接口
+}
 
 // GetLabels 获取标签
 func (m *LightweightModel) GetLabels() []string {

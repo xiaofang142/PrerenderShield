@@ -3,6 +3,7 @@ package ddos
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -210,6 +211,42 @@ func TestChallengeManager_GetStats(t *testing.T) {
 	assert.NotNil(t, stats)
 	assert.GreaterOrEqual(t, stats.TotalChallenges, 2)
 	assert.Equal(t, 5*time.Minute, stats.Duration)
+}
+
+// TestChallengeManager_GetStats_WithVerifiedAndExpired 测试 GetStats 包含已验证和过期统计
+func TestChallengeManager_GetStats_WithVerifiedAndExpired(t *testing.T) {
+	cm := NewChallengeManager(50 * time.Millisecond)
+
+	// 创建一个已验证的挑战
+	entry1 := cm.StartChallenge("192.168.1.100")
+	entry1.Verified = true
+
+	// 创建一个会过期的挑战
+	cm.StartChallenge("192.168.1.101")
+
+	// 等待过期
+	time.Sleep(60 * time.Millisecond)
+
+	stats := cm.GetStats()
+	assert.NotNil(t, stats)
+	assert.GreaterOrEqual(t, stats.VerifiedChallenges, 1)
+	assert.GreaterOrEqual(t, stats.ExpiredChallenges, 1)
+}
+
+// TestHandleChallengeAPI_Success 测试 HandleChallengeAPI 成功请求
+func TestHandleChallengeAPI_Success(t *testing.T) {
+	cm := NewChallengeManager(5 * time.Minute)
+
+	// 创建有效的 JSON 请求
+	jsonBody := `{"token":"test_token","timestamp":12345,"answer":"test_answer"}`
+	req := httptest.NewRequest(http.MethodPost, "http://example.com/challenge", strings.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	HandleChallengeAPI(cm, w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "Challenge verified")
 }
 
 // TestChallengeEntry 测试 ChallengeEntry 结构
@@ -442,4 +479,213 @@ func TestLastIndex(t *testing.T) {
 	assert.Equal(t, 5, lastindex("hello:world", ":"))
 	assert.Equal(t, -1, lastindex("hello", ":"))
 	assert.Equal(t, 0, lastindex(":hello", ":"))
+}
+
+// TestVerifyChallenge_NoEntry 测试 VerifyChallenge 不存在挑战
+func TestVerifyChallenge_NoEntry(t *testing.T) {
+	cm := NewChallengeManager(5 * time.Minute)
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	result := cm.VerifyChallenge(req, "192.168.1.1")
+	assert.False(t, result)
+}
+
+// TestVerifyChallenge_Expired 测试 VerifyChallenge 过期
+func TestVerifyChallenge_Expired(t *testing.T) {
+	cm := NewChallengeManager(5 * time.Minute)
+
+	// 创建一个立即过期的挑战
+	ip := "192.168.1.1"
+	cm.challenges[ip] = &ChallengeEntry{
+		Token:       "test_token",
+		Timestamp:   time.Now().Unix(),
+		IP:          ip,
+		Attempts:    0,
+		MaxAttempts: 3,
+		ExpiresAt:   time.Now().Add(-1 * time.Second),
+		Verified:    false,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	result := cm.VerifyChallenge(req, ip)
+	assert.False(t, result)
+	// 验证过期挑战已被删除
+	assert.Nil(t, cm.GetStatus(ip))
+}
+
+// TestVerifyChallenge_MaxAttempts 测试 VerifyChallenge 达到最大尝试次数
+func TestVerifyChallenge_MaxAttempts(t *testing.T) {
+	cm := NewChallengeManager(5 * time.Minute)
+
+	ip := "192.168.1.1"
+	cm.challenges[ip] = &ChallengeEntry{
+		Token:       "test_token",
+		Timestamp:   time.Now().Unix(),
+		IP:          ip,
+		Attempts:    3,
+		MaxAttempts: 3,
+		ExpiresAt:   time.Now().Add(5 * time.Minute),
+		Verified:    false,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	result := cm.VerifyChallenge(req, ip)
+	assert.False(t, result)
+	// 验证挑战已被删除
+	assert.Nil(t, cm.GetStatus(ip))
+}
+
+// TestVerifyChallenge_NoAnswer 测试 VerifyChallenge 无答案
+func TestVerifyChallenge_NoAnswer(t *testing.T) {
+	cm := NewChallengeManager(5 * time.Minute)
+
+	ip := "192.168.1.1"
+	cm.StartChallenge(ip)
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	result := cm.VerifyChallenge(req, ip)
+	assert.False(t, result)
+	// 验证尝试次数增加
+	assert.Equal(t, 1, cm.challenges[ip].Attempts)
+}
+
+// TestVerifyChallenge_WrongAnswer 测试 VerifyChallenge 错误答案
+func TestVerifyChallenge_WrongAnswer(t *testing.T) {
+	cm := NewChallengeManager(5 * time.Minute)
+
+	ip := "192.168.1.1"
+	cm.StartChallenge(ip)
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com?challenge_answer=wrong_answer", nil)
+	result := cm.VerifyChallenge(req, ip)
+	assert.False(t, result)
+	// 验证尝试次数增加
+	assert.Equal(t, 1, cm.challenges[ip].Attempts)
+}
+
+// TestVerifyChallenge_CorrectAnswer 测试 VerifyChallenge 正确答案
+func TestVerifyChallenge_CorrectAnswer(t *testing.T) {
+	cm := NewChallengeManager(5 * time.Minute)
+
+	ip := "192.168.1.1"
+	entry := cm.StartChallenge(ip)
+
+	// 计算正确答案
+	expectedAnswer := cm.calculateAnswer(entry.Token, entry.Timestamp)
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com?challenge_answer="+expectedAnswer, nil)
+	result := cm.VerifyChallenge(req, ip)
+	assert.True(t, result)
+	// 验证已标记为已验证
+	assert.True(t, cm.challenges[ip].Verified)
+}
+
+// TestChallengeMiddleware_UnverifiedChallenge 测试 ChallengeMiddleware 未验证挑战
+func TestChallengeMiddleware_UnverifiedChallenge(t *testing.T) {
+	cm := NewChallengeManager(5 * time.Minute)
+
+	ip := "192.168.1.1"
+	// 创建一个未验证的挑战
+	cm.StartChallenge(ip)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	middleware := ChallengeMiddleware(cm)
+	wrappedHandler := middleware(handler)
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	req.RemoteAddr = ip + ":12345"
+	w := httptest.NewRecorder()
+
+	wrappedHandler.ServeHTTP(w, req)
+	// 应该返回挑战页面（StatusForbidden）
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "Challenge")
+}
+
+// TestChallengeMiddleware_VerifiedSuccess 测试 ChallengeMiddleware 验证成功后继续
+func TestChallengeMiddleware_VerifiedSuccess(t *testing.T) {
+	cm := NewChallengeManager(5 * time.Minute)
+
+	ip := "192.168.1.1"
+	// 创建一个挑战并设置为已验证
+	entry := cm.StartChallenge(ip)
+	entry.Verified = true
+
+	handlerCalled := false
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	middleware := ChallengeMiddleware(cm)
+	wrappedHandler := middleware(handler)
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	req.RemoteAddr = ip + ":12345"
+	w := httptest.NewRecorder()
+
+	wrappedHandler.ServeHTTP(w, req)
+	assert.True(t, handlerCalled)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// TestChallengeMiddleware_VerifySuccess 测试 ChallengeMiddleware 验证成功分支
+func TestChallengeMiddleware_VerifySuccess(t *testing.T) {
+	cm := NewChallengeManager(5 * time.Minute)
+
+	ip := "192.168.1.50"
+	// 创建一个未验证的挑战
+	entry := cm.StartChallenge(ip)
+
+	handlerCalled := false
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	middleware := ChallengeMiddleware(cm)
+	wrappedHandler := middleware(handler)
+
+	// 创建带有正确答案的请求
+	answer := cm.calculateAnswer(entry.Token, entry.Timestamp)
+	req := httptest.NewRequest(http.MethodGet, "http://example.com?challenge_answer="+answer, nil)
+	req.RemoteAddr = ip + ":12345"
+	w := httptest.NewRecorder()
+
+	wrappedHandler.ServeHTTP(w, req)
+	assert.True(t, handlerCalled)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// TestGetClientIP 测试 getClientIP 函数
+func TestGetClientIP(t *testing.T) {
+	// 测试 X-Forwarded-For
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	req.Header.Set("X-Forwarded-For", "203.0.113.1")
+	req.RemoteAddr = "127.0.0.1:12345"
+	assert.Equal(t, "203.0.113.1", getClientIP(req))
+
+	// 测试 X-Real-IP
+	req = httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	req.Header.Set("X-Real-IP", "198.51.100.1")
+	req.RemoteAddr = "127.0.0.1:12345"
+	assert.Equal(t, "198.51.100.1", getClientIP(req))
+
+	// 测试 RemoteAddr（有端口）
+	req = httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	req.RemoteAddr = "192.168.1.1:54321"
+	assert.Equal(t, "192.168.1.1", getClientIP(req))
+
+	// 测试 RemoteAddr（无端口）
+	req = httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	req.RemoteAddr = "192.168.1.1"
+	assert.Equal(t, "192.168.1.1", getClientIP(req))
+
+	// 测试 IPv6（有端口）
+	req = httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	req.RemoteAddr = "[::1]:12345"
+	assert.Equal(t, "[::1]", getClientIP(req))
 }

@@ -1,18 +1,36 @@
 package firewall
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 
 	"prerender-shield/internal/config"
+	"prerender-shield/internal/constants"
 	"prerender-shield/internal/firewall/detectors"
 	"prerender-shield/internal/firewall/detectors/ai"
 	"prerender-shield/internal/firewall/types"
+)
+
+// FailStrategy 失败处理策略
+type FailStrategy int
+
+const (
+	// FailOpen 失败时开放（默认允许）
+	FailOpen FailStrategy = iota
+	// FailClosed 失败时关闭（默认拒绝）
+	FailClosed
 )
 
 // Engine 防火墙引擎
@@ -27,9 +45,10 @@ type Engine struct {
 	requestCache   map[string]*CheckResult // 请求缓存，用于相同请求快速返回结果
 	cacheMutex     sync.RWMutex            // 请求缓存互斥锁
 	cacheTTL       time.Duration           // 请求缓存过期时间
+	failStrategy   FailStrategy            // 失败处理策略
 }
 
-// OWASPDetector OWASP Top 10检测器接口
+// OWASPDetector OWASP Top 10 检测器接口
 type OWASPDetector interface {
 	Detect(req *http.Request) ([]types.Threat, error)
 	Name() string
@@ -68,20 +87,23 @@ func (rm *RuleManager) ReloadRules() error {
 	rm.updateMutex.Lock()
 	defer rm.updateMutex.Unlock()
 
+	var rules map[string][]types.Rule
+	var err error
+
 	// 首先尝试从远程源获取规则
 	if rm.remoteRuleSource != "" {
-		rules, err := rm.fetchRulesFromRemote()
+		rules, err = rm.fetchRulesFromRemote()
 		if err == nil && len(rules) > 0 {
 			rm.rules = rules
-			// 保存规则到Redis，便于快速加载
-			rm.saveRulesToRedis(rules)
+			// 保存规则到 Redis，便于快速加载
+			_ = rm.saveRulesToRedis(rules)
 			return nil
 		}
 	}
 
-	// 尝试从Redis加载规则
+	// 尝试从 Redis 加载规则
 	if rm.redisClient != nil {
-		rules, err := rm.loadRulesFromRedis()
+		rules, err = rm.loadRulesFromRedis()
 		if err == nil && len(rules) > 0 {
 			rm.rules = rules
 			return nil
@@ -90,7 +112,7 @@ func (rm *RuleManager) ReloadRules() error {
 
 	// 从本地文件加载规则
 	if rm.rulesPath != "" {
-		rules, err := rm.loadRulesFromFile()
+		rules, err = rm.loadRulesFromFile()
 		if err == nil && len(rules) > 0 {
 			rm.rules = rules
 			return nil
@@ -112,7 +134,6 @@ func (rm *RuleManager) startAutoUpdate() {
 		case <-ticker.C:
 			err := rm.ReloadRules()
 			if err != nil {
-				// 记录错误
 				fmt.Printf("Failed to update rules: %v\n", err)
 			}
 		case <-rm.stopChan:
@@ -128,13 +149,42 @@ func (rm *RuleManager) StopAutoUpdate() {
 
 // fetchRulesFromRemote 从远程源获取规则
 func (rm *RuleManager) fetchRulesFromRemote() (map[string][]types.Rule, error) {
-	// 这里实现从远程源获取规则的逻辑
-	// 例如从API接口获取规则
-	// 暂时返回空，实际实现需要根据具体的远程源格式进行调整
-	return nil, fmt.Errorf("remote rule source not implemented")
+	if rm.remoteRuleSource == "" {
+		return nil, fmt.Errorf("remote rule source not configured")
+	}
+
+	// 创建 HTTP 客户端，设置超时
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// 发送请求获取规则
+	resp, err := client.Get(rm.remoteRuleSource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch rules from remote: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("remote rule source returned status: %d", resp.StatusCode)
+	}
+
+	// 读取响应体
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read rule response: %w", err)
+	}
+
+	// 反序列化规则
+	var rules map[string][]types.Rule
+	if err := json.Unmarshal(body, &rules); err != nil {
+		return nil, fmt.Errorf("failed to parse rules: %w", err)
+	}
+
+	return rules, nil
 }
 
-// saveRulesToRedis 保存规则到Redis
+// saveRulesToRedis 保存规则到 Redis
 func (rm *RuleManager) saveRulesToRedis(rules map[string][]types.Rule) error {
 	if rm.redisClient == nil {
 		return fmt.Errorf("redis client not set")
@@ -146,9 +196,8 @@ func (rm *RuleManager) saveRulesToRedis(rules map[string][]types.Rule) error {
 		return err
 	}
 
-	// 保存到Redis，设置过期时间为7天
-	key := "prerender:firewall:rules"
-	err = rm.redisClient.Set(rm.redisClient.Context(), key, rulesJSON, 7*24*time.Hour).Err()
+	// 保存到 Redis，设置过期时间为 7 天
+	err = rm.redisClient.Set(rm.redisClient.Context(), constants.RedisKeyFirewallRules, rulesJSON, 7*24*time.Hour).Err()
 	if err != nil {
 		return err
 	}
@@ -156,15 +205,14 @@ func (rm *RuleManager) saveRulesToRedis(rules map[string][]types.Rule) error {
 	return nil
 }
 
-// loadRulesFromRedis 从Redis加载规则
+// loadRulesFromRedis 从 Redis 加载规则
 func (rm *RuleManager) loadRulesFromRedis() (map[string][]types.Rule, error) {
 	if rm.redisClient == nil {
 		return nil, fmt.Errorf("redis client not set")
 	}
 
-	// 从Redis获取规则
-	key := "prerender:firewall:rules"
-	rulesJSON, err := rm.redisClient.Get(rm.redisClient.Context(), key).Bytes()
+	// 从 Redis 获取规则
+	rulesJSON, err := rm.redisClient.Get(rm.redisClient.Context(), constants.RedisKeyFirewallRules).Bytes()
 	if err != nil {
 		return nil, err
 	}
@@ -181,10 +229,42 @@ func (rm *RuleManager) loadRulesFromRedis() (map[string][]types.Rule, error) {
 
 // loadRulesFromFile 从文件加载规则
 func (rm *RuleManager) loadRulesFromFile() (map[string][]types.Rule, error) {
-	// 这里实现从文件加载规则的逻辑
-	// 例如从JSON、YAML文件加载规则
-	// 暂时返回默认规则
-	return rm.getDefaultRules(), nil
+	if rm.rulesPath == "" {
+		return nil, fmt.Errorf("rules path not configured")
+	}
+
+	// 检查文件是否存在
+	if _, err := os.Stat(rm.rulesPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("rules file not found: %s", rm.rulesPath)
+	}
+
+	// 读取文件内容
+	data, err := os.ReadFile(rm.rulesPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read rules file: %w", err)
+	}
+
+	// 根据文件扩展名选择解析方式
+	var rules map[string][]types.Rule
+	ext := strings.ToLower(filepath.Ext(rm.rulesPath))
+
+	switch ext {
+	case ".json":
+		if err := json.Unmarshal(data, &rules); err != nil {
+			return nil, fmt.Errorf("failed to parse JSON rules: %w", err)
+		}
+	case ".yaml", ".yml":
+		// 如果需要使用 YAML，需要引入 gopkg.in/yaml.v3
+		// 这里暂时返回错误，表示不支持
+		return nil, fmt.Errorf("YAML rules not yet implemented")
+	default:
+		// 尝试 JSON 格式
+		if err := json.Unmarshal(data, &rules); err != nil {
+			return nil, fmt.Errorf("unsupported rules file format: %s", ext)
+		}
+	}
+
+	return rules, nil
 }
 
 // getDefaultRules 获取默认规则
@@ -197,21 +277,21 @@ func (rm *RuleManager) getDefaultRules() map[string][]types.Rule {
 			ID:       "rule-1",
 			Name:     "SQL Injection Detection",
 			Category: "injection",
-			Pattern:  "(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)\\s+.*\\s*(FROM|INTO|TABLE|DATABASE)",
+			Pattern:  `(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)\s+.*\s*(FROM|INTO|TABLE|DATABASE)`,
 			Severity: "high",
 		},
 		{
 			ID:       "rule-2",
 			Name:     "XSS Detection",
 			Category: "xss",
-			Pattern:  "(?i)<script[^>]*>.*</script>",
+			Pattern:  `(?i)<script[^>]*>.*</script>`,
 			Severity: "high",
 		},
 		{
 			ID:       "rule-3",
 			Name:     "CSRF Detection",
 			Category: "csrf",
-			Pattern:  "(?i)csrf_token=.*",
+			Pattern:  `(?i)csrf_token=.*`,
 			Severity: "medium",
 		},
 	}
@@ -227,7 +307,7 @@ func (rm *RuleManager) getDefaultRules() map[string][]types.Rule {
 // NewRuleManager 创建新的规则管理器
 func NewRuleManager(rulesPath string, autoUpdate bool, updateInterval time.Duration, remoteRuleSource string, redisClient *redis.Client) *RuleManager {
 	if updateInterval <= 0 {
-		updateInterval = 24 * time.Hour // 默认24小时更新一次
+		updateInterval = constants.DefaultRuleUpdateInterval
 	}
 
 	rm := &RuleManager{
@@ -268,18 +348,19 @@ type Config struct {
 	FileIntegrityConfig *config.FileIntegrityConfig    // 网页防篡改配置
 	Blacklist           []string                       // 静态黑名单
 	Whitelist           []string                       // 静态白名单
-	RedisClient         *redis.Client                  // Redis客户端
-	AIConfig            *AIEngineConfig                // AI检测器配置
+	RedisClient         *redis.Client                  // Redis 客户端
+	AIConfig            *AIEngineConfig                // AI 检测器配置
+	FailStrategy        FailStrategy                   // 失败处理策略
 }
 
-// AIEngineConfig AI检测器引擎配置
+// AIEngineConfig AI 检测器引擎配置
 type AIEngineConfig struct {
-	Enabled             bool          // 是否启用AI检测器
-	ModelPath           string        // 模型文件路径
-	WorkerPool          int           // 工作池大小
-	ConfidenceThreshold float32       // 置信度阈值
-	TimeoutMs           int           // 预测超时时间(毫秒)
-	CacheSize           int           // 特征缓存大小
+	Enabled             bool    // 是否启用 AI 检测器
+	ModelPath           string  // 模型文件路径
+	WorkerPool          int     // 工作池大小
+	ConfidenceThreshold float32 // 置信度阈值
+	TimeoutMs           int     // 预测超时时间 (毫秒)
+	CacheSize           int     // 特征缓存大小
 }
 
 // ActionConfig 动作配置
@@ -363,16 +444,22 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 	// 创建规则管理器，启用自动更新
 	ruleManager := NewRuleManager(
 		config.RulesPath,
-		true,               // 启用自动更新
-		24*time.Hour,       // 24小时更新一次
-		"",                 // 远程规则源，暂时为空
-		config.RedisClient, // Redis客户端
+		true,                     // 启用自动更新
+		constants.DefaultRuleUpdateInterval,
+		"",                       // 远程规则源，暂时为空
+		config.RedisClient,       // Redis 客户端
 	)
 
-	// 设置默认缓存TTL为60秒
+	// 设置默认缓存 TTL 为 60 秒
 	cacheTTL := 60 * time.Second
 	if config.CacheTTL > 0 {
 		cacheTTL = time.Duration(config.CacheTTL) * time.Second
+	}
+
+	// 设置默认失败策略为 FailClosed（安全优先）
+	failStrategy := config.FailStrategy
+	if failStrategy == 0 {
+		failStrategy = FailClosed
 	}
 
 	// 创建引擎实例
@@ -383,12 +470,13 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 		ruleManager:    ruleManager,
 		requestCache:   make(map[string]*CheckResult),
 		cacheTTL:       cacheTTL,
+		failStrategy:   failStrategy,
 	}
 
 	// 初始化动作处理器
 	e.actionHandler = NewDefaultActionHandler(config.ActionConfig, config.StaticDir, siteName)
 
-	// 初始化OWASP Top 10检测器
+	// 初始化 OWASP Top 10 检测器
 	e.owaspDetectors["injection"] = detectors.NewInjectionDetector(ruleManager)
 	e.owaspDetectors["xss"] = detectors.NewXSSDetector(ruleManager)
 	e.owaspDetectors["csrf"] = detectors.NewCSRFDetector(ruleManager)
@@ -396,25 +484,29 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 	e.owaspDetectors["sensitive-data"] = detectors.NewSensitiveDataDetector(ruleManager)
 
 	// 初始化核心检测器
-	// 检查GeoIP配置是否为nil
+	// 检查 GeoIP 配置是否为 nil
 	if config.GeoIPConfig != nil {
 		e.coreDetectors = append(e.coreDetectors, detectors.NewGeoIPDetector(config.GeoIPConfig))
 	}
 
-	// 检查RateLimit配置是否为nil
+	// 检查 RateLimit 配置是否为 nil
 	if config.RateLimitConfig != nil {
 		e.coreDetectors = append(e.coreDetectors, detectors.NewRateLimitDetector(config.RateLimitConfig))
 	}
 
-	// 检查FileIntegrity配置是否为nil
+	// 检查 FileIntegrity 配置是否为 nil
 	if config.FileIntegrityConfig != nil {
 		e.coreDetectors = append(e.coreDetectors, detectors.NewFileIntegrityDetector(config.StaticDir, config.FileIntegrityConfig))
 	}
 
 	// 初始化黑名单检测器
-	e.coreDetectors = append(e.coreDetectors, detectors.NewBlacklistDetector(config.RedisClient, siteName, config.Blacklist, config.Whitelist))
+	if config.RedisClient != nil {
+		e.coreDetectors = append(e.coreDetectors, detectors.NewBlacklistDetector(config.RedisClient, siteName, config.Blacklist, config.Whitelist))
+	} else {
+		e.coreDetectors = append(e.coreDetectors, detectors.NewBlacklistDetector(nil, siteName, config.Blacklist, config.Whitelist))
+	}
 
-	// 初始化AI威胁检测器（如果启用）
+	// 初始化 AI 威胁检测器（如果启用）
 	if config.AIConfig != nil && config.AIConfig.Enabled {
 		aiConfig := &ai.Config{
 			ModelPath:           config.AIConfig.ModelPath,
@@ -424,7 +516,7 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 			CacheSize:           config.AIConfig.CacheSize,
 			Enabled:             true,
 		}
-		
+
 		// 如果配置值无效，使用默认值
 		if aiConfig.WorkerPool <= 0 {
 			aiConfig.WorkerPool = 4
@@ -441,8 +533,8 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 
 		aiDetector, err := ai.NewAIDetector(aiConfig)
 		if err != nil {
-			// AI检测器初始化失败，记录错误但不影响其他检测器
-			// 在实际生产环境中应该记录日志
+			// AI 检测器初始化失败，记录错误但不影响其他检测器
+			fmt.Printf("AI detector initialization failed: %v\n", err)
 		} else {
 			e.owaspDetectors["ai"] = aiDetector
 		}
@@ -468,10 +560,10 @@ func (e *Engine) CheckRequest(req *http.Request) (*CheckResult, error) {
 	threatsChan := make(chan []types.Threat, len(e.owaspDetectors)+len(e.coreDetectors))
 	errChan := make(chan error, len(e.owaspDetectors)+len(e.coreDetectors))
 
-	// 并行执行OWASP Top 10检测
+	// 并行执行 OWASP Top 10 检测
 	var wg sync.WaitGroup
 
-	// 执行OWASP检测器
+	// 执行 OWASP 检测器
 	e.mutex.RLock()
 	owaspDetectors := make(map[string]OWASPDetector)
 	for k, v := range e.owaspDetectors {
@@ -481,14 +573,14 @@ func (e *Engine) CheckRequest(req *http.Request) (*CheckResult, error) {
 	copy(coreDetectors, e.coreDetectors)
 	e.mutex.RUnlock()
 
-	// 启动OWASP检测器协程
+	// 启动 OWASP 检测器协程
 	for name, detector := range owaspDetectors {
 		wg.Add(1)
 		go func(det OWASPDetector, detectorName string) {
 			defer wg.Done()
 			threats, err := det.Detect(req)
 			if err != nil {
-				errChan <- err
+				errChan <- fmt.Errorf("detector %s error: %w", detectorName, err)
 				return
 			}
 			threatsChan <- threats
@@ -502,7 +594,7 @@ func (e *Engine) CheckRequest(req *http.Request) (*CheckResult, error) {
 			defer wg.Done()
 			threats, err := det.Detect(req)
 			if err != nil {
-				errChan <- err
+				errChan <- fmt.Errorf("core detector %s error: %w", det.Name(), err)
 				return
 			}
 			threatsChan <- threats
@@ -528,14 +620,30 @@ func (e *Engine) CheckRequest(req *http.Request) (*CheckResult, error) {
 		result.Threats = append(result.Threats, threats...)
 	}
 
-	// 收集错误
+	// 收集错误，关键检测器错误会影响结果
+	var criticalErrors []error
 	for err := range errChan {
 		if e.logger != nil {
 			e.logger.Error("Detector error: %s", err.Error())
 		}
+		criticalErrors = append(criticalErrors, err)
 	}
 
-	// 如果有威胁，设置Allow为false
+	// 如果有严重错误，根据失败策略处理
+	if len(criticalErrors) > 0 && e.failStrategy == FailClosed {
+		// FailClosed 策略：检测器失败时拒绝请求
+		result.Allow = false
+		result.Threats = append(result.Threats, types.Threat{
+			Type:      "detector_error",
+			SubType:   "Security Detector Failure",
+			Severity:  "critical",
+			Message:   fmt.Sprintf("Security detector failed (%d errors), request blocked by fail-closed policy", len(criticalErrors)),
+			RuleID:    "system-failclosed",
+			RuleName:  "Fail-Closed Policy",
+		})
+	}
+
+	// 如果有威胁，设置 Allow 为 false
 	if len(result.Threats) > 0 {
 		result.Allow = false
 	}
@@ -547,14 +655,31 @@ func (e *Engine) CheckRequest(req *http.Request) (*CheckResult, error) {
 }
 
 // HandleRequest 处理请求
+// HandleRequest 处理请求并根据检查结果执行相应动作
+// 参数:
+//
+//	w: HTTP 响应写入器
+//	req: HTTP 请求
+//
+// 返回值:
+//
+//	bool: true 表示允许请求通过，false 表示拒绝
 func (e *Engine) HandleRequest(w http.ResponseWriter, req *http.Request) bool {
 	// 检查请求
 	result, err := e.CheckRequest(req)
 	if err != nil {
 		if e.logger != nil {
-			e.logger.Error("Check request error: %s", err.Error())
+			e.logger.Error("Check request error: %s, fail_strategy=%v", err.Error(), e.failStrategy)
 		}
-		return true // 出错时默认允许请求通过
+		// 根据失败策略决定
+		if e.failStrategy == FailClosed {
+			// FailClosed: 错误时拒绝请求
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("Security check unavailable"))
+			return false
+		}
+		// FailOpen: 错误时允许请求
+		return true
 	}
 
 	// 如果检测到威胁，执行相应动作
@@ -584,9 +709,126 @@ func (e *Engine) UpdateRules() error {
 }
 
 // generateRequestCacheKey 生成请求缓存键
+// 使用 URL 规范化 + Header 指纹 + 请求体哈希的组合方式
 func (e *Engine) generateRequestCacheKey(req *http.Request) string {
-	// 简单的缓存键生成，实际生产环境中可以使用更复杂的算法
-	return req.Method + "|" + req.URL.String() + "|" + req.RemoteAddr
+	// URL 规范化
+	normalizedURL := normalizeURL(req.URL)
+
+	// 获取真实客户端 IP（考虑代理）
+	clientIP := getClientIP(req)
+
+	// 计算请求体哈希（如果有）
+	bodyHash := e.calculateBodyHash(req)
+
+	// 组合缓存键
+	key := fmt.Sprintf("%s|%s|%s|%s", req.Method, normalizedURL, clientIP, bodyHash)
+	return key
+}
+
+// normalizeURL 规范化 URL，防止绕过
+func normalizeURL(u *url.URL) string {
+	// 复制 URL 以避免修改原始对象
+	normalized := &url.URL{
+		Scheme:   strings.ToLower(u.Scheme),
+		Host:     strings.ToLower(u.Host),
+		Path:     u.Path,
+		RawQuery: normalizeQuery(u.RawQuery),
+		Fragment: u.Fragment,
+	}
+
+	// 清理路径中的 .. 和 .
+	normalized.Path = filepath.Clean(normalized.Path)
+
+	// 如果路径为空，设置为/
+	if normalized.Path == "" || normalized.Path == "." {
+		normalized.Path = "/"
+	}
+
+	return normalized.String()
+}
+
+// normalizeQuery 规范化查询参数
+func normalizeQuery(rawQuery string) string {
+	if rawQuery == "" {
+		return ""
+	}
+
+	// 解析查询参数
+	params, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return rawQuery
+	}
+
+	// 对参数键进行排序，确保相同参数生成相同的查询字符串
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+
+	// 构建规范化的查询字符串
+	var normalized strings.Builder
+	for i, key := range keys {
+		if i > 0 {
+			normalized.WriteByte('&')
+		}
+		values := params[key]
+		for j, value := range values {
+			if j > 0 {
+				normalized.WriteByte('&')
+			}
+			normalized.WriteString(url.QueryEscape(key))
+			normalized.WriteByte('=')
+			normalized.WriteString(url.QueryEscape(value))
+		}
+	}
+
+	return normalized.String()
+}
+
+// getClientIP 获取真实客户端 IP
+func getClientIP(req *http.Request) string {
+	// 检查 X-Forwarded-For 头
+	xff := req.Header.Get("X-Forwarded-For")
+	if xff != "" {
+		// X-Forwarded-For 可能包含多个 IP，取第一个
+		ips := strings.Split(xff, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[0])
+		}
+	}
+
+	// 检查 X-Real-IP 头
+	xri := req.Header.Get("X-Real-IP")
+	if xri != "" {
+		return xri
+	}
+
+	// 使用 RemoteAddr
+	return req.RemoteAddr
+}
+
+// calculateBodyHash 计算请求体哈希
+func (e *Engine) calculateBodyHash(req *http.Request) string {
+	if req.Body == nil {
+		return ""
+	}
+
+	// 读取请求体
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return ""
+	}
+
+	// 关闭原始 Body 并重新设置，以便后续处理
+	req.Body = io.NopCloser(strings.NewReader(string(body)))
+
+	if len(body) == 0 {
+		return ""
+	}
+
+	// 计算 SHA256 哈希
+	hash := sha256.Sum256(body)
+	return hex.EncodeToString(hash[:])
 }
 
 // getFromCache 从缓存获取结果
@@ -625,8 +867,9 @@ func (e *Engine) clearCache() {
 
 // cleanCacheLoop 定期清理过期缓存
 func (e *Engine) cleanCacheLoop() {
-	// 每5分钟清理一次过期缓存
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(constants.DefaultCacheCleanInterval)
+	defer ticker.Stop()
+
 	for {
 		<-ticker.C
 		e.cleanExpiredCache()
@@ -635,10 +878,7 @@ func (e *Engine) cleanCacheLoop() {
 
 // cleanExpiredCache 清理过期缓存
 func (e *Engine) cleanExpiredCache() {
-	// 改进的缓存清理策略，使用批量清理方式，减少锁持有时间
-	const batchSize = 100 // 每次清理的批次大小
-
-	// 先获取需要清理的键列表，减少锁持有时间
+	// 使用批量清理方式，减少锁持有时间
 	var expiredKeys []string
 	{
 		e.cacheMutex.RLock()
@@ -648,8 +888,8 @@ func (e *Engine) cleanExpiredCache() {
 			if now.Sub(result.CreatedAt) > e.cacheTTL {
 				expiredKeys = append(expiredKeys, key)
 				count++
-				// 限制批次大小，避免一次性处理过多
-				if count >= batchSize {
+				// 限制批次大小
+				if count >= constants.DefaultCacheBatchSize {
 					break
 				}
 			}
@@ -657,12 +897,12 @@ func (e *Engine) cleanExpiredCache() {
 		e.cacheMutex.RUnlock()
 	}
 
-	// 如果有过期键需要清理
+	// 清理过期键
 	if len(expiredKeys) > 0 {
 		e.cacheMutex.Lock()
 		now := time.Now()
 		for _, key := range expiredKeys {
-			// 再次检查是否过期，避免在获取键列表和清理之间发生变化
+			// 再次检查是否过期
 			if result, exists := e.requestCache[key]; exists {
 				if now.Sub(result.CreatedAt) > e.cacheTTL {
 					delete(e.requestCache, key)

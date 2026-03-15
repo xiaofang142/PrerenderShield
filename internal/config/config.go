@@ -332,6 +332,13 @@ func GetInstance() *ConfigManager {
 	return instance
 }
 
+// ResetInstance 重置配置管理器实例，仅用于测试
+// 测试完成后需要调用 GetInstance() 重新初始化
+func ResetInstance() {
+	instance = nil
+	once = sync.Once{}
+}
+
 // LoadConfig 从环境变量和YAML配置文件加载配置
 func LoadConfig(configPath string) (*Config, error) {
 	manager := GetInstance()
@@ -493,73 +500,99 @@ func (cm *ConfigManager) GetConfig() *Config {
 }
 
 // ValidateConfig 验证配置的合法性
+// 关键配置错误会返回错误，非关键配置会使用默认值并记录警告
 func (cm *ConfigManager) ValidateConfig(config *Config) error {
+	var errs []error
+	var warnings []string
+
 	// 验证服务器配置
 	if config.Server.Address == "" {
 		config.Server.Address = "0.0.0.0" // 使用默认地址
+		warnings = append(warnings, "Server address is empty, using default: 0.0.0.0")
 	}
 
-	// 验证端口号
+	// 验证端口号 - 关键配置，错误时返回错误
 	if config.Server.APIPort <= 0 || config.Server.APIPort > 65535 {
-		config.Server.APIPort = 9598 // 使用默认端口
+		errs = append(errs, fmt.Errorf("invalid API port: %d, must be between 1 and 65535", config.Server.APIPort))
 	}
 
 	if config.Server.ConsolePort <= 0 || config.Server.ConsolePort > 65535 {
-		config.Server.ConsolePort = 9597 // 使用默认端口
+		errs = append(errs, fmt.Errorf("invalid Console port: %d, must be between 1 and 65535", config.Server.ConsolePort))
 	}
 
 	// 验证 PublicAPIURL
 	if config.Server.PublicAPIURL == "" {
 		config.Server.PublicAPIURL = fmt.Sprintf("http://%s:%d", config.Server.Address, config.Server.APIPort)
+		warnings = append(warnings, "Public API URL is empty, using default")
 	}
 
-	// 验证目录配置
+	// 验证目录配置 - 非关键配置，使用默认值
 	if config.Dirs.DataDir == "" {
 		config.Dirs.DataDir = "./data"
+		warnings = append(warnings, "Data directory is empty, using default: ./data")
 	}
 
 	if config.Dirs.StaticDir == "" {
 		config.Dirs.StaticDir = "./static"
+		warnings = append(warnings, "Static directory is empty, using default: ./static")
 	}
 
 	if config.Dirs.CertsDir == "" {
 		config.Dirs.CertsDir = "./certs"
+		warnings = append(warnings, "Certs directory is empty, using default: ./certs")
 	}
 
 	if config.Dirs.AdminStaticDir == "" {
 		config.Dirs.AdminStaticDir = "./web"
+		warnings = append(warnings, "Admin static directory is empty, using default: ./web")
 	}
 
 	// 验证缓存配置
 	validCacheTypes := map[string]bool{"memory": true, "redis": true}
 	if !validCacheTypes[config.Cache.Type] {
-		config.Cache.Type = "memory" // 使用默认缓存类型
+		config.Cache.Type = "memory"
+		warnings = append(warnings, fmt.Sprintf("Invalid cache type '%s', using default: memory", config.Cache.Type))
 	}
 
 	if config.Cache.Type == "redis" {
 		if config.Cache.RedisURL == "" {
 			config.Cache.RedisURL = "localhost:6379"
+			warnings = append(warnings, "Redis URL is empty, using default: localhost:6379")
 		}
 	}
 
 	if config.Cache.MemorySize <= 0 {
-		config.Cache.MemorySize = 1000 // 使用默认内存大小
+		config.Cache.MemorySize = 1000
+		warnings = append(warnings, "Memory size is invalid, using default: 1000")
 	}
 
 	// 验证存储配置
 	validStorageTypes := map[string]bool{"redis": true, "memory": true}
 	if !validStorageTypes[config.Storage.Type] {
-		config.Storage.Type = "redis" // 使用默认存储类型
+		config.Storage.Type = "redis"
+		warnings = append(warnings, fmt.Sprintf("Invalid storage type '%s', using default: redis", config.Storage.Type))
 	}
 
 	// 验证监控配置
 	if config.Monitoring.PrometheusAddress == "" {
 		config.Monitoring.PrometheusAddress = ":9090"
+		warnings = append(warnings, "Prometheus address is empty, using default: :9090")
 	}
 
 	// 验证应用配置
 	if config.App.Version == "" {
 		config.App.Version = "1.0.0"
+		warnings = append(warnings, "App version is empty, using default: 1.0.0")
+	}
+
+	// 输出警告日志
+	for _, w := range warnings {
+		fmt.Printf("[WARN] %s\n", w)
+	}
+
+	// 如果有严重错误，返回错误
+	if len(errs) > 0 {
+		return fmt.Errorf("configuration validation failed: %v", errs)
 	}
 
 	// 验证站点配置
@@ -609,7 +642,8 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 			}
 
 			if site.Redirect.StatusCode < 300 || site.Redirect.StatusCode >= 400 {
-				site.Redirect.StatusCode = 301 // 使用默认重定向状态码
+				warnings = append(warnings, fmt.Sprintf("Site %s has invalid redirect status code %d, using default: 301", site.ID, site.Redirect.StatusCode))
+				site.Redirect.StatusCode = 301
 			}
 		}
 
@@ -657,12 +691,14 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 		// 验证防火墙配置
 		if site.Firewall.Enabled {
 			if site.Firewall.RulesPath == "" {
+				warnings = append(warnings, fmt.Sprintf("Site %s firewall rules path is empty, using default: ./rules", site.ID))
 				site.Firewall.RulesPath = "./rules"
 			}
 
 			validActions := map[string]bool{"block": true, "allow": true}
 			if !validActions[site.Firewall.ActionConfig.DefaultAction] {
-				site.Firewall.ActionConfig.DefaultAction = "block" // 使用默认动作
+				warnings = append(warnings, fmt.Sprintf("Site %s firewall action is invalid, using default: block", site.ID))
+				site.Firewall.ActionConfig.DefaultAction = "block"
 			}
 
 			if site.Firewall.ActionConfig.BlockMessage == "" {
@@ -671,15 +707,18 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 
 			if site.Firewall.RateLimitConfig.Enabled {
 				if site.Firewall.RateLimitConfig.Requests <= 0 {
-					site.Firewall.RateLimitConfig.Requests = 100 // 使用默认请求数
+					warnings = append(warnings, fmt.Sprintf("Site %s rate limit requests is invalid, using default: 100", site.ID))
+					site.Firewall.RateLimitConfig.Requests = 100
 				}
 
 				if site.Firewall.RateLimitConfig.Window <= 0 {
-					site.Firewall.RateLimitConfig.Window = 60 // 使用默认时间窗口
+					warnings = append(warnings, fmt.Sprintf("Site %s rate limit window is invalid, using default: 60", site.ID))
+					site.Firewall.RateLimitConfig.Window = 60
 				}
 
 				if site.Firewall.RateLimitConfig.BanTime <= 0 {
-					site.Firewall.RateLimitConfig.BanTime = 3600 // 使用默认封禁时间
+					warnings = append(warnings, fmt.Sprintf("Site %s rate limit ban time is invalid, using default: 3600", site.ID))
+					site.Firewall.RateLimitConfig.BanTime = 3600
 				}
 			}
 		}
@@ -702,14 +741,21 @@ func (cm *ConfigManager) ValidateConfig(config *Config) error {
 		// 验证网页防篡改配置
 		if site.FileIntegrityConfig.Enabled {
 			if site.FileIntegrityConfig.CheckInterval <= 0 {
-				site.FileIntegrityConfig.CheckInterval = 300 // 使用默认检查间隔
+				warnings = append(warnings, fmt.Sprintf("Site %s file integrity check interval is invalid, using default: 300", site.ID))
+				site.FileIntegrityConfig.CheckInterval = 300
 			}
 
 			validHashAlgorithms := map[string]bool{"md5": true, "sha256": true}
 			if !validHashAlgorithms[site.FileIntegrityConfig.HashAlgorithm] {
-				site.FileIntegrityConfig.HashAlgorithm = "sha256" // 使用默认哈希算法
+				warnings = append(warnings, fmt.Sprintf("Site %s hash algorithm is invalid, using default: sha256", site.ID))
+				site.FileIntegrityConfig.HashAlgorithm = "sha256"
 			}
 		}
+	}
+
+	// 输出所有警告
+	for _, w := range warnings {
+		fmt.Printf("[WARN] %s\n", w)
 	}
 
 	return nil

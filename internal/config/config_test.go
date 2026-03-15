@@ -58,6 +58,12 @@ func TestValidateConfig(t *testing.T) {
 
 	// 测试有效配置
 	validConfig := &Config{
+		Server: ServerConfig{
+			Address:      "0.0.0.0",
+			APIPort:      8080,
+			ConsolePort:  8081,
+			PublicAPIURL: "http://localhost:8080",
+		},
 		Sites: []SiteConfig{
 			{
 				ID:      "test-site",

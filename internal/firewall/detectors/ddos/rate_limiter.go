@@ -41,6 +41,23 @@ func NewRateLimiter(rateThreshold, burstThreshold int) *RateLimiter {
 	return rl
 }
 
+// NewRateLimiterWithInterval 创建指定清理间隔的速率限制器（用于测试）
+func NewRateLimiterWithInterval(rateThreshold, burstThreshold int, cleanupInterval time.Duration) *RateLimiter {
+	rl := &RateLimiter{
+		rateThreshold:   rateThreshold,
+		burstThreshold:  burstThreshold,
+		ipWindows:       make(map[string]*SlidingWindow),
+		cleanupInterval: cleanupInterval,
+		lastCleanupTime: time.Now(),
+		stopChan:        make(chan struct{}),
+	}
+
+	// 启动后台清理协程
+	go rl.startCleanup()
+
+	return rl
+}
+
 // RecordRequest 记录请求
 func (rl *RateLimiter) RecordRequest(ip string) {
 	rl.mu.Lock()
