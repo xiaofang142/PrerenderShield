@@ -5,14 +5,11 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import zh from './locales/zh.json';
 import en from './locales/en.json';
 
-// TODO: Add translations for ar, fr, ru, es
+// 当前支持的语言：中文和英文
+// 如需添加更多语言，需要在 locales 目录创建对应的翻译文件
 const resources = {
   zh: { translation: zh },
-  en: { translation: en },
-  ar: { translation: { common: { loading: "جاري التحميل..." } } },
-  fr: { translation: { common: { loading: "Chargement..." } } },
-  ru: { translation: { common: { loading: "Загрузка..." } } },
-  es: { translation: { common: { loading: "Cargando..." } } }
+  en: { translation: en }
 };
 
 i18n
