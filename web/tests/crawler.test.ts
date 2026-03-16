@@ -37,8 +37,10 @@ test.describe('Crawler Page', () => {
       // 点击完成按钮
       await page.click('button:has-text("完成")');
 
-      // 等待页面跳转
+      // 等待页面跳转到首页
       await page.waitForURL('/');
+      // 等待首页元素出现
+      await page.waitForSelector('h1.page-title, h1:has-text("概览")', { timeout: 5000 });
     } else {
       // 等待登录表单出现
       await page.waitForSelector('input[placeholder="Username"]');
@@ -49,15 +51,20 @@ test.describe('Crawler Page', () => {
       await page.click('button[type="submit"]');
       // 等待导航到首页
       await page.waitForURL('/');
+      // 等待首页元素出现
+      await page.waitForSelector('h1.page-title, h1:has-text("概览")', { timeout: 5000 });
     }
 
-    // 导航到爬虫页面
-    await page.goto('/crawler');
-    await page.waitForURL('/crawler');
+    // 等待侧边栏加载完成
+    await page.waitForTimeout(1000);
+    // 点击侧边栏导航到爬虫页面（通过 URL 匹配）
+    await page.click('a[href="/crawler"]');
+    await page.waitForTimeout(2000);
   });
 
   test('Crawler page loads successfully', async ({ page }) => {
-    await expect(page.locator('h1')).toContainText('爬虫');
+    await expect(page.locator('h1.page-title')).toBeVisible();
+    await expect(page.locator('h1.page-title')).toContainText('爬虫');
   });
 
   test('Crawler shows site selector', async ({ page }) => {
@@ -65,11 +72,14 @@ test.describe('Crawler Page', () => {
   });
 
   test('Crawler shows logs table', async ({ page }) => {
-    await expect(page.locator('table')).toBeVisible();
+    // Click the "Access Logs" tab first
+    await page.click('text="访问记录"');
+    await page.waitForTimeout(1000);
+    await expect(page.locator('.ant-table').first()).toBeVisible();
   });
 
   test('Crawler shows statistics', async ({ page }) => {
-    await expect(page.locator('.ant-statistic')).toBeVisible();
+    await expect(page.locator('.ant-statistic').first()).toBeVisible();
   });
 
   test('Crawler granularity selector test', async ({ page }) => {
