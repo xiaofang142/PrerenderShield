@@ -3,12 +3,14 @@ module prerender-shield
 go 1.25.0
 
 require (
+	github.com/chromedp/cdproto v0.0.0-20250803210736-d308e07a266d
 	github.com/chromedp/chromedp v0.14.2
 	github.com/gin-gonic/gin v1.9.0
 	github.com/go-acme/lego/v4 v4.32.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
+	github.com/google/wire v0.7.0
 	github.com/oschwald/geoip2-golang v1.9.0
 	github.com/pquerna/otp v1.5.0
 	github.com/prometheus/client_golang v1.20.4
@@ -83,7 +85,6 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20250803210736-d308e07a266d // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/clbanning/mxj/v2 v2.7.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
