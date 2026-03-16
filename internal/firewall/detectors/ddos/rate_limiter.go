@@ -8,14 +8,14 @@ import (
 
 // RateLimiter 滑动窗口速率限制器
 type RateLimiter struct {
-	mu               sync.RWMutex
-	rateThreshold    int           // 每秒请求数阈值
-	burstThreshold   int           // 突发请求数阈值
-	ipWindows        map[string]*SlidingWindow
-	cleanupInterval  time.Duration
-	lastCleanupTime  time.Time
-	stopChan         chan struct{}
-	stopped          atomic.Bool
+	mu              sync.RWMutex
+	rateThreshold   int // 每秒请求数阈值
+	burstThreshold  int // 突发请求数阈值
+	ipWindows       map[string]*SlidingWindow
+	cleanupInterval time.Duration
+	lastCleanupTime time.Time
+	stopChan        chan struct{}
+	stopped         atomic.Bool
 }
 
 // SlidingWindow 滑动窗口
@@ -241,10 +241,10 @@ func (rl *RateLimiter) GetStats() *RateLimiterStats {
 	}
 
 	return &RateLimiterStats{
-		TotalIPs:     totalIPs,
-		LimitedIPs:   limitedIPs,
-		Threshold:    rl.rateThreshold,
-		BurstLimit:   rl.burstThreshold,
+		TotalIPs:   totalIPs,
+		LimitedIPs: limitedIPs,
+		Threshold:  rl.rateThreshold,
+		BurstLimit: rl.burstThreshold,
 	}
 }
 
@@ -258,11 +258,11 @@ type RateLimiterStats struct {
 
 // TokenBucket 令牌桶限流器（备用算法）
 type TokenBucket struct {
-	mu           sync.Mutex
-	capacity     int           // 桶容量
-	tokens       float64       // 当前令牌数
-	refillRate   float64       // 每秒补充令牌数
-	lastRefill   time.Time     // 上次补充时间
+	mu         sync.Mutex
+	capacity   int       // 桶容量
+	tokens     float64   // 当前令牌数
+	refillRate float64   // 每秒补充令牌数
+	lastRefill time.Time // 上次补充时间
 }
 
 // NewTokenBucket 创建令牌桶

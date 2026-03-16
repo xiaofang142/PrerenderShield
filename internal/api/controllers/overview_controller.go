@@ -15,11 +15,11 @@ import (
 
 // OverviewController 概览控制器
 type OverviewController struct {
-	cfg             *config.Config
-	monitor         *monitoring.Monitor
-	visitLogMgr     *logging.VisitLogManager
-	crawlerLogMgr   *logging.CrawlerLogManager
-	wafRepo         *repository.WafRepository
+	cfg           *config.Config
+	monitor       *monitoring.Monitor
+	visitLogMgr   *logging.VisitLogManager
+	crawlerLogMgr *logging.CrawlerLogManager
+	wafRepo       *repository.WafRepository
 }
 
 // NewOverviewController 创建概览控制器实例

@@ -5,12 +5,12 @@ import "time"
 // Fingerprint 设备指纹
 type Fingerprint struct {
 	ID             string                 `json:"id"`
-	TLSHash        string                 `json:"tls_hash,omitempty"`        // JA3 指纹
-	HTTP2Hash      string                 `json:"http2_hash,omitempty"`      // HTTP/2 指纹
-	TCPHash        string                 `json:"tcp_hash,omitempty"`        // TCP 栈指纹
+	TLSHash        string                 `json:"tls_hash,omitempty"`   // JA3 指纹
+	HTTP2Hash      string                 `json:"http2_hash,omitempty"` // HTTP/2 指纹
+	TCPHash        string                 `json:"tcp_hash,omitempty"`   // TCP 栈指纹
 	UserAgent      string                 `json:"user_agent"`
 	UserAgentHash  string                 `json:"user_agent_hash"`
-	DeviceType     string                 `json:"device_type"`               // desktop, mobile, tablet, bot
+	DeviceType     string                 `json:"device_type"` // desktop, mobile, tablet, bot
 	OS             string                 `json:"os"`
 	OSVersion      string                 `json:"os_version"`
 	Browser        string                 `json:"browser"`
@@ -27,9 +27,9 @@ type Fingerprint struct {
 	TCPWindow      int                    `json:"tcp_window,omitempty"`
 	TCPMSS         int                    `json:"tcp_mss,omitempty"`
 	TCPOptions     []string               `json:"tcp_options,omitempty"`
-	Confidence     float64                `json:"confidence"`                // 置信度 0-1
+	Confidence     float64                `json:"confidence"` // 置信度 0-1
 	IsBot          bool                   `json:"is_bot"`
-	BotScore       float64                `json:"bot_score"`                 // 0-100, 越高风险越大
+	BotScore       float64                `json:"bot_score"` // 0-100, 越高风险越大
 	RiskLevel      RiskLevel              `json:"risk_level"`
 	CreatedAt      time.Time              `json:"created_at"`
 }
@@ -38,11 +38,11 @@ type Fingerprint struct {
 type RiskLevel string
 
 const (
-	RiskLevelTrusted  RiskLevel = "trusted"
-	RiskLevelNormal   RiskLevel = "normal"
+	RiskLevelTrusted    RiskLevel = "trusted"
+	RiskLevelNormal     RiskLevel = "normal"
 	RiskLevelSuspicious RiskLevel = "suspicious"
-	RiskLevelHigh     RiskLevel = "high"
-	RiskLevelCritical RiskLevel = "critical"
+	RiskLevelHigh       RiskLevel = "high"
+	RiskLevelCritical   RiskLevel = "critical"
 )
 
 // ChallengeType 挑战类型
@@ -51,38 +51,38 @@ type ChallengeType string
 const (
 	ChallengeJavaScript ChallengeType = "javascript"
 	ChallengeCookie     ChallengeType = "cookie"
-	ChallengePoW        ChallengeType = "pow"        // Proof of Work
-	ChallengeCaptcha    ChallengeType = "captcha"    // 人机验证
+	ChallengePoW        ChallengeType = "pow"     // Proof of Work
+	ChallengeCaptcha    ChallengeType = "captcha" // 人机验证
 )
 
 // ChallengeResult 挑战结果
 type ChallengeResult struct {
-	Passed      bool                 `json:"passed"`
-	ChallengeType ChallengeType      `json:"challenge_type"`
-	Score       float64              `json:"score"`
-	Duration    time.Duration        `json:"duration"`
-	Attempts    int                  `json:"attempts"`
-	Error       string               `json:"error,omitempty"`
-	Extra       map[string]interface{} `json:"extra,omitempty"`
+	Passed        bool                   `json:"passed"`
+	ChallengeType ChallengeType          `json:"challenge_type"`
+	Score         float64                `json:"score"`
+	Duration      time.Duration          `json:"duration"`
+	Attempts      int                    `json:"attempts"`
+	Error         string                 `json:"error,omitempty"`
+	Extra         map[string]interface{} `json:"extra,omitempty"`
 }
 
 // DeviceTrust 设备信任状态
 type DeviceTrust struct {
-	DeviceID      string    `json:"device_id"`
-	FingerprintID string    `json:"fingerprint_id"`
-	TrustScore    float64   `json:"trust_score"` // 0-100
-	TrustLevel    string    `json:"trust_level"` // trusted, verified, unknown, suspicious
-	FirstSeen     time.Time `json:"first_seen"`
-	LastSeen      time.Time `json:"last_seen"`
-	TotalSessions int64     `json:"total_sessions"`
-	FailedChallenges int64  `json:"failed_challenges"`
-	PassedChallenges int64  `json:"passed_challenges"`
-	LastChallenge time.Time `json:"last_challenge,omitempty"`
-	LastIP        string    `json:"last_ip"`
-	LastUserAgent string    `json:"last_user_agent"`
-	IsKnown       bool      `json:"is_known"`
-	IsBlocked     bool      `json:"is_blocked"`
-	Tags          []string  `json:"tags,omitempty"`
+	DeviceID         string    `json:"device_id"`
+	FingerprintID    string    `json:"fingerprint_id"`
+	TrustScore       float64   `json:"trust_score"` // 0-100
+	TrustLevel       string    `json:"trust_level"` // trusted, verified, unknown, suspicious
+	FirstSeen        time.Time `json:"first_seen"`
+	LastSeen         time.Time `json:"last_seen"`
+	TotalSessions    int64     `json:"total_sessions"`
+	FailedChallenges int64     `json:"failed_challenges"`
+	PassedChallenges int64     `json:"passed_challenges"`
+	LastChallenge    time.Time `json:"last_challenge,omitempty"`
+	LastIP           string    `json:"last_ip"`
+	LastUserAgent    string    `json:"last_user_agent"`
+	IsKnown          bool      `json:"is_known"`
+	IsBlocked        bool      `json:"is_blocked"`
+	Tags             []string  `json:"tags,omitempty"`
 }
 
 // SessionState 会话状态
@@ -106,10 +106,10 @@ type SessionState struct {
 // BotConfig 机器人管理配置
 type BotConfig struct {
 	// 指纹配置
-	EnableTLSFingerprint    bool          `json:"enable_tls_fingerprint"`
-	EnableHTTP2Fingerprint  bool          `json:"enable_http2_fingerprint"`
-	EnableTCPFingerprint    bool          `json:"enable_tcp_fingerprint"`
-	EnableUserAgentAnalysis bool          `json:"enable_user_agent_analysis"`
+	EnableTLSFingerprint    bool `json:"enable_tls_fingerprint"`
+	EnableHTTP2Fingerprint  bool `json:"enable_http2_fingerprint"`
+	EnableTCPFingerprint    bool `json:"enable_tcp_fingerprint"`
+	EnableUserAgentAnalysis bool `json:"enable_user_agent_analysis"`
 
 	// 挑战配置
 	EnableJavaScriptChallenge bool          `json:"enable_javascript_challenge"`
@@ -120,23 +120,23 @@ type BotConfig struct {
 	MaxChallengeAttempts      int           `json:"max_challenge_attempts"`
 
 	// 信任配置
-	EnableDeviceTrust       bool          `json:"enable_device_trust"`
-	TrustDecayRate          float64       `json:"trust_decay_rate"`     // 信任衰减率
-	TrustBoostRate          float64       `json:"trust_boost_rate"`     // 信任提升率
-	MinTrustScore           float64       `json:"min_trust_score"`      // 最低信任分数
-	MaxTrustScore           float64       `json:"max_trust_score"`      // 最高信任分数
+	EnableDeviceTrust bool    `json:"enable_device_trust"`
+	TrustDecayRate    float64 `json:"trust_decay_rate"` // 信任衰减率
+	TrustBoostRate    float64 `json:"trust_boost_rate"` // 信任提升率
+	MinTrustScore     float64 `json:"min_trust_score"`  // 最低信任分数
+	MaxTrustScore     float64 `json:"max_trust_score"`  // 最高信任分数
 
 	// 阈值配置
-	BotScoreThreshold       float64       `json:"bot_score_threshold"`  // 机器人分数阈值
-	SuspiciousThreshold     float64       `json:"suspicious_threshold"` // 可疑阈值
-	CriticalThreshold       float64       `json:"critical_threshold"`   // 严重阈值
+	BotScoreThreshold   float64 `json:"bot_score_threshold"`  // 机器人分数阈值
+	SuspiciousThreshold float64 `json:"suspicious_threshold"` // 可疑阈值
+	CriticalThreshold   float64 `json:"critical_threshold"`   // 严重阈值
 
 	// 缓存配置
-	CacheSize               int           `json:"cache_size"`
-	CacheTTL                time.Duration `json:"cache_ttl"`
+	CacheSize int           `json:"cache_size"`
+	CacheTTL  time.Duration `json:"cache_ttl"`
 
 	// 日志配置
-	EnableLogging           bool          `json:"enable_logging"`
+	EnableLogging bool `json:"enable_logging"`
 }
 
 // DefaultBotConfig 返回默认机器人管理配置
@@ -145,21 +145,21 @@ func DefaultBotConfig() *BotConfig {
 		// 指纹配置
 		EnableTLSFingerprint:    true,
 		EnableHTTP2Fingerprint:  true,
-		EnableTCPFingerprint:    false,  // TCP 指纹需要原始 socket 权限
+		EnableTCPFingerprint:    false, // TCP 指纹需要原始 socket 权限
 		EnableUserAgentAnalysis: true,
 
 		// 挑战配置
 		EnableJavaScriptChallenge: true,
 		EnableCookieChallenge:     true,
 		EnablePoWChallenge:        true,
-		EnableCaptcha:             false,  // 需要第三方服务
+		EnableCaptcha:             false, // 需要第三方服务
 		ChallengeTimeout:          30 * time.Second,
 		MaxChallengeAttempts:      3,
 
 		// 信任配置
 		EnableDeviceTrust: true,
-		TrustDecayRate:    0.01,  // 每次请求衰减 1%
-		TrustBoostRate:    0.05,  // 通过挑战提升 5%
+		TrustDecayRate:    0.01, // 每次请求衰减 1%
+		TrustBoostRate:    0.05, // 通过挑战提升 5%
 		MinTrustScore:     0,
 		MaxTrustScore:     100,
 

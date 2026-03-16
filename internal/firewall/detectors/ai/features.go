@@ -381,19 +381,19 @@ func ExtractBehaviorFeatures(req *http.Request) []float32 {
 	features[33] = boolToFloat(hasSensitiveParams(req.URL.Query()))
 
 	// 34-47: 组合特征
-	features[34] = features[6] * features[8] // POST + Body
-	features[35] = features[1] * features[8] // POST + Body
-	features[36] = features[29] * features[33] // Admin path + Sensitive params
-	features[37] = features[30] * features[6] // Sensitive path + DELETE
-	features[38] = features[26] * features[7] // Web request + HTTPS
-	features[39] = features[27] * features[8] // API request + Body
-	features[40] = features[16] * features[17] // Has cookies * cookie count
-	features[41] = features[11] * features[12] // Has referer * host length
-	features[42] = features[9] * features[8]   // Content length * Has body
-	features[43] = features[0] + features[1] + features[2] // Method score
-	features[44] = features[29] + features[30] + features[31] // Suspicious path score
-	features[45] = features[32] + features[33] // Suspicious params score
-	features[46] = features[26] + features[27] + features[28] // Request type score
+	features[34] = features[6] * features[8]                          // POST + Body
+	features[35] = features[1] * features[8]                          // POST + Body
+	features[36] = features[29] * features[33]                        // Admin path + Sensitive params
+	features[37] = features[30] * features[6]                         // Sensitive path + DELETE
+	features[38] = features[26] * features[7]                         // Web request + HTTPS
+	features[39] = features[27] * features[8]                         // API request + Body
+	features[40] = features[16] * features[17]                        // Has cookies * cookie count
+	features[41] = features[11] * features[12]                        // Has referer * host length
+	features[42] = features[9] * features[8]                          // Content length * Has body
+	features[43] = features[0] + features[1] + features[2]            // Method score
+	features[44] = features[29] + features[30] + features[31]         // Suspicious path score
+	features[45] = features[32] + features[33]                        // Suspicious params score
+	features[46] = features[26] + features[27] + features[28]         // Request type score
 	features[47] = (features[43] + features[44] + features[45]) / 3.0 // Overall suspicious score
 
 	return features
@@ -402,18 +402,18 @@ func ExtractBehaviorFeatures(req *http.Request) []float32 {
 // NormalizeFeatures 规范化特征向量大小
 func NormalizeFeatures(features []float32, targetSize int) []float32 {
 	currentLen := len(features)
-	
+
 	if currentLen == targetSize {
 		return features
 	}
-	
+
 	if currentLen < targetSize {
 		// 填充0
 		result := make([]float32, targetSize)
 		copy(result, features)
 		return result
 	}
-	
+
 	// 截断
 	return features[:targetSize]
 }

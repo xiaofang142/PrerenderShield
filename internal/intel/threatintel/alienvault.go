@@ -106,31 +106,31 @@ func (p *AlienVaultProvider) QueryDomain(ctx context.Context, domain string) (*T
 // parseIPResponse 解析 IP 响应
 func (p *AlienVaultProvider) parseIPResponse(body []byte, ip string) (*ThreatIntelResult, error) {
 	var response struct {
-		Indicator   string `json:"indicator"`
-		Name        string `json:"name"`
-		TLP         string `json:"tlp"`
-		Access      string `json:"access"`
-		AuthorName  string `json:"author_name"`
-		Creator     string `json:"creator"`
-		IsPublic    bool   `json:"is_public"`
-		Validation  struct {
-			Access    string `json:"access"`
-			IsPublic  bool   `json:"is_public"`
+		Indicator  string `json:"indicator"`
+		Name       string `json:"name"`
+		TLP        string `json:"tlp"`
+		Access     string `json:"access"`
+		AuthorName string `json:"author_name"`
+		Creator    string `json:"creator"`
+		IsPublic   bool   `json:"is_public"`
+		Validation struct {
+			Access   string `json:"access"`
+			IsPublic bool   `json:"is_public"`
 		} `json:"validation"`
 		PulseInfo struct {
-			Count              int      `json:"count"`
-			TopPulses          []Pulse  `json:"top_pulses"`
-			RelatedPulses      []Pulse  `json:"related_pulses"`
+			Count         int     `json:"count"`
+			TopPulses     []Pulse `json:"top_pulses"`
+			RelatedPulses []Pulse `json:"related_pulses"`
 		} `json:"pulse_info"`
-		Asn             string `json:"asn"`
-		CountryName     string `json:"country_name"`
-		City            string `json:"city"`
-		Region          string `json:"region"`
-		PostalCode      string `json:"postal_code"`
-		Latitude        float64 `json:"latitude"`
-		Longitude       float64 `json:"longitude"`
-		IsMalicious     *bool   `json:"is_malicious"`
-		ThreatTypes     []struct {
+		Asn         string  `json:"asn"`
+		CountryName string  `json:"country_name"`
+		City        string  `json:"city"`
+		Region      string  `json:"region"`
+		PostalCode  string  `json:"postal_code"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		IsMalicious *bool   `json:"is_malicious"`
+		ThreatTypes []struct {
 			ThreatType string `json:"threat_type"`
 			Count      int    `json:"count"`
 		} `json:"threat_types"`
@@ -184,17 +184,17 @@ func (p *AlienVaultProvider) parseIPResponse(body []byte, ip string) (*ThreatInt
 		Categories:  categories,
 		Provider:    "alienvault",
 		RawData: map[string]interface{}{
-			"name":            response.Name,
-			"tlp":             response.TLP,
-			"author_name":     response.AuthorName,
-			"asn":             response.Asn,
-			"country_name":    response.CountryName,
-			"city":            response.City,
-			"region":          response.Region,
-			"pulse_count":     pulseCount,
-			"top_pulses":      response.PulseInfo.TopPulses,
-			"latitude":        response.Latitude,
-			"longitude":       response.Longitude,
+			"name":         response.Name,
+			"tlp":          response.TLP,
+			"author_name":  response.AuthorName,
+			"asn":          response.Asn,
+			"country_name": response.CountryName,
+			"city":         response.City,
+			"region":       response.Region,
+			"pulse_count":  pulseCount,
+			"top_pulses":   response.PulseInfo.TopPulses,
+			"latitude":     response.Latitude,
+			"longitude":    response.Longitude,
 		},
 	}
 
@@ -204,12 +204,12 @@ func (p *AlienVaultProvider) parseIPResponse(body []byte, ip string) (*ThreatInt
 // parseDomainResponse 解析域名响应
 func (p *AlienVaultProvider) parseDomainResponse(body []byte, domain string) (*ThreatIntelResult, error) {
 	var response struct {
-		Indicator   string `json:"indicator"`
-		Name        string `json:"name"`
-		TLP         string `json:"tlp"`
-		PulseInfo   struct {
-			Count         int     `json:"count"`
-			TopPulses     []Pulse `json:"top_pulses"`
+		Indicator string `json:"indicator"`
+		Name      string `json:"name"`
+		TLP       string `json:"tlp"`
+		PulseInfo struct {
+			Count     int     `json:"count"`
+			TopPulses []Pulse `json:"top_pulses"`
 		} `json:"pulse_info"`
 		IsMalicious *bool `json:"is_malicious"`
 		ThreatTypes []struct {
@@ -287,8 +287,8 @@ type Pulse struct {
 	TLP         string   `json:"tlp"`
 	Tags        []string `json:"tags"`
 	Votes       struct {
-		Count   int `json:"count"`
-		MyVote  int `json:"my_vote"`
+		Count  int `json:"count"`
+		MyVote int `json:"my_vote"`
 	} `json:"votes"`
 	Indicators []struct {
 		Indicator   string `json:"indicator"`

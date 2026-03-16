@@ -339,18 +339,18 @@ type Logger interface {
 
 // Config 防火墙配置
 type Config struct {
-	RulesPath           string                         // 规则文件路径
-	ActionConfig        ActionConfig                   // 动作配置
-	CacheTTL            int                            // 请求缓存过期时间（秒）
-	StaticDir           string                         // 静态文件目录
-	GeoIPConfig         *config.GeoIPConfig            // 地理位置访问控制配置
-	RateLimitConfig     *config.RateLimitConfig        // 频率限制配置
-	FileIntegrityConfig *config.FileIntegrityConfig    // 网页防篡改配置
-	Blacklist           []string                       // 静态黑名单
-	Whitelist           []string                       // 静态白名单
-	RedisClient         *redis.Client                  // Redis 客户端
-	AIConfig            *AIEngineConfig                // AI 检测器配置
-	FailStrategy        FailStrategy                   // 失败处理策略
+	RulesPath           string                      // 规则文件路径
+	ActionConfig        ActionConfig                // 动作配置
+	CacheTTL            int                         // 请求缓存过期时间（秒）
+	StaticDir           string                      // 静态文件目录
+	GeoIPConfig         *config.GeoIPConfig         // 地理位置访问控制配置
+	RateLimitConfig     *config.RateLimitConfig     // 频率限制配置
+	FileIntegrityConfig *config.FileIntegrityConfig // 网页防篡改配置
+	Blacklist           []string                    // 静态黑名单
+	Whitelist           []string                    // 静态白名单
+	RedisClient         *redis.Client               // Redis 客户端
+	AIConfig            *AIEngineConfig             // AI 检测器配置
+	FailStrategy        FailStrategy                // 失败处理策略
 }
 
 // AIEngineConfig AI 检测器引擎配置
@@ -444,10 +444,10 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 	// 创建规则管理器，启用自动更新
 	ruleManager := NewRuleManager(
 		config.RulesPath,
-		true,                     // 启用自动更新
+		true, // 启用自动更新
 		constants.DefaultRuleUpdateInterval,
-		"",                       // 远程规则源，暂时为空
-		config.RedisClient,       // Redis 客户端
+		"",                 // 远程规则源，暂时为空
+		config.RedisClient, // Redis 客户端
 	)
 
 	// 设置默认缓存 TTL 为 60 秒
@@ -634,12 +634,12 @@ func (e *Engine) CheckRequest(req *http.Request) (*CheckResult, error) {
 		// FailClosed 策略：检测器失败时拒绝请求
 		result.Allow = false
 		result.Threats = append(result.Threats, types.Threat{
-			Type:      "detector_error",
-			SubType:   "Security Detector Failure",
-			Severity:  "critical",
-			Message:   fmt.Sprintf("Security detector failed (%d errors), request blocked by fail-closed policy", len(criticalErrors)),
-			RuleID:    "system-failclosed",
-			RuleName:  "Fail-Closed Policy",
+			Type:     "detector_error",
+			SubType:  "Security Detector Failure",
+			Severity: "critical",
+			Message:  fmt.Sprintf("Security detector failed (%d errors), request blocked by fail-closed policy", len(criticalErrors)),
+			RuleID:   "system-failclosed",
+			RuleName: "Fail-Closed Policy",
 		})
 	}
 

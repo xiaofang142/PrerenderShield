@@ -238,9 +238,9 @@ func TestPriorityQueue_MaxSize(t *testing.T) {
 	for queue.Len() > 0 {
 		items = append(items, queue.Pop().ID)
 	}
-	assert.Contains(t, items, "1") // 优先级 1
-	assert.Contains(t, items, "2") // 优先级 2
-	assert.Contains(t, items, "3") // 优先级 3
+	assert.Contains(t, items, "1")    // 优先级 1
+	assert.Contains(t, items, "2")    // 优先级 2
+	assert.Contains(t, items, "3")    // 优先级 3
 	assert.NotContains(t, items, "4") // 优先级 4 被丢弃
 }
 
@@ -557,8 +557,8 @@ func TestRegionDetector_attrsToString(t *testing.T) {
 	detector := NewRegionDetector(config)
 
 	attrs := map[string]string{
-		"class": "test",
-		"id":    "main",
+		"class":      "test",
+		"id":         "main",
 		"data-value": "123",
 	}
 

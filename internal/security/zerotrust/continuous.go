@@ -24,15 +24,15 @@ type ContinuousVerificationEngine struct {
 // ContinuousVerificationConfig 持续验证配置
 type ContinuousVerificationConfig struct {
 	// 会话配置
-	SessionTimeout       time.Duration `json:"session_timeout"`
-	SessionIdleTimeout   time.Duration `json:"session_idle_timeout"`
-	MaxSessionDuration   time.Duration `json:"max_session_duration"`
+	SessionTimeout     time.Duration `json:"session_timeout"`
+	SessionIdleTimeout time.Duration `json:"session_idle_timeout"`
+	MaxSessionDuration time.Duration `json:"max_session_duration"`
 
 	// 验证配置
-	VerificationInterval time.Duration `json:"verification_interval"` // 定期验证间隔
-	ReverifyOnIPChange   bool          `json:"reverify_on_ip_change"`
-	ReverifyOnUAChange   bool          `json:"reverify_on_ua_change"`
-	ReverifyOnLocationChange bool      `json:"reverify_on_location_change"`
+	VerificationInterval     time.Duration `json:"verification_interval"` // 定期验证间隔
+	ReverifyOnIPChange       bool          `json:"reverify_on_ip_change"`
+	ReverifyOnUAChange       bool          `json:"reverify_on_ua_change"`
+	ReverifyOnLocationChange bool          `json:"reverify_on_location_change"`
 
 	// 行为分析配置
 	EnableBehaviorAnalysis bool          `json:"enable_behavior_analysis"`
@@ -40,41 +40,41 @@ type ContinuousVerificationConfig struct {
 	AnomalyThreshold       float64       `json:"anomaly_threshold"`
 
 	// 信任配置
-	TrustDecayRate       float64       `json:"trust_decay_rate"`
-	TrustBoostRate       float64       `json:"trust_boost_rate"`
-	MinTrustScore        float64       `json:"min_trust_score"`
-	MaxTrustScore        float64       `json:"max_trust_score"`
+	TrustDecayRate float64 `json:"trust_decay_rate"`
+	TrustBoostRate float64 `json:"trust_boost_rate"`
+	MinTrustScore  float64 `json:"min_trust_score"`
+	MaxTrustScore  float64 `json:"max_trust_score"`
 
 	// 阈值
-	SuspiciousThreshold  float64       `json:"suspicious_threshold"`
-	BlockThreshold       float64       `json:"block_threshold"`
+	SuspiciousThreshold float64 `json:"suspicious_threshold"`
+	BlockThreshold      float64 `json:"block_threshold"`
 
 	// 缓存配置
-	CacheSize            int           `json:"cache_size"`
-	CacheTTL             time.Duration `json:"cache_ttl"`
+	CacheSize int           `json:"cache_size"`
+	CacheTTL  time.Duration `json:"cache_ttl"`
 }
 
 // DefaultContinuousVerificationConfig 返回默认配置
 func DefaultContinuousVerificationConfig() *ContinuousVerificationConfig {
 	return &ContinuousVerificationConfig{
-		SessionTimeout:         24 * time.Hour,
-		SessionIdleTimeout:     30 * time.Minute,
-		MaxSessionDuration:     7 * 24 * time.Hour,
-		VerificationInterval:   5 * time.Minute,
-		ReverifyOnIPChange:     true,
-		ReverifyOnUAChange:     true,
+		SessionTimeout:           24 * time.Hour,
+		SessionIdleTimeout:       30 * time.Minute,
+		MaxSessionDuration:       7 * 24 * time.Hour,
+		VerificationInterval:     5 * time.Minute,
+		ReverifyOnIPChange:       true,
+		ReverifyOnUAChange:       true,
 		ReverifyOnLocationChange: true,
-		EnableBehaviorAnalysis: true,
-		BehaviorWindow:         1 * time.Hour,
-		AnomalyThreshold:       0.7,
-		TrustDecayRate:         0.01,
-		TrustBoostRate:         0.05,
-		MinTrustScore:          0,
-		MaxTrustScore:          100,
-		SuspiciousThreshold:    40,
-		BlockThreshold:         20,
-		CacheSize:              10000,
-		CacheTTL:               1 * time.Hour,
+		EnableBehaviorAnalysis:   true,
+		BehaviorWindow:           1 * time.Hour,
+		AnomalyThreshold:         0.7,
+		TrustDecayRate:           0.01,
+		TrustBoostRate:           0.05,
+		MinTrustScore:            0,
+		MaxTrustScore:            100,
+		SuspiciousThreshold:      40,
+		BlockThreshold:           20,
+		CacheSize:                10000,
+		CacheTTL:                 1 * time.Hour,
 	}
 }
 
@@ -87,55 +87,55 @@ type SessionStore struct {
 
 // Session 会话
 type Session struct {
-	SessionID        string                 `json:"session_id"`
-	UserID           string                 `json:"user_id"`
-	DeviceID         string                 `json:"device_id"`
-	IP               string                 `json:"ip"`
-	UserAgent        string                 `json:"user_agent"`
-	Location         *Location              `json:"location,omitempty"`
-	StartTime        time.Time              `json:"start_time"`
-	LastActivity     time.Time              `json:"last_activity"`
-	LastVerification time.Time              `json:"last_verification"`
-	TrustScore       float64                `json:"trust_score"`
-	RiskScore        float64                `json:"risk_score"`
-	BehaviorFlags    []string               `json:"behavior_flags,omitempty"`
-	Metadata         map[string]interface{} `json:"metadata,omitempty"`
-	IsValid          bool                   `json:"is_valid"`
-	IsVerified       bool                   `json:"is_verified"`
-	VerificationCount int64                 `json:"verification_count"`
+	SessionID         string                 `json:"session_id"`
+	UserID            string                 `json:"user_id"`
+	DeviceID          string                 `json:"device_id"`
+	IP                string                 `json:"ip"`
+	UserAgent         string                 `json:"user_agent"`
+	Location          *Location              `json:"location,omitempty"`
+	StartTime         time.Time              `json:"start_time"`
+	LastActivity      time.Time              `json:"last_activity"`
+	LastVerification  time.Time              `json:"last_verification"`
+	TrustScore        float64                `json:"trust_score"`
+	RiskScore         float64                `json:"risk_score"`
+	BehaviorFlags     []string               `json:"behavior_flags,omitempty"`
+	Metadata          map[string]interface{} `json:"metadata,omitempty"`
+	IsValid           bool                   `json:"is_valid"`
+	IsVerified        bool                   `json:"is_verified"`
+	VerificationCount int64                  `json:"verification_count"`
 }
 
 // BehaviorDB 行为数据库
 type BehaviorDB struct {
-_behaviors map[string]*UserBehavior
-	mu       sync.RWMutex
+	_behaviors map[string]*UserBehavior
+	mu         sync.RWMutex
 }
 
 // UserBehavior 用户行为
 type UserBehavior struct {
-	UserID        string    `json:"user_id"`
-	DeviceID      string    `json:"device_id"`
+	UserID        string      `json:"user_id"`
+	DeviceID      string      `json:"device_id"`
 	RequestTimes  []time.Time `json:"request_times"`
 	URIs          []string    `json:"uris,omitempty"`
 	Methods       []string    `json:"methods,omitempty"`
 	ResponseTimes []int64     `json:"response_times,omitempty"` // 毫秒
-	AvgRPM        float64     `json:"avg_rpm"` // 平均每分钟请求数
+	AvgRPM        float64     `json:"avg_rpm"`                  // 平均每分钟请求数
 	MaxRPM        float64     `json:"max_rpm"`
 	LastUpdated   time.Time   `json:"last_updated"`
 }
 
 // VerificationStats 验证统计
 type VerificationStats struct {
-	TotalSessions       int64 `json:"total_sessions"`
-	ActiveSessions      int64 `json:"active_sessions"`
-	VerifiedSessions    int64 `json:"verified_sessions"`
-	SuspiciousSessions  int64 `json:"suspicious_sessions"`
-	BlockedSessions     int64 `json:"blocked_sessions"`
-	IPChanges           int64 `json:"ip_changes"`
-	UAChanges           int64 `json:"ua_changes"`
-	LocationChanges     int64 `json:"location_changes"`
-	BehaviorAnomalies   int64 `json:"behavior_anomalies"`
-	TimeoutSessions     int64 `json:"timeout_sessions"`
+	TotalSessions      int64 `json:"total_sessions"`
+	ActiveSessions     int64 `json:"active_sessions"`
+	VerifiedSessions   int64 `json:"verified_sessions"`
+	SuspiciousSessions int64 `json:"suspicious_sessions"`
+	BlockedSessions    int64 `json:"blocked_sessions"`
+	IPChanges          int64 `json:"ip_changes"`
+	UAChanges          int64 `json:"ua_changes"`
+	LocationChanges    int64 `json:"location_changes"`
+	BehaviorAnomalies  int64 `json:"behavior_anomalies"`
+	TimeoutSessions    int64 `json:"timeout_sessions"`
 }
 
 // NewContinuousVerificationEngine 创建持续验证引擎
@@ -193,21 +193,21 @@ func (e *ContinuousVerificationEngine) CreateSession(
 	sessionID := e.generateSessionID()
 
 	session := &Session{
-		SessionID:        sessionID,
-		UserID:           userID,
-		DeviceID:         deviceID,
-		IP:               ip,
-		UserAgent:        userAgent,
-		Location:         location,
-		StartTime:        time.Now(),
-		LastActivity:     time.Now(),
-		LastVerification: time.Now(),
-		TrustScore:       50.0,
-		RiskScore:        0.0,
-		BehaviorFlags:    make([]string, 0),
-		Metadata:         make(map[string]interface{}),
-		IsValid:          true,
-		IsVerified:       false,
+		SessionID:         sessionID,
+		UserID:            userID,
+		DeviceID:          deviceID,
+		IP:                ip,
+		UserAgent:         userAgent,
+		Location:          location,
+		StartTime:         time.Now(),
+		LastActivity:      time.Now(),
+		LastVerification:  time.Now(),
+		TrustScore:        50.0,
+		RiskScore:         0.0,
+		BehaviorFlags:     make([]string, 0),
+		Metadata:          make(map[string]interface{}),
+		IsValid:           true,
+		IsVerified:        false,
 		VerificationCount: 0,
 	}
 
@@ -236,9 +236,9 @@ func (e *ContinuousVerificationEngine) VerifySession(
 	session := e.sessions.Get(sessionID)
 	if session == nil {
 		return &VerificationResult{
-			Valid:   false,
-			Reason:  "session_not_found",
-			Action:  "reject",
+			Valid:  false,
+			Reason: "session_not_found",
+			Action: "reject",
 		}
 	}
 

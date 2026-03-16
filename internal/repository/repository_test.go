@@ -19,9 +19,9 @@ func TestParseInt64(t *testing.T) {
 		{"123", 123},
 		{"0", 0},
 		{"999999", 999999},
-		{"", 0},         // 空字符串
-		{"abc", 0},      // 无效输入
-		{"-123", -123},  // 负数
+		{"", 0},        // 空字符串
+		{"abc", 0},     // 无效输入
+		{"-123", -123}, // 负数
 	}
 
 	for _, tt := range tests {
@@ -183,8 +183,8 @@ func TestWafRepositoryInMemory_GetWafConfigBySiteID(t *testing.T) {
 
 	// 测试存在的配置
 	expectedConfig := &models.WafConfig{
-		ID:     "config1",
-		SiteID: "site1",
+		ID:      "config1",
+		SiteID:  "site1",
 		Enabled: true,
 	}
 	repo.configs["site1"] = expectedConfig
@@ -200,8 +200,8 @@ func TestWafRepositoryInMemory_UpdateWafConfig(t *testing.T) {
 	repo := NewWafRepositoryInMemory()
 
 	config := &models.WafConfig{
-		ID:     "config1",
-		SiteID: "site1",
+		ID:      "config1",
+		SiteID:  "site1",
 		Enabled: true,
 	}
 

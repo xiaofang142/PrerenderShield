@@ -1,14 +1,14 @@
 package telemetry
 
 import (
+	"bufio"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"sync"
 	"testing"
 	"time"
-	"net"
-	"bufio"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"

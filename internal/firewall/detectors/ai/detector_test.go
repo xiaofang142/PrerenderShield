@@ -101,8 +101,8 @@ func TestConfig_Validate(t *testing.T) {
 
 	// 测试 CacheSize <= 0
 	config = &Config{
-		ModelPath:           "./test",
-		CacheSize:           0,
+		ModelPath: "./test",
+		CacheSize: 0,
 	}
 	err = config.Validate()
 	assert.NoError(t, err)

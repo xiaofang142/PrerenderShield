@@ -55,7 +55,7 @@ func (o *Observability) RecordWAFBlock(ctx context.Context, siteID, threatType s
 	o.EventBus.Publish(ctx, eventbus.TopicWAFBlocked,
 		eventbus.NewEvent(eventbus.TopicWAFBlocked, "waf",
 			map[string]interface{}{
-				"site_id":   siteID,
+				"site_id":     siteID,
 				"threat_type": threatType,
 			}))
 }

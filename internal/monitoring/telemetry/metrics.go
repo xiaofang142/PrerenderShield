@@ -22,10 +22,10 @@ import (
 )
 
 var (
-	meterProvider  *sdkmetric.MeterProvider
-	meter          metric.Meter
+	meterProvider   *sdkmetric.MeterProvider
+	meter           metric.Meter
 	metricsInitOnce sync.Once
-	metricsLogger  *zap.Logger
+	metricsLogger   *zap.Logger
 )
 
 // MetricsConfig 指标配置
@@ -63,14 +63,14 @@ type Metrics struct {
 	HTTPResponseSize    prometheus.HistogramVec
 
 	// 业务指标
-	CrawlerQueueSize    prometheus.GaugeVec
-	CacheHitTotal       prometheus.CounterVec
-	CacheMissTotal      prometheus.CounterVec
-	WAFBlockedTotal     prometheus.CounterVec
-	DDoSDetectedTotal   prometheus.CounterVec
-	SSLCertExpiryDays   prometheus.GaugeVec
-	RenderDuration      prometheus.HistogramVec
-	RenderErrorTotal    prometheus.CounterVec
+	CrawlerQueueSize  prometheus.GaugeVec
+	CacheHitTotal     prometheus.CounterVec
+	CacheMissTotal    prometheus.CounterVec
+	WAFBlockedTotal   prometheus.CounterVec
+	DDoSDetectedTotal prometheus.CounterVec
+	SSLCertExpiryDays prometheus.GaugeVec
+	RenderDuration    prometheus.HistogramVec
+	RenderErrorTotal  prometheus.CounterVec
 
 	// OTel 指标
 	RequestCounter metric.Int64Counter
@@ -415,9 +415,9 @@ func RecordDDoSDetection(detector, attackType, severity string) {
 		return
 	}
 	metricsInstance.DDoSDetectedTotal.With(prometheus.Labels{
-		"detector":   detector,
+		"detector":    detector,
 		"attack_type": attackType,
-		"severity":   severity,
+		"severity":    severity,
 	}).Inc()
 }
 
@@ -463,7 +463,7 @@ func RecordRenderError(url, errorType string) {
 		return
 	}
 	metricsInstance.RenderErrorTotal.With(prometheus.Labels{
-		"url":       url,
+		"url":        url,
 		"error_type": errorType,
 	}).Inc()
 }

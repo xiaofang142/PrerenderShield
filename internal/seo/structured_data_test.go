@@ -304,7 +304,7 @@ func TestStructuredDataOptimizer_OptimizeStructuredData_ExplicitType(t *testing.
 	optimizer := NewStructuredDataOptimizer(nil, logger)
 
 	data := map[string]interface{}{
-		"name": "Test Product",
+		"name":  "Test Product",
 		"price": 99.99,
 	}
 
@@ -498,7 +498,7 @@ func TestStructuredDataOptimizer_InjectStructuredData_ValidJSON(t *testing.T) {
 	endIdx := strings.Index(resultHTML, `</script>`)
 	assert.Greater(t, endIdx, startIdx)
 
-	jsonStr := resultHTML[startIdx+len(`<script type="application/ld+json">`):endIdx]
+	jsonStr := resultHTML[startIdx+len(`<script type="application/ld+json">`) : endIdx]
 
 	var parsed map[string]interface{}
 	err = json.Unmarshal([]byte(jsonStr), &parsed)

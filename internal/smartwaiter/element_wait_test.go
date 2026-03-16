@@ -103,8 +103,8 @@ func TestElementWaiter_WaitForElements(t *testing.T) {
 func TestElementWaiter_WaitForElements_MaxLimit(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	config := &ElementWaitConfig{
-		EnableWait:     true,
-		PollInterval:   100 * time.Millisecond,
+		EnableWait:      true,
+		PollInterval:    100 * time.Millisecond,
 		MaxWaitElements: 5,
 	}
 	waiter := NewElementWaiter(config, logger, nil)
@@ -263,12 +263,12 @@ func TestElementWaiter_WaitForResult_Fields(t *testing.T) {
 
 func TestElementWaitConfig_Fields(t *testing.T) {
 	config := &ElementWaitConfig{
-		EnableWait:        true,
-		DefaultTimeout:    60 * time.Second,
-		PollInterval:      200 * time.Millisecond,
-		EnableVisibility:  true,
+		EnableWait:         true,
+		DefaultTimeout:     60 * time.Second,
+		PollInterval:       200 * time.Millisecond,
+		EnableVisibility:   true,
 		EnableIntersection: true,
-		MaxWaitElements:   20,
+		MaxWaitElements:    20,
 	}
 
 	assert.Equal(t, true, config.EnableWait)

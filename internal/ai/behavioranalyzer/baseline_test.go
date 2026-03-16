@@ -191,7 +191,7 @@ func TestBaseline_GeoDeviation(t *testing.T) {
 			URI:        "/api/test",
 			Method:     "GET",
 			StatusCode: 200,
-			Latitude:   40.7128,  // 纽约
+			Latitude:   40.7128, // 纽约
 			Longitude:  -74.0060,
 			Country:    "US",
 		}
@@ -206,7 +206,7 @@ func TestBaseline_GeoDeviation(t *testing.T) {
 		URI:        "/api/test",
 		Method:     "GET",
 		StatusCode: 200,
-		Latitude:   39.9042,  // 北京
+		Latitude:   39.9042, // 北京
 		Longitude:  116.4074,
 		Country:    "CN",
 	}
@@ -316,13 +316,13 @@ func TestGetSeverity(t *testing.T) {
 
 func TestParseUserAgent(t *testing.T) {
 	tests := []struct {
-		ua       string
+		ua              string
 		expectedBrowser string
-		expectedOS string
+		expectedOS      string
 	}{
 		{"Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0", "Chrome", "Windows"},
 		{"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/537.36", "Safari", "macOS"},
-		{"Mozilla/5.0 (Linux; Android 10) Firefox/91.0", "Firefox", "Linux"}, // Android 基于 Linux
+		{"Mozilla/5.0 (Linux; Android 10) Firefox/91.0", "Firefox", "Linux"},         // Android 基于 Linux
 		{"Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X)", "Other", "macOS"}, // iOS 类似 macOS
 	}
 

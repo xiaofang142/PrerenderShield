@@ -12,27 +12,27 @@ import (
 
 // DeviceFingerprint 设备指纹
 type DeviceFingerprint struct {
-	ID              string                 `json:"id"`
-	FingerprintHash string                 `json:"fingerprint_hash"`
-	IP              string                 `json:"ip"`
-	UserAgent       string                 `json:"user_agent"`
-	ScreenRes       string                 `json:"screen_res,omitempty"`
-	Timezone        string                 `json:"timezone,omitempty"`
-	Language        string                 `json:"language,omitempty"`
-	Platform        string                 `json:"platform,omitempty"`
-	WebGLHash       string                 `json:"webgl_hash,omitempty"`
-	AudioHash       string                 `json:"audio_hash,omitempty"`
-	CanvasHash      string                 `json:"canvas_hash,omitempty"`
-	FontsHash       string                 `json:"fonts_hash,omitempty"`
-	Plugins         []string               `json:"plugins,omitempty"`
-	Headers         map[string]string      `json:"headers,omitempty"`
-	TLSFingerprint  string                 `json:"tls_fingerprint,omitempty"`
-	Confidence      float64                `json:"confidence"`
-	IsEmulator      bool                   `json:"is_emulator"`
-	IsVM            bool                   `json:"is_vm"`
-	RiskScore       float64                `json:"risk_score"`
-	CreatedAt       time.Time              `json:"created_at"`
-	UpdatedAt       time.Time              `json:"updated_at"`
+	ID              string            `json:"id"`
+	FingerprintHash string            `json:"fingerprint_hash"`
+	IP              string            `json:"ip"`
+	UserAgent       string            `json:"user_agent"`
+	ScreenRes       string            `json:"screen_res,omitempty"`
+	Timezone        string            `json:"timezone,omitempty"`
+	Language        string            `json:"language,omitempty"`
+	Platform        string            `json:"platform,omitempty"`
+	WebGLHash       string            `json:"webgl_hash,omitempty"`
+	AudioHash       string            `json:"audio_hash,omitempty"`
+	CanvasHash      string            `json:"canvas_hash,omitempty"`
+	FontsHash       string            `json:"fonts_hash,omitempty"`
+	Plugins         []string          `json:"plugins,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	TLSFingerprint  string            `json:"tls_fingerprint,omitempty"`
+	Confidence      float64           `json:"confidence"`
+	IsEmulator      bool              `json:"is_emulator"`
+	IsVM            bool              `json:"is_vm"`
+	RiskScore       float64           `json:"risk_score"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
 }
 
 // DeviceTrust 设备信任状态
@@ -57,13 +57,13 @@ type DeviceTrust struct {
 
 // Location 位置信息
 type Location struct {
-	Country   string  `json:"country"`
-	Region    string  `json:"region"`
-	City      string  `json:"city"`
-	Lat       float64 `json:"lat"`
-	Lon       float64 `json:"lon"`
-	Timezone  string  `json:"timezone"`
-	Accuracy  float64 `json:"accuracy,omitempty"`
+	Country  string  `json:"country"`
+	Region   string  `json:"region"`
+	City     string  `json:"city"`
+	Lat      float64 `json:"lat"`
+	Lon      float64 `json:"lon"`
+	Timezone string  `json:"timezone"`
+	Accuracy float64 `json:"accuracy,omitempty"`
 }
 
 // DeviceBehavior 设备行为特征
@@ -82,23 +82,23 @@ type DeviceBehavior struct {
 
 // DeviceFingerprintConfig 设备指纹配置
 type DeviceFingerprintConfig struct {
-	EnableCanvas       bool          `json:"enable_canvas"`
-	EnableWebGL        bool          `json:"enable_webgl"`
-	EnableAudio        bool          `json:"enable_audio"`
-	EnableFonts        bool          `json:"enable_fonts"`
-	EnablePlugins      bool          `json:"enable_plugins"`
-	EnableScreen       bool          `json:"enable_screen"`
-	EnableTimezone     bool          `json:"enable_timezone"`
-	EnableLanguage     bool          `json:"enable_language"`
-	EnableHeaders      bool          `json:"enable_headers"`
-	EnableTLSFingerprint bool        `json:"enable_tls_fingerprint"`
+	EnableCanvas         bool `json:"enable_canvas"`
+	EnableWebGL          bool `json:"enable_webgl"`
+	EnableAudio          bool `json:"enable_audio"`
+	EnableFonts          bool `json:"enable_fonts"`
+	EnablePlugins        bool `json:"enable_plugins"`
+	EnableScreen         bool `json:"enable_screen"`
+	EnableTimezone       bool `json:"enable_timezone"`
+	EnableLanguage       bool `json:"enable_language"`
+	EnableHeaders        bool `json:"enable_headers"`
+	EnableTLSFingerprint bool `json:"enable_tls_fingerprint"`
 
 	// 信任配置
-	TrustDecayRate   float64       `json:"trust_decay_rate"`
-	TrustBoostRate   float64       `json:"trust_boost_rate"`
-	MinTrustScore    float64       `json:"min_trust_score"`
-	MaxTrustScore    float64       `json:"max_trust_score"`
-	SessionTimeout   time.Duration `json:"session_timeout"`
+	TrustDecayRate float64       `json:"trust_decay_rate"`
+	TrustBoostRate float64       `json:"trust_boost_rate"`
+	MinTrustScore  float64       `json:"min_trust_score"`
+	MaxTrustScore  float64       `json:"max_trust_score"`
+	SessionTimeout time.Duration `json:"session_timeout"`
 
 	// 阈值
 	EmulatorThreshold float64 `json:"emulator_threshold"`
@@ -123,11 +123,11 @@ func DefaultDeviceFingerprintConfig() *DeviceFingerprintConfig {
 		EnableHeaders:        true,
 		EnableTLSFingerprint: true,
 
-		TrustDecayRate:   0.01,
-		TrustBoostRate:   0.05,
-		MinTrustScore:    0,
-		MaxTrustScore:    100,
-		SessionTimeout:   24 * time.Hour,
+		TrustDecayRate: 0.01,
+		TrustBoostRate: 0.05,
+		MinTrustScore:  0,
+		MaxTrustScore:  100,
+		SessionTimeout: 24 * time.Hour,
 
 		EmulatorThreshold: 0.7,
 		VMThreshold:       0.7,
@@ -169,15 +169,15 @@ type DeviceTrustDB struct {
 
 // DeviceStats 设备统计
 type DeviceStats struct {
-	TotalDevices     int64 `json:"total_devices"`
-	KnownDevices     int64 `json:"known_devices"`
-	UnknownDevices   int64 `json:"unknown_devices"`
-	TrustedDevices   int64 `json:"trusted_devices"`
-	BlockedDevices   int64 `json:"blocked_devices"`
+	TotalDevices      int64 `json:"total_devices"`
+	KnownDevices      int64 `json:"known_devices"`
+	UnknownDevices    int64 `json:"unknown_devices"`
+	TrustedDevices    int64 `json:"trusted_devices"`
+	BlockedDevices    int64 `json:"blocked_devices"`
 	EmulatorsDetected int64 `json:"emulators_detected"`
 	VMsDetected       int64 `json:"vms_detected"`
-	CacheHits        int64 `json:"cache_hits"`
-	CacheMisses      int64 `json:"cache_misses"`
+	CacheHits         int64 `json:"cache_hits"`
+	CacheMisses       int64 `json:"cache_misses"`
 }
 
 // NewDeviceFingerprintEngine 创建设备指纹引擎

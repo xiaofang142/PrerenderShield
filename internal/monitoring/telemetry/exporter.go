@@ -20,10 +20,10 @@ import (
 // ExporterConfig 导出器配置
 type ExporterConfig struct {
 	// OTLP 配置
-	OTLPEndpoint     string
-	OTLPHeaders      map[string]string
-	OTLPTimeout      time.Duration
-	OTLPCompression  bool
+	OTLPEndpoint    string
+	OTLPHeaders     map[string]string
+	OTLPTimeout     time.Duration
+	OTLPCompression bool
 
 	// Prometheus 远程写入配置
 	PrometheusRemoteWriteURL     string
@@ -40,28 +40,28 @@ type ExporterConfig struct {
 	FileExportFormat string // json, text
 
 	// 通用配置
-	MaxQueueSize       int
-	BatchTimeout       time.Duration
-	MaxExportBatchSize int
-	RetryMaxAttempts   int
+	MaxQueueSize         int
+	BatchTimeout         time.Duration
+	MaxExportBatchSize   int
+	RetryMaxAttempts     int
 	RetryInitialInterval time.Duration
 }
 
 // DefaultExporterConfig 返回默认配置
 func DefaultExporterConfig() *ExporterConfig {
 	return &ExporterConfig{
-		OTLPTimeout:        10 * time.Second,
-		OTLPCompression:    true,
-		PrometheusBatchSize: 512,
+		OTLPTimeout:             10 * time.Second,
+		OTLPCompression:         true,
+		PrometheusBatchSize:     512,
 		PrometheusFlushInterval: 5 * time.Second,
-		LogExport:          false,
-		LogExportLevel:     zap.InfoLevel,
-		FileExportFormat:   "json",
-		MaxQueueSize:       2048,
-		BatchTimeout:       5 * time.Second,
-		MaxExportBatchSize: 512,
-		RetryMaxAttempts:   3,
-		RetryInitialInterval: time.Second,
+		LogExport:               false,
+		LogExportLevel:          zap.InfoLevel,
+		FileExportFormat:        "json",
+		MaxQueueSize:            2048,
+		BatchTimeout:            5 * time.Second,
+		MaxExportBatchSize:      512,
+		RetryMaxAttempts:        3,
+		RetryInitialInterval:    time.Second,
 	}
 }
 

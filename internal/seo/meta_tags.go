@@ -93,14 +93,14 @@ type DescriptionAnalysis struct {
 
 // MetaTagsResult Meta 标签优化结果
 type MetaTagsResult struct {
-	Title         *TitleAnalysis         `json:"title"`
-	Description   *DescriptionAnalysis   `json:"description"`
-	Keywords      []string               `json:"keywords"`
-	MetaTags      map[string]string      `json:"meta_tags"`
-	OpenGraph     map[string]string      `json:"open_graph"`
-	TwitterCard   map[string]string      `json:"twitter_card"`
-	CanonicalURL  string                 `json:"canonical_url"`
-	MissingTags   []string               `json:"missing_tags"`
+	Title           *TitleAnalysis       `json:"title"`
+	Description     *DescriptionAnalysis `json:"description"`
+	Keywords        []string             `json:"keywords"`
+	MetaTags        map[string]string    `json:"meta_tags"`
+	OpenGraph       map[string]string    `json:"open_graph"`
+	TwitterCard     map[string]string    `json:"twitter_card"`
+	CanonicalURL    string               `json:"canonical_url"`
+	MissingTags     []string             `json:"missing_tags"`
 	Recommendations []string             `json:"recommendations"`
 }
 
@@ -110,9 +110,9 @@ func (o *MetaTagsOptimizer) OptimizeMetaTags(html string, targetKeywords []strin
 	defer o.mu.Unlock()
 
 	result := &MetaTagsResult{
-		MetaTags:      make(map[string]string),
-		OpenGraph:     make(map[string]string),
-		TwitterCard:   make(map[string]string),
+		MetaTags:        make(map[string]string),
+		OpenGraph:       make(map[string]string),
+		TwitterCard:     make(map[string]string),
 		Recommendations: make([]string, 0),
 	}
 
@@ -156,10 +156,10 @@ func (o *MetaTagsOptimizer) analyzeTitle(html string, keywords []string) *TitleA
 	title := o.extractTitle(html)
 
 	analysis := &TitleAnalysis{
-		Original: title,
+		Original:  title,
 		Optimized: title,
-		Length:   len(title),
-		Issues:   make([]string, 0),
+		Length:    len(title),
+		Issues:    make([]string, 0),
 	}
 
 	// 检查长度
@@ -207,10 +207,10 @@ func (o *MetaTagsOptimizer) analyzeDescription(html string, keywords []string) *
 	description := o.extractDescription(html)
 
 	analysis := &DescriptionAnalysis{
-		Original: description,
+		Original:  description,
 		Optimized: description,
-		Length:   len(description),
-		Issues:   make([]string, 0),
+		Length:    len(description),
+		Issues:    make([]string, 0),
 	}
 
 	if description == "" {

@@ -11,24 +11,24 @@ import (
 
 // Aggregator 窗口聚合器
 type Aggregator struct {
-	config       *AggregatorConfig
-	windowSize   time.Duration
-	slideSize    time.Duration
-	windows      map[int64]*Window
-	mu           sync.RWMutex
-	ctx          context.Context
-	cancel       context.CancelFunc
-	wg           sync.WaitGroup
-	outputChan   chan<- *AggregatedResult
-	logger       *zap.Logger
+	config     *AggregatorConfig
+	windowSize time.Duration
+	slideSize  time.Duration
+	windows    map[int64]*Window
+	mu         sync.RWMutex
+	ctx        context.Context
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
+	outputChan chan<- *AggregatedResult
+	logger     *zap.Logger
 }
 
 // AggregatorConfig 聚合器配置
 type AggregatorConfig struct {
-	WindowSize    time.Duration // 窗口大小
-	SlideSize     time.Duration // 滑动步长
-	MaxWindows    int           // 最大窗口数
-	EnableRealtime bool         // 启用实时输出
+	WindowSize     time.Duration // 窗口大小
+	SlideSize      time.Duration // 滑动步长
+	MaxWindows     int           // 最大窗口数
+	EnableRealtime bool          // 启用实时输出
 }
 
 // Window 时间窗口
@@ -44,21 +44,21 @@ type Window struct {
 
 // AggregatedResult 聚合结果
 type AggregatedResult struct {
-	WindowID    int64             `json:"window_id"`
-	StartTime   time.Time         `json:"start_time"`
-	EndTime     time.Time         `json:"end_time"`
-	TotalCount  int64             `json:"total_count"`
-	ByType      map[string]int64  `json:"by_type"`
-	ByStatus    map[string]int64  `json:"by_status"`
-	ByCountry   map[string]int64  `json:"by_country"`
-	BySite      map[string]int64  `json:"by_site"`
-	TopIPs      []IPStat          `json:"top_ips"`
-	TopURIs     []URIStat         `json:"top_uris"`
-	ThreatCount int64             `json:"threat_count"`
-	ErrorCount  int64             `json:"error_count"`
-	AvgLatency  float64           `json:"avg_latency"`
-	P95Latency  float64           `json:"p95_latency"`
-	P99Latency  float64           `json:"p99_latency"`
+	WindowID    int64            `json:"window_id"`
+	StartTime   time.Time        `json:"start_time"`
+	EndTime     time.Time        `json:"end_time"`
+	TotalCount  int64            `json:"total_count"`
+	ByType      map[string]int64 `json:"by_type"`
+	ByStatus    map[string]int64 `json:"by_status"`
+	ByCountry   map[string]int64 `json:"by_country"`
+	BySite      map[string]int64 `json:"by_site"`
+	TopIPs      []IPStat         `json:"top_ips"`
+	TopURIs     []URIStat        `json:"top_uris"`
+	ThreatCount int64            `json:"threat_count"`
+	ErrorCount  int64            `json:"error_count"`
+	AvgLatency  float64          `json:"avg_latency"`
+	P95Latency  float64          `json:"p95_latency"`
+	P99Latency  float64          `json:"p99_latency"`
 }
 
 // IPStat IP 统计
@@ -71,8 +71,8 @@ type IPStat struct {
 
 // URIStat URI 统计
 type URIStat struct {
-	URI    string `json:"uri"`
-	Count  int64  `json:"count"`
+	URI     string  `json:"uri"`
+	Count   int64   `json:"count"`
 	AvgTime float64 `json:"avg_time"`
 }
 
@@ -338,9 +338,9 @@ func (a *Aggregator) GetWindowStats() map[string]interface{} {
 	defer a.mu.RUnlock()
 
 	return map[string]interface{}{
-		"window_count":  len(a.windows),
-		"window_size":   a.windowSize.String(),
-		"slide_size":    a.slideSize.String(),
+		"window_count": len(a.windows),
+		"window_size":  a.windowSize.String(),
+		"slide_size":   a.slideSize.String(),
 	}
 }
 

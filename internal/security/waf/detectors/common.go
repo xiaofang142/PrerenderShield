@@ -83,10 +83,10 @@ func (d *BlacklistDetector) Check(req *http.Request) *types.CheckResult {
 
 // RateLimitDetector 速率限制检测器
 type RateLimitDetector struct {
-	requests      map[string][]time.Time
-	limit         int
-	window        time.Duration
-	mu            sync.Mutex
+	requests map[string][]time.Time
+	limit    int
+	window   time.Duration
+	mu       sync.Mutex
 }
 
 // NewRateLimitDetector 创建速率限制检测器

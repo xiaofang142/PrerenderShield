@@ -130,8 +130,8 @@ func TestRiskEngine_CalculateBehaviorRisk(t *testing.T) {
 	engine := NewUEBAEngine(config, logger)
 
 	session := &UserSession{
-		UserID:   "test_user",
-		Events:   make([]SessionEvent, 0),
+		UserID:    "test_user",
+		Events:    make([]SessionEvent, 0),
 		RiskLevel: RiskLevelNormal,
 	}
 
@@ -291,8 +291,8 @@ func TestUEBAEngine_DetectInsiderThreat(t *testing.T) {
 
 func TestUserSession_AddEvent(t *testing.T) {
 	session := &UserSession{
-		UserID:   "test",
-		Events:   make([]SessionEvent, 0),
+		UserID:    "test",
+		Events:    make([]SessionEvent, 0),
 		RiskLevel: RiskLevelTrusted,
 	}
 
@@ -314,8 +314,8 @@ func TestRiskEngine_UpdateRisk(t *testing.T) {
 	engine := NewRiskEngine(config, logger)
 
 	session := &UserSession{
-		UserID:   "risk_test",
-		Events:   make([]SessionEvent, 0),
+		UserID:    "risk_test",
+		Events:    make([]SessionEvent, 0),
 		RiskLevel: RiskLevelTrusted,
 	}
 

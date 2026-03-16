@@ -21,14 +21,14 @@ type SelectiveRenderer struct {
 
 // SelectiveRenderConfig 选择性渲染配置
 type SelectiveRenderConfig struct {
-	EnablePriorityQueue bool          `json:"enable_priority_queue"` // 启用优先级队列
-	EnableLazyRender    bool          `json:"enable_lazy_render"`    // 启用懒渲染
-	MaxConcurrentRenders int          `json:"max_concurrent_renders"` // 最大并发渲染数
-	BatchInterval       time.Duration `json:"batch_interval"`        // 批量渲染间隔
-	ViewportHeight      int           `json:"viewport_height"`       // 视口高度
-	ViewportWidth       int           `json:"viewport_width"`        // 视口宽度
-	PrioritySelectors   []string      `json:"priority_selectors"`    // 高优先级选择器
-	LazySelectors       []string      `json:"lazy_selectors"`        // 懒加载选择器
+	EnablePriorityQueue  bool          `json:"enable_priority_queue"`  // 启用优先级队列
+	EnableLazyRender     bool          `json:"enable_lazy_render"`     // 启用懒渲染
+	MaxConcurrentRenders int           `json:"max_concurrent_renders"` // 最大并发渲染数
+	BatchInterval        time.Duration `json:"batch_interval"`         // 批量渲染间隔
+	ViewportHeight       int           `json:"viewport_height"`        // 视口高度
+	ViewportWidth        int           `json:"viewport_width"`         // 视口宽度
+	PrioritySelectors    []string      `json:"priority_selectors"`     // 高优先级选择器
+	LazySelectors        []string      `json:"lazy_selectors"`         // 懒加载选择器
 }
 
 // DefaultSelectiveRenderConfig 返回默认配置
@@ -419,9 +419,9 @@ func stringToInt(s string) int {
 
 // PriorityQueue 优先级队列
 type PriorityQueue struct {
-	items  []*RenderRegion
+	items   []*RenderRegion
 	maxSize int
-	mu     sync.RWMutex
+	mu      sync.RWMutex
 }
 
 // NewPriorityQueue 创建优先级队列
@@ -493,13 +493,13 @@ type RenderTask struct {
 
 // RenderOptions 渲染选项
 type RenderOptions struct {
-	SkipCache      bool          `json:"skip_cache"`       // 跳过缓存
-	ForceRefresh   bool          `json:"force_refresh"`    // 强制刷新
-	Timeout        time.Duration `json:"timeout"`          // 超时时间
-	OnlyCritical   bool          `json:"only_critical"`    // 仅渲染关键区域
-	IncludeLazy    bool          `json:"include_lazy"`     // 包含懒加载区域
-	MaxRegions     int           `json:"max_regions"`      // 最大渲染区域数
-	PriorityFilter int           `json:"priority_filter"`  // 优先级过滤阈值
+	SkipCache      bool          `json:"skip_cache"`      // 跳过缓存
+	ForceRefresh   bool          `json:"force_refresh"`   // 强制刷新
+	Timeout        time.Duration `json:"timeout"`         // 超时时间
+	OnlyCritical   bool          `json:"only_critical"`   // 仅渲染关键区域
+	IncludeLazy    bool          `json:"include_lazy"`    // 包含懒加载区域
+	MaxRegions     int           `json:"max_regions"`     // 最大渲染区域数
+	PriorityFilter int           `json:"priority_filter"` // 优先级过滤阈值
 }
 
 // DefaultRenderOptions 返回默认渲染选项

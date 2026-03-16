@@ -277,10 +277,10 @@ func TestMetaTagsOptimizer_generateOpenGraph(t *testing.T) {
 	optimizer := NewMetaTagsOptimizer(nil, logger)
 
 	result := &MetaTagsResult{
-		Title:       &TitleAnalysis{Optimized: "OG Title"},
-		Description: &DescriptionAnalysis{Optimized: "OG Description"},
+		Title:        &TitleAnalysis{Optimized: "OG Title"},
+		Description:  &DescriptionAnalysis{Optimized: "OG Description"},
 		CanonicalURL: "https://example.com/page",
-		OpenGraph:   make(map[string]string),
+		OpenGraph:    make(map[string]string),
 	}
 
 	optimizer.generateOpenGraph(result)
@@ -319,8 +319,8 @@ func TestMetaTagsOptimizer_generateRecommendations(t *testing.T) {
 		Description: &DescriptionAnalysis{
 			Issues: []string{"描述太长"},
 		},
-		MissingTags: []string{"viewport"},
-		Keywords:    []string{},
+		MissingTags:     []string{"viewport"},
+		Keywords:        []string{},
 		Recommendations: make([]string, 0),
 	}
 
@@ -441,7 +441,7 @@ func TestMetaTagsOptimizer_BuildOptimizedHTML_AddMissing(t *testing.T) {
 			Original:  "",
 			Optimized: "Added description",
 		},
-		Keywords: []string{"test"},
+		Keywords:     []string{"test"},
 		CanonicalURL: "https://example.com/page",
 	}
 

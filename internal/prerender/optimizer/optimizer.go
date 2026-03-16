@@ -11,14 +11,14 @@ import (
 
 // Config 优化器配置
 type Config struct {
-	EnableLazyLoad       bool          // 启用懒加载
-	EnableResourceBlock  bool          // 启用资源阻止
-	EnableMemoryMonitor  bool          // 启用内存监控
-	BlockedResources     []string      // 要阻止的资源类型
-	LazyLoadImages       bool          // 图片懒加载
-	LazyLoadIFrames      bool          // iframe 懒加载
-	MemoryLimitMB        int           // 内存限制 (MB)
-	MemoryCheckInterval  time.Duration // 内存检查间隔
+	EnableLazyLoad      bool          // 启用懒加载
+	EnableResourceBlock bool          // 启用资源阻止
+	EnableMemoryMonitor bool          // 启用内存监控
+	BlockedResources    []string      // 要阻止的资源类型
+	LazyLoadImages      bool          // 图片懒加载
+	LazyLoadIFrames     bool          // iframe 懒加载
+	MemoryLimitMB       int           // 内存限制 (MB)
+	MemoryCheckInterval time.Duration // 内存检查间隔
 }
 
 // DefaultConfig 返回默认配置
@@ -69,10 +69,10 @@ func NewOptimizer(config Config, logger *zap.Logger) *Optimizer {
 	}
 
 	opt := &Optimizer{
-		config:     config,
-		logger:     logger,
+		config:      config,
+		logger:      logger,
 		memoryStats: &MemoryStats{LimitMB: float64(config.MemoryLimitMB)},
-		stopChan:   make(chan struct{}),
+		stopChan:    make(chan struct{}),
 	}
 
 	if config.EnableMemoryMonitor {
@@ -230,9 +230,9 @@ func (o *Optimizer) GetStats() map[string]interface{} {
 		"lazy_load_count": o.lazyLoadCount,
 		"memory_stats":    o.memoryStats,
 		"config": map[string]bool{
-			"lazy_load_enabled":        o.config.EnableLazyLoad,
-			"resource_block_enabled":   o.config.EnableResourceBlock,
-			"memory_monitor_enabled":   o.config.EnableMemoryMonitor,
+			"lazy_load_enabled":      o.config.EnableLazyLoad,
+			"resource_block_enabled": o.config.EnableResourceBlock,
+			"memory_monitor_enabled": o.config.EnableMemoryMonitor,
 		},
 	}
 }

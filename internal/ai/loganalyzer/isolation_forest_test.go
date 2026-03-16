@@ -119,9 +119,9 @@ func TestIsolationForest_Predict_Untrained(t *testing.T) {
 
 func TestAnomalyScore(t *testing.T) {
 	forest := NewIsolationForest(&IFConfig{
-		NTrees:        10,
-		SampleSize:    50,
-		MaxHeight:     4,
+		NTrees:     10,
+		SampleSize: 50,
+		MaxHeight:  4,
 	}, []string{"a", "b"})
 
 	// 未训练时
@@ -191,8 +191,8 @@ func TestCalculateConfidence(t *testing.T) {
 
 func TestAnalyzeAnomaly(t *testing.T) {
 	forest := NewIsolationForest(&IFConfig{
-		NTrees:        10,
-		SampleSize:    50,
+		NTrees:     10,
+		SampleSize: 50,
 	}, []string{"status", "bytes", "latency"})
 
 	// 训练

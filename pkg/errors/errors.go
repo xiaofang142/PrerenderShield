@@ -88,8 +88,8 @@ const (
 	ErrInvalidPassword = "INVALID_PASSWORD"
 
 	// Site errors
-	ErrSiteNotFound    = "SITE_NOT_FOUND"
-	ErrSiteExists      = "SITE_EXISTS"
+	ErrSiteNotFound      = "SITE_NOT_FOUND"
+	ErrSiteExists        = "SITE_EXISTS"
 	ErrSiteConfigInvalid = "SITE_CONFIG_INVALID"
 )
 

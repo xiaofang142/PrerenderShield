@@ -15,10 +15,10 @@ import (
 
 // FingerprintEngine 指纹识别引擎
 type FingerprintEngine struct {
-	config     *BotConfig
-	logger     *zap.Logger
-	cache      *FingerprintCache
-	parser     *UserAgentParser
+	config      *BotConfig
+	logger      *zap.Logger
+	cache       *FingerprintCache
+	parser      *UserAgentParser
 	tlsAnalyzer *TLSAnalyzer
 
 	// 已知机器人指纹库
@@ -45,22 +45,22 @@ type FingerprintEntry struct {
 
 // BotSignature 已知机器人签名
 type BotSignature struct {
-	Name        string   `json:"name"`
-	Category    string   `json:"category"` // search_engine, monitoring, malicious, etc.
-	Patterns    []string `json:"patterns"` // User-Agent 正则模式
-	JA3Hashes   []string `json:"ja3_hashes"`
-	IsGoodBot   bool     `json:"is_good_bot"`
+	Name      string   `json:"name"`
+	Category  string   `json:"category"` // search_engine, monitoring, malicious, etc.
+	Patterns  []string `json:"patterns"` // User-Agent 正则模式
+	JA3Hashes []string `json:"ja3_hashes"`
+	IsGoodBot bool     `json:"is_good_bot"`
 }
 
 // FingerprintStats 指纹统计
 type FingerprintStats struct {
-	TotalFingerprints  int64 `json:"total_fingerprints"`
-	BotDetected        int64 `json:"bot_detected"`
-	GoodBot            int64 `json:"good_bot"`
-	BadBot             int64 `json:"bad_bot"`
-	Unknown            int64 `json:"unknown"`
-	CacheHits          int64 `json:"cache_hits"`
-	CacheMisses        int64 `json:"cache_misses"`
+	TotalFingerprints int64 `json:"total_fingerprints"`
+	BotDetected       int64 `json:"bot_detected"`
+	GoodBot           int64 `json:"good_bot"`
+	BadBot            int64 `json:"bad_bot"`
+	Unknown           int64 `json:"unknown"`
+	CacheHits         int64 `json:"cache_hits"`
+	CacheMisses       int64 `json:"cache_misses"`
 }
 
 // UserAgentParser User-Agent 解析器
@@ -73,9 +73,9 @@ type UserAgentParser struct {
 
 // TLSAnalyzer TLS 分析器
 type TLSAnalyzer struct {
-	ja3Hashes   map[string]string // hash -> bot name
-	knownJa3    []string
-	mu          sync.RWMutex
+	ja3Hashes map[string]string // hash -> bot name
+	knownJa3  []string
+	mu        sync.RWMutex
 }
 
 // NewFingerprintEngine 创建指纹识别引擎
@@ -88,12 +88,12 @@ func NewFingerprintEngine(config *BotConfig, logger *zap.Logger) *FingerprintEng
 	}
 
 	engine := &FingerprintEngine{
-		config: config,
-		logger: logger,
-		cache:  NewFingerprintCache(config.CacheSize, config.CacheTTL),
-		parser: NewUserAgentParser(),
+		config:      config,
+		logger:      logger,
+		cache:       NewFingerprintCache(config.CacheSize, config.CacheTTL),
+		parser:      NewUserAgentParser(),
 		tlsAnalyzer: NewTLSAnalyzer(),
-		stats:  &FingerprintStats{},
+		stats:       &FingerprintStats{},
 	}
 
 	// 加载已知机器人签名
@@ -142,11 +142,11 @@ func NewUserAgentParser() *UserAgentParser {
 
 	// 浏览器模式
 	browserPatterns := map[string]string{
-		`chrome`:   `(?i)Chrome/(\d+\.\d+\.\d+\.\d+)`,
-		`firefox`:  `(?i)Firefox/(\d+\.\d+)`,
-		`safari`:   `(?i)Safari/(\d+\.\d+\.\d+)`,
-		`edge`:     `(?i)Edg/(\d+\.\d+\.\d+\.\d+)`,
-		`opera`:    `(?i)OPR/(\d+\.\d+\.\d+\.\d+)`,
+		`chrome`:  `(?i)Chrome/(\d+\.\d+\.\d+\.\d+)`,
+		`firefox`: `(?i)Firefox/(\d+\.\d+)`,
+		`safari`:  `(?i)Safari/(\d+\.\d+\.\d+)`,
+		`edge`:    `(?i)Edg/(\d+\.\d+\.\d+\.\d+)`,
+		`opera`:   `(?i)OPR/(\d+\.\d+\.\d+\.\d+)`,
 	}
 	for name, pattern := range browserPatterns {
 		if re, err := regexp.Compile(pattern); err == nil {
@@ -156,11 +156,11 @@ func NewUserAgentParser() *UserAgentParser {
 
 	// 操作系统模式
 	osPatterns := map[string]string{
-		`windows`:  `(?i)Windows NT (\d+\.\d+)`,
-		`macos`:    `(?i)Mac OS X (\d+[_.]\d+)`,
-		`linux`:    `(?i)Linux`,
-		`android`:  `(?i)Android (\d+\.\d+)`,
-		`ios`:      `(?i)iPhone OS (\d+_\d+)`,
+		`windows`: `(?i)Windows NT (\d+\.\d+)`,
+		`macos`:   `(?i)Mac OS X (\d+[_.]\d+)`,
+		`linux`:   `(?i)Linux`,
+		`android`: `(?i)Android (\d+\.\d+)`,
+		`ios`:     `(?i)iPhone OS (\d+_\d+)`,
 	}
 	for name, pattern := range osPatterns {
 		if re, err := regexp.Compile(pattern); err == nil {
@@ -170,8 +170,8 @@ func NewUserAgentParser() *UserAgentParser {
 
 	// 设备模式
 	devicePatterns := map[string]string{
-		`mobile`: `(?i)Mobile|Android|iPhone`,
-		`tablet`: `(?i)Tablet|iPad`,
+		`mobile`:  `(?i)Mobile|Android|iPhone`,
+		`tablet`:  `(?i)Tablet|iPad`,
 		`desktop`: `(?i)Windows NT|Mac OS X|Linux`,
 	}
 	for name, pattern := range devicePatterns {
@@ -214,20 +214,20 @@ func (e *FingerprintEngine) Analyze(
 
 	// 生成指纹
 	fingerprint := &Fingerprint{
-		ID:            e.generateFingerprintID(userAgent, tlsHash, http2Hash),
-		UserAgent:     userAgent,
-		UserAgentHash: e.hashString(userAgent),
-		TLSHash:       tlsHash,
-		HTTP2Hash:     http2Hash,
-		DeviceType:    uaInfo.DeviceType,
-		OS:            uaInfo.OS,
-		OSVersion:     uaInfo.OSVersion,
-		Browser:       uaInfo.Browser,
+		ID:             e.generateFingerprintID(userAgent, tlsHash, http2Hash),
+		UserAgent:      userAgent,
+		UserAgentHash:  e.hashString(userAgent),
+		TLSHash:        tlsHash,
+		HTTP2Hash:      http2Hash,
+		DeviceType:     uaInfo.DeviceType,
+		OS:             uaInfo.OS,
+		OSVersion:      uaInfo.OSVersion,
+		Browser:        uaInfo.Browser,
 		BrowserVersion: uaInfo.BrowserVersion,
-		Device:        uaInfo.Device,
-		Headers:       headers,
-		Confidence:    uaInfo.Confidence,
-		CreatedAt:     time.Now(),
+		Device:         uaInfo.Device,
+		Headers:        headers,
+		Confidence:     uaInfo.Confidence,
+		CreatedAt:      time.Now(),
 	}
 
 	// 检测机器人

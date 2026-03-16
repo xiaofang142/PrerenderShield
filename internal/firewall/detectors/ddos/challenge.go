@@ -13,10 +13,10 @@ import (
 
 // ChallengeManager 挑战管理器
 type ChallengeManager struct {
-	mu              sync.RWMutex
-	challenges      map[string]*ChallengeEntry // key: IP
+	mu                sync.RWMutex
+	challenges        map[string]*ChallengeEntry // key: IP
 	challengeDuration time.Duration
-	secret          string
+	secret            string
 }
 
 // ChallengeEntry 挑战条目
@@ -41,9 +41,9 @@ type ChallengeResult struct {
 func NewChallengeManager(duration time.Duration) *ChallengeManager {
 	secret := generateSecret()
 	return &ChallengeManager{
-		challenges:      make(map[string]*ChallengeEntry),
+		challenges:        make(map[string]*ChallengeEntry),
 		challengeDuration: duration,
-		secret:          secret,
+		secret:            secret,
 	}
 }
 
@@ -267,10 +267,10 @@ func (c *ChallengeManager) GetStats() *ChallengeStats {
 	}
 
 	return &ChallengeStats{
-		TotalChallenges:   total,
+		TotalChallenges:    total,
 		VerifiedChallenges: verified,
-		ExpiredChallenges: expired,
-		Duration:          c.challengeDuration,
+		ExpiredChallenges:  expired,
+		Duration:           c.challengeDuration,
 	}
 }
 

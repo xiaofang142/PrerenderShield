@@ -24,10 +24,10 @@ type Dashboard struct {
 
 // Config 仪表板配置
 type Config struct {
-	Enabled      bool          // 是否启用仪表板
-	ListenAddr   string        // 监听地址
+	Enabled         bool          // 是否启用仪表板
+	ListenAddr      string        // 监听地址
 	RefreshInterval time.Duration // 数据刷新间隔
-	MaxHistory   int           // 最大历史记录数
+	MaxHistory      int           // 最大历史记录数
 }
 
 // MetricsSource 指标数据源接口
@@ -40,13 +40,13 @@ type MetricsSource interface {
 
 // Overview 概览数据
 type Overview struct {
-	Timestamp      time.Time `json:"timestamp"`
-	TotalRequests  int64     `json:"total_requests"`
-	ActiveRequests int64     `json:"active_requests"`
-	CacheHitRate   float64   `json:"cache_hit_rate"`
-	AvgResponseTime float64  `json:"avg_response_time"`
-	ThreatsBlocked int64     `json:"threats_blocked"`
-	SitesCount     int       `json:"sites_count"`
+	Timestamp       time.Time `json:"timestamp"`
+	TotalRequests   int64     `json:"total_requests"`
+	ActiveRequests  int64     `json:"active_requests"`
+	CacheHitRate    float64   `json:"cache_hit_rate"`
+	AvgResponseTime float64   `json:"avg_response_time"`
+	ThreatsBlocked  int64     `json:"threats_blocked"`
+	SitesCount      int       `json:"sites_count"`
 }
 
 // SecurityStats 安全统计
@@ -82,30 +82,30 @@ type PerformanceStats struct {
 
 // SystemHealth 系统健康状态
 type SystemHealth struct {
-	Timestamp    time.Time        `json:"timestamp"`
-	Status       string           `json:"status"`
-	Goroutines   int              `json:"goroutines"`
-	MemoryUsage  uint64           `json:"memory_usage"`
-	MemoryLimit  uint64           `json:"memory_limit"`
-	CPUUsage     float64          `json:"cpu_usage"`
-	DiskUsage    *DiskUsage       `json:"disk_usage"`
-	ModuleStatus map[string]bool  `json:"module_status"`
+	Timestamp    time.Time       `json:"timestamp"`
+	Status       string          `json:"status"`
+	Goroutines   int             `json:"goroutines"`
+	MemoryUsage  uint64          `json:"memory_usage"`
+	MemoryLimit  uint64          `json:"memory_limit"`
+	CPUUsage     float64         `json:"cpu_usage"`
+	DiskUsage    *DiskUsage      `json:"disk_usage"`
+	ModuleStatus map[string]bool `json:"module_status"`
 }
 
 // DiskUsage 磁盘使用情况
 type DiskUsage struct {
-	Total     uint64  `json:"total"`
-	Used      uint64  `json:"used"`
+	Total       uint64  `json:"total"`
+	Used        uint64  `json:"used"`
 	UsedPercent float64 `json:"used_percent"`
 }
 
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		Enabled:       true,
-		ListenAddr:    ":9090",
+		Enabled:         true,
+		ListenAddr:      ":9090",
 		RefreshInterval: 5 * time.Second,
-		MaxHistory:    1000,
+		MaxHistory:      1000,
 	}
 }
 
@@ -147,7 +147,7 @@ func (d *Dashboard) RegisterRoutes(router *gin.Engine) {
 // handleIndex 处理首页请求
 func (d *Dashboard) handleIndex(c *gin.Context) {
 	c.HTML(http.StatusOK, "dashboard.html", gin.H{
-		"title":        "Prerender Shield Dashboard",
+		"title":            "Prerender Shield Dashboard",
 		"refresh_interval": d.config.RefreshInterval.Seconds(),
 	})
 }

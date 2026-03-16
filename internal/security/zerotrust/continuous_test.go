@@ -397,28 +397,28 @@ func TestVerificationResult(t *testing.T) {
 func TestSession(t *testing.T) {
 	now := time.Now()
 	location := &Location{
-		Country:  "CN",
-		Region:   "Beijing",
-		City:     "Beijing",
-		Lat:      39.9042,
-		Lon:      116.4074,
+		Country: "CN",
+		Region:  "Beijing",
+		City:    "Beijing",
+		Lat:     39.9042,
+		Lon:     116.4074,
 	}
 
 	session := &Session{
-		SessionID:        "sess-test123",
-		UserID:           "user123",
-		DeviceID:         "device456",
-		IP:               "192.168.1.1",
-		UserAgent:        "Mozilla/5.0",
-		Location:         location,
-		StartTime:        now,
-		LastActivity:     now,
-		LastVerification: now,
-		TrustScore:       75.0,
-		RiskScore:        25.0,
-		BehaviorFlags:    []string{"verified"},
-		IsValid:          true,
-		IsVerified:       true,
+		SessionID:         "sess-test123",
+		UserID:            "user123",
+		DeviceID:          "device456",
+		IP:                "192.168.1.1",
+		UserAgent:         "Mozilla/5.0",
+		Location:          location,
+		StartTime:         now,
+		LastActivity:      now,
+		LastVerification:  now,
+		TrustScore:        75.0,
+		RiskScore:         25.0,
+		BehaviorFlags:     []string{"verified"},
+		IsValid:           true,
+		IsVerified:        true,
 		VerificationCount: 5,
 	}
 
@@ -430,13 +430,13 @@ func TestSession(t *testing.T) {
 
 func TestLocation(t *testing.T) {
 	location := &Location{
-		Country:   "CN",
-		Region:    "Beijing",
-		City:      "Beijing",
-		Lat:       39.9042,
-		Lon:       116.4074,
-		Timezone:  "Asia/Shanghai",
-		Accuracy:  10.0,
+		Country:  "CN",
+		Region:   "Beijing",
+		City:     "Beijing",
+		Lat:      39.9042,
+		Lon:      116.4074,
+		Timezone: "Asia/Shanghai",
+		Accuracy: 10.0,
 	}
 
 	assert.NotNil(t, location)

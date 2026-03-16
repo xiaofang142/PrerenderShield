@@ -526,12 +526,12 @@ type LazyLoadManager struct {
 
 // LazyElement 懒加载元素
 type LazyElement struct {
-	Tag        string
-	ID         string
-	Class      string
-	Original   string
+	Tag         string
+	ID          string
+	Class       string
+	Original    string
 	Placeholder string
-	Loaded     bool
+	Loaded      bool
 }
 
 // NewLazyLoadManager 创建懒加载管理器

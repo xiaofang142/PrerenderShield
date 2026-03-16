@@ -30,22 +30,22 @@ type ChallengeSessionStore struct {
 
 // ChallengeSession 挑战会话
 type ChallengeSession struct {
-	SessionID   string
-	IP          string
-	UserAgent   string
+	SessionID     string
+	IP            string
+	UserAgent     string
 	ChallengeType ChallengeType
-	CreatedAt   time.Time
-	ExpiresAt   time.Time
-	Attempts    int
-	Passed      bool
-	Token       string
-	PoWParams   *PoWParams
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	Attempts      int
+	Passed        bool
+	Token         string
+	PoWParams     *PoWParams
 }
 
 // PoWParams Proof of Work 参数
 type PoWParams struct {
-	Challenge string `json:"challenge"`
-	Difficulty int   `json:"difficulty"` // 前缀零的个数
+	Challenge  string `json:"challenge"`
+	Difficulty int    `json:"difficulty"` // 前缀零的个数
 	Salt       string `json:"salt"`
 }
 
@@ -104,14 +104,14 @@ func (e *ChallengeEngine) CreateChallenge(ctx context.Context, ip, userAgent str
 	now := time.Now()
 
 	session := &ChallengeSession{
-		SessionID:   sessionID,
-		IP:          ip,
-		UserAgent:   userAgent,
+		SessionID:     sessionID,
+		IP:            ip,
+		UserAgent:     userAgent,
 		ChallengeType: challengeType,
-		CreatedAt:   now,
-		ExpiresAt:   now.Add(e.config.ChallengeTimeout),
-		Attempts:    0,
-		Passed:      false,
+		CreatedAt:     now,
+		ExpiresAt:     now.Add(e.config.ChallengeTimeout),
+		Attempts:      0,
+		Passed:        false,
 	}
 
 	// 根据挑战类型生成特定参数
@@ -156,9 +156,9 @@ func (e *ChallengeEngine) VerifyChallenge(ctx context.Context, sessionID string,
 		e.stats.TimeoutChallenges++
 		e.sessions.Delete(sessionID)
 		return &ChallengeResult{
-			Passed:      false,
+			Passed:        false,
 			ChallengeType: session.ChallengeType,
-			Error:       "challenge_expired",
+			Error:         "challenge_expired",
 		}
 	}
 
@@ -167,9 +167,9 @@ func (e *ChallengeEngine) VerifyChallenge(ctx context.Context, sessionID string,
 		e.stats.FailedChallenges++
 		e.sessions.Delete(sessionID)
 		return &ChallengeResult{
-			Passed:      false,
+			Passed:        false,
 			ChallengeType: session.ChallengeType,
-			Error:       "max_attempts_exceeded",
+			Error:         "max_attempts_exceeded",
 		}
 	}
 

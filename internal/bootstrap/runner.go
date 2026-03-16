@@ -42,8 +42,8 @@ func (r *AppRunner) Initialize(ctx context.Context) error {
 	// 使用依赖注入容器初始化所有模块
 	var err error
 	r.container, err = di.NewContainer(di.ContainerDeps{
-		Config:    r.config,
-		Redis:     r.redisClient,
+		Config: r.config,
+		Redis:  r.redisClient,
 	})
 	if err != nil {
 		return fmt.Errorf("init container: %w", err)

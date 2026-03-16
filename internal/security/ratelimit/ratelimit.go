@@ -10,29 +10,29 @@ import (
 
 // RateLimiter 速率限制器
 type RateLimiter struct {
-	config    *RateLimiterConfig
-	buckets   map[string]*TokenBucket
-	mu        sync.RWMutex
-	logger    *zap.Logger
-	stats     *RateLimiterStats
-	stopChan  chan struct{}
-	stopped   bool
-	closeMu   sync.Mutex
+	config   *RateLimiterConfig
+	buckets  map[string]*TokenBucket
+	mu       sync.RWMutex
+	logger   *zap.Logger
+	stats    *RateLimiterStats
+	stopChan chan struct{}
+	stopped  bool
+	closeMu  sync.Mutex
 }
 
 // RateLimiterConfig 速率限制配置
 type RateLimiterConfig struct {
 	// 全局配置
-	RequestsPerSecond int           // 全局每秒请求数
-	BurstSize         int           // 突发大小
+	RequestsPerSecond int // 全局每秒请求数
+	BurstSize         int // 突发大小
 
 	// IP 级别配置
-	IPRequestsPerSecond int           // 每 IP 每秒请求数
-	IPBurstSize         int           // 每 IP 突发大小
+	IPRequestsPerSecond int // 每 IP 每秒请求数
+	IPBurstSize         int // 每 IP 突发大小
 
 	// 用户级别配置
-	UserRequestsPerSecond int         // 每用户每秒请求数
-	UserBurstSize         int         // 每用户突发大小
+	UserRequestsPerSecond int // 每用户每秒请求数
+	UserBurstSize         int // 每用户突发大小
 
 	// 端点级别配置
 	EndpointLimits map[string]*EndpointLimit // 端点特定限制
@@ -68,11 +68,11 @@ type RateLimiterStats struct {
 
 // LimitResult 限制结果
 type LimitResult struct {
-	Allowed   bool    `json:"allowed"`
-	Remaining int     `json:"remaining"`
+	Allowed    bool   `json:"allowed"`
+	Remaining  int    `json:"remaining"`
 	ResetAfter int64  `json:"reset_after"` // 秒
-	RetryAfter  int64  `json:"retry_after"` // 秒
-	Reason      string `json:"reason,omitempty"`
+	RetryAfter int64  `json:"retry_after"` // 秒
+	Reason     string `json:"reason,omitempty"`
 }
 
 // DefaultRateLimiterConfig 返回默认配置

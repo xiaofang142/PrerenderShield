@@ -42,15 +42,15 @@ type Fields map[string]interface{}
 
 // structuredLogEntry 结构化日志条目
 type structuredLogEntry struct {
-	Timestamp string      `json:"timestamp"`
-	Level     string      `json:"level"`
-	Message   string      `json:"message"`
-	Service   string      `json:"service,omitempty"`
-	File      string      `json:"file,omitempty"`
-	Line      int         `json:"line,omitempty"`
-	TraceID   string      `json:"trace_id,omitempty"`
-	SpanID    string      `json:"span_id,omitempty"`
-	Details   Fields      `json:"details,omitempty"`
+	Timestamp string `json:"timestamp"`
+	Level     string `json:"level"`
+	Message   string `json:"message"`
+	Service   string `json:"service,omitempty"`
+	File      string `json:"file,omitempty"`
+	Line      int    `json:"line,omitempty"`
+	TraceID   string `json:"trace_id,omitempty"`
+	SpanID    string `json:"span_id,omitempty"`
+	Details   Fields `json:"details,omitempty"`
 }
 
 // NewStructuredLogger 创建结构化日志记录器

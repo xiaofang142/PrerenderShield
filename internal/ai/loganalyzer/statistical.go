@@ -28,17 +28,17 @@ type StatisticalConfig struct {
 
 // MetricStats 指标统计
 type MetricStats struct {
-	Count    int64
-	Sum      float64
-	SumSq    float64
-	Min      float64
-	Max      float64
-	Mean     float64
-	StdDev   float64
-	Q1       float64 // 第一四分位数
-	Q3       float64 // 第三四分位数
-	IQR      float64 // 四分位距
-	Values   []float64 // 用于计算分位数
+	Count      int64
+	Sum        float64
+	SumSq      float64
+	Min        float64
+	Max        float64
+	Mean       float64
+	StdDev     float64
+	Q1         float64   // 第一四分位数
+	Q3         float64   // 第三四分位数
+	IQR        float64   // 四分位距
+	Values     []float64 // 用于计算分位数
 	lastUpdate time.Time
 }
 
@@ -319,18 +319,18 @@ func (d *StatisticalDetector) GetStats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total_metrics":   metricCount,
-		"ready_metrics":   readyCount,
-		"min_samples":     d.minSamples,
-		"z_threshold":     d.config.ZScoreThreshold,
-		"iqr_multiplier":  d.config.IQRMultiplier,
+		"total_metrics":  metricCount,
+		"ready_metrics":  readyCount,
+		"min_samples":    d.minSamples,
+		"z_threshold":    d.config.ZScoreThreshold,
+		"iqr_multiplier": d.config.IQRMultiplier,
 	}
 }
 
 // StatisticalDetectorProcessor 统计异常检测处理器（包装器）
 type StatisticalDetectorProcessor struct {
-	name       string
-	detector   *StatisticalDetector
+	name     string
+	detector *StatisticalDetector
 }
 
 // NewStatisticalDetectorProcessor 创建统计异常检测处理器

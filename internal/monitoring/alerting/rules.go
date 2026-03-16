@@ -19,23 +19,23 @@ type RuleEngine struct {
 
 // Rule 告警规则
 type Rule struct {
-	ID          string        `json:"id"`
-	Name        string        `json:"name"`
-	Description string        `json:"description"`
-	Enabled     bool          `json:"enabled"`
-	Condition   *Condition    `json:"condition"`
-	Severity    string        `json:"severity"` // critical, warning, info
-	Handlers    []string      `json:"handlers"`
-	Cooldown    time.Duration `json:"cooldown"` // 冷却时间
+	ID            string        `json:"id"`
+	Name          string        `json:"name"`
+	Description   string        `json:"description"`
+	Enabled       bool          `json:"enabled"`
+	Condition     *Condition    `json:"condition"`
+	Severity      string        `json:"severity"` // critical, warning, info
+	Handlers      []string      `json:"handlers"`
+	Cooldown      time.Duration `json:"cooldown"` // 冷却时间
 	lastTriggered time.Time
-	mu          sync.Mutex
+	mu            sync.Mutex
 }
 
 // Condition 告警条件
 type Condition struct {
-	Metric    string      `json:"metric"`    // 指标名称
-	Operator  string      `json:"operator"`  // gt, lt, eq, ge, le
-	Threshold float64     `json:"threshold"` // 阈值
+	Metric    string        `json:"metric"`    // 指标名称
+	Operator  string        `json:"operator"`  // gt, lt, eq, ge, le
+	Threshold float64       `json:"threshold"` // 阈值
 	Duration  time.Duration `json:"duration"`  // 持续时间
 }
 

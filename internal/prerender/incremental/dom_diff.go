@@ -24,12 +24,12 @@ type DOMNode struct {
 
 // DOMDiff DOM 差异
 type DOMDiff struct {
-	Type       string     `json:"type"` // added, removed, modified, moved
-	Node       *DOMNode   `json:"node"`
-	OldNode    *DOMNode   `json:"old_node,omitempty"`
-	ParentPath string     `json:"parent_path"`
-	Index      int        `json:"index"`
-	Changes    []Change   `json:"changes,omitempty"`
+	Type       string   `json:"type"` // added, removed, modified, moved
+	Node       *DOMNode `json:"node"`
+	OldNode    *DOMNode `json:"old_node,omitempty"`
+	ParentPath string   `json:"parent_path"`
+	Index      int      `json:"index"`
+	Changes    []Change `json:"changes,omitempty"`
 }
 
 // Change 属性或文本变化
@@ -42,19 +42,19 @@ type Change struct {
 
 // DOMTree DOM 树
 type DOMTree struct {
-	Root      *DOMNode `json:"root"`
+	Root      *DOMNode            `json:"root"`
 	NodeIndex map[string]*DOMNode `json:"-"` // ID -> Node 映射
 	mu        sync.RWMutex
 }
 
 // DiffResult 差异结果
 type DiffResult struct {
-	Diffs       []DOMDiff `json:"diffs"`
-	TotalNodes  int       `json:"total_nodes"`
-	ChangedNodes int      `json:"changed_nodes"`
-	AddedNodes   int      `json:"added_nodes"`
-	RemovedNodes int      `json:"removed_nodes"`
-	Duration    int64     `json:"duration_ms"`
+	Diffs        []DOMDiff `json:"diffs"`
+	TotalNodes   int       `json:"total_nodes"`
+	ChangedNodes int       `json:"changed_nodes"`
+	AddedNodes   int       `json:"added_nodes"`
+	RemovedNodes int       `json:"removed_nodes"`
+	Duration     int64     `json:"duration_ms"`
 }
 
 // DOMDiffEngine DOM 差异引擎

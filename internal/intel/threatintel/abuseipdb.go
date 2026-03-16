@@ -80,24 +80,24 @@ func (p *AbuseIPDBProvider) QueryDomain(ctx context.Context, domain string) (*Th
 func (p *AbuseIPDBProvider) parseResponse(body []byte, ip string) (*ThreatIntelResult, error) {
 	var response struct {
 		Data struct {
-			IPAddress            string            `json:"ipAddress"`
-			IsPublic             bool              `json:"isPublic"`
-			IPVersion            int               `json:"ipVersion"`
-			IsWhitelisted        bool              `json:"isWhitelisted"`
-			AbuseScore           int               `json:"abuseScore"`
-			AbuseConfidence      int               `json:"abuseConfidence"`
-			CountryCode          string            `json:"countryCode"`
-			UsageType            string            `json:"usageType"`
-			ISP                  string            `json:"isp"`
-			Domain               string            `json:"domain"`
-			Hostnames            []string          `json:"hostnames"`
-			IsTor                bool              `json:"isTor"`
-			TotalReports         int               `json:"totalReports"`
-			LastReportedAt       string            `json:"lastReportedAt"`
-			Reports              []Report          `json:"reports"`
-			Categories           map[string]string `json:"categories"`
-			DistinctUsers        int               `json:"distinctUsers"`
-			DistinctUserCountries map[string]int `json:"distinctUserCountries"`
+			IPAddress             string            `json:"ipAddress"`
+			IsPublic              bool              `json:"isPublic"`
+			IPVersion             int               `json:"ipVersion"`
+			IsWhitelisted         bool              `json:"isWhitelisted"`
+			AbuseScore            int               `json:"abuseScore"`
+			AbuseConfidence       int               `json:"abuseConfidence"`
+			CountryCode           string            `json:"countryCode"`
+			UsageType             string            `json:"usageType"`
+			ISP                   string            `json:"isp"`
+			Domain                string            `json:"domain"`
+			Hostnames             []string          `json:"hostnames"`
+			IsTor                 bool              `json:"isTor"`
+			TotalReports          int               `json:"totalReports"`
+			LastReportedAt        string            `json:"lastReportedAt"`
+			Reports               []Report          `json:"reports"`
+			Categories            map[string]string `json:"categories"`
+			DistinctUsers         int               `json:"distinctUsers"`
+			DistinctUserCountries map[string]int    `json:"distinctUserCountries"`
 		} `json:"data"`
 	}
 
@@ -158,19 +158,19 @@ func (p *AbuseIPDBProvider) parseResponse(body []byte, ip string) (*ThreatIntelR
 		Categories:  append(categories, categoryLabels...),
 		Provider:    "abuseipdb",
 		RawData: map[string]interface{}{
-			"is_public":       data.IsPublic,
-			"is_whitelisted":  data.IsWhitelisted,
-			"abuse_score":     data.AbuseScore,
+			"is_public":        data.IsPublic,
+			"is_whitelisted":   data.IsWhitelisted,
+			"abuse_score":      data.AbuseScore,
 			"abuse_confidence": data.AbuseConfidence,
-			"country_code":    data.CountryCode,
-			"usage_type":      data.UsageType,
-			"isp":             data.ISP,
-			"domain":          data.Domain,
-			"is_tor":          data.IsTor,
-			"total_reports":   data.TotalReports,
-			"distinct_users":  data.DistinctUsers,
-			"last_reported":   data.LastReportedAt,
-			"hostnames":       data.Hostnames,
+			"country_code":     data.CountryCode,
+			"usage_type":       data.UsageType,
+			"isp":              data.ISP,
+			"domain":           data.Domain,
+			"is_tor":           data.IsTor,
+			"total_reports":    data.TotalReports,
+			"distinct_users":   data.DistinctUsers,
+			"last_reported":    data.LastReportedAt,
+			"hostnames":        data.Hostnames,
 		},
 	}
 
@@ -179,10 +179,10 @@ func (p *AbuseIPDBProvider) parseResponse(body []byte, ip string) (*ThreatIntelR
 
 // Report 滥用报告
 type Report struct {
-	ReportedAt   string `json:"reportedAt"`
-	Categories   []int  `json:"categories"`
-	Comment      string `json:"comment"`
-	ReporterID   int    `json:"reporterId"`
-	IsPublic     bool   `json:"isPublic"`
-	IsAutomated  bool   `json:"isAutomated"`
+	ReportedAt  string `json:"reportedAt"`
+	Categories  []int  `json:"categories"`
+	Comment     string `json:"comment"`
+	ReporterID  int    `json:"reporterId"`
+	IsPublic    bool   `json:"isPublic"`
+	IsAutomated bool   `json:"isAutomated"`
 }

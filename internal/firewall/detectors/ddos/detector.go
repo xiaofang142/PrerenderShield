@@ -312,14 +312,14 @@ func (d *Detector) Stop() {
 // getDefaultConfig 获取默认配置
 func getDefaultConfig() *Config {
 	return &Config{
-		Enabled:              true,
-		RateThreshold:        100,
-		BurstThreshold:       50,
-		ChallengeThreshold:   30,
-		BlockDuration:        10 * time.Minute,
-		ChallengeDuration:    5 * time.Minute,
-		RedisKeyPrefix:       "firewall:ddos",
-		EnableRedis:          false,
+		Enabled:            true,
+		RateThreshold:      100,
+		BurstThreshold:     50,
+		ChallengeThreshold: 30,
+		BlockDuration:      10 * time.Minute,
+		ChallengeDuration:  5 * time.Minute,
+		RedisKeyPrefix:     "firewall:ddos",
+		EnableRedis:        false,
 	}
 }
 

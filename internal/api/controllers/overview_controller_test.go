@@ -34,7 +34,7 @@ func TestOverviewController_GetOverview(t *testing.T) {
 		monitor:       monitor,
 		visitLogMgr:   visitLogMgr,
 		crawlerLogMgr: crawlerLogMgr,
-		wafRepo:     nil, // 使用 nil wafRepo 进行测试
+		wafRepo:       nil, // 使用 nil wafRepo 进行测试
 	}
 
 	router := gin.New()

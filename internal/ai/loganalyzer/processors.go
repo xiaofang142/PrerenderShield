@@ -280,17 +280,17 @@ func (p *RenderEnrichmentProcessor) classifyError(errMsg string) string {
 
 // AnomalyDetectionProcessor 异常检测处理器
 type AnomalyDetectionProcessor struct {
-	name        string
-	thresholds  *AnomalyThresholds
-	stats       *RequestStats
-	mu          sync.RWMutex
+	name       string
+	thresholds *AnomalyThresholds
+	stats      *RequestStats
+	mu         sync.RWMutex
 }
 
 // AnomalyThresholds 异常阈值
 type AnomalyThresholds struct {
-	RPMThreshold      int     // 每分钟请求数阈值
+	RPMThreshold       int     // 每分钟请求数阈值
 	ErrorRateThreshold float64 // 错误率阈值
-	LatencyThreshold  float64 // 延迟阈值
+	LatencyThreshold   float64 // 延迟阈值
 }
 
 // RequestStats 请求统计
@@ -302,17 +302,17 @@ type RequestStats struct {
 
 // IPWindowStats IP 窗口统计
 type IPWindowStats struct {
-	Count       int64
-	Errors      int64
+	Count        int64
+	Errors       int64
 	TotalLatency float64
-	FirstSeen   time.Time
-	LastSeen    time.Time
+	FirstSeen    time.Time
+	LastSeen     time.Time
 }
 
 // SiteWindowStats 站点窗口统计
 type SiteWindowStats struct {
-	Count       int64
-	Errors      int64
+	Count        int64
+	Errors       int64
 	TotalLatency float64
 }
 
@@ -320,9 +320,9 @@ type SiteWindowStats struct {
 func NewAnomalyDetectionProcessor(thresholds *AnomalyThresholds) *AnomalyDetectionProcessor {
 	if thresholds == nil {
 		thresholds = &AnomalyThresholds{
-			RPMThreshold:      1000,
+			RPMThreshold:       1000,
 			ErrorRateThreshold: 0.1,
-			LatencyThreshold:  5000,
+			LatencyThreshold:   5000,
 		}
 	}
 

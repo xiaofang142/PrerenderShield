@@ -22,16 +22,16 @@ type NetworkDetector struct {
 
 // NetworkConfig 网络检测配置
 type NetworkConfig struct {
-	EnableDetection    bool          `json:"enable_detection"`     // 启用检测
-	DetectionInterval  time.Duration `json:"detection_interval"`   // 检测间隔
-	Timeout            time.Duration `json:"timeout"`              // 超时时间
-	SampleCount        int           `json:"sample_count"`         // 采样次数
-	EnableAdaptive     bool          `json:"enable_adaptive"`      // 启用自适应
-	EnableFallback     bool          `json:"enable_fallback"`      // 启用降级
-	GoodLatency        time.Duration `json:"good_latency"`         // 良好延迟阈值
-	PoorLatency        time.Duration `json:"poor_latency"`         // 差延迟阈值
-	GoodBandwidth      float64       `json:"good_bandwidth"`       // 良好带宽 (Mbps)
-	PoorBandwidth      float64       `json:"poor_bandwidth"`       // 差带宽 (Mbps)
+	EnableDetection   bool          `json:"enable_detection"`   // 启用检测
+	DetectionInterval time.Duration `json:"detection_interval"` // 检测间隔
+	Timeout           time.Duration `json:"timeout"`            // 超时时间
+	SampleCount       int           `json:"sample_count"`       // 采样次数
+	EnableAdaptive    bool          `json:"enable_adaptive"`    // 启用自适应
+	EnableFallback    bool          `json:"enable_fallback"`    // 启用降级
+	GoodLatency       time.Duration `json:"good_latency"`       // 良好延迟阈值
+	PoorLatency       time.Duration `json:"poor_latency"`       // 差延迟阈值
+	GoodBandwidth     float64       `json:"good_bandwidth"`     // 良好带宽 (Mbps)
+	PoorBandwidth     float64       `json:"poor_bandwidth"`     // 差带宽 (Mbps)
 }
 
 // DefaultNetworkConfig 返回默认配置
@@ -52,31 +52,31 @@ func DefaultNetworkConfig() *NetworkConfig {
 
 // NetworkMetrics 网络指标
 type NetworkMetrics struct {
-	Latency         time.Duration `json:"latency"`          // 延迟
-	RTT             time.Duration `json:"rtt"`              // 往返时间
-	Bandwidth       float64       `json:"bandwidth"`        // 带宽 (Mbps)
-	PacketLoss      float64       `json:"packet_loss"`      // 丢包率 (%)
-	Jitter          time.Duration `json:"jitter"`           // 抖动
-	NetworkType     NetworkType   `json:"network_type"`     // 网络类型
-	SignalStrength  int           `json:"signal_strength"`  // 信号强度 (0-100)
-	EffectiveType   string        `json:"effective_type"`   // 有效类型 (4g, 3g, 2g)
-	Downlink        float64       `json:"downlink"`         // 下行速度 (Mbps)
-	IsOnline        bool          `json:"is_online"`        // 是否在线
-	LastUpdated     time.Time     `json:"last_updated"`     // 最后更新时间
-	QualityScore    float64       `json:"quality_score"`    // 质量评分 (0-100)
+	Latency        time.Duration `json:"latency"`         // 延迟
+	RTT            time.Duration `json:"rtt"`             // 往返时间
+	Bandwidth      float64       `json:"bandwidth"`       // 带宽 (Mbps)
+	PacketLoss     float64       `json:"packet_loss"`     // 丢包率 (%)
+	Jitter         time.Duration `json:"jitter"`          // 抖动
+	NetworkType    NetworkType   `json:"network_type"`    // 网络类型
+	SignalStrength int           `json:"signal_strength"` // 信号强度 (0-100)
+	EffectiveType  string        `json:"effective_type"`  // 有效类型 (4g, 3g, 2g)
+	Downlink       float64       `json:"downlink"`        // 下行速度 (Mbps)
+	IsOnline       bool          `json:"is_online"`       // 是否在线
+	LastUpdated    time.Time     `json:"last_updated"`    // 最后更新时间
+	QualityScore   float64       `json:"quality_score"`   // 质量评分 (0-100)
 }
 
 // NetworkType 网络类型
 type NetworkType string
 
 const (
-	NetworkTypeWiFi      NetworkType = "wifi"
-	NetworkType5G        NetworkType = "5g"
-	NetworkType4G        NetworkType = "4g"
-	NetworkType3G        NetworkType = "3g"
-	NetworkType2G        NetworkType = "2g"
-	NetworkTypeEthernet  NetworkType = "ethernet"
-	NetworkTypeUnknown   NetworkType = "unknown"
+	NetworkTypeWiFi     NetworkType = "wifi"
+	NetworkType5G       NetworkType = "5g"
+	NetworkType4G       NetworkType = "4g"
+	NetworkType3G       NetworkType = "3g"
+	NetworkType2G       NetworkType = "2g"
+	NetworkTypeEthernet NetworkType = "ethernet"
+	NetworkTypeUnknown  NetworkType = "unknown"
 )
 
 // NetworkQuality 网络质量等级
@@ -95,21 +95,21 @@ const (
 type WaitStrategy int
 
 const (
-	WaitStrategyNone     WaitStrategy = iota // 无需等待
-	WaitStrategyShort                        // 短暂等待
-	WaitStrategyMedium                       // 中等等待
-	WaitStrategyLong                         // 长等待
-	WaitStrategyLazy                         // 懒加载
+	WaitStrategyNone   WaitStrategy = iota // 无需等待
+	WaitStrategyShort                      // 短暂等待
+	WaitStrategyMedium                     // 中等等待
+	WaitStrategyLong                       // 长等待
+	WaitStrategyLazy                       // 懒加载
 )
 
 // FallbackStrategy 降级策略
 type FallbackStrategy int
 
 const (
-	FallbackStrategyNone     FallbackStrategy = iota // 无降级
-	FallbackStrategyLite                             // 精简模式
-	FallbackStrategyBasic                            // 基础模式
-	FallbackStrategyMinimal                          // 最小模式
+	FallbackStrategyNone    FallbackStrategy = iota // 无降级
+	FallbackStrategyLite                            // 精简模式
+	FallbackStrategyBasic                           // 基础模式
+	FallbackStrategyMinimal                         // 最小模式
 )
 
 // NewNetworkDetector 创建网络检测器

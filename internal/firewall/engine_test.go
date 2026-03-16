@@ -374,7 +374,6 @@ func TestRuleManager_loadRulesFromFile_DefaultFormat(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported rules file format")
 }
 
-
 // TestEngine_normalizeURL_EmptyPath 测试 normalizeURL 空路径
 func TestEngine_normalizeURL_EmptyPath(t *testing.T) {
 	u, err := url.Parse("http://example.com")

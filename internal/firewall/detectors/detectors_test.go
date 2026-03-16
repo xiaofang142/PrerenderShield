@@ -3,8 +3,8 @@ package detectors
 import (
 	"testing"
 
-	"prerender-shield/internal/firewall/types"
 	"github.com/stretchr/testify/assert"
+	"prerender-shield/internal/firewall/types"
 )
 
 // EmptyRuleManager 返回空规则切片的 mock

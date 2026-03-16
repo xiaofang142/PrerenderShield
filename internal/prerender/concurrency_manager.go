@@ -9,18 +9,18 @@ import (
 
 // ConcurrencyManager 动态并发管理器
 type ConcurrencyManager struct {
-	mu              sync.RWMutex
-	currentLimit    int
-	minLimit        int
-	maxLimit        int
-	activeCount     int
-	waitingCount    int
-	successCount    int64
-	failureCount    int64
-	lastAdjustTime  time.Time
-	adjustInterval  time.Duration
-	avgRenderTime   float64
-	renderTimes     []float64
+	mu             sync.RWMutex
+	currentLimit   int
+	minLimit       int
+	maxLimit       int
+	activeCount    int
+	waitingCount   int
+	successCount   int64
+	failureCount   int64
+	lastAdjustTime time.Time
+	adjustInterval time.Duration
+	avgRenderTime  float64
+	renderTimes    []float64
 }
 
 // NewConcurrencyManager 创建动态并发管理器

@@ -6,16 +6,16 @@ import "time"
 type ThreatType string
 
 const (
-	ThreatSQLInjection     ThreatType = "sql_injection"
-	ThreatXSS              ThreatType = "xss"
-	ThreatCSRF             ThreatType = "csrf"
-	ThreatRCE              ThreatType = "rce"
-	ThreatPathTraversal    ThreatType = "path_traversal"
-	ThreatFileInclusion    ThreatType = "file_inclusion"
-	ThreatSensitiveData    ThreatType = "sensitive_data"
-	ThreatMaliciousIP      ThreatType = "malicious_ip"
-	ThreatRateLimit        ThreatType = "rate_limit"
-	ThreatGeoIPBlock       ThreatType = "geo_ip_block"
+	ThreatSQLInjection  ThreatType = "sql_injection"
+	ThreatXSS           ThreatType = "xss"
+	ThreatCSRF          ThreatType = "csrf"
+	ThreatRCE           ThreatType = "rce"
+	ThreatPathTraversal ThreatType = "path_traversal"
+	ThreatFileInclusion ThreatType = "file_inclusion"
+	ThreatSensitiveData ThreatType = "sensitive_data"
+	ThreatMaliciousIP   ThreatType = "malicious_ip"
+	ThreatRateLimit     ThreatType = "rate_limit"
+	ThreatGeoIPBlock    ThreatType = "geo_ip_block"
 )
 
 // Threat 威胁信息
@@ -44,12 +44,12 @@ type Rule struct {
 
 // CheckResult 检查结果
 type CheckResult struct {
-	Allowed   bool     `json:"allowed"`
-	Blocked   bool     `json:"blocked"`
-	Challenge bool     `json:"challenge"`
-	Reason    string   `json:"reason,omitempty"`
-	RuleID    string   `json:"rule_id,omitempty"`
-	Threat    *Threat  `json:"threat,omitempty"`
+	Allowed   bool    `json:"allowed"`
+	Blocked   bool    `json:"blocked"`
+	Challenge bool    `json:"challenge"`
+	Reason    string  `json:"reason,omitempty"`
+	RuleID    string  `json:"rule_id,omitempty"`
+	Threat    *Threat `json:"threat,omitempty"`
 }
 
 // GeoIPConfig GeoIP 配置

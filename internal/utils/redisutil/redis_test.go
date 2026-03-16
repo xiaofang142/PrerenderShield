@@ -16,7 +16,7 @@ func TestParseRedisURLFormat(t *testing.T) {
 		expectHost string
 		expectPass string
 		expectDB   int
-		parseErr  bool // parsing error (before connection)
+		parseErr   bool // parsing error (before connection)
 	}{
 		{
 			name:       "simple URL",
@@ -24,7 +24,7 @@ func TestParseRedisURLFormat(t *testing.T) {
 			expectHost: "localhost:6379",
 			expectPass: "",
 			expectDB:   0,
-			parseErr:  false,
+			parseErr:   false,
 		},
 		{
 			name:       "URL with password",
@@ -32,7 +32,7 @@ func TestParseRedisURLFormat(t *testing.T) {
 			expectHost: "localhost:6379",
 			expectPass: "password",
 			expectDB:   0,
-			parseErr:  false,
+			parseErr:   false,
 		},
 		{
 			name:       "URL with different DB",
@@ -40,7 +40,7 @@ func TestParseRedisURLFormat(t *testing.T) {
 			expectHost: "localhost:6379",
 			expectPass: "",
 			expectDB:   5,
-			parseErr:  false,
+			parseErr:   false,
 		},
 		{
 			name:       "URL with password and different DB",
@@ -48,7 +48,7 @@ func TestParseRedisURLFormat(t *testing.T) {
 			expectHost: "127.0.0.1:6380",
 			expectPass: "mypassword",
 			expectDB:   3,
-			parseErr:  false,
+			parseErr:   false,
 		},
 		{
 			name:       "URL without DB",
@@ -56,7 +56,7 @@ func TestParseRedisURLFormat(t *testing.T) {
 			expectHost: "localhost:6379",
 			expectPass: "",
 			expectDB:   0, // default
-			parseErr:  false,
+			parseErr:   false,
 		},
 		{
 			name:       "invalid DB number",
@@ -64,7 +64,7 @@ func TestParseRedisURLFormat(t *testing.T) {
 			expectHost: "",
 			expectPass: "",
 			expectDB:   0,
-			parseErr:  true,
+			parseErr:   true,
 		},
 		{
 			name:       "empty URL",
@@ -72,7 +72,7 @@ func TestParseRedisURLFormat(t *testing.T) {
 			expectHost: "", // empty string results in empty host
 			expectPass: "",
 			expectDB:   0,
-			parseErr:  false,
+			parseErr:   false,
 		},
 		{
 			name:       "URL with empty DB",
@@ -80,7 +80,7 @@ func TestParseRedisURLFormat(t *testing.T) {
 			expectHost: "localhost:6379",
 			expectPass: "",
 			expectDB:   0,
-			parseErr:  false,
+			parseErr:   false,
 		},
 	}
 

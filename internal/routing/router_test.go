@@ -479,8 +479,8 @@ func TestRouter_AddRule(t *testing.T) {
 	cache := NewMemoryCache()
 
 	config := Config{
-		Cache: cache,
-		Rules: []*RouteRule{},
+		Cache:    cache,
+		Rules:    []*RouteRule{},
 		Handlers: map[string]HandlerFunc{},
 	}
 
@@ -504,8 +504,8 @@ func TestRouter_AddRule_WithID(t *testing.T) {
 	cache := NewMemoryCache()
 
 	config := Config{
-		Cache: cache,
-		Rules: []*RouteRule{},
+		Cache:    cache,
+		Rules:    []*RouteRule{},
 		Handlers: map[string]HandlerFunc{},
 	}
 
@@ -555,8 +555,8 @@ func TestRouter_DeleteRule_NotFound(t *testing.T) {
 	cache := NewMemoryCache()
 
 	config := Config{
-		Cache: cache,
-		Rules: []*RouteRule{},
+		Cache:    cache,
+		Rules:    []*RouteRule{},
 		Handlers: map[string]HandlerFunc{},
 	}
 

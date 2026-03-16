@@ -19,9 +19,9 @@ type MockPlugin struct {
 	metrics     map[string]interface{}
 }
 
-func (m *MockPlugin) Name() string                                   { return m.name }
-func (m *MockPlugin) Version() string                                { return m.version }
-func (m *MockPlugin) Description() string                            { return m.description }
+func (m *MockPlugin) Name() string        { return m.name }
+func (m *MockPlugin) Version() string     { return m.version }
+func (m *MockPlugin) Description() string { return m.description }
 func (m *MockPlugin) Initialize(ctx context.Context, config map[string]interface{}) error {
 	m.config = config
 	m.metrics["initialized"] = true

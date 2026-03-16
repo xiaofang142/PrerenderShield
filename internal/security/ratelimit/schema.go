@@ -16,21 +16,21 @@ import (
 
 // SchemaValidator Schema 验证器
 type SchemaValidator struct {
-	config   *SchemaValidatorConfig
-	schemas  map[string]*Schema
-	mu       sync.RWMutex
-	logger   *zap.Logger
-	stats    *ValidatorStats
+	config  *SchemaValidatorConfig
+	schemas map[string]*Schema
+	mu      sync.RWMutex
+	logger  *zap.Logger
+	stats   *ValidatorStats
 }
 
 // SchemaValidatorConfig 验证器配置
 type SchemaValidatorConfig struct {
-	EnableStrict      bool          // 严格模式
-	MaxDepth          int           // 最大嵌套深度
-	MaxProperties     int           // 最大属性数
-	Timeout           time.Duration // 验证超时
-	EnableCaching     bool          // 启用缓存
-	CacheSize         int           // 缓存大小
+	EnableStrict  bool          // 严格模式
+	MaxDepth      int           // 最大嵌套深度
+	MaxProperties int           // 最大属性数
+	Timeout       time.Duration // 验证超时
+	EnableCaching bool          // 启用缓存
+	CacheSize     int           // 缓存大小
 }
 
 // Schema JSON Schema 定义
@@ -58,18 +58,18 @@ type Schema struct {
 
 // ValidatorStats 验证统计
 type ValidatorStats struct {
-	TotalValidations   int64 `json:"total_validations"`
-	SuccessfulReviews  int64 `json:"successful_validations"`
-	FailedValidations  int64 `json:"failed_validations"`
-	CacheHits          int64 `json:"cache_hits"`
-	CacheMisses        int64 `json:"cache_misses"`
+	TotalValidations  int64 `json:"total_validations"`
+	SuccessfulReviews int64 `json:"successful_validations"`
+	FailedValidations int64 `json:"failed_validations"`
+	CacheHits         int64 `json:"cache_hits"`
+	CacheMisses       int64 `json:"cache_misses"`
 }
 
 // ValidationError 验证错误
 type ValidationError struct {
-	Field   string `json:"field"`
-	Message string `json:"message"`
-	Type    string `json:"type"` // required, type, pattern, enum, etc.
+	Field   string      `json:"field"`
+	Message string      `json:"message"`
+	Type    string      `json:"type"` // required, type, pattern, enum, etc.
 	Value   interface{} `json:"value,omitempty"`
 }
 

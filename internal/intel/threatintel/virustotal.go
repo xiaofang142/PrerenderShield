@@ -107,28 +107,28 @@ func (p *VirusTotalProvider) QueryDomain(ctx context.Context, domain string) (*T
 func (p *VirusTotalProvider) parseIPResponse(body []byte, ip string) (*ThreatIntelResult, error) {
 	var response struct {
 		Data struct {
-			ID         string `json:"id"`
-			Type       string `json:"type"`
-			Links      struct {
+			ID    string `json:"id"`
+			Type  string `json:"type"`
+			Links struct {
 				Self string `json:"self"`
 			} `json:"links"`
 			Attributes struct {
 				LastAnalysisStats struct {
-					Harmless  int `json:"harmless"`
-					Malicious int `json:"malicious"`
+					Harmless   int `json:"harmless"`
+					Malicious  int `json:"malicious"`
 					Suspicious int `json:"suspicious"`
-					Timeout   int `json:"timeout"`
+					Timeout    int `json:"timeout"`
 					Undetected int `json:"undetected"`
 				} `json:"last_analysis_stats"`
 				LastAnalysisResults map[string]struct {
-					Category  string `json:"category"`
-					Result    string `json:"result"`
-					Method    string `json:"method"`
+					Category   string `json:"category"`
+					Result     string `json:"result"`
+					Method     string `json:"method"`
 					EngineName string `json:"engine_name"`
 				} `json:"last_analysis_results"`
 				Reputation int `json:"reputation"`
 				TotalVotes struct {
-					Harmless int `json:"harmless"`
+					Harmless  int `json:"harmless"`
 					Malicious int `json:"malicious"`
 				} `json:"total_votes"`
 				Country string `json:"country"`
@@ -184,10 +184,10 @@ func (p *VirusTotalProvider) parseDomainResponse(body []byte, domain string) (*T
 			Type       string `json:"type"`
 			Attributes struct {
 				LastAnalysisStats struct {
-					Harmless  int `json:"harmless"`
-					Malicious int `json:"malicious"`
+					Harmless   int `json:"harmless"`
+					Malicious  int `json:"malicious"`
 					Suspicious int `json:"suspicious"`
-					Timeout   int `json:"timeout"`
+					Timeout    int `json:"timeout"`
 					Undetected int `json:"undetected"`
 				} `json:"last_analysis_stats"`
 				LastAnalysisResults map[string]struct {
@@ -201,7 +201,7 @@ func (p *VirusTotalProvider) parseDomainResponse(body []byte, domain string) (*T
 					Harmless  int `json:"harmless"`
 					Malicious int `json:"malicious"`
 				} `json:"total_votes"`
-				CreationDate int64 `json:"creation_date"`
+				CreationDate   int64 `json:"creation_date"`
 				LastUpdateDate int64 `json:"last_update_date"`
 			} `json:"attributes"`
 		} `json:"data"`

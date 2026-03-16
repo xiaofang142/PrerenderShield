@@ -11,14 +11,14 @@ const (
 
 // 默认配置常量
 const (
-	DefaultConfigCheckInterval     = 5 * time.Second
-	DefaultPrerenderTimeout        = 30 * time.Second
-	DefaultCacheTTL                = 3600 * time.Second
-	DefaultIdleTimeout             = 300 * time.Second
+	DefaultConfigCheckInterval        = 5 * time.Second
+	DefaultPrerenderTimeout           = 30 * time.Second
+	DefaultCacheTTL                   = 3600 * time.Second
+	DefaultIdleTimeout                = 300 * time.Second
 	DefaultFileIntegrityCheckInterval = 300 * time.Second
-	DefaultRuleUpdateInterval      = 24 * time.Hour
-	DefaultCacheCleanInterval      = 5 * time.Minute
-	DefaultCacheBatchSize          = 100
+	DefaultRuleUpdateInterval         = 24 * time.Hour
+	DefaultCacheCleanInterval         = 5 * time.Minute
+	DefaultCacheBatchSize             = 100
 )
 
 // 默认端口和地址
@@ -30,9 +30,9 @@ const (
 
 // 默认缓存配置
 const (
-	DefaultCacheType     = "memory"
+	DefaultCacheType       = "memory"
 	DefaultCacheMemorySize = 1000
-	DefaultRedisDB       = 0
+	DefaultRedisDB         = 0
 )
 
 // 默认防火墙配置

@@ -10,22 +10,22 @@ import (
 
 // IsolationForest 孤立森林异常检测器
 type IsolationForest struct {
-	config        *IFConfig
-	trees         []*IFTrees
-	featureNames  []string
-	mu            sync.RWMutex
-	trained       bool
-	threshold     float64
-	normalStats   map[string]*FeatureStats
+	config       *IFConfig
+	trees        []*IFTrees
+	featureNames []string
+	mu           sync.RWMutex
+	trained      bool
+	threshold    float64
+	normalStats  map[string]*FeatureStats
 }
 
 // IFConfig 孤立森林配置
 type IFConfig struct {
-	NTrees          int     // 树的数量
-	SampleSize      int     // 样本大小
-	MaxHeight       int     // 树的最大高度
-	Contamination   float64 // 异常比例阈值
-	NumFeatures     int     // 特征数量
+	NTrees        int     // 树的数量
+	SampleSize    int     // 样本大小
+	MaxHeight     int     // 树的最大高度
+	Contamination float64 // 异常比例阈值
+	NumFeatures   int     // 特征数量
 }
 
 // IFTrees 孤立树
@@ -56,10 +56,10 @@ type FeatureStats struct {
 
 // IFResult 孤立森林检测结果
 type IFResult struct {
-	Score       float64 // 异常分数 (0-1), 越接近 1 越异常
-	IsAnomaly   bool    // 是否异常
-	Confidence  float64 // 置信度
-	Reason      string  // 异常原因
+	Score      float64 // 异常分数 (0-1), 越接近 1 越异常
+	IsAnomaly  bool    // 是否异常
+	Confidence float64 // 置信度
+	Reason     string  // 异常原因
 }
 
 // DefaultIFConfig 返回默认配置
@@ -425,11 +425,11 @@ func (f *IsolationForest) GetStats() map[string]interface{} {
 	defer f.mu.RUnlock()
 
 	return map[string]interface{}{
-		"trained":        f.trained,
-		"num_trees":      len(f.trees),
-		"threshold":      f.threshold,
-		"num_features":   len(f.featureNames),
-		"contamination":  f.config.Contamination,
+		"trained":       f.trained,
+		"num_trees":     len(f.trees),
+		"threshold":     f.threshold,
+		"num_features":  len(f.featureNames),
+		"contamination": f.config.Contamination,
 	}
 }
 
@@ -488,10 +488,10 @@ func LogEntryToFeatures(entry *LogEntry) []float64 {
 
 // AnomalyDetectorProcessor 异常检测处理器
 type AnomalyDetectorProcessor struct {
-	name    string
-	forest  *IsolationForest
-	window  []*LogEntry
-	mu      sync.RWMutex
+	name   string
+	forest *IsolationForest
+	window []*LogEntry
+	mu     sync.RWMutex
 }
 
 // NewAnomalyDetectorProcessor 创建异常检测处理器

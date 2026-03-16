@@ -147,12 +147,12 @@ func TestPushManager_GetPushConfig_SiteNotFound(t *testing.T) {
 
 func TestPushManager_GetPushConfig(t *testing.T) {
 	expectedConfig := config.PushConfig{
-		Enabled:        true,
-		BaiduAPI:       "http://baidu.com/api",
-		BaiduToken:     "token123",
-		BingAPI:        "http://bing.com/api",
-		BingToken:      "token456",
-		PushDomain:     "example.com",
+		Enabled:         true,
+		BaiduAPI:        "http://baidu.com/api",
+		BaiduToken:      "token123",
+		BingAPI:         "http://bing.com/api",
+		BingToken:       "token456",
+		PushDomain:      "example.com",
 		BaiduDailyLimit: 100,
 		BingDailyLimit:  50,
 	}
@@ -291,14 +291,14 @@ func TestBuildFullURL_SpecialRoutes(t *testing.T) {
 func TestPushTask_FullStruct(t *testing.T) {
 	now := time.Now()
 	task := PushTask{
-		ID:          "test-task",
-		SiteID:      "site-1",
-		SiteName:    "Test Site",
-		URLs:        []string{"/page1", "/page2"},
-		Status:      "completed",
-		CreatedAt:   now,
-		StartedAt:   now.Add(time.Minute),
-		CompletedAt: now.Add(time.Minute * 5),
+		ID:           "test-task",
+		SiteID:       "site-1",
+		SiteName:     "Test Site",
+		URLs:         []string{"/page1", "/page2"},
+		Status:       "completed",
+		CreatedAt:    now,
+		StartedAt:    now.Add(time.Minute),
+		CompletedAt:  now.Add(time.Minute * 5),
 		SuccessCount: 10,
 		FailedCount:  2,
 	}

@@ -111,7 +111,7 @@ func TestDetector_Name(t *testing.T) {
 // TestDetector_Detect_NotEnabled 测试未启用检测
 func TestDetector_Detect_NotEnabled(t *testing.T) {
 	config := &Config{
-		Enabled:            false,
+		Enabled:              false,
 		EnabledDDoSDetection: false,
 	}
 	detector, _ := NewDetector(config, nil)
@@ -871,8 +871,8 @@ func TestDetector_Detect_WithRedis(t *testing.T) {
 // TestDetector_cleanupExpired 测试 cleanupExpired 方法
 func TestDetector_cleanupExpired_Full(t *testing.T) {
 	config := &Config{
-		Enabled:         true,
-		BlockDuration:   100 * time.Millisecond,
+		Enabled:           true,
+		BlockDuration:     100 * time.Millisecond,
 		ChallengeDuration: 100 * time.Millisecond,
 	}
 	detector, _ := NewDetector(config, nil)
@@ -1058,7 +1058,7 @@ func TestDetector_Detect_ChallengeSuccess(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
 	req.RemoteAddr = ip + ":12345"
 	req.Header.Set("User-Agent", "Mozilla/5.0")
-	req.Header.Set("Accept", "*/*")  // 添加正常请求头
+	req.Header.Set("Accept", "*/*") // 添加正常请求头
 	detector.Detect(req)
 
 	// 设置挑战状态

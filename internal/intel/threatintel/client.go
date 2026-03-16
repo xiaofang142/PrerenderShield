@@ -24,16 +24,16 @@ type ThreatIntelClient struct {
 
 // ThreatIntelConfig 威胁情报配置
 type ThreatIntelConfig struct {
-	VirusTotalAPIKey  string
-	AbuseIPDBAPIKey   string
-	AlienVaultAPIKey  string
-	EnableVirusTotal  bool
-	EnableAbuseIPDB   bool
-	EnableAlienVault  bool
-	CacheTTL          time.Duration
-	CacheMaxSize      int
-	RateLimitPerMin   int
-	Timeout           time.Duration
+	VirusTotalAPIKey string
+	AbuseIPDBAPIKey  string
+	AlienVaultAPIKey string
+	EnableVirusTotal bool
+	EnableAbuseIPDB  bool
+	EnableAlienVault bool
+	CacheTTL         time.Duration
+	CacheMaxSize     int
+	RateLimitPerMin  int
+	Timeout          time.Duration
 }
 
 // ThreatIntelResult 威胁情报查询结果
@@ -90,8 +90,8 @@ func NewThreatIntelClient(config *ThreatIntelConfig, logger *zap.Logger) *Threat
 	}
 
 	client := &ThreatIntelClient{
-		config: config,
-		cache:  NewMemoryCache(config.CacheMaxSize),
+		config:      config,
+		cache:       NewMemoryCache(config.CacheMaxSize),
 		rateLimiter: NewRateLimiter(config.RateLimitPerMin),
 		httpClient: &http.Client{
 			Timeout: config.Timeout,
@@ -264,12 +264,12 @@ func (c *ThreatIntelClient) aggregateResults(results []*ThreatIntelResult) *Thre
 
 	// 多提供者聚合
 	aggregated := &ThreatIntelResult{
-		IsMalicious:  false,
-		Confidence:   0,
-		RiskScore:    0,
-		Categories:   make([]string, 0),
-		RawData:      make(map[string]interface{}),
-		Provider:     "aggregated",
+		IsMalicious: false,
+		Confidence:  0,
+		RiskScore:   0,
+		Categories:  make([]string, 0),
+		RawData:     make(map[string]interface{}),
+		Provider:    "aggregated",
 	}
 
 	categorySet := make(map[string]bool)
@@ -321,9 +321,9 @@ func (c *ThreatIntelClient) GetProviders() []map[string]interface{} {
 	providers := make([]map[string]interface{}, 0, len(c.providers))
 	for name, provider := range c.providers {
 		providers = append(providers, map[string]interface{}{
-			"name":      name,
-			"enabled":   provider.IsEnabled(),
-			"type":      fmt.Sprintf("%T", provider),
+			"name":    name,
+			"enabled": provider.IsEnabled(),
+			"type":    fmt.Sprintf("%T", provider),
 		})
 	}
 	return providers
@@ -335,9 +335,9 @@ func (c *ThreatIntelClient) GetStats() map[string]interface{} {
 	defer c.mu.RUnlock()
 
 	return map[string]interface{}{
-		"provider_count":  len(c.providers),
-		"enabled_count":   c.countEnabledProviders(),
-		"cache_size":      c.cache.(*MemoryCache).Size(),
+		"provider_count":       len(c.providers),
+		"enabled_count":        c.countEnabledProviders(),
+		"cache_size":           c.cache.(*MemoryCache).Size(),
 		"rate_limit_remaining": c.rateLimiter.Remaining(),
 	}
 }
@@ -354,9 +354,9 @@ func (c *ThreatIntelClient) countEnabledProviders() int {
 
 // MemoryCache 内存缓存实现
 type MemoryCache struct {
-	data     map[string]*cacheItem
-	mu       sync.RWMutex
-	maxSize  int
+	data    map[string]*cacheItem
+	mu      sync.RWMutex
+	maxSize int
 }
 
 type cacheItem struct {

@@ -451,14 +451,14 @@ func TestIPTracker_RecordRequest_FastRequests(t *testing.T) {
 // TestIPRecord_RecordHeaders 测试 recordHeaders 方法
 func TestIPRecord_RecordHeaders(t *testing.T) {
 	record := &IPRecord{
-		IP:         "192.168.1.1",
-		Headers:    make(map[string][]string),
-		FirstSeen:  time.Now(),
-		LastSeen:   time.Now(),
+		IP:           "192.168.1.1",
+		Headers:      make(map[string][]string),
+		FirstSeen:    time.Now(),
+		LastSeen:     time.Now(),
 		RequestTimes: make([]time.Time, 0),
-		Paths:      make(map[string]int),
-		Methods:    make(map[string]int),
-		UserAgents: make([]string, 0),
+		Paths:        make(map[string]int),
+		Methods:      make(map[string]int),
+		UserAgents:   make([]string, 0),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
@@ -505,11 +505,11 @@ func TestIPRecord_UpdateSuspiciousScore_FastRequests(t *testing.T) {
 			now.Add(5 * time.Millisecond),
 			now.Add(10 * time.Millisecond),
 		},
-		UserAgents:  []string{"Mozilla/5.0"},
-		FirstSeen:   now,
-		LastSeen:    now,
-		Paths:       make(map[string]int),
-		Methods:     make(map[string]int),
+		UserAgents: []string{"Mozilla/5.0"},
+		FirstSeen:  now,
+		LastSeen:   now,
+		Paths:      make(map[string]int),
+		Methods:    make(map[string]int),
 	}
 
 	record.updateSuspiciousScore()
@@ -768,12 +768,12 @@ func TestIPRecord_updateSuspiciousScore_SuspiciousUA(t *testing.T) {
 		RequestTimes: []time.Time{
 			time.Now(),
 		},
-		UserAgents:  []string{"sqlmap/1.0"},
-		FirstSeen:   time.Now(),
-		LastSeen:    time.Now(),
-		Paths:       make(map[string]int),
-		Methods:     make(map[string]int),
-		Flags:       make(map[string]bool),
+		UserAgents: []string{"sqlmap/1.0"},
+		FirstSeen:  time.Now(),
+		LastSeen:   time.Now(),
+		Paths:      make(map[string]int),
+		Methods:    make(map[string]int),
+		Flags:      make(map[string]bool),
 	}
 
 	record.updateSuspiciousScore()
@@ -861,13 +861,13 @@ func TestIPTracker_getIPPrefix_IPv6(t *testing.T) {
 // TestIPTracker_updateSuspiciousScore_EmptyWindow 测试 updateSuspiciousScore 空窗口
 func TestIPTracker_updateSuspiciousScore_EmptyWindow(t *testing.T) {
 	record := &IPRecord{
-		IP:         "192.168.21.100",
-		UserAgents: []string{"Mozilla/5.0"},
-		FirstSeen:  time.Now(),
-		LastSeen:   time.Now(),
-		Paths:      make(map[string]int),
-		Methods:    make(map[string]int),
-		Flags:      make(map[string]bool),
+		IP:           "192.168.21.100",
+		UserAgents:   []string{"Mozilla/5.0"},
+		FirstSeen:    time.Now(),
+		LastSeen:     time.Now(),
+		Paths:        make(map[string]int),
+		Methods:      make(map[string]int),
+		Flags:        make(map[string]bool),
 		RequestTimes: []time.Time{}, // 空请求时间窗口
 	}
 
@@ -879,14 +879,14 @@ func TestIPTracker_updateSuspiciousScore_EmptyWindow(t *testing.T) {
 // TestIPTracker_updateSuspiciousScore_NoUA 测试 updateSuspiciousScore 无 User-Agent
 func TestIPTracker_updateSuspiciousScore_NoUA(t *testing.T) {
 	record := &IPRecord{
-		IP:       "192.168.21.101",
-		FirstSeen: time.Now(),
-		LastSeen:  time.Now(),
-		Paths:     make(map[string]int),
-		Methods:   make(map[string]int),
-		Flags:     make(map[string]bool),
+		IP:           "192.168.21.101",
+		FirstSeen:    time.Now(),
+		LastSeen:     time.Now(),
+		Paths:        make(map[string]int),
+		Methods:      make(map[string]int),
+		Flags:        make(map[string]bool),
 		RequestTimes: []time.Time{time.Now()},
-		UserAgents: []string{}, // 空 User-Agent
+		UserAgents:   []string{}, // 空 User-Agent
 	}
 
 	record.updateSuspiciousScore()

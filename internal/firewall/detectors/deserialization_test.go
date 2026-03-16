@@ -168,7 +168,6 @@ func TestDeserializationDetector_Detect_POSTBody(t *testing.T) {
 	}
 }
 
-
 // TestDeserializationDetector_Detect_MultiplePatterns 测试多个模式
 func TestDeserializationDetector_Detect_MultiplePatterns(t *testing.T) {
 	mockManager := &MockRuleManagerForDeserialization{

@@ -210,10 +210,10 @@ func (b *Blacklist) GetStats() *BlacklistStats {
 	}
 
 	return &BlacklistStats{
-		Total:      total,
-		Active:     active,
-		Expired:    expired,
-		Duration:   b.blockDuration,
+		Total:    total,
+		Active:   active,
+		Expired:  expired,
+		Duration: b.blockDuration,
 	}
 }
 

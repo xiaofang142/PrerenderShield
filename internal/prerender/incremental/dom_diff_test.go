@@ -135,14 +135,14 @@ func TestDOMDiffEngine_compareAttributes(t *testing.T) {
 	engine := NewDOMDiffEngine(nil)
 
 	oldAttrs := map[string]string{
-		"class": "old-class",
-		"id":    "same-id",
+		"class":    "old-class",
+		"id":       "same-id",
 		"data-old": "removed",
 	}
 
 	newAttrs := map[string]string{
-		"class": "new-class",
-		"id":    "same-id",
+		"class":    "new-class",
+		"id":       "same-id",
 		"data-new": "added",
 	}
 
@@ -282,8 +282,8 @@ func TestDOMDiffEngine_GetPatch(t *testing.T) {
 		{
 			Type: "modified",
 			Node: &DOMNode{
-				ID:   "node-2",
-				Tag:  "p",
+				ID:  "node-2",
+				Tag: "p",
 			},
 			OldNode: &DOMNode{
 				ID:   "node-2",
@@ -315,7 +315,7 @@ func TestDOMDiffEngine_GetChangedElements(t *testing.T) {
 				Node: &DOMNode{ID: "new-1"},
 			},
 			{
-				Type: "removed",
+				Type:    "removed",
 				OldNode: &DOMNode{ID: "old-1"},
 			},
 		},
@@ -334,11 +334,11 @@ func TestDOMDiffEngine_GetChangedPaths(t *testing.T) {
 	result := &DiffResult{
 		Diffs: []DOMDiff{
 			{
-				Type: "added",
+				Type:       "added",
 				ParentPath: "/div/section[0]",
 			},
 			{
-				Type: "modified",
+				Type:       "modified",
 				ParentPath: "/div/p[0]",
 			},
 		},
@@ -353,9 +353,9 @@ func TestDOMDiffEngine_GetChangedPaths(t *testing.T) {
 
 func TestDOMNode(t *testing.T) {
 	node := &DOMNode{
-		ID:    "test-node",
-		Tag:   "div",
-		Text:  "content",
+		ID:   "test-node",
+		Tag:  "div",
+		Text: "content",
 		Attributes: map[string]string{
 			"class": "container",
 			"id":    "main",

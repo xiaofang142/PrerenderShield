@@ -28,15 +28,15 @@ var (
 
 // MiddlewareConfig 中间件配置
 type MiddlewareConfig struct {
-	ServiceName       string        // 服务名称
-	Tracer            trace.Tracer  // 追踪器
-	Propagator        propagation.TextMapPropagator // 传播器
-	SkipPaths         []string      // 跳过追踪的路径
-	EnableMetrics     bool          // 启用指标
-	EnableTracing     bool          // 启用追踪
-	RecordRequestBody bool          // 记录请求体
-	RecordResponseBody bool         // 记录响应体
-	MaxBodySize       int           // 最大记录体大小 (字节)
+	ServiceName        string                        // 服务名称
+	Tracer             trace.Tracer                  // 追踪器
+	Propagator         propagation.TextMapPropagator // 传播器
+	SkipPaths          []string                      // 跳过追踪的路径
+	EnableMetrics      bool                          // 启用指标
+	EnableTracing      bool                          // 启用追踪
+	RecordRequestBody  bool                          // 记录请求体
+	RecordResponseBody bool                          // 记录响应体
+	MaxBodySize        int                           // 最大记录体大小 (字节)
 }
 
 // defaultSkipPaths 默认跳过的路径
@@ -49,13 +49,13 @@ var defaultSkipPaths = []string{
 // DefaultMiddlewareConfig 返回默认配置
 func DefaultMiddlewareConfig(serviceName string) *MiddlewareConfig {
 	return &MiddlewareConfig{
-		ServiceName: serviceName,
-		Tracer:      otel.Tracer(serviceName),
-		Propagator:  otel.GetTextMapPropagator(),
-		SkipPaths:   defaultSkipPaths,
+		ServiceName:   serviceName,
+		Tracer:        otel.Tracer(serviceName),
+		Propagator:    otel.GetTextMapPropagator(),
+		SkipPaths:     defaultSkipPaths,
 		EnableMetrics: true,
 		EnableTracing: true,
-		MaxBodySize: 4096,
+		MaxBodySize:   4096,
 	}
 }
 

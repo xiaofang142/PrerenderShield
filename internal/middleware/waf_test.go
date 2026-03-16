@@ -81,8 +81,8 @@ func TestWafMiddleware_Blacklist(t *testing.T) {
 	site := config.SiteConfig{
 		ID: "site1",
 		Firewall: config.FirewallConfig{
-			Enabled:     true,
-			Blacklist:   []string{"192.168.1.100"},
+			Enabled:   true,
+			Blacklist: []string{"192.168.1.100"},
 			ActionConfig: config.ActionConfig{
 				BlockMessage: "Access denied",
 			},
@@ -356,8 +356,8 @@ func TestWafMiddleware_NilWafRepo(t *testing.T) {
 	site := config.SiteConfig{
 		ID: "site1",
 		Firewall: config.FirewallConfig{
-			Enabled:     true,
-			Blacklist:   []string{"192.168.1.100"},
+			Enabled:   true,
+			Blacklist: []string{"192.168.1.100"},
 			ActionConfig: config.ActionConfig{
 				BlockMessage: "Access denied",
 			},
@@ -387,9 +387,9 @@ func TestWafMiddleware_NilRedis(t *testing.T) {
 		Firewall: config.FirewallConfig{
 			Enabled: true,
 			RateLimitConfig: config.RateLimitConfig{
-				Enabled:   true,
-				Requests:  100,
-				Window:    60,
+				Enabled:  true,
+				Requests: 100,
+				Window:   60,
 			},
 			ActionConfig: config.ActionConfig{
 				BlockMessage: "Access denied",
@@ -418,9 +418,9 @@ func TestWafMiddleware_Whitelist_Before_Blacklist(t *testing.T) {
 	site := config.SiteConfig{
 		ID: "site1",
 		Firewall: config.FirewallConfig{
-			Enabled:     true,
-			Whitelist:   []string{"192.168.1.100"},
-			Blacklist:   []string{"192.168.1.100"},
+			Enabled:   true,
+			Whitelist: []string{"192.168.1.100"},
+			Blacklist: []string{"192.168.1.100"},
 			ActionConfig: config.ActionConfig{
 				BlockMessage: "Access denied",
 			},
@@ -448,8 +448,8 @@ func TestWafMiddleware_Blacklist_Response(t *testing.T) {
 	site := config.SiteConfig{
 		ID: "site1",
 		Firewall: config.FirewallConfig{
-			Enabled:     true,
-			Blacklist:   []string{"192.168.1.100"},
+			Enabled:   true,
+			Blacklist: []string{"192.168.1.100"},
 			ActionConfig: config.ActionConfig{
 				BlockMessage: "Forbidden by WAF",
 			},

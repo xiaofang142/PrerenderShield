@@ -32,15 +32,15 @@ func (t TierType) String() string {
 
 // CacheEntry 缓存条目
 type CacheEntry struct {
-	Key        string                 `json:"key"`
-	Value      []byte                 `json:"value"`
-	Metadata   map[string]interface{} `json:"metadata"`
-	CreatedAt  time.Time              `json:"created_at"`
-	ExpiresAt  time.Time              `json:"expires_at"`
-	HitCount   int64                  `json:"hit_count"`
-	LastHitAt  time.Time              `json:"last_hit_at"`
-	Priority   int                    `json:"priority"` // 1-5, 5 为最高
-	Tier       TierType               `json:"tier"`
+	Key       string                 `json:"key"`
+	Value     []byte                 `json:"value"`
+	Metadata  map[string]interface{} `json:"metadata"`
+	CreatedAt time.Time              `json:"created_at"`
+	ExpiresAt time.Time              `json:"expires_at"`
+	HitCount  int64                  `json:"hit_count"`
+	LastHitAt time.Time              `json:"last_hit_at"`
+	Priority  int                    `json:"priority"` // 1-5, 5 为最高
+	Tier      TierType               `json:"tier"`
 }
 
 // IsExpired 检查是否过期
@@ -62,13 +62,13 @@ func (e *CacheEntry) TTL() time.Duration {
 // Config 多级缓存配置
 type Config struct {
 	// L1 内存缓存配置
-	L1Enabled bool
-	L1MaxSize int           // 最大条目数
+	L1Enabled    bool
+	L1MaxSize    int // 最大条目数
 	L1DefaultTTL time.Duration
 
 	// L2 Redis 缓存配置
-	L2Enabled bool
-	L2Prefix  string
+	L2Enabled    bool
+	L2Prefix     string
 	L2DefaultTTL time.Duration
 
 	// 写策略
@@ -78,7 +78,7 @@ type Config struct {
 	ReadThrough bool // 是否自动从 L2 回填 L1
 
 	// 监控
-	EnableMetrics bool
+	EnableMetrics         bool
 	MetricsSampleInterval time.Duration
 
 	// 日志
@@ -88,18 +88,18 @@ type Config struct {
 // DefaultConfig 默认配置
 func DefaultConfig() Config {
 	return Config{
-		L1Enabled:        true,
-		L1MaxSize:        1000,
-		L1DefaultTTL:     5 * time.Minute,
+		L1Enabled:    true,
+		L1MaxSize:    1000,
+		L1DefaultTTL: 5 * time.Minute,
 
-		L2Enabled:        true,
-		L2Prefix:         "prerender:cache:",
-		L2DefaultTTL:     1 * time.Hour,
+		L2Enabled:    true,
+		L2Prefix:     "prerender:cache:",
+		L2DefaultTTL: 1 * time.Hour,
 
-		WriteThrough:     true,
-		ReadThrough:      true,
+		WriteThrough: true,
+		ReadThrough:  true,
 
-		EnableMetrics:    true,
+		EnableMetrics:         true,
 		MetricsSampleInterval: 10 * time.Second,
 	}
 }
@@ -109,21 +109,21 @@ type Metrics struct {
 	mu sync.RWMutex
 
 	// L1 指标
-	L1Hits       int64
-	L1Misses     int64
-	L1Evictions  int64
-	L1Writes     int64
+	L1Hits      int64
+	L1Misses    int64
+	L1Evictions int64
+	L1Writes    int64
 
 	// L2 指标
-	L2Hits       int64
-	L2Misses     int64
-	L2Writes     int64
-	L2Errors     int64
+	L2Hits   int64
+	L2Misses int64
+	L2Writes int64
+	L2Errors int64
 
 	// 总体指标
-	TotalReads   int64
-	TotalWrites  int64
-	HitRate      float64
+	TotalReads  int64
+	TotalWrites int64
+	HitRate     float64
 
 	// 延迟统计
 	AvgReadLatency  time.Duration
@@ -237,36 +237,36 @@ func (m *Metrics) GetSnapshot() map[string]interface{} {
 	defer m.mu.RUnlock()
 
 	return map[string]interface{}{
-		"l1_hits":         m.L1Hits,
-		"l1_misses":       m.L1Misses,
-		"l1_evictions":    m.L1Evictions,
-		"l1_writes":       m.L1Writes,
-		"l2_hits":         m.L2Hits,
-		"l2_misses":       m.L2Misses,
-		"l2_writes":       m.L2Writes,
-		"l2_errors":       m.L2Errors,
-		"total_reads":     m.TotalReads,
-		"total_writes":    m.TotalWrites,
-		"hit_rate":        m.HitRate,
-		"avg_read_latency": m.AvgReadLatency.String(),
+		"l1_hits":           m.L1Hits,
+		"l1_misses":         m.L1Misses,
+		"l1_evictions":      m.L1Evictions,
+		"l1_writes":         m.L1Writes,
+		"l2_hits":           m.L2Hits,
+		"l2_misses":         m.L2Misses,
+		"l2_writes":         m.L2Writes,
+		"l2_errors":         m.L2Errors,
+		"total_reads":       m.TotalReads,
+		"total_writes":      m.TotalWrites,
+		"hit_rate":          m.HitRate,
+		"avg_read_latency":  m.AvgReadLatency.String(),
 		"avg_write_latency": m.AvgWriteLatency.String(),
-		"l1_size":         m.L1Size,
-		"l2_size":         m.L2Size,
+		"l1_size":           m.L1Size,
+		"l2_size":           m.L2Size,
 	}
 }
 
 // TieredCache 多级缓存实现
 type TieredCache struct {
-	config     Config
-	logger     *zap.Logger
-	metrics    *Metrics
-	ctx        context.Context
-	cancel     context.CancelFunc
+	config  Config
+	logger  *zap.Logger
+	metrics *Metrics
+	ctx     context.Context
+	cancel  context.CancelFunc
 
 	// L1: 内存缓存
-	l1mu      sync.RWMutex
-	l1items   map[string]*CacheEntry
-	l1queue   []string // 用于 LRU  eviction
+	l1mu    sync.RWMutex
+	l1items map[string]*CacheEntry
+	l1queue []string // 用于 LRU  eviction
 
 	// L2: Redis 缓存
 	redisClient RedisClientForTieredCache

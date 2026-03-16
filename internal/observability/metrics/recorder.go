@@ -32,11 +32,11 @@ type InMemoryRecorder struct {
 	totalErrors      int64
 
 	// 详细分类数据
-	requestCount  map[string]int64
-	cacheHits     map[string]int64
-	cacheMisses   map[string]int64
-	wafBlocks     map[string]int64
-	errors        map[string]int64
+	requestCount map[string]int64
+	cacheHits    map[string]int64
+	cacheMisses  map[string]int64
+	wafBlocks    map[string]int64
+	errors       map[string]int64
 
 	startTime time.Time
 }

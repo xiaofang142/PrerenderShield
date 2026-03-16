@@ -170,8 +170,8 @@ func TestChallengeSessionStore_Cleanup(t *testing.T) {
 
 	// 添加会话
 	session := &ChallengeSession{
-		SessionID:   "test-session",
-		ExpiresAt:   time.Now().Add(50 * time.Millisecond),
+		SessionID:     "test-session",
+		ExpiresAt:     time.Now().Add(50 * time.Millisecond),
 		ChallengeType: ChallengeJavaScript,
 	}
 	store.Set("test-session", session)
@@ -248,11 +248,11 @@ func TestPoWParams_Serialization(t *testing.T) {
 
 func TestChallengeResult(t *testing.T) {
 	result := &ChallengeResult{
-		Passed:      true,
+		Passed:        true,
 		ChallengeType: ChallengeJavaScript,
-		Score:       0.8,
-		Duration:    100 * time.Millisecond,
-		Attempts:    1,
+		Score:         0.8,
+		Duration:      100 * time.Millisecond,
+		Attempts:      1,
 		Extra: map[string]interface{}{
 			"test": "value",
 		},
@@ -269,15 +269,15 @@ func TestChallengeResult(t *testing.T) {
 func TestChallengeSession(t *testing.T) {
 	now := time.Now()
 	session := &ChallengeSession{
-		SessionID:   "session-123",
-		IP:          "192.168.1.1",
-		UserAgent:   "test-ua",
+		SessionID:     "session-123",
+		IP:            "192.168.1.1",
+		UserAgent:     "test-ua",
 		ChallengeType: ChallengePoW,
-		CreatedAt:   now,
-		ExpiresAt:   now.Add(5 * time.Minute),
-		Attempts:    0,
-		Passed:      false,
-		Token:       "token-abc",
+		CreatedAt:     now,
+		ExpiresAt:     now.Add(5 * time.Minute),
+		Attempts:      0,
+		Passed:        false,
+		Token:         "token-abc",
 		PoWParams: &PoWParams{
 			Challenge:  "challenge",
 			Difficulty: 4,
@@ -299,9 +299,9 @@ func TestChallengeStore_GetStats(t *testing.T) {
 	// 添加一些会话
 	for i := 0; i < 5; i++ {
 		store.Set("session-"+string(rune('0'+i)), &ChallengeSession{
-			SessionID:   "session-" + string(rune('0'+i)),
+			SessionID:     "session-" + string(rune('0'+i)),
 			ChallengeType: ChallengeJavaScript,
-			ExpiresAt:   time.Now().Add(1 * time.Minute),
+			ExpiresAt:     time.Now().Add(1 * time.Minute),
 		})
 	}
 

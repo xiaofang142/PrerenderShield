@@ -31,11 +31,11 @@ type PreheaterConfig struct {
 
 // HeatEntry 热度条目
 type HeatEntry struct {
-	Key        string
-	HitCount   int
-	LastHit    time.Time
-	IsHot      bool
-	Priority   int
+	Key      string
+	HitCount int
+	LastHit  time.Time
+	IsHot    bool
+	Priority int
 }
 
 // PreheatTask 预热任务
@@ -255,14 +255,14 @@ type Invalidator struct {
 
 // InvalidatorConfig 失效器配置
 type InvalidatorConfig struct {
-	EnableVersioning bool     // 启用版本控制
+	EnableVersioning bool          // 启用版本控制
 	DefaultTTL       time.Duration // 默认 TTL
 }
 
 // InvalidationRule 失效规则
 type InvalidationRule struct {
-	Pattern    string // 匹配模式（支持通配符）
-	Condition  func(key string, value []byte) bool
+	Pattern      string // 匹配模式（支持通配符）
+	Condition    func(key string, value []byte) bool
 	OnInvalidate func(key string)
 }
 

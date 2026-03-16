@@ -322,9 +322,9 @@ func TestSaveCertificate(t *testing.T) {
 	}
 
 	cert := &certificate.Resource{
-		Domain:      "example.com",
-		Certificate: []byte("-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----"),
-		PrivateKey:  []byte("-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----"),
+		Domain:            "example.com",
+		Certificate:       []byte("-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----"),
+		PrivateKey:        []byte("-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----"),
 		IssuerCertificate: []byte("-----BEGIN CERTIFICATE-----\nissuer\n-----END CERTIFICATE-----"),
 	}
 

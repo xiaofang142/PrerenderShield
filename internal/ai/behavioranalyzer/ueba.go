@@ -32,16 +32,16 @@ type UEBAConfig struct {
 	RiskScoreWeights *RiskScoreWeights
 
 	// 检测配置
-	EnableSequenceAnalysis  bool   // 启用序列分析
-	EnableLateralMovement   bool   // 启用横向移动检测
-	EnableInsiderThreat     bool   // 启用内部威胁检测
-	MinSequenceLength       int    // 最小序列长度
-	LateralMovementThreshold int    // 横向移动阈值
-	InsiderThreatThreshold  float64 // 内部威胁阈值
+	EnableSequenceAnalysis   bool    // 启用序列分析
+	EnableLateralMovement    bool    // 启用横向移动检测
+	EnableInsiderThreat      bool    // 启用内部威胁检测
+	MinSequenceLength        int     // 最小序列长度
+	LateralMovementThreshold int     // 横向移动阈值
+	InsiderThreatThreshold   float64 // 内部威胁阈值
 
 	// 群体基线配置
-	EnablePeerGrouping  bool // 启用群体分析
-	MinGroupSize        int  // 最小群体大小
+	EnablePeerGrouping bool // 启用群体分析
+	MinGroupSize       int  // 最小群体大小
 
 	// 存储配置
 	MaxUsers int
@@ -50,27 +50,27 @@ type UEBAConfig struct {
 
 // RiskScoreWeights 风险评分权重
 type RiskScoreWeights struct {
-	ThreatIntel      float64 // 威胁情报权重
-	BehaviorAnomaly  float64 // 行为异常权重
-	SequenceAnomaly  float64 // 序列异常权重
-	PeerAnomaly      float64 // 群体偏离权重
+	ThreatIntel         float64 // 威胁情报权重
+	BehaviorAnomaly     float64 // 行为异常权重
+	SequenceAnomaly     float64 // 序列异常权重
+	PeerAnomaly         float64 // 群体偏离权重
 	PrivilegeEscalation float64 // 权限提升权重
-	LateralMovement  float64 // 横向移动权重
+	LateralMovement     float64 // 横向移动权重
 }
 
 // UserSession 用户会话
 type UserSession struct {
-	UserID      string                 `json:"user_id"`
-	IP          string                 `json:"ip"`
-	Start       time.Time              `json:"start"`
-	LastSeen    time.Time              `json:"last_seen"`
-	Events      []SessionEvent         `json:"events"`
-	EventCount  int64                  `json:"event_count"`
-	RiskScore   float64                `json:"risk_score"`
-	RiskLevel   RiskLevel              `json:"risk_level"`
-	Flags       []string               `json:"flags"`
-	Metadata    map[string]interface{} `json:"metadata"`
-	mu          sync.RWMutex
+	UserID     string                 `json:"user_id"`
+	IP         string                 `json:"ip"`
+	Start      time.Time              `json:"start"`
+	LastSeen   time.Time              `json:"last_seen"`
+	Events     []SessionEvent         `json:"events"`
+	EventCount int64                  `json:"event_count"`
+	RiskScore  float64                `json:"risk_score"`
+	RiskLevel  RiskLevel              `json:"risk_level"`
+	Flags      []string               `json:"flags"`
+	Metadata   map[string]interface{} `json:"metadata"`
+	mu         sync.RWMutex
 }
 
 // SessionEvent 会话事件
@@ -90,32 +90,32 @@ type SessionEvent struct {
 
 // RiskEngine 风险评分引擎
 type RiskEngine struct {
-	config      *UEBAConfig
-	userRisks   map[string]*UserRisk
-	mu          sync.RWMutex
+	config    *UEBAConfig
+	userRisks map[string]*UserRisk
+	mu        sync.RWMutex
 }
 
 // UserRisk 用户风险
 type UserRisk struct {
-	UserID        string                 `json:"user_id"`
-	BaseRisk      float64                `json:"base_risk"`      // 基础风险
-	ThreatRisk    float64                `json:"threat_risk"`    // 威胁情报风险
-	BehaviorRisk  float64                `json:"behavior_risk"`  // 行为异常风险
-	SequenceRisk  float64                `json:"sequence_risk"`  // 序列异常风险
-	PeerRisk      float64                `json:"peer_risk"`      // 群体偏离风险
-	PrivilegeRisk float64                `json:"privilege_risk"` // 权限提升风险
-	LateralRisk   float64                `json:"lateral_risk"`   // 横向移动风险
-	TotalRisk     float64                `json:"total_risk"`
-	RiskFactors   []RiskFactor           `json:"risk_factors"`
-	LastUpdated   time.Time              `json:"last_updated"`
+	UserID        string       `json:"user_id"`
+	BaseRisk      float64      `json:"base_risk"`      // 基础风险
+	ThreatRisk    float64      `json:"threat_risk"`    // 威胁情报风险
+	BehaviorRisk  float64      `json:"behavior_risk"`  // 行为异常风险
+	SequenceRisk  float64      `json:"sequence_risk"`  // 序列异常风险
+	PeerRisk      float64      `json:"peer_risk"`      // 群体偏离风险
+	PrivilegeRisk float64      `json:"privilege_risk"` // 权限提升风险
+	LateralRisk   float64      `json:"lateral_risk"`   // 横向移动风险
+	TotalRisk     float64      `json:"total_risk"`
+	RiskFactors   []RiskFactor `json:"risk_factors"`
+	LastUpdated   time.Time    `json:"last_updated"`
 }
 
 // RiskFactor 风险因素
 type RiskFactor struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Severity    string  `json:"severity"`
-	Score       float64 `json:"score"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Severity    string    `json:"severity"`
+	Score       float64   `json:"score"`
 	Timestamp   time.Time `json:"timestamp"`
 }
 
@@ -157,13 +157,13 @@ type SequenceModel struct {
 
 // UEBAStats UEBA 统计
 type UEBAStats struct {
-	TotalUsers       int64 `json:"total_users"`
-	ActiveUsers      int64 `json:"active_users"`
-	HighRiskUsers    int64 `json:"high_risk_users"`
-	TotalSessions    int64 `json:"total_sessions"`
-	ActiveSessions   int64 `json:"active_sessions"`
-	PatternsMatched  int64 `json:"patterns_matched"`
-	AlertsGenerated  int64 `json:"alerts_generated"`
+	TotalUsers      int64 `json:"total_users"`
+	ActiveUsers     int64 `json:"active_users"`
+	HighRiskUsers   int64 `json:"high_risk_users"`
+	TotalSessions   int64 `json:"total_sessions"`
+	ActiveSessions  int64 `json:"active_sessions"`
+	PatternsMatched int64 `json:"patterns_matched"`
+	AlertsGenerated int64 `json:"alerts_generated"`
 }
 
 // Alert UEBA 告警
@@ -183,25 +183,25 @@ type Alert struct {
 // DefaultUEBAConfig 返回默认配置
 func DefaultUEBAConfig() *UEBAConfig {
 	return &UEBAConfig{
-		SessionTimeout:        30 * time.Minute,
-		MaxSessionHistory:     1000,
-		EnableSequenceAnalysis: true,
-		EnableLateralMovement: true,
-		EnableInsiderThreat:   true,
-		MinSequenceLength:     5,
+		SessionTimeout:           30 * time.Minute,
+		MaxSessionHistory:        1000,
+		EnableSequenceAnalysis:   true,
+		EnableLateralMovement:    true,
+		EnableInsiderThreat:      true,
+		MinSequenceLength:        5,
 		LateralMovementThreshold: 10,
-		InsiderThreatThreshold: 0.7,
-		EnablePeerGrouping:    true,
-		MinGroupSize:          10,
-		MaxUsers:              100000,
-		CacheTTL:              1 * time.Hour,
+		InsiderThreatThreshold:   0.7,
+		EnablePeerGrouping:       true,
+		MinGroupSize:             10,
+		MaxUsers:                 100000,
+		CacheTTL:                 1 * time.Hour,
 		RiskScoreWeights: &RiskScoreWeights{
-			ThreatIntel:       0.2,
-			BehaviorAnomaly:   0.2,
-			SequenceAnomaly:   0.15,
-			PeerAnomaly:       0.15,
+			ThreatIntel:         0.2,
+			BehaviorAnomaly:     0.2,
+			SequenceAnomaly:     0.15,
+			PeerAnomaly:         0.15,
 			PrivilegeEscalation: 0.15,
-			LateralMovement:   0.15,
+			LateralMovement:     0.15,
 		},
 	}
 }
@@ -518,13 +518,13 @@ func evaluateCondition(cond PatternCondition, event map[string]interface{}) bool
 // eventToMap 转换事件为 map
 func eventToMap(event SessionEvent) map[string]interface{} {
 	m := map[string]interface{}{
-		"type":       event.Type,
-		"uri":        event.URI,
-		"method":     event.Method,
-		"status":     event.StatusCode,
-		"source_ip":  event.SourceIP,
-		"action":     event.Action,
-		"result":     event.Result,
+		"type":      event.Type,
+		"uri":       event.URI,
+		"method":    event.Method,
+		"status":    event.StatusCode,
+		"source_ip": event.SourceIP,
+		"action":    event.Action,
+		"result":    event.Result,
 	}
 	for k, v := range event.Extra {
 		m[k] = v

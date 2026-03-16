@@ -11,11 +11,11 @@ import (
 
 // 定义错误
 var (
-	ErrModelNotLoaded     = errors.New("model not loaded")
-	ErrModelPathEmpty     = errors.New("model path is empty")
-	ErrPredictionTimeout  = errors.New("prediction timeout")
-	ErrInvalidFeatures    = errors.New("invalid features")
-	ErrDetectorClosed     = errors.New("detector is closed")
+	ErrModelNotLoaded    = errors.New("model not loaded")
+	ErrModelPathEmpty    = errors.New("model path is empty")
+	ErrPredictionTimeout = errors.New("prediction timeout")
+	ErrInvalidFeatures   = errors.New("invalid features")
+	ErrDetectorClosed    = errors.New("detector is closed")
 )
 
 // AIDetector AI威胁检测器
@@ -129,12 +129,12 @@ func (d *AIDetector) Detect(req *http.Request) ([]types.Threat, error) {
 					Description: "AI detected potential threat",
 				}
 			}
-			
+
 			return []types.Threat{{
-				Type:       threatType.Label,
-				Severity:   threatType.Severity,
-				Message:    threatType.Description,
-				SubType:    "ai_detected",
+				Type:     threatType.Label,
+				Severity: threatType.Severity,
+				Message:  threatType.Description,
+				SubType:  "ai_detected",
 				Details: map[string]interface{}{
 					"confidence": result.Confidence,
 					"source":     "ai_detector",
@@ -294,9 +294,9 @@ func (d *AIDetector) GetStats() map[string]interface{} {
 	defer d.mu.RUnlock()
 
 	return map[string]interface{}{
-		"cache_size":     d.featureCache.Size(),
-			"worker_pool":   d.workerPool,
-		"model_loaded":   d.model != nil,
+		"cache_size":           d.featureCache.Size(),
+		"worker_pool":          d.workerPool,
+		"model_loaded":         d.model != nil,
 		"confidence_threshold": d.config.ConfidenceThreshold,
 	}
 }

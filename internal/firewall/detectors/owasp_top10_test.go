@@ -283,4 +283,3 @@ func TestOWASPTop10Detector_CompileRules_EmptyPattern(t *testing.T) {
 	// 验证检测器创建成功（空规则被跳过）
 	assert.NotNil(t, detector)
 }
-

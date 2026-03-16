@@ -147,46 +147,46 @@ func TestUserAgentParser_Parse(t *testing.T) {
 	parser := NewUserAgentParser()
 
 	tests := []struct {
-		name           string
-		userAgent      string
+		name            string
+		userAgent       string
 		expectedBrowser string
-		expectedOS     string
-		expectedType   string
+		expectedOS      string
+		expectedType    string
 	}{
 		{
-			name:           "Chrome on Windows",
-			userAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/91.0.4472.124 Safari/537.36",
+			name:            "Chrome on Windows",
+			userAgent:       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/91.0.4472.124 Safari/537.36",
 			expectedBrowser: "chrome",
-			expectedOS:     "windows",
-			expectedType:   "desktop",
+			expectedOS:      "windows",
+			expectedType:    "desktop",
 		},
 		{
-			name:           "Firefox on macOS",
-			userAgent:      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:89.0) Gecko/20100101 Firefox/89.0",
+			name:            "Firefox on macOS",
+			userAgent:       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:89.0) Gecko/20100101 Firefox/89.0",
 			expectedBrowser: "firefox",
-			expectedOS:     "macos",
-			expectedType:   "desktop",
+			expectedOS:      "macos",
+			expectedType:    "desktop",
 		},
 		{
-			name:           "Safari on iPhone",
-			userAgent:      "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
+			name:            "Safari on iPhone",
+			userAgent:       "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
 			expectedBrowser: "", // Safari 检测需要更复杂的逻辑
-			expectedOS:     "ios",
-			expectedType:   "mobile",
+			expectedOS:      "ios",
+			expectedType:    "mobile",
 		},
 		{
-			name:           "Chrome on Android",
-			userAgent:      "Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 Chrome/91.0.4472.120 Mobile Safari/537.36",
+			name:            "Chrome on Android",
+			userAgent:       "Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 Chrome/91.0.4472.120 Mobile Safari/537.36",
 			expectedBrowser: "chrome",
-			expectedOS:     "linux", // Android 基于 Linux
-			expectedType:   "mobile",
+			expectedOS:      "linux", // Android 基于 Linux
+			expectedType:    "mobile",
 		},
 		{
-			name:           "Googlebot",
-			userAgent:      "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+			name:            "Googlebot",
+			userAgent:       "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
 			expectedBrowser: "",
-			expectedOS:     "",
-			expectedType:   "unknown",
+			expectedOS:      "",
+			expectedType:    "unknown",
 		},
 	}
 
@@ -522,8 +522,8 @@ func TestRiskLevel(t *testing.T) {
 	engine := NewFingerprintEngine(DefaultBotConfig(), logger)
 
 	tests := []struct {
-		score     float64
-		expected  RiskLevel
+		score    float64
+		expected RiskLevel
 	}{
 		{0, RiskLevelTrusted},
 		{30, RiskLevelNormal},

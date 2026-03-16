@@ -156,11 +156,11 @@ func TestCombinedMiddleware_WithTracing(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(CombinedMiddleware(&MiddlewareConfig{
-		EnableTracing:   true,
-		EnableMetrics:   true,
-		ServiceName:     "test-service",
+		EnableTracing:      true,
+		EnableMetrics:      true,
+		ServiceName:        "test-service",
 		RecordResponseBody: true,
-		MaxBodySize:     1024,
+		MaxBodySize:        1024,
 	}))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -345,7 +345,7 @@ func TestCombinedMiddleware_CustomPropagator(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(CombinedMiddleware(&MiddlewareConfig{
-		ServiceName: "test-service",
+		ServiceName:   "test-service",
 		EnableTracing: true,
 		EnableMetrics: false,
 	}))

@@ -10,19 +10,19 @@ import (
 	"prerender-shield/internal/auth"
 	"prerender-shield/internal/cache"
 	"prerender-shield/internal/config"
+	"prerender-shield/internal/eventbus"
 	"prerender-shield/internal/firewall"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/monitoring"
+	"prerender-shield/internal/observability/metrics"
 	"prerender-shield/internal/prerender"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/repository"
 	"prerender-shield/internal/scheduler"
 	"prerender-shield/internal/services"
-	"prerender-shield/internal/utils/redisutil"
 	sitehandler "prerender-shield/internal/site-handler"
 	siteserver "prerender-shield/internal/site-server"
-	"prerender-shield/internal/eventbus"
-	"prerender-shield/internal/observability/metrics"
+	"prerender-shield/internal/utils/redisutil"
 )
 
 // ProviderSet 提供者集合

@@ -13,14 +13,14 @@ import (
 
 // ChunkedRenderer 流式渲染器
 type ChunkedRenderer struct {
-	config   *ChunkedRendererConfig
-	logger   *zap.Logger
-	chunks   chan *RenderChunk
-	mu       sync.RWMutex
-	stats    *RendererStats
-	flusher  FlushWriter
-	closed   bool
-	closeMu  sync.Mutex
+	config  *ChunkedRendererConfig
+	logger  *zap.Logger
+	chunks  chan *RenderChunk
+	mu      sync.RWMutex
+	stats   *RendererStats
+	flusher FlushWriter
+	closed  bool
+	closeMu sync.Mutex
 }
 
 // ChunkedRendererConfig 流式渲染配置
@@ -36,10 +36,10 @@ type ChunkedRendererConfig struct {
 // DefaultChunkedRendererConfig 返回默认配置
 func DefaultChunkedRendererConfig() *ChunkedRendererConfig {
 	return &ChunkedRendererConfig{
-		ChunkSize:       4096,          // 4KB
+		ChunkSize:       4096, // 4KB
 		FlushInterval:   100 * time.Millisecond,
 		EnableGzip:      false,
-		MinChunkSize:    512,           // 512 字节
+		MinChunkSize:    512, // 512 字节
 		MaxBufferChunks: 100,
 		Timeout:         30 * time.Second,
 	}
@@ -81,10 +81,10 @@ func NewChunkedRenderer(config *ChunkedRendererConfig, logger *zap.Logger) *Chun
 	}
 
 	renderer := &ChunkedRenderer{
-		config:  config,
-		logger:  logger,
-		chunks:  make(chan *RenderChunk, config.MaxBufferChunks),
-		stats:   &RendererStats{},
+		config: config,
+		logger: logger,
+		chunks: make(chan *RenderChunk, config.MaxBufferChunks),
+		stats:  &RendererStats{},
 	}
 
 	return renderer
@@ -92,22 +92,22 @@ func NewChunkedRenderer(config *ChunkedRendererConfig, logger *zap.Logger) *Chun
 
 // RenderContext 渲染上下文
 type RenderContext struct {
-	Context     context.Context
-	Cancel      context.CancelFunc
-	StartTime   time.Time
-	ChunkCount  int
-	TotalBytes  int
-	Metadata    map[string]interface{}
+	Context    context.Context
+	Cancel     context.CancelFunc
+	StartTime  time.Time
+	ChunkCount int
+	TotalBytes int
+	Metadata   map[string]interface{}
 }
 
 // NewRenderContext 创建渲染上下文
 func (r *ChunkedRenderer) NewRenderContext(ctx context.Context) *RenderContext {
 	renderCtx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	return &RenderContext{
-		Context:    renderCtx,
-		Cancel:     cancel,
-		StartTime:  time.Now(),
-		Metadata:   make(map[string]interface{}),
+		Context:   renderCtx,
+		Cancel:    cancel,
+		StartTime: time.Now(),
+		Metadata:  make(map[string]interface{}),
 	}
 }
 

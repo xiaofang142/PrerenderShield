@@ -18,23 +18,23 @@ type ElementWaiter struct {
 
 // ElementWaitConfig 元素等待配置
 type ElementWaitConfig struct {
-	EnableWait        bool          `json:"enable_wait"`         // 启用等待
-	DefaultTimeout    time.Duration `json:"default_timeout"`     // 默认超时时间
-	PollInterval      time.Duration `json:"poll_interval"`       // 轮询间隔
-	EnableVisibility  bool          `json:"enable_visibility"`   // 启用可见性检测
-	EnableIntersection bool         `json:"enable_intersection"` // 启用交叉观察
-	MaxWaitElements   int           `json:"max_wait_elements"`   // 最大等待元素数量
+	EnableWait         bool          `json:"enable_wait"`         // 启用等待
+	DefaultTimeout     time.Duration `json:"default_timeout"`     // 默认超时时间
+	PollInterval       time.Duration `json:"poll_interval"`       // 轮询间隔
+	EnableVisibility   bool          `json:"enable_visibility"`   // 启用可见性检测
+	EnableIntersection bool          `json:"enable_intersection"` // 启用交叉观察
+	MaxWaitElements    int           `json:"max_wait_elements"`   // 最大等待元素数量
 }
 
 // DefaultElementWaitConfig 返回默认配置
 func DefaultElementWaitConfig() *ElementWaitConfig {
 	return &ElementWaitConfig{
-		EnableWait:        true,
-		DefaultTimeout:    30 * time.Second,
-		PollInterval:      100 * time.Millisecond,
-		EnableVisibility:  true,
+		EnableWait:         true,
+		DefaultTimeout:     30 * time.Second,
+		PollInterval:       100 * time.Millisecond,
+		EnableVisibility:   true,
 		EnableIntersection: true,
-		MaxWaitElements:   10,
+		MaxWaitElements:    10,
 	}
 }
 
@@ -50,9 +50,9 @@ type ElementWaitResult struct {
 
 // WaitForElementOptions 等待元素选项
 type WaitForElementOptions struct {
-	Timeout       time.Duration `json:"timeout"`        // 超时时间
-	Visible       bool          `json:"visible"`        // 是否需要可见
-	InViewport    bool          `json:"in_viewport"`    // 是否需要在视口内
+	Timeout       time.Duration `json:"timeout"`         // 超时时间
+	Visible       bool          `json:"visible"`         // 是否需要可见
+	InViewport    bool          `json:"in_viewport"`     // 是否需要在视口内
 	WaitForRender bool          `json:"wait_for_render"` // 等待渲染完成
 }
 
@@ -192,7 +192,7 @@ func (w *ElementWaiter) simulateElementCheck(selector string, opts *WaitForEleme
 	// 模拟：假设所有元素最终都会被找到
 	// 实际实现应该与浏览器集成
 	found = true
-	visible = !opts.Visible || true // 简化：假设可见
+	visible = !opts.Visible || true       // 简化：假设可见
 	inViewport = !opts.InViewport || true // 简化：假设在视口内
 
 	return found, visible, inViewport

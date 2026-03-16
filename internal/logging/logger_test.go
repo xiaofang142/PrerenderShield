@@ -52,8 +52,8 @@ func TestNewLogger_InvalidOutput(t *testing.T) {
 
 func TestNewLogger_Levels(t *testing.T) {
 	testCases := []struct {
-		level      string
-		expected   LogLevel
+		level    string
+		expected LogLevel
 	}{
 		{"debug", DEBUG},
 		{"info", INFO},
@@ -219,7 +219,7 @@ func TestLogger_Audit_MaxLogs(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		logger.Audit(AuditLogEntry{
 			Level:   "TEST",
-			Message: string(rune('A'+i)),
+			Message: string(rune('A' + i)),
 		})
 	}
 
@@ -294,7 +294,7 @@ func TestLogger_GetAuditLogs(t *testing.T) {
 	for i := 0; i < 25; i++ {
 		logger.auditLogs = append(logger.auditLogs, AuditLogEntry{
 			Level:   "TEST",
-			Message: string(rune('A'+i%26)),
+			Message: string(rune('A' + i%26)),
 		})
 	}
 

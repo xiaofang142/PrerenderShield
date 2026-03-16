@@ -12,9 +12,9 @@ import (
 
 // StructuredDataOptimizer 结构化数据优化器
 type StructuredDataOptimizer struct {
-	config   *StructuredDataConfig
-	logger   *zap.Logger
-	mu       sync.RWMutex
+	config *StructuredDataConfig
+	logger *zap.Logger
+	mu     sync.RWMutex
 }
 
 // StructuredDataConfig 结构化数据配置
@@ -70,82 +70,82 @@ type StructuredDataResult struct {
 
 // ArticleSchema Article 类型结构化数据
 type ArticleSchema struct {
-	Context     string `json:"@context"`
-	Type        string `json:"@type"`
-	ID          string `json:"@id,omitempty"`
-	MainEntity  string `json:"mainEntityOfPage,omitempty"`
-	Headline    string `json:"headline"`
-	Description string `json:"description"`
-	Image       []string `json:"image,omitempty"`
-	DatePublished string `json:"datePublished,omitempty"`
-	DateModified  string `json:"dateModified,omitempty"`
-	Author      *AuthorSchema `json:"author,omitempty"`
-	Publisher   *OrganizationSchema `json:"publisher,omitempty"`
+	Context       string              `json:"@context"`
+	Type          string              `json:"@type"`
+	ID            string              `json:"@id,omitempty"`
+	MainEntity    string              `json:"mainEntityOfPage,omitempty"`
+	Headline      string              `json:"headline"`
+	Description   string              `json:"description"`
+	Image         []string            `json:"image,omitempty"`
+	DatePublished string              `json:"datePublished,omitempty"`
+	DateModified  string              `json:"dateModified,omitempty"`
+	Author        *AuthorSchema       `json:"author,omitempty"`
+	Publisher     *OrganizationSchema `json:"publisher,omitempty"`
 }
 
 // AuthorSchema 作者
 type AuthorSchema struct {
-	Type  string `json:"@type"`
-	Name  string `json:"name"`
-	URL   string `json:"url,omitempty"`
+	Type string `json:"@type"`
+	Name string `json:"name"`
+	URL  string `json:"url,omitempty"`
 }
 
 // OrganizationSchema 组织
 type OrganizationSchema struct {
-	Type  string `json:"@type"`
-	Name  string `json:"name"`
-	Logo  *ImageObjectSchema `json:"logo,omitempty"`
-	URL   string `json:"url,omitempty"`
+	Type string             `json:"@type"`
+	Name string             `json:"name"`
+	Logo *ImageObjectSchema `json:"logo,omitempty"`
+	URL  string             `json:"url,omitempty"`
 }
 
 // ImageObjectSchema 图片
 type ImageObjectSchema struct {
-	Type    string `json:"@type"`
-	URL     string `json:"url"`
-	Width   int    `json:"width,omitempty"`
-	Height  int    `json:"height,omitempty"`
+	Type   string `json:"@type"`
+	URL    string `json:"url"`
+	Width  int    `json:"width,omitempty"`
+	Height int    `json:"height,omitempty"`
 }
 
 // ProductSchema 产品
 type ProductSchema struct {
-	Context     string `json:"@context"`
-	Type        string `json:"@type"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Image       []string `json:"image,omitempty"`
+	Context     string       `json:"@context"`
+	Type        string       `json:"@type"`
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	Image       []string     `json:"image,omitempty"`
 	Offers      *OfferSchema `json:"offers,omitempty"`
 	Brand       *BrandSchema `json:"brand,omitempty"`
-	SKU         string `json:"sku,omitempty"`
-	MPN         string `json:"mpn,omitempty"`
+	SKU         string       `json:"sku,omitempty"`
+	MPN         string       `json:"mpn,omitempty"`
 }
 
 // OfferSchema 报价
 type OfferSchema struct {
-	Type         string `json:"@type"`
-	Price        float64 `json:"price"`
-	PriceCurrency string `json:"priceCurrency"`
-	Availability  string `json:"availability,omitempty"`
-	URL          string `json:"url,omitempty"`
+	Type          string  `json:"@type"`
+	Price         float64 `json:"price"`
+	PriceCurrency string  `json:"priceCurrency"`
+	Availability  string  `json:"availability,omitempty"`
+	URL           string  `json:"url,omitempty"`
 }
 
 // BrandSchema 品牌
 type BrandSchema struct {
-	Type  string `json:"@type"`
-	Name  string `json:"name"`
+	Type string `json:"@type"`
+	Name string `json:"name"`
 }
 
 // LocalBusinessSchema 本地商家
 type LocalBusinessSchema struct {
-	Context     string `json:"@context"`
-	Type        string `json:"@type"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Image       []string `json:"image,omitempty"`
-	Telephone   string `json:"telephone,omitempty"`
-	Address     *PostalAddressSchema `json:"address,omitempty"`
-	Geo         *GeoSchema `json:"geo,omitempty"`
-	OpeningHours []string `json:"openingHours,omitempty"`
-	PriceRange  string `json:"priceRange,omitempty"`
+	Context      string               `json:"@context"`
+	Type         string               `json:"@type"`
+	Name         string               `json:"name"`
+	Description  string               `json:"description"`
+	Image        []string             `json:"image,omitempty"`
+	Telephone    string               `json:"telephone,omitempty"`
+	Address      *PostalAddressSchema `json:"address,omitempty"`
+	Geo          *GeoSchema           `json:"geo,omitempty"`
+	OpeningHours []string             `json:"openingHours,omitempty"`
+	PriceRange   string               `json:"priceRange,omitempty"`
 }
 
 // PostalAddressSchema 地址
@@ -167,35 +167,35 @@ type GeoSchema struct {
 
 // FAQSchema FAQ 页面
 type FAQSchema struct {
-	Context     string `json:"@context"`
-	Type        string `json:"@type"`
-	MainEntity  []FAQItemSchema `json:"mainEntity"`
+	Context    string          `json:"@context"`
+	Type       string          `json:"@type"`
+	MainEntity []FAQItemSchema `json:"mainEntity"`
 }
 
 // FAQItemSchema FAQ 项目
 type FAQItemSchema struct {
-	Type          string `json:"@type"`
-	Name          string `json:"name"`
-	AcceptAnswer  *AnswerSchema `json:"acceptedAnswer"`
+	Type         string        `json:"@type"`
+	Name         string        `json:"name"`
+	AcceptAnswer *AnswerSchema `json:"acceptedAnswer"`
 }
 
 // AnswerSchema 答案
 type AnswerSchema struct {
-	Type  string `json:"@type"`
-	Text  string `json:"text"`
+	Type string `json:"@type"`
+	Text string `json:"text"`
 }
 
 // BreadcrumbListSchema 面包屑
 type BreadcrumbListSchema struct {
-	Context     string `json:"@context"`
-	Type        string `json:"@type"`
+	Context         string           `json:"@context"`
+	Type            string           `json:"@type"`
 	ItemListElement []ListItemSchema `json:"itemListElement"`
 }
 
 // ListItemSchema 列表项
 type ListItemSchema struct {
-	Type     string `json:"@type"`
-	Position int    `json:"position"`
+	Type     string    `json:"@type"`
+	Position int       `json:"position"`
 	Item     *ListItem `json:"item"`
 }
 
@@ -208,19 +208,19 @@ type ListItem struct {
 
 // OrganizationWithSocialMedia 带社交媒体的组织
 type OrganizationWithSocialMedia struct {
-	Type           string   `json:"@type"`
-	Name           string   `json:"name"`
-	URL            string   `json:"url"`
-	Logo           interface{} `json:"logo,omitempty"`
-	SameAs         []string `json:"sameAs,omitempty"`
-	ContactPoint   []ContactPointSchema `json:"contactPoint,omitempty"`
+	Type         string               `json:"@type"`
+	Name         string               `json:"name"`
+	URL          string               `json:"url"`
+	Logo         interface{}          `json:"logo,omitempty"`
+	SameAs       []string             `json:"sameAs,omitempty"`
+	ContactPoint []ContactPointSchema `json:"contactPoint,omitempty"`
 }
 
 // ContactPointSchema 联系点
 type ContactPointSchema struct {
-	Type            string `json:"@type"`
-	Telephone       string `json:"telephone"`
-	ContactType     string `json:"contactType"`
+	Type              string `json:"@type"`
+	Telephone         string `json:"telephone"`
+	ContactType       string `json:"contactType"`
 	AvailableLanguage string `json:"availableLanguage,omitempty"`
 }
 

@@ -40,12 +40,12 @@ type TaskRenderResult struct {
 
 // RenderQueue 渲染优先级队列
 type RenderQueue struct {
-	mu       sync.Mutex
-	tasks    PriorityQueue
-	taskMap  map[string]*RenderTask
-	cond     *sync.Cond
-	closed   bool
-	maxSize  int
+	mu      sync.Mutex
+	tasks   PriorityQueue
+	taskMap map[string]*RenderTask
+	cond    *sync.Cond
+	closed  bool
+	maxSize int
 }
 
 // PriorityQueue 实现 heap.Interface
@@ -246,12 +246,12 @@ func (rq *RenderQueue) Stats() map[string]interface{} {
 
 // PriorityOptions 优先级选项
 type PriorityOptions struct {
-	SiteID         string
-	URL            string
-	IsVIP          bool
-	IsPreheat      bool
+	SiteID          string
+	URL             string
+	IsVIP           bool
+	IsPreheat       bool
 	IsUserTriggered bool
-	UserAgent      string
+	UserAgent       string
 }
 
 // CalculatePriority 计算任务优先级

@@ -209,17 +209,17 @@ func TestStatisticalDetector_GetAllMetrics(t *testing.T) {
 
 func TestMetricStats(t *testing.T) {
 	stats := &MetricStats{
-		Count:    100,
-		Sum:      1000.0,
-		SumSq:    15000.0,
-		Min:      5.0,
-		Max:      25.0,
-		Mean:     10.0,
-		StdDev:   3.0,
-		Q1:       7.5,
-		Q3:       12.5,
-		IQR:      5.0,
-		Values:   []float64{1, 2, 3},
+		Count:      100,
+		Sum:        1000.0,
+		SumSq:      15000.0,
+		Min:        5.0,
+		Max:        25.0,
+		Mean:       10.0,
+		StdDev:     3.0,
+		Q1:         7.5,
+		Q3:         12.5,
+		IQR:        5.0,
+		Values:     []float64{1, 2, 3},
 		lastUpdate: time.Now(),
 	}
 

@@ -27,12 +27,12 @@ type Instance struct {
 
 // Config 实例池配置
 type Config struct {
-	MinInstances     int           // 最小实例数
-	MaxInstances     int           // 最大实例数
-	IdleTimeout      time.Duration // 空闲超时
-	MaxUseCount      int           // 单个实例最大使用次数
+	MinInstances        int           // 最小实例数
+	MaxInstances        int           // 最大实例数
+	IdleTimeout         time.Duration // 空闲超时
+	MaxUseCount         int           // 单个实例最大使用次数
 	HealthCheckInterval time.Duration // 健康检查间隔
-	Headless         bool          // 是否无头模式
+	Headless            bool          // 是否无头模式
 }
 
 // DefaultConfig 默认配置
@@ -49,15 +49,15 @@ func DefaultConfig() Config {
 
 // Pool Chromium 实例池
 type Pool struct {
-	config       Config
-	instances    []*Instance
-	available    chan *Instance
-	mu           sync.RWMutex
-	closed       bool
-	logger       *zap.Logger
-	ctx          context.Context
-	cancel       context.CancelFunc
-	wg           sync.WaitGroup
+	config        Config
+	instances     []*Instance
+	available     chan *Instance
+	mu            sync.RWMutex
+	closed        bool
+	logger        *zap.Logger
+	ctx           context.Context
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
 	instanceCount int
 }
 
@@ -101,15 +101,15 @@ func (p *Pool) createInstance() *Instance {
 	chromeCtx, chromeCancel := chromedp.NewContext(allocCtx)
 
 	instance := &Instance{
-		ID:          fmt.Sprintf("instance-%d", time.Now().UnixNano()),
-		AllocCtx:    allocCtx,
-		AllocCancel: allocCancel,
-		ChromeCtx:   chromeCtx,
+		ID:           fmt.Sprintf("instance-%d", time.Now().UnixNano()),
+		AllocCtx:     allocCtx,
+		AllocCancel:  allocCancel,
+		ChromeCtx:    chromeCtx,
 		ChromeCancel: chromeCancel,
-		CreatedAt:   time.Now(),
-		LastUsedAt:  time.Now(),
-		MaxUseCount: p.config.MaxUseCount,
-		IsHealthy:   true,
+		CreatedAt:    time.Now(),
+		LastUsedAt:   time.Now(),
+		MaxUseCount:  p.config.MaxUseCount,
+		IsHealthy:    true,
 	}
 
 	p.logger.Debug("created new chromium instance",

@@ -11,19 +11,19 @@ import (
 
 // CacheEntry 缓存条目结构
 type CacheEntry struct {
-	Data      []byte      `json:"data"`
-	CreatedAt int64       `json:"created_at"`
-	ExpiresAt int64       `json:"expires_at"`
-	Priority  int         `json:"priority"`  // 优先级 1-5，5 为最高
-	HitCount  int64       `json:"hit_count"` // 命中次数
-	LastHitAt int64       `json:"last_hit_at"`
+	Data      []byte `json:"data"`
+	CreatedAt int64  `json:"created_at"`
+	ExpiresAt int64  `json:"expires_at"`
+	Priority  int    `json:"priority"`  // 优先级 1-5，5 为最高
+	HitCount  int64  `json:"hit_count"` // 命中次数
+	LastHitAt int64  `json:"last_hit_at"`
 }
 
 // MemoryCache 内存缓存结构
 type MemoryCache struct {
-	mu      sync.RWMutex
-	items   map[string]*CacheEntry
-	maxSize int
+	mu          sync.RWMutex
+	items       map[string]*CacheEntry
+	maxSize     int
 	currentSize int
 }
 
@@ -361,11 +361,11 @@ func (m *manager) GetStats(siteID string) (map[string]interface{}, error) {
 	}
 
 	return map[string]interface{}{
-		"hits":              hits,
-		"misses":            misses,
-		"total":             total,
-		"hit_rate":          hitRate,
-		"cache_count":       cacheCount,
+		"hits":               hits,
+		"misses":             misses,
+		"total":              total,
+		"hit_rate":           hitRate,
+		"cache_count":        cacheCount,
 		"memory_cache_count": memoryCount,
 		"memory_cache_hits":  memoryHits,
 		"memory_cache_size":  m.memoryCache.currentSize,

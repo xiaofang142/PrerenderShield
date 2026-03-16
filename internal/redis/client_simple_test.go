@@ -104,44 +104,44 @@ func TestTimeFormatting(t *testing.T) {
 // TestJSONSerialization 测试 JSON 序列化
 func TestJSONSerialization(t *testing.T) {
 	testCases := []struct {
-		name     string
-		input    interface{}
-		wantErr  bool
+		name    string
+		input   interface{}
+		wantErr bool
 	}{
 		{
-			name:     "simple map",
-			input:    map[string]interface{}{"key": "value"},
-			wantErr:  false,
+			name:    "simple map",
+			input:   map[string]interface{}{"key": "value"},
+			wantErr: false,
 		},
 		{
-			name:     "nested map",
-			input:    map[string]map[string]int{"outer": {"inner": 1}},
-			wantErr:  false,
+			name:    "nested map",
+			input:   map[string]map[string]int{"outer": {"inner": 1}},
+			wantErr: false,
 		},
 		{
-			name:     "array",
-			input:    []int{1, 2, 3, 4, 5},
-			wantErr:  false,
+			name:    "array",
+			input:   []int{1, 2, 3, 4, 5},
+			wantErr: false,
 		},
 		{
-			name:     "string",
-			input:    "hello world",
-			wantErr:  false,
+			name:    "string",
+			input:   "hello world",
+			wantErr: false,
 		},
 		{
-			name:     "number",
-			input:    42,
-			wantErr:  false,
+			name:    "number",
+			input:   42,
+			wantErr: false,
 		},
 		{
-			name:     "boolean",
-			input:    true,
-			wantErr:  false,
+			name:    "boolean",
+			input:   true,
+			wantErr: false,
 		},
 		{
-			name:     "nil",
-			input:    nil,
-			wantErr:  false,
+			name:    "nil",
+			input:   nil,
+			wantErr: false,
 		},
 	}
 

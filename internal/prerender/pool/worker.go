@@ -110,13 +110,13 @@ type TaskResult struct {
 
 // PageMetrics 页面性能指标
 type PageMetrics struct {
-	LoadTime      time.Duration
-	DOMContentLoaded time.Duration
-	FirstPaint    time.Duration
-	FirstContentfulPaint time.Duration
-	TotalBlockingTime time.Duration
+	LoadTime               time.Duration
+	DOMContentLoaded       time.Duration
+	FirstPaint             time.Duration
+	FirstContentfulPaint   time.Duration
+	TotalBlockingTime      time.Duration
 	LargestContentfulPaint time.Duration
-	CumulativeLayoutShift float64
+	CumulativeLayoutShift  float64
 }
 
 // Priority 优先级
@@ -131,22 +131,22 @@ const (
 
 // Worker 工作进程
 type Worker struct {
-	ID             string
-	pool           *WorkerPool
-	instance       *Instance
-	status         WorkerStatus
-	currentTask    *WorkTask
-	taskCount      int64
-	successCount   int64
-	failCount      int64
-	totalDuration  time.Duration
-	lastTaskAt     time.Time
-	createdAt      time.Time
-	mu             sync.RWMutex
-	ctx            context.Context
-	cancel         context.CancelFunc
-	stopChan       chan struct{}
-	wg             sync.WaitGroup
+	ID            string
+	pool          *WorkerPool
+	instance      *Instance
+	status        WorkerStatus
+	currentTask   *WorkTask
+	taskCount     int64
+	successCount  int64
+	failCount     int64
+	totalDuration time.Duration
+	lastTaskAt    time.Time
+	createdAt     time.Time
+	mu            sync.RWMutex
+	ctx           context.Context
+	cancel        context.CancelFunc
+	stopChan      chan struct{}
+	wg            sync.WaitGroup
 }
 
 // WorkerConfig 工作进程配置
@@ -234,13 +234,13 @@ func (wp *WorkerPool) createWorker() *Worker {
 	ctx, cancel := context.WithCancel(wp.ctx)
 
 	worker := &Worker{
-		ID:         fmt.Sprintf("worker-%d", time.Now().UnixNano()),
-		pool:       wp,
-		status:     WorkerStatusIdle,
-		createdAt:  time.Now(),
-		ctx:        ctx,
-		cancel:     cancel,
-		stopChan:   make(chan struct{}),
+		ID:        fmt.Sprintf("worker-%d", time.Now().UnixNano()),
+		pool:      wp,
+		status:    WorkerStatusIdle,
+		createdAt: time.Now(),
+		ctx:       ctx,
+		cancel:    cancel,
+		stopChan:  make(chan struct{}),
 	}
 
 	worker.wg.Add(1)
@@ -420,10 +420,10 @@ func (wp *WorkerPool) Stats() map[string]interface{} {
 	defer wp.mu.RUnlock()
 
 	stats := map[string]interface{}{
-		"total_workers":  len(wp.workers),
-		"available":      len(wp.available),
-		"queue_length":   len(wp.taskQueue),
-		"closed":         wp.closed,
+		"total_workers": len(wp.workers),
+		"available":     len(wp.available),
+		"queue_length":  len(wp.taskQueue),
+		"closed":        wp.closed,
 	}
 
 	// 按状态统计

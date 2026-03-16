@@ -11,17 +11,17 @@ import (
 
 // StreamEngine 流处理引擎
 type StreamEngine struct {
-	config        *StreamConfig
-	inputChan     <-chan *LogEntry
-	outputChans   map[string]chan<- *LogEntry
-	processors    []LogProcessor
-	mu            sync.RWMutex
-	ctx           context.Context
-	cancel        context.CancelFunc
-	wg            sync.WaitGroup
-	running       bool
-	metrics       *StreamMetrics
-	logger        *zap.Logger
+	config      *StreamConfig
+	inputChan   <-chan *LogEntry
+	outputChans map[string]chan<- *LogEntry
+	processors  []LogProcessor
+	mu          sync.RWMutex
+	ctx         context.Context
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
+	running     bool
+	metrics     *StreamMetrics
+	logger      *zap.Logger
 }
 
 // StreamConfig 流处理配置
@@ -359,11 +359,11 @@ func (e *StreamEngine) metricsWorker() {
 func (e *StreamEngine) GetStats() map[string]interface{} {
 	metrics := e.GetMetrics()
 	return map[string]interface{}{
-		"total_processed":  metrics.TotalProcessed,
-		"total_errors":     metrics.TotalErrors,
+		"total_processed":   metrics.TotalProcessed,
+		"total_errors":      metrics.TotalErrors,
 		"processed_per_sec": metrics.ProcessedPerSec,
-		"running":          e.running,
-		"worker_count":     e.config.WorkerCount,
-		"processor_count":  len(e.processors),
+		"running":           e.running,
+		"worker_count":      e.config.WorkerCount,
+		"processor_count":   len(e.processors),
 	}
 }

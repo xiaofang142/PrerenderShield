@@ -65,10 +65,10 @@ type Engine interface {
 
 // engine 渲染引擎实现
 type engine struct {
-	redisClient          *redis.Client
-	cacheManager         cache.Manager
-	maxConcurrent        int
-	concurrencyManager   *ConcurrencyManager
+	redisClient        *redis.Client
+	cacheManager       cache.Manager
+	maxConcurrent      int
+	concurrencyManager *ConcurrencyManager
 }
 
 // NewEngine 创建新的渲染引擎

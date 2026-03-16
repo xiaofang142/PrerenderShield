@@ -175,17 +175,17 @@ type Config struct {
 
 // SSLConfig SSL 证书配置
 type SSLConfig struct {
-	Enabled         bool          `yaml:"enabled" json:"enabled"`                   // 是否启用 SSL
-	AutoRenew       bool          `yaml:"auto_renew" json:"auto_renew"`             // 自动续签
-	Email           string        `yaml:"email" json:"email"`                       // ACME 账户邮箱
-	Production      bool          `yaml:"production" json:"production"`             // 是否使用生产环境（Let's Encrypt）
-	HTTPPort        int           `yaml:"http_port" json:"http_port"`               // HTTP-01 挑战监听端口
-	CheckInterval   time.Duration `yaml:"check_interval" json:"check_interval"`     // 检查间隔
+	Enabled         bool          `yaml:"enabled" json:"enabled"`                     // 是否启用 SSL
+	AutoRenew       bool          `yaml:"auto_renew" json:"auto_renew"`               // 自动续签
+	Email           string        `yaml:"email" json:"email"`                         // ACME 账户邮箱
+	Production      bool          `yaml:"production" json:"production"`               // 是否使用生产环境（Let's Encrypt）
+	HTTPPort        int           `yaml:"http_port" json:"http_port"`                 // HTTP-01 挑战监听端口
+	CheckInterval   time.Duration `yaml:"check_interval" json:"check_interval"`       // 检查间隔
 	RenewBeforeDays int           `yaml:"renew_before_days" json:"renew_before_days"` // 提前多少天续签
-	MaxRetries      int           `yaml:"max_retries" json:"max_retries"`           // 最大重试次数
-	RetryDelay      time.Duration `yaml:"retry_delay" json:"retry_delay"`           // 重试间隔
-	WebhookURL      string        `yaml:"webhook_url" json:"webhook_url"`           // 通知 Webhook
-	DNS             DNSConfig     `yaml:"dns" json:"dns"`                           // DNS 配置（用于 DNS-01 挑战）
+	MaxRetries      int           `yaml:"max_retries" json:"max_retries"`             // 最大重试次数
+	RetryDelay      time.Duration `yaml:"retry_delay" json:"retry_delay"`             // 重试间隔
+	WebhookURL      string        `yaml:"webhook_url" json:"webhook_url"`             // 通知 Webhook
+	DNS             DNSConfig     `yaml:"dns" json:"dns"`                             // DNS 配置（用于 DNS-01 挑战）
 }
 
 // DNSConfig DNS 配置

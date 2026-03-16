@@ -75,12 +75,12 @@ func (c *SystemController) Health(ctx *gin.Context) {
 		"code":    200,
 		"message": "success",
 		"data": gin.H{
-			"status":       status,
-			"service":      "prerender-shield",
-			"redis_status": redisStatus,
-			"ssl_status":   sslStatus,
+			"status":         status,
+			"service":        "prerender-shield",
+			"redis_status":   redisStatus,
+			"ssl_status":     sslStatus,
 			"expiring_certs": expiringCerts,
-			"timestamp":    time.Now().Unix(),
+			"timestamp":      time.Now().Unix(),
 			"health_details": gin.H{
 				"memory_allocated":   m.Alloc,
 				"memory_total_alloc": m.TotalAlloc,

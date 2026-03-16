@@ -366,8 +366,8 @@ func TestEngine_NilConfig(t *testing.T) {
 		ActionConfig: ActionConfig{
 			DefaultAction: "block",
 		},
-		GeoIPConfig:     nil,
-		RateLimitConfig: nil,
+		GeoIPConfig:         nil,
+		RateLimitConfig:     nil,
 		FileIntegrityConfig: nil,
 	}
 

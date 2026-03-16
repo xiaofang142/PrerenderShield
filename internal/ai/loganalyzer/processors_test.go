@@ -301,9 +301,9 @@ func TestNewAnomalyDetectionProcessor(t *testing.T) {
 	assert.Equal(t, "anomaly_detection", processor.Name())
 
 	thresholds := &AnomalyThresholds{
-		RPMThreshold:      500,
+		RPMThreshold:       500,
 		ErrorRateThreshold: 0.05,
-		LatencyThreshold:  3000,
+		LatencyThreshold:   3000,
 	}
 	processorWithThreshold := NewAnomalyDetectionProcessor(thresholds)
 	assert.NotNil(t, processorWithThreshold)
@@ -319,17 +319,17 @@ func TestAnomalyDetectionProcessor_Process_NilEntry(t *testing.T) {
 
 func TestAnomalyDetectionProcessor_Process(t *testing.T) {
 	processor := NewAnomalyDetectionProcessor(&AnomalyThresholds{
-		RPMThreshold:      100,
+		RPMThreshold:       100,
 		ErrorRateThreshold: 0.1,
-		LatencyThreshold:  5000,
+		LatencyThreshold:   5000,
 	})
 
 	// 发送正常请求
 	entry := &LogEntry{
 		Fields: map[string]interface{}{
-			"remote_addr":   "192.168.1.1",
-			"site_id":       "site-1",
-			"status_int":    200,
+			"remote_addr":     "192.168.1.1",
+			"site_id":         "site-1",
+			"status_int":      200,
 			"request_time_ms": 100.0,
 		},
 	}
@@ -345,9 +345,9 @@ func TestAnomalyDetectionProcessor_Process(t *testing.T) {
 	for i := 0; i < 150; i++ {
 		entry := &LogEntry{
 			Fields: map[string]interface{}{
-				"remote_addr":   "192.168.1.2",
-				"site_id":       "site-1",
-				"status_int":    200,
+				"remote_addr":     "192.168.1.2",
+				"site_id":         "site-1",
+				"status_int":      200,
 				"request_time_ms": 100.0,
 			},
 		}
@@ -358,9 +358,9 @@ func TestAnomalyDetectionProcessor_Process(t *testing.T) {
 	// 第 151 次请求应该触发异常
 	entry2 := &LogEntry{
 		Fields: map[string]interface{}{
-			"remote_addr":   "192.168.1.2",
-			"site_id":       "site-1",
-			"status_int":    200,
+			"remote_addr":     "192.168.1.2",
+			"site_id":         "site-1",
+			"status_int":      200,
 			"request_time_ms": 100.0,
 		},
 	}
@@ -372,18 +372,18 @@ func TestAnomalyDetectionProcessor_Process(t *testing.T) {
 
 func TestAnomalyDetectionProcessor_Process_HighErrorRate(t *testing.T) {
 	processor := NewAnomalyDetectionProcessor(&AnomalyThresholds{
-		RPMThreshold:      1000,
+		RPMThreshold:       1000,
 		ErrorRateThreshold: 0.1,
-		LatencyThreshold:  5000,
+		LatencyThreshold:   5000,
 	})
 
 	// 发送 10 个请求，其中 9 个失败
 	for i := 0; i < 9; i++ {
 		entry := &LogEntry{
 			Fields: map[string]interface{}{
-				"remote_addr":   "192.168.1.1",
-				"site_id":       "site-error",
-				"status_int":    500,
+				"remote_addr":     "192.168.1.1",
+				"site_id":         "site-error",
+				"status_int":      500,
 				"request_time_ms": 100.0,
 			},
 		}
@@ -393,9 +393,9 @@ func TestAnomalyDetectionProcessor_Process_HighErrorRate(t *testing.T) {
 
 	entry := &LogEntry{
 		Fields: map[string]interface{}{
-			"remote_addr":   "192.168.1.1",
-			"site_id":       "site-error",
-			"status_int":    200,
+			"remote_addr":     "192.168.1.1",
+			"site_id":         "site-error",
+			"status_int":      200,
 			"request_time_ms": 100.0,
 		},
 	}
@@ -409,16 +409,16 @@ func TestAnomalyDetectionProcessor_Process_HighErrorRate(t *testing.T) {
 
 func TestAnomalyDetectionProcessor_Process_HighLatency(t *testing.T) {
 	processor := NewAnomalyDetectionProcessor(&AnomalyThresholds{
-		RPMThreshold:      1000,
+		RPMThreshold:       1000,
 		ErrorRateThreshold: 0.1,
-		LatencyThreshold:  5000,
+		LatencyThreshold:   5000,
 	})
 
 	entry := &LogEntry{
 		Fields: map[string]interface{}{
-			"remote_addr":   "192.168.1.1",
-			"site_id":       "site-1",
-			"status_int":    200,
+			"remote_addr":     "192.168.1.1",
+			"site_id":         "site-1",
+			"status_int":      200,
 			"request_time_ms": 6000.0, // 超过 5000ms 阈值
 		},
 	}
@@ -434,9 +434,9 @@ func TestAnomalyDetectionProcessor_updateStats(t *testing.T) {
 
 	entry := &LogEntry{
 		Fields: map[string]interface{}{
-			"remote_addr":   "192.168.1.1",
-			"site_id":       "site-1",
-			"status_int":    500,
+			"remote_addr":     "192.168.1.1",
+			"site_id":         "site-1",
+			"status_int":      500,
 			"request_time_ms": 200.0,
 		},
 	}
@@ -460,16 +460,16 @@ func TestAnomalyDetectionProcessor_updateStats(t *testing.T) {
 
 func TestAnomalyDetectionProcessor_detectAnomalies(t *testing.T) {
 	processor := NewAnomalyDetectionProcessor(&AnomalyThresholds{
-		RPMThreshold:      10,
+		RPMThreshold:       10,
 		ErrorRateThreshold: 0.1,
-		LatencyThreshold:  5000,
+		LatencyThreshold:   5000,
 	})
 
 	entry := &LogEntry{
 		Fields: map[string]interface{}{
-			"remote_addr":   "192.168.1.1",
-			"site_id":       "site-1",
-			"status_int":    200,
+			"remote_addr":     "192.168.1.1",
+			"site_id":         "site-1",
+			"status_int":      200,
 			"request_time_ms": 100.0,
 		},
 	}
@@ -586,9 +586,9 @@ func TestSiteWindowStats(t *testing.T) {
 
 func TestAnomalyThresholds(t *testing.T) {
 	thresholds := &AnomalyThresholds{
-		RPMThreshold:      500,
+		RPMThreshold:       500,
 		ErrorRateThreshold: 0.05,
-		LatencyThreshold:  3000,
+		LatencyThreshold:   3000,
 	}
 
 	assert.Equal(t, 500, thresholds.RPMThreshold)

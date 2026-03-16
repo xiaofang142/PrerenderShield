@@ -42,9 +42,9 @@ type WebhookConfig struct {
 
 // WebhookStats Webhook 统计
 type WebhookStats struct {
-	TotalSent     int64 `json:"total_sent"`
-	SuccessCount  int64 `json:"success_count"`
-	FailureCount  int64 `json:"failure_count"`
+	TotalSent     int64     `json:"total_sent"`
+	SuccessCount  int64     `json:"success_count"`
+	FailureCount  int64     `json:"failure_count"`
 	LastSentAt    time.Time `json:"last_sent_at"`
 	LastSuccessAt time.Time `json:"last_success_at"`
 	LastFailureAt time.Time `json:"last_failure_at"`
@@ -131,15 +131,15 @@ func (h *WebhookHandler) buildPayload(alert *Alert) ([]byte, string, error) {
 
 	// 通用 JSON 格式
 	data := map[string]interface{}{
-		"alert_id":    alert.ID,
-		"rule_id":     alert.RuleID,
-		"rule_name":   alert.RuleName,
-		"severity":    alert.Severity,
-		"message":     alert.Message,
-		"timestamp":   alert.Timestamp.Format(time.RFC3339),
-		"metric":      alert.Metric,
-		"value":       alert.Value,
-		"details":     alert.Details,
+		"alert_id":  alert.ID,
+		"rule_id":   alert.RuleID,
+		"rule_name": alert.RuleName,
+		"severity":  alert.Severity,
+		"message":   alert.Message,
+		"timestamp": alert.Timestamp.Format(time.RFC3339),
+		"metric":    alert.Metric,
+		"value":     alert.Value,
+		"details":   alert.Details,
 	}
 	body, err := json.Marshal(data)
 	return body, "application/json", err
@@ -291,13 +291,13 @@ type EmailHandler struct {
 
 // EmailConfig 邮件配置
 type EmailConfig struct {
-	SMTPHost     string `json:"smtp_host"`
-	SMTPPort     int    `json:"smtp_port"`
-	Username     string `json:"username"`
-	Password     string `json:"password"`
-	From         string `json:"from"`
-	To           []string `json:"to"`
-	UseTLS       bool   `json:"use_tls"`
+	SMTPHost string   `json:"smtp_host"`
+	SMTPPort int      `json:"smtp_port"`
+	Username string   `json:"username"`
+	Password string   `json:"password"`
+	From     string   `json:"from"`
+	To       []string `json:"to"`
+	UseTLS   bool     `json:"use_tls"`
 }
 
 // NewEmailHandler 创建邮件处理器

@@ -11,8 +11,8 @@ import (
 
 // 定义模型相关错误
 var (
-	ErrModelFileNotFound = errors.New("model file not found")
-	ErrInvalidModelFile  = errors.New("invalid model file")
+	ErrModelFileNotFound  = errors.New("model file not found")
+	ErrInvalidModelFile   = errors.New("invalid model file")
 	ErrLabelsFileNotFound = errors.New("labels file not found")
 )
 
@@ -98,7 +98,7 @@ func (m *TensorFlowModel) ruleBasedPredict(features []float32) *Prediction {
 	var sum, maxVal, minVal float32
 	maxVal = features[0]
 	minVal = features[0]
-	
+
 	for _, f := range features {
 		sum += f
 		if f > maxVal {
@@ -108,12 +108,12 @@ func (m *TensorFlowModel) ruleBasedPredict(features []float32) *Prediction {
 			minVal = f
 		}
 	}
-	
+
 	avg := sum / float32(len(features))
-	
+
 	// 基于特征统计进行简单判断
 	// 这是简化的演示实现，实际应使用训练好的模型
-	
+
 	// 高异常分数特征（通常是攻击模式）
 	if maxVal > 0.8 {
 		return &Prediction{
@@ -123,7 +123,7 @@ func (m *TensorFlowModel) ruleBasedPredict(features []float32) *Prediction {
 			AllProbs:    generateProbs(len(m.labels), 0),
 		}
 	}
-	
+
 	// 中等异常特征
 	if avg > 0.5 {
 		return &Prediction{
@@ -133,7 +133,7 @@ func (m *TensorFlowModel) ruleBasedPredict(features []float32) *Prediction {
 			AllProbs:    generateProbs(len(m.labels), 1),
 		}
 	}
-	
+
 	// 正常请求
 	return &Prediction{
 		ThreatType:  "benign",
@@ -203,7 +203,7 @@ func (m *LightweightModel) Predict(features []float32) *Prediction {
 
 	// 计算异常分数
 	score := m.calculateAnomalyScore(features)
-	
+
 	if score > m.threshold {
 		// 根据特征模式判断威胁类型
 		threatType := m.classifyThreat(features)
@@ -228,19 +228,19 @@ func (m *LightweightModel) calculateAnomalyScore(features []float32) float32 {
 		sum += f
 		sqSum += f * f
 	}
-	
+
 	n := float32(len(features))
 	mean := sum / n
 	variance := sqSum/n - mean*mean
-	
+
 	// 使用方差作为异常分数的一部分
 	// 高方差通常意味着更异常的行为
 	score := variance * 10 // 放大系数
-	
+
 	if score > 1.0 {
 		score = 1.0
 	}
-	
+
 	return score
 }
 
@@ -249,21 +249,21 @@ func (m *LightweightModel) classifyThreat(features []float32) string {
 	if len(features) < 10 {
 		return "unknown"
 	}
-	
+
 	// 基于特征向量的一些关键维度进行分类
 	// 这是简化的演示实现
-	
+
 	// 特征索引映射（与features.go中的提取顺序相关）
 	// 0-19: URL特征
 	// 20-49: Header特征
 	// 50-79: Body特征
 	// 80-127: 行为特征
-	
+
 	urlScore := avgSlice(features[0:20])
 	headerScore := avgSlice(features[20:50])
 	bodyScore := avgSlice(features[50:80])
 	behaviorScore := avgSlice(features[80:])
-	
+
 	// 根据不同区域的分数判断威胁类型
 	if bodyScore > 0.7 {
 		return "sql_injection"
@@ -277,7 +277,7 @@ func (m *LightweightModel) classifyThreat(features []float32) string {
 	if behaviorScore > 0.7 {
 		return "bot"
 	}
-	
+
 	return "unknown"
 }
 
@@ -352,7 +352,7 @@ func GetModelInfo(model ThreatModel) *ModelInfo {
 	if model == nil {
 		return nil
 	}
-	
+
 	return &ModelInfo{
 		Name:      "Threat Detection Model",
 		Version:   model.GetVersion(),

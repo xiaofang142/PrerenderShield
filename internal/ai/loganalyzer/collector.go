@@ -28,21 +28,21 @@ type LogEntry struct {
 
 // AccessLogFields 访问日志字段
 type AccessLogFields struct {
-	RemoteAddr   string `json:"remote_addr"`
-	Method       string `json:"method"`
-	URI          string `json:"uri"`
-	Protocol     string `json:"protocol"`
-	Status       int    `json:"status"`
-	BodyBytes    int64  `json:"body_bytes"`
-	Referer      string `json:"referer"`
-	UserAgent    string `json:"user_agent"`
+	RemoteAddr   string  `json:"remote_addr"`
+	Method       string  `json:"method"`
+	URI          string  `json:"uri"`
+	Protocol     string  `json:"protocol"`
+	Status       int     `json:"status"`
+	BodyBytes    int64   `json:"body_bytes"`
+	Referer      string  `json:"referer"`
+	UserAgent    string  `json:"user_agent"`
 	RequestTime  float64 `json:"request_time"`
 	UpstreamTime float64 `json:"upstream_time"`
-	SiteID       string `json:"site_id"`
-	CacheStatus  string `json:"cache_status"` // HIT, MISS, BYPASS
-	IsCrawler    bool   `json:"is_crawler"`
-	IsBot        bool   `json:"is_bot"`
-	Country      string `json:"country"`
+	SiteID       string  `json:"site_id"`
+	CacheStatus  string  `json:"cache_status"` // HIT, MISS, BYPASS
+	IsCrawler    bool    `json:"is_crawler"`
+	IsBot        bool    `json:"is_bot"`
+	Country      string  `json:"country"`
 }
 
 // SecurityLogFields 安全日志字段
@@ -92,11 +92,11 @@ type Collector struct {
 
 // CollectorConfig 采集器配置
 type CollectorConfig struct {
-	BufferSize     int           // 缓冲区大小
-	FlushInterval  time.Duration // 刷新间隔
-	MaxBatchSize   int           // 最大批量大小
-	SourceConfigs  []SourceConfig
-	EnableMetrics  bool
+	BufferSize    int           // 缓冲区大小
+	FlushInterval time.Duration // 刷新间隔
+	MaxBatchSize  int           // 最大批量大小
+	SourceConfigs []SourceConfig
+	EnableMetrics bool
 }
 
 // SourceConfig 日志源配置

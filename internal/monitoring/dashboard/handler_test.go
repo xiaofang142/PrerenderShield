@@ -13,11 +13,11 @@ import (
 
 // MockMetricsSource 模拟指标数据源
 type MockMetricsSource struct {
-	overview        *Overview
-	securityStats   *SecurityStats
+	overview         *Overview
+	securityStats    *SecurityStats
 	performanceStats *PerformanceStats
-	systemHealth    *SystemHealth
-	err             error
+	systemHealth     *SystemHealth
+	err              error
 }
 
 func (m *MockMetricsSource) GetOverview(ctx context.Context) (*Overview, error) {
@@ -48,10 +48,10 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestNewDashboard(t *testing.T) {
 	config := &Config{
-		Enabled:       true,
-		ListenAddr:    ":9091",
+		Enabled:         true,
+		ListenAddr:      ":9091",
 		RefreshInterval: 10 * time.Second,
-		MaxHistory:    500,
+		MaxHistory:      500,
 	}
 
 	metricsSrc := &MockMetricsSource{}
@@ -111,13 +111,13 @@ func TestDashboard_HandleOverview_Success(t *testing.T) {
 	router := gin.New()
 
 	overview := &Overview{
-		Timestamp:      time.Now(),
-		TotalRequests:  1000,
-		ActiveRequests: 10,
-		CacheHitRate:   0.85,
+		Timestamp:       time.Now(),
+		TotalRequests:   1000,
+		ActiveRequests:  10,
+		CacheHitRate:    0.85,
 		AvgResponseTime: 150.5,
-		ThreatsBlocked: 50,
-		SitesCount:     5,
+		ThreatsBlocked:  50,
+		SitesCount:      5,
 	}
 
 	metricsSrc := &MockMetricsSource{overview: overview}
@@ -243,13 +243,13 @@ func TestDashboard_HandleHealth_Success(t *testing.T) {
 		MemoryLimit: 1024 * 1024 * 512,
 		CPUUsage:    25.5,
 		DiskUsage: &DiskUsage{
-			Total:     1024 * 1024 * 1024 * 100,
-			Used:      1024 * 1024 * 1024 * 50,
+			Total:       1024 * 1024 * 1024 * 100,
+			Used:        1024 * 1024 * 1024 * 50,
 			UsedPercent: 50.0,
 		},
 		ModuleStatus: map[string]bool{
-			"waf":     true,
-			"cache":   true,
+			"waf":       true,
+			"cache":     true,
 			"prerender": false,
 		},
 	}
@@ -338,13 +338,13 @@ func TestDashboard_Start_Disabled(t *testing.T) {
 
 func TestOverview_Struct(t *testing.T) {
 	overview := &Overview{
-		Timestamp:      time.Now(),
-		TotalRequests:  1000,
-		ActiveRequests: 10,
-		CacheHitRate:   0.85,
+		Timestamp:       time.Now(),
+		TotalRequests:   1000,
+		ActiveRequests:  10,
+		CacheHitRate:    0.85,
 		AvgResponseTime: 150.5,
-		ThreatsBlocked: 50,
-		SitesCount:     5,
+		ThreatsBlocked:  50,
+		SitesCount:      5,
 	}
 
 	assert.Equal(t, int64(1000), overview.TotalRequests)
@@ -428,8 +428,8 @@ func TestSystemHealth_Struct(t *testing.T) {
 		MemoryLimit: 1024 * 1024 * 512,
 		CPUUsage:    25.5,
 		DiskUsage: &DiskUsage{
-			Total:     1024 * 1024 * 1024 * 100,
-			Used:      1024 * 1024 * 1024 * 50,
+			Total:       1024 * 1024 * 1024 * 100,
+			Used:        1024 * 1024 * 1024 * 50,
 			UsedPercent: 50.0,
 		},
 		ModuleStatus: map[string]bool{
@@ -445,8 +445,8 @@ func TestSystemHealth_Struct(t *testing.T) {
 
 func TestDiskUsage_Struct(t *testing.T) {
 	usage := &DiskUsage{
-		Total:     1024 * 1024 * 1024 * 100,
-		Used:      1024 * 1024 * 1024 * 50,
+		Total:       1024 * 1024 * 1024 * 100,
+		Used:        1024 * 1024 * 1024 * 50,
 		UsedPercent: 50.0,
 	}
 
@@ -455,10 +455,10 @@ func TestDiskUsage_Struct(t *testing.T) {
 
 func TestConfig_Struct(t *testing.T) {
 	config := &Config{
-		Enabled:       true,
-		ListenAddr:    ":9090",
+		Enabled:         true,
+		ListenAddr:      ":9090",
 		RefreshInterval: 5 * time.Second,
-		MaxHistory:    1000,
+		MaxHistory:      1000,
 	}
 
 	assert.True(t, config.Enabled)

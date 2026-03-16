@@ -54,28 +54,28 @@ type BaselineConfig struct {
 
 // UserProfile 用户行为画像
 type UserProfile struct {
-	UserID       string                 `json:"user_id"`
-	FirstSeen    time.Time              `json:"first_seen"`
-	LastSeen     time.Time              `json:"last_seen"`
-	TotalEvents  int64                  `json:"total_events"`
+	UserID      string    `json:"user_id"`
+	FirstSeen   time.Time `json:"first_seen"`
+	LastSeen    time.Time `json:"last_seen"`
+	TotalEvents int64     `json:"total_events"`
 
 	// 时间基线
-	HourlyBaseline   map[int]*TimeStats   `json:"hourly_baseline"`   // 0-23 点
-	DayOfWeekBaseline map[int]*TimeStats  `json:"dow_baseline"`      // 0-6 (周日 - 周六)
+	HourlyBaseline    map[int]*TimeStats `json:"hourly_baseline"` // 0-23 点
+	DayOfWeekBaseline map[int]*TimeStats `json:"dow_baseline"`    // 0-6 (周日 - 周六)
 
 	// 行为基线
-	RequestBaseline   *BehaviorStats `json:"request_baseline"`
-	ErrorBaseline     *BehaviorStats `json:"error_baseline"`
-	LatencyBaseline   *LatencyStats  `json:"latency_baseline"`
+	RequestBaseline *BehaviorStats `json:"request_baseline"`
+	ErrorBaseline   *BehaviorStats `json:"error_baseline"`
+	LatencyBaseline *LatencyStats  `json:"latency_baseline"`
 
 	// 地理位置基线
-	GeoBaseline       *GeoStats      `json:"geo_baseline"`
+	GeoBaseline *GeoStats `json:"geo_baseline"`
 
 	// 设备基线
-	DeviceBaseline    *DeviceStats   `json:"device_baseline"`
+	DeviceBaseline *DeviceStats `json:"device_baseline"`
 
 	//  URI 基线
-	URIBaseline       map[string]int64 `json:"uri_baseline"` // 常用 URI 及访问次数
+	URIBaseline map[string]int64 `json:"uri_baseline"` // 常用 URI 及访问次数
 
 	// 状态
 	IsBaselineReady bool `json:"is_baseline_ready"` // 基线是否已建立
@@ -85,86 +85,86 @@ type UserProfile struct {
 
 // TimeStats 时间统计
 type TimeStats struct {
-	Count      int64   `json:"count"`
-	Mean       float64 `json:"mean"`
-	StdDev     float64 `json:"std_dev"`
-	Min        int64   `json:"min"`
-	Max        int64   `json:"max"`
+	Count      int64     `json:"count"`
+	Mean       float64   `json:"mean"`
+	StdDev     float64   `json:"std_dev"`
+	Min        int64     `json:"min"`
+	Max        int64     `json:"max"`
 	LastUpdate time.Time `json:"last_update"`
 }
 
 // BehaviorStats 行为统计
 type BehaviorStats struct {
-	Count           int64       `json:"count"`
-	RequestsPerMin  float64     `json:"requests_per_min"`
-	StdDev          float64     `json:"std_dev"`
-	UniqueURIs      int64       `json:"unique_uris"`
-	UniqueMethods   int64       `json:"unique_methods"`
-	CommonMethods   map[string]int64 `json:"common_methods"`
-	CommonStatuses  map[string]int64 `json:"common_statuses"`
-	LastUpdate      time.Time   `json:"last_update"`
+	Count          int64            `json:"count"`
+	RequestsPerMin float64          `json:"requests_per_min"`
+	StdDev         float64          `json:"std_dev"`
+	UniqueURIs     int64            `json:"unique_uris"`
+	UniqueMethods  int64            `json:"unique_methods"`
+	CommonMethods  map[string]int64 `json:"common_methods"`
+	CommonStatuses map[string]int64 `json:"common_statuses"`
+	LastUpdate     time.Time        `json:"last_update"`
 }
 
 // LatencyStats 延迟统计
 type LatencyStats struct {
-	Count      int64   `json:"count"`
-	Mean       float64 `json:"mean"`
-	StdDev     float64 `json:"std_dev"`
-	P50        float64 `json:"p50"`
-	P90        float64 `json:"p90"`
-	P95        float64 `json:"p95"`
-	P99        float64 `json:"p99"`
-	Min        float64 `json:"min"`
-	Max        float64 `json:"max"`
+	Count      int64     `json:"count"`
+	Mean       float64   `json:"mean"`
+	StdDev     float64   `json:"std_dev"`
+	P50        float64   `json:"p50"`
+	P90        float64   `json:"p90"`
+	P95        float64   `json:"p95"`
+	P99        float64   `json:"p99"`
+	Min        float64   `json:"min"`
+	Max        float64   `json:"max"`
 	LastUpdate time.Time `json:"last_update"`
 	values     []float64 // 用于计算分位数
 }
 
 // GeoStats 地理位置统计
 type GeoStats struct {
-	Count         int64              `json:"count"`
-	Countries     map[string]int64   `json:"countries"`
-	Cities        map[string]int64   `json:"cities"`
-	Latitudes     []float64          `json:"latitudes"`
-	Longitudes    []float64          `json:"longitudes"`
-	MeanLat       float64            `json:"mean_lat"`
-	MeanLon        float64           `json:"mean_lon"`
-	StdDevDistance float64           `json:"std_dev_distance"`
-	LastUpdate    time.Time          `json:"last_update"`
+	Count          int64            `json:"count"`
+	Countries      map[string]int64 `json:"countries"`
+	Cities         map[string]int64 `json:"cities"`
+	Latitudes      []float64        `json:"latitudes"`
+	Longitudes     []float64        `json:"longitudes"`
+	MeanLat        float64          `json:"mean_lat"`
+	MeanLon        float64          `json:"mean_lon"`
+	StdDevDistance float64          `json:"std_dev_distance"`
+	LastUpdate     time.Time        `json:"last_update"`
 }
 
 // DeviceStats 设备统计
 type DeviceStats struct {
-	Count         int64              `json:"count"`
-	UserAgents    map[string]int64   `json:"user_agents"`
-	Browsers      map[string]int64   `json:"browsers"`
-	OS            map[string]int64   `json:"os"`
-	Devices       map[string]int64   `json:"devices"`
-	Resolutions   map[string]int64   `json:"resolutions"`
-	CommonHash    string             `json:"common_hash"` // 常见设备指纹 hash
-	LastUpdate    time.Time          `json:"last_update"`
+	Count       int64            `json:"count"`
+	UserAgents  map[string]int64 `json:"user_agents"`
+	Browsers    map[string]int64 `json:"browsers"`
+	OS          map[string]int64 `json:"os"`
+	Devices     map[string]int64 `json:"devices"`
+	Resolutions map[string]int64 `json:"resolutions"`
+	CommonHash  string           `json:"common_hash"` // 常见设备指纹 hash
+	LastUpdate  time.Time        `json:"last_update"`
 }
 
 // IPProfile IP 画像
 type IPProfile struct {
-	IP            string                 `json:"ip"`
-	FirstSeen     time.Time              `json:"first_seen"`
-	LastSeen      time.Time              `json:"last_seen"`
-	TotalEvents   int64                  `json:"total_events"`
-	UserIDs       map[string]int64       `json:"user_ids"` // 关联的用户 ID
-	RequestBaseline *BehaviorStats       `json:"request_baseline"`
-	GeoBaseline     *GeoStats            `json:"geo_baseline"`
-	mu            sync.RWMutex
+	IP              string           `json:"ip"`
+	FirstSeen       time.Time        `json:"first_seen"`
+	LastSeen        time.Time        `json:"last_seen"`
+	TotalEvents     int64            `json:"total_events"`
+	UserIDs         map[string]int64 `json:"user_ids"` // 关联的用户 ID
+	RequestBaseline *BehaviorStats   `json:"request_baseline"`
+	GeoBaseline     *GeoStats        `json:"geo_baseline"`
+	mu              sync.RWMutex
 }
 
 // BaselineStats 基线服务统计
 type BaselineStats struct {
-	TotalUsers      int64 `json:"total_users"`
-	TotalIPs        int64 `json:"total_ips"`
-	ReadyUsers      int64 `json:"ready_users"`
-	ReadyIPs        int64 `json:"ready_ips"`
-	LearningUsers   int64 `json:"learning_users"`
-	LearningIPs     int64 `json:"learning_ips"`
+	TotalUsers    int64 `json:"total_users"`
+	TotalIPs      int64 `json:"total_ips"`
+	ReadyUsers    int64 `json:"ready_users"`
+	ReadyIPs      int64 `json:"ready_ips"`
+	LearningUsers int64 `json:"learning_users"`
+	LearningIPs   int64 `json:"learning_ips"`
 }
 
 // BaselineEvent 基线事件
@@ -187,22 +187,22 @@ type BaselineEvent struct {
 
 // DeviationResult 偏离检测结果
 type DeviationResult struct {
-	UserID        string             `json:"user_id"`
-	IP            string             `json:"ip"`
-	IsAnomaly     bool               `json:"is_anomaly"`
-	DeviationScore float64           `json:"deviation_score"` // 偏离分数 0-100
-	DeviationDims  []DeviationDimension `json:"deviation_dims"` // 偏离维度
-	Confidence    float64            `json:"confidence"`
-	Timestamp     time.Time          `json:"timestamp"`
+	UserID         string               `json:"user_id"`
+	IP             string               `json:"ip"`
+	IsAnomaly      bool                 `json:"is_anomaly"`
+	DeviationScore float64              `json:"deviation_score"` // 偏离分数 0-100
+	DeviationDims  []DeviationDimension `json:"deviation_dims"`  // 偏离维度
+	Confidence     float64              `json:"confidence"`
+	Timestamp      time.Time            `json:"timestamp"`
 }
 
 // DeviationDimension 偏离维度
 type DeviationDimension struct {
-	Dimension  string  `json:"dimension"`
-	Expected   string  `json:"expected"`
-	Actual     string  `json:"actual"`
-	Deviation  float64 `json:"deviation"` // 偏离程度 (标准差)
-	Severity   string  `json:"severity"`  // low/medium/high/critical
+	Dimension string  `json:"dimension"`
+	Expected  string  `json:"expected"`
+	Actual    string  `json:"actual"`
+	Deviation float64 `json:"deviation"` // 偏离程度 (标准差)
+	Severity  string  `json:"severity"`  // low/medium/high/critical
 }
 
 // DefaultBaselineConfig 返回默认配置
@@ -215,12 +215,12 @@ func DefaultBaselineConfig() *BaselineConfig {
 		HourlyWindow:         true,
 		DayOfWeekWindow:      true,
 		EnableGeoBaseline:    true,
-		MaxGeoDistance:       100,                // 100km
+		MaxGeoDistance:       100, // 100km
 		EnableDeviceBaseline: true,
 		MaxUserProfiles:      100000,
 		MaxHistoryDays:       90,
 		CacheTTL:             1 * time.Hour,
-		DecayFactor:          0.02,               // 每日衰减 2%
+		DecayFactor:          0.02, // 每日衰减 2%
 	}
 }
 
@@ -274,12 +274,12 @@ func (b *UserBehaviorBaseline) CheckDeviation(ctx context.Context, event Baselin
 	defer b.mu.RUnlock()
 
 	result := &DeviationResult{
-		UserID:        event.UserID,
-		IP:            event.IP,
-		IsAnomaly:     false,
+		UserID:         event.UserID,
+		IP:             event.IP,
+		IsAnomaly:      false,
 		DeviationScore: 0,
 		DeviationDims:  make([]DeviationDimension, 0),
-		Timestamp:     time.Now(),
+		Timestamp:      time.Now(),
 	}
 
 	// 检查用户基线偏离
@@ -866,7 +866,7 @@ func (p *UserProfile) MarshalJSON() ([]byte, error) {
 		*Alias
 		IsBaselineReady bool `json:"is_baseline_ready"`
 	}{
-		Alias:     (*Alias)(p),
+		Alias:           (*Alias)(p),
 		IsBaselineReady: p.IsBaselineReady,
 	})
 }

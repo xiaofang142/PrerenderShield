@@ -66,27 +66,27 @@ func TestDeviceFingerprintEngine_DetectEmulator(t *testing.T) {
 	engine := NewDeviceFingerprintEngine(DefaultDeviceFingerprintConfig(), logger)
 
 	tests := []struct {
-		name         string
-		userAgent    string
-		plugins      []string
+		name           string
+		userAgent      string
+		plugins        []string
 		expectEmulator bool
 	}{
 		{
-			name:         "Normal browser",
-			userAgent:    "Mozilla/5.0 Chrome/91.0",
-			plugins:      []string{"Flash", "PDF"},
+			name:           "Normal browser",
+			userAgent:      "Mozilla/5.0 Chrome/91.0",
+			plugins:        []string{"Flash", "PDF"},
 			expectEmulator: false,
 		},
 		{
-			name:         "BlueStacks",
-			userAgent:    "Mozilla/5.0 (BlueStacks)",
-			plugins:      []string{},
+			name:           "BlueStacks",
+			userAgent:      "Mozilla/5.0 (BlueStacks)",
+			plugins:        []string{},
 			expectEmulator: true,
 		},
 		{
-			name:         "Genymotion",
-			userAgent:    "Mozilla/5.0 (Genymotion)",
-			plugins:      []string{},
+			name:           "Genymotion",
+			userAgent:      "Mozilla/5.0 (Genymotion)",
+			plugins:        []string{},
 			expectEmulator: true,
 		},
 	}
@@ -204,9 +204,9 @@ func TestDeviceCache(t *testing.T) {
 	cache := NewDeviceCache(100, 1*time.Second)
 
 	fp := &DeviceFingerprint{
-		ID:         "test-fp",
+		ID:              "test-fp",
 		FingerprintHash: "hash-123",
-		IP:         "192.168.1.1",
+		IP:              "192.168.1.1",
 	}
 
 	cache.Set("test-key", fp)

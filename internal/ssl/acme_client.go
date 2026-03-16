@@ -77,7 +77,7 @@ func NewACMEClient(config ACMEConfig) (*ACMEClient, error) {
 
 	// 创建 LEGO 客户端配置（先创建临时配置用于注册）
 	legoConfig := &lego.Config{
-		CADirURL: directoryURL,
+		CADirURL:  directoryURL,
 		UserAgent: "PrerenderShield/1.0",
 	}
 
@@ -98,7 +98,7 @@ func NewACMEClient(config ACMEConfig) (*ACMEClient, error) {
 
 	// 重新创建客户端配置（使用已注册的账户）
 	legoConfig = &lego.Config{
-		CADirURL: directoryURL,
+		CADirURL:  directoryURL,
 		UserAgent: "PrerenderShield/1.0",
 	}
 	legoConfig.Certificate.KeyType = certcrypto.RSA2048
@@ -180,9 +180,9 @@ func (c *ACMEClient) RenewCertificate(domain string) (*certificate.Resource, err
 
 	// 从 PEM 数据加载证书（LEGO v4 没有 NewCertFromPEM，手动解析）
 	cert := &certificate.Resource{
-		Domain:        domain,
-		Certificate:   certData,
-		PrivateKey:    keyData,
+		Domain:            domain,
+		Certificate:       certData,
+		PrivateKey:        keyData,
 		IssuerCertificate: certData, // 简化处理，使用相同数据
 	}
 

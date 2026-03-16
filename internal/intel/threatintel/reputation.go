@@ -28,14 +28,14 @@ type IPReputationConfig struct {
 	BehaviorWeight    float64 // 实时行为权重 (0-1)
 
 	// 评分阈值
-	TrustedThreshold   float64 // 可信阈值
+	TrustedThreshold    float64 // 可信阈值
 	SuspiciousThreshold float64 // 可疑阈值
 	MaliciousThreshold  float64 // 恶意阈值
 
 	// 时间衰减
-	DecayFactor    float64         // 衰减因子 (每小时)
-	MaxHistoryDays int             // 最大历史记录天数
-	CacheTTL       time.Duration   // 缓存过期时间
+	DecayFactor    float64       // 衰减因子 (每小时)
+	MaxHistoryDays int           // 最大历史记录天数
+	CacheTTL       time.Duration // 缓存过期时间
 
 	// 存储配置
 	EnableRedis bool
@@ -44,83 +44,83 @@ type IPReputationConfig struct {
 
 // IPReputation IP 信誉结果
 type IPReputation struct {
-	IP              string                 `json:"ip"`
-	Score           float64                `json:"score"`           // 0-100, 越高越危险
-	RiskLevel       RiskLevel              `json:"risk_level"`      // 风险等级
-	Confidence      float64                `json:"confidence"`      // 置信度 0-100
-	ThreatIntelScore float64               `json:"threat_intel_score"` // 威胁情报评分
-	HistoryScore    float64                `json:"history_score"`   // 历史行为评分
-	BehaviorScore   float64                `json:"behavior_score"`  // 实时行为评分
-	Categories      []string               `json:"categories"`      // 风险类别
-	Evidence        []Evidence             `json:"evidence"`        // 证据列表
-	LastUpdated     time.Time              `json:"last_updated"`
-	RawData         map[string]interface{} `json:"raw_data,omitempty"`
+	IP               string                 `json:"ip"`
+	Score            float64                `json:"score"`              // 0-100, 越高越危险
+	RiskLevel        RiskLevel              `json:"risk_level"`         // 风险等级
+	Confidence       float64                `json:"confidence"`         // 置信度 0-100
+	ThreatIntelScore float64                `json:"threat_intel_score"` // 威胁情报评分
+	HistoryScore     float64                `json:"history_score"`      // 历史行为评分
+	BehaviorScore    float64                `json:"behavior_score"`     // 实时行为评分
+	Categories       []string               `json:"categories"`         // 风险类别
+	Evidence         []Evidence             `json:"evidence"`           // 证据列表
+	LastUpdated      time.Time              `json:"last_updated"`
+	RawData          map[string]interface{} `json:"raw_data,omitempty"`
 }
 
 // RiskLevel 风险等级
 type RiskLevel string
 
 const (
-	RiskLevelTrusted  RiskLevel = "trusted"   // 可信
-	RiskLevelNormal   RiskLevel = "normal"    // 正常
+	RiskLevelTrusted    RiskLevel = "trusted"    // 可信
+	RiskLevelNormal     RiskLevel = "normal"     // 正常
 	RiskLevelSuspicious RiskLevel = "suspicious" // 可疑
-	RiskLevelMalicious RiskLevel = "malicious"  // 恶意
+	RiskLevelMalicious  RiskLevel = "malicious"  // 恶意
 )
 
 // Evidence 证据
 type Evidence struct {
-	Source    string    `json:"source"`     // 证据来源
-	Type      string    `json:"type"`       // 证据类型
-	Value     string    `json:"value"`      // 证据值
-	Weight    float64   `json:"weight"`     // 权重
-	Timestamp time.Time `json:"timestamp"`  // 时间戳
+	Source    string    `json:"source"`    // 证据来源
+	Type      string    `json:"type"`      // 证据类型
+	Value     string    `json:"value"`     // 证据值
+	Weight    float64   `json:"weight"`    // 权重
+	Timestamp time.Time `json:"timestamp"` // 时间戳
 }
 
 // IPHistory IP 历史记录
 type IPHistory struct {
-	IP           string      `json:"ip"`
-	FirstSeen    time.Time   `json:"first_seen"`
-	LastSeen     time.Time   `json:"last_seen"`
-	TotalRequests int64      `json:"total_requests"`
-	ErrorRequests int64      `json:"error_requests"`
-	BlockedCount  int64      `json:"blocked_count"`
-	ThreatEvents  []ThreatEvent `json:"threat_events"`
+	IP            string           `json:"ip"`
+	FirstSeen     time.Time        `json:"first_seen"`
+	LastSeen      time.Time        `json:"last_seen"`
+	TotalRequests int64            `json:"total_requests"`
+	ErrorRequests int64            `json:"error_requests"`
+	BlockedCount  int64            `json:"blocked_count"`
+	ThreatEvents  []ThreatEvent    `json:"threat_events"`
 	RequestStats  map[string]int64 `json:"request_stats"` // 按状态码统计
 }
 
 // ThreatEvent 威胁事件
 type ThreatEvent struct {
-	Type      string    `json:"type"`       // 事件类型
-	Severity  string    `json:"severity"`   // 严重程度
-	Timestamp time.Time `json:"timestamp"`  // 发生时间
-	Details   string    `json:"details"`    // 详细信息
+	Type      string    `json:"type"`      // 事件类型
+	Severity  string    `json:"severity"`  // 严重程度
+	Timestamp time.Time `json:"timestamp"` // 发生时间
+	Details   string    `json:"details"`   // 详细信息
 }
 
 // RequestStats 请求统计 (用于实时行为分析)
 type RequestStats struct {
-	TotalRequests   int64       `json:"total_requests"`
-	ErrorRequests   int64       `json:"error_requests"`
-	AvgLatency      float64     `json:"avg_latency"`
-	RequestsPerMin  float64     `json:"requests_per_min"`
-	UniqueURIs      int64       `json:"unique_uris"`
-	UniqueMethods   int64       `json:"unique_methods"`
-	WindowStart     time.Time   `json:"window_start"`
-	WindowEnd       time.Time   `json:"window_end"`
+	TotalRequests  int64     `json:"total_requests"`
+	ErrorRequests  int64     `json:"error_requests"`
+	AvgLatency     float64   `json:"avg_latency"`
+	RequestsPerMin float64   `json:"requests_per_min"`
+	UniqueURIs     int64     `json:"unique_uris"`
+	UniqueMethods  int64     `json:"unique_methods"`
+	WindowStart    time.Time `json:"window_start"`
+	WindowEnd      time.Time `json:"window_end"`
 }
 
 // DefaultIPReputationConfig 返回默认配置
 func DefaultIPReputationConfig() *IPReputationConfig {
 	return &IPReputationConfig{
-		ThreatIntelWeight:  0.5,
-		HistoryWeight:      0.3,
-		BehaviorWeight:     0.2,
-		TrustedThreshold:   20,
+		ThreatIntelWeight:   0.5,
+		HistoryWeight:       0.3,
+		BehaviorWeight:      0.2,
+		TrustedThreshold:    20,
 		SuspiciousThreshold: 50,
 		MaliciousThreshold:  80,
-		DecayFactor:        0.01, // 每小时衰减 1%
-		MaxHistoryDays:     30,
-		CacheTTL:           30 * time.Minute,
-		EnableRedis:        false,
+		DecayFactor:         0.01, // 每小时衰减 1%
+		MaxHistoryDays:      30,
+		CacheTTL:            30 * time.Minute,
+		EnableRedis:         false,
 	}
 }
 
@@ -166,13 +166,13 @@ func (s *IPReputationService) GetReputation(ctx context.Context, ip string) (*IP
 
 	// 并行获取各维度评分
 	var (
-		threatScore float64
-		historyScore float64
-		behaviorScore float64
+		threatScore      float64
+		historyScore     float64
+		behaviorScore    float64
 		threatCategories []string
-		threatEvidence []Evidence
-		mu sync.Mutex
-		wg sync.WaitGroup
+		threatEvidence   []Evidence
+		mu               sync.Mutex
+		wg               sync.WaitGroup
 	)
 
 	// 1. 获取外部威胁情报
@@ -236,16 +236,16 @@ func (s *IPReputationService) GetReputation(ctx context.Context, ip string) (*IP
 	allEvidence = append(allEvidence, historyEvidence...)
 
 	reputation := &IPReputation{
-		IP:              ip,
-		Score:           finalScore,
-		RiskLevel:       riskLevel,
-		Confidence:      confidence,
+		IP:               ip,
+		Score:            finalScore,
+		RiskLevel:        riskLevel,
+		Confidence:       confidence,
 		ThreatIntelScore: threatScore,
-		HistoryScore:    historyScore,
-		BehaviorScore:   behaviorScore,
-		Categories:      threatCategories,
-		Evidence:        allEvidence,
-		LastUpdated:     time.Now(),
+		HistoryScore:     historyScore,
+		BehaviorScore:    behaviorScore,
+		Categories:       threatCategories,
+		Evidence:         allEvidence,
+		LastUpdated:      time.Now(),
 	}
 
 	// 写入缓存
@@ -264,11 +264,11 @@ func (s *IPReputationService) RecordEvent(ip string, event IPEvent) {
 
 // IPEvent IP 事件
 type IPEvent struct {
-	Type       string                 `json:"type"`        // 事件类型：request/error/block/threat
-	StatusCode int                    `json:"status_code"` // HTTP 状态码
-	Latency    float64                `json:"latency"`     // 延迟 ms
-	URI        string                 `json:"uri"`         // 请求 URI
-	Method     string                 `json:"method"`      // HTTP 方法
+	Type       string                 `json:"type"`                  // 事件类型：request/error/block/threat
+	StatusCode int                    `json:"status_code"`           // HTTP 状态码
+	Latency    float64                `json:"latency"`               // 延迟 ms
+	URI        string                 `json:"uri"`                   // 请求 URI
+	Method     string                 `json:"method"`                // HTTP 方法
 	ThreatType string                 `json:"threat_type,omitempty"` // 威胁类型
 	Details    map[string]interface{} `json:"details,omitempty"`
 	Timestamp  time.Time              `json:"timestamp"`
@@ -451,13 +451,13 @@ func (s *IPReputationService) GetStats() map[string]interface{} {
 	defer s.mu.RUnlock()
 
 	return map[string]interface{}{
-		"cache_size":        s.cache.Size(),
-		"history_ips":       s.history.Count(),
+		"cache_size":  s.cache.Size(),
+		"history_ips": s.history.Count(),
 		"config": map[string]interface{}{
-			"threat_weight": s.config.ThreatIntelWeight,
-			"history_weight": s.config.HistoryWeight,
-			"behavior_weight": s.config.BehaviorWeight,
-			"malicious_threshold": s.config.MaliciousThreshold,
+			"threat_weight":        s.config.ThreatIntelWeight,
+			"history_weight":       s.config.HistoryWeight,
+			"behavior_weight":      s.config.BehaviorWeight,
+			"malicious_threshold":  s.config.MaliciousThreshold,
 			"suspicious_threshold": s.config.SuspiciousThreshold,
 		},
 	}
@@ -465,8 +465,8 @@ func (s *IPReputationService) GetStats() map[string]interface{} {
 
 // IPReputationCache IP 信誉缓存
 type IPReputationCache struct {
-	data     map[string]*IPReputation
-	mu       sync.RWMutex
+	data       map[string]*IPReputation
+	mu         sync.RWMutex
 	defaultTTL time.Duration
 }
 
@@ -541,9 +541,9 @@ func (c *IPReputationCache) cleanup() {
 
 // IPHistoryStore IP 历史记录存储
 type IPHistoryStore struct {
-	data     map[string]*IPHistory
-	mu       sync.RWMutex
-	stats    map[string][]RequestStats // 按 IP 存储请求统计窗口
+	data  map[string]*IPHistory
+	mu    sync.RWMutex
+	stats map[string][]RequestStats // 按 IP 存储请求统计窗口
 }
 
 // NewIPHistoryStore 创建 IP 历史记录存储
@@ -574,8 +574,8 @@ func (s *IPHistoryStore) Record(ip string, event IPEvent) {
 	history, exists := s.data[ip]
 	if !exists {
 		history = &IPHistory{
-			IP:          ip,
-			FirstSeen:   event.Timestamp,
+			IP:           ip,
+			FirstSeen:    event.Timestamp,
 			RequestStats: make(map[string]int64),
 		}
 		s.data[ip] = history

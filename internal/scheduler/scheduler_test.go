@@ -73,10 +73,10 @@ func TestScheduler_TaskMap(t *testing.T) {
 func TestScheduler_CronExpression(t *testing.T) {
 	// 测试常见的 cron 表达式
 	expressions := []string{
-		"0 */5 * * * *",   // 每 5 分钟
-		"0 0 8 * * *",     // 每天早上 8 点
-		"0 0 */2 * * *",   // 每 2 小时
-		"30 12 * * 1-5",   // 工作日中午 12:30
+		"0 */5 * * * *", // 每 5 分钟
+		"0 0 8 * * *",   // 每天早上 8 点
+		"0 0 */2 * * *", // 每 2 小时
+		"30 12 * * 1-5", // 工作日中午 12:30
 	}
 
 	for _, expr := range expressions {

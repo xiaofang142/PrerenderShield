@@ -23,13 +23,13 @@ type IPRecord struct {
 	LastSeen        time.Time
 	RequestTimes    []time.Time
 	RequestCount    int
-	Paths           map[string]int       // 请求路径统计
-	Methods         map[string]int       // 请求方法统计
-	Headers         map[string][]string  // 请求头样本
-	UserAgents      []string             // User-Agent 列表
-	ResponseCodes   map[int]int          // 响应码统计
-	SuspiciousScore float64              // 可疑分数
-	Flags           map[string]bool      // 行为标记
+	Paths           map[string]int      // 请求路径统计
+	Methods         map[string]int      // 请求方法统计
+	Headers         map[string][]string // 请求头样本
+	UserAgents      []string            // User-Agent 列表
+	ResponseCodes   map[int]int         // 响应码统计
+	SuspiciousScore float64             // 可疑分数
+	Flags           map[string]bool     // 行为标记
 }
 
 // NewIPTracker 创建 IP 追踪器
@@ -438,10 +438,10 @@ func (t *IPTracker) GetStats() *IPTrackerStats {
 	}
 
 	return &IPTrackerStats{
-		TotalIPs:       totalIPs,
-		SuspiciousIPs:  suspiciousIPs,
-		MaxRecords:     t.maxRecords,
-		RecordExpiry:   t.recordExpiry,
+		TotalIPs:      totalIPs,
+		SuspiciousIPs: suspiciousIPs,
+		MaxRecords:    t.maxRecords,
+		RecordExpiry:  t.recordExpiry,
 	}
 }
 
@@ -498,7 +498,7 @@ func (t *IPTracker) ResetIP(ip string) {
 func containsIgnoreCase(s, substr string) bool {
 	return len(s) >= len(substr) &&
 		(s == substr || lower(s) == lower(substr) ||
-		 findSubstring(lower(s), lower(substr)) >= 0)
+			findSubstring(lower(s), lower(substr)) >= 0)
 }
 
 func lower(s string) string {

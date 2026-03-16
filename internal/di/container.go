@@ -49,8 +49,8 @@ type Container struct {
 
 // ContainerDeps 容器依赖项
 type ContainerDeps struct {
-	Config    *config.Config
-	Redis     *redis.Client
+	Config *config.Config
+	Redis  *redis.Client
 }
 
 // NewContainer 创建依赖容器

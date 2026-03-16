@@ -13,15 +13,15 @@ type RateLimiter struct {
 	redisClient *redis.Client
 	mu          sync.RWMutex
 	clients     map[string]*ClientRateLimit
-	limit       int64           // 请求次数限制
-	window      time.Duration   // 时间窗口
-	banTime     time.Duration   // 封禁时长
+	limit       int64                // 请求次数限制
+	window      time.Duration        // 时间窗口
+	banTime     time.Duration        // 封禁时长
 	bannedIPs   map[string]time.Time // 被封禁的 IP
 }
 
 // ClientRateLimit 客户端速率限制信息
 type ClientRateLimit struct {
-	Count     int64
+	Count       int64
 	WindowStart time.Time
 	LastAccess  time.Time
 }
@@ -46,8 +46,8 @@ func (r *RateLimiter) Middleware() gin.HandlerFunc {
 		// 检查是否被封禁
 		if r.isBanned(clientIP) {
 			c.AbortWithStatusJSON(429, gin.H{
-				"code":    429,
-				"message": "Too many requests, please try again later",
+				"code":        429,
+				"message":     "Too many requests, please try again later",
 				"retry_after": r.banTime.String(),
 			})
 			return
@@ -58,8 +58,8 @@ func (r *RateLimiter) Middleware() gin.HandlerFunc {
 			// 超过限制，封禁
 			r.Ban(clientIP)
 			c.AbortWithStatusJSON(429, gin.H{
-				"code":    429,
-				"message": "Too many requests, you have been rate limited",
+				"code":        429,
+				"message":     "Too many requests, you have been rate limited",
 				"retry_after": r.banTime.String(),
 			})
 			return
@@ -179,11 +179,11 @@ func (r *RateLimiter) GetStats() map[string]interface{} {
 	defer r.mu.RUnlock()
 
 	return map[string]interface{}{
-		"total_clients":   len(r.clients),
-		"banned_ips":      len(r.bannedIPs),
-		"limit":           r.limit,
-		"window":          r.window.String(),
-		"ban_time":        r.banTime.String(),
+		"total_clients": len(r.clients),
+		"banned_ips":    len(r.bannedIPs),
+		"limit":         r.limit,
+		"window":        r.window.String(),
+		"ban_time":      r.banTime.String(),
 	}
 }
 

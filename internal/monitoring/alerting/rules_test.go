@@ -164,9 +164,9 @@ func TestRuleEngine_EvaluateAll(t *testing.T) {
 			Operator:  "gt",
 			Threshold: 100,
 		},
-		Severity:  "warning",
-		Cooldown:  time.Millisecond,
-		Handlers:  []string{"test_handler"},
+		Severity: "warning",
+		Cooldown: time.Millisecond,
+		Handlers: []string{"test_handler"},
 	}
 	engine.AddRule(&rule)
 

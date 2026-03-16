@@ -67,7 +67,7 @@ func TestMultiExporter_WithLogExporter(t *testing.T) {
 
 func TestMultiExporter_WithFileExporter(t *testing.T) {
 	cfg := &ExporterConfig{
-		FileExportPath: "/tmp/telemetry_test.json",
+		FileExportPath:   "/tmp/telemetry_test.json",
 		FileExportFormat: "json",
 	}
 	logger, _ := zap.NewDevelopment()
@@ -293,7 +293,7 @@ func TestLogExporter_Shutdown(t *testing.T) {
 
 func TestFileExporter_InvalidPath(t *testing.T) {
 	cfg := &ExporterConfig{
-		FileExportPath: "/invalid/path/that/does/not/exist/file.json",
+		FileExportPath:   "/invalid/path/that/does/not/exist/file.json",
 		FileExportFormat: "json",
 	}
 	logger, _ := zap.NewDevelopment()
@@ -309,7 +309,7 @@ func TestFileExporter_InvalidPath(t *testing.T) {
 
 func TestFileExporter_ValidPath(t *testing.T) {
 	cfg := &ExporterConfig{
-		FileExportPath: "/tmp/telemetry_test_export.json",
+		FileExportPath:   "/tmp/telemetry_test_export.json",
 		FileExportFormat: "json",
 	}
 	logger, _ := zap.NewDevelopment()
@@ -326,7 +326,7 @@ func TestFileExporter_ValidPath(t *testing.T) {
 
 func TestFileExporter_TextFormat(t *testing.T) {
 	cfg := &ExporterConfig{
-		FileExportPath: "/tmp/telemetry_test_export.txt",
+		FileExportPath:   "/tmp/telemetry_test_export.txt",
 		FileExportFormat: "text",
 	}
 	logger, _ := zap.NewDevelopment()
@@ -343,7 +343,7 @@ func TestFileExporter_TextFormat(t *testing.T) {
 
 func TestFileExporter_DefaultFormat(t *testing.T) {
 	cfg := &ExporterConfig{
-		FileExportPath: "/tmp/telemetry_test_export_default.json",
+		FileExportPath:   "/tmp/telemetry_test_export_default.json",
 		FileExportFormat: "", // 空格式应该使用默认值
 	}
 	logger, _ := zap.NewDevelopment()
