@@ -1,6 +1,7 @@
 package task
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -304,4 +305,222 @@ func TestTaskStatus_String(t *testing.T) {
 	assert.Equal(t, "completed", string(TaskStatusCompleted))
 	assert.Equal(t, "failed", string(TaskStatusFailed))
 	assert.Equal(t, "cancelled", string(TaskStatusCancelled))
+}
+
+// TestQueue_Enqueue_NilTask 测试 Enqueue 处理 nil 任务
+func TestQueue_Enqueue_NilTask(t *testing.T) {
+	q := NewQueue(nil)
+	err := q.Enqueue(nil)
+	// 应该因为 nil redis 返回错误
+	assert.Error(t, err)
+}
+
+// TestQueue_Dequeue_EmptyQueue 测试 Dequeue 空队列
+func TestQueue_Dequeue_EmptyQueue(t *testing.T) {
+	q := NewQueue(nil)
+	_, err := q.Dequeue(TaskTypePreheat)
+	assert.Error(t, err)
+}
+
+// TestQueue_Dequeue_DifferentTypes 测试 Dequeue 不同任务类型
+func TestQueue_Dequeue_DifferentTypes(t *testing.T) {
+	q := NewQueue(nil)
+
+	taskTypes := []TaskType{TaskTypeSSL, TaskTypeCleanup, TaskTypeMonitor}
+	for _, taskType := range taskTypes {
+		_, err := q.Dequeue(taskType)
+		assert.Error(t, err)
+	}
+}
+
+// TestQueue_GetTask_InvalidID 测试 GetTask 无效任务 ID
+func TestQueue_GetTask_InvalidID(t *testing.T) {
+	q := NewQueue(nil)
+	_, err := q.GetTask("")
+	assert.Error(t, err)
+
+	_, err = q.GetTask("nonexistent-id")
+	assert.Error(t, err)
+}
+
+// TestQueue_UpdateTaskStatus_NilRedis 测试 UpdateTaskStatus nil redis
+func TestQueue_UpdateTaskStatus_NilRedis(t *testing.T) {
+	q := NewQueue(nil)
+	err := q.UpdateTaskStatus("test-id", TaskStatusRunning)
+	assert.Error(t, err)
+}
+
+// TestQueue_UpdateTaskStatus_DifferentStatus 测试 UpdateTaskStatus 不同状态
+func TestQueue_UpdateTaskStatus_DifferentStatus(t *testing.T) {
+	q := NewQueue(nil)
+
+	statuses := []TaskStatus{
+		TaskStatusPending,
+		TaskStatusRunning,
+		TaskStatusCompleted,
+		TaskStatusFailed,
+		TaskStatusCancelled,
+	}
+
+	for _, status := range statuses {
+		err := q.UpdateTaskStatus("test-id", status)
+		assert.Error(t, err)
+	}
+}
+
+// TestQueue_ListTasks_Empty 测试 ListTasks 空列表
+func TestQueue_ListTasks_Empty(t *testing.T) {
+	q := NewQueue(nil)
+	tasks, err := q.ListTasks(TaskStatusPending)
+	assert.Error(t, err)
+	assert.Nil(t, tasks)
+}
+
+// TestQueue_ListTasks_DifferentStatus 测试 ListTasks 不同状态
+func TestQueue_ListTasks_DifferentStatus(t *testing.T) {
+	q := NewQueue(nil)
+
+	statuses := []TaskStatus{
+		TaskStatusPending,
+		TaskStatusRunning,
+		TaskStatusCompleted,
+		TaskStatusFailed,
+		TaskStatusCancelled,
+	}
+
+	for _, status := range statuses {
+		_, err := q.ListTasks(status)
+		assert.Error(t, err)
+	}
+}
+
+// TestQueue_Cleanup_NoTasks 测试 Cleanup 没有任务
+func TestQueue_Cleanup_NoTasks(t *testing.T) {
+	q := NewQueue(nil)
+	err := q.Cleanup()
+	assert.Error(t, err)
+}
+
+// TestQueue_StructFields 测试 queue 结构体字段
+func TestQueue_StructFields(t *testing.T) {
+	q := &queue{
+		redisClient: nil,
+	}
+	assert.Nil(t, q.redisClient)
+}
+
+// TestQueue_Enqueue_ErrorPath 测试 Enqueue 错误路径
+func TestQueue_Enqueue_ErrorPath(t *testing.T) {
+	// 创建一个有 ID 的任务
+	task := &BaseTask{
+		IDValue:     "test-id",
+		TypeValue:   TaskTypePreheat,
+		StatusValue: TaskStatusPending,
+	}
+
+	q := NewQueue(nil)
+	err := q.Enqueue(task)
+	// 应该因为 nil redis 返回错误
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis client is nil")
+}
+
+// TestQueue_Dequeue_ErrorPath 测试 Dequeue 错误路径
+func TestQueue_Dequeue_ErrorPath(t *testing.T) {
+	q := NewQueue(nil)
+	_, err := q.Dequeue(TaskTypePreheat)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis client is nil")
+}
+
+// TestQueue_GetTask_ErrorPath 测试 GetTask 错误路径
+func TestQueue_GetTask_ErrorPath(t *testing.T) {
+	q := NewQueue(nil)
+	_, err := q.GetTask("test-id")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis client is nil")
+}
+
+// TestQueue_UpdateTaskStatus_ErrorPath 测试 UpdateTaskStatus 错误路径
+func TestQueue_UpdateTaskStatus_ErrorPath(t *testing.T) {
+	q := NewQueue(nil)
+	err := q.UpdateTaskStatus("test-id", TaskStatusRunning)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis client is nil")
+}
+
+// TestQueue_ListTasks_ErrorPath 测试 ListTasks 错误路径
+func TestQueue_ListTasks_ErrorPath(t *testing.T) {
+	q := NewQueue(nil)
+	_, err := q.ListTasks(TaskStatusPending)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis client is nil")
+}
+
+// TestQueue_Cleanup_ErrorPath 测试 Cleanup 错误路径
+func TestQueue_Cleanup_ErrorPath(t *testing.T) {
+	q := NewQueue(nil)
+	err := q.Cleanup()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "redis client is nil")
+}
+
+// TestBaseTask_MarshalJSON 测试 BaseTask JSON 序列化
+func TestBaseTask_MarshalJSON(t *testing.T) {
+	task := NewBaseTask(TaskTypePreheat)
+	task.PriorityValue = 5
+	task.Retries = 1
+
+	// 验证可以被序列化
+	data, err := json.Marshal(task)
+	assert.Nil(t, err)
+	assert.NotEmpty(t, data)
+}
+
+// TestBaseTask_SetCreatedAt 测试设置 CreatedAt
+func TestBaseTask_SetCreatedAt(t *testing.T) {
+	task := NewBaseTask(TaskTypePreheat)
+	oldTime := task.CreatedAt
+
+	task.CreatedAt = oldTime + 1000
+	assert.Equal(t, oldTime+1000, task.CreatedAt)
+}
+
+// TestBaseTask_SetUpdatedAt 测试设置 UpdatedAt
+func TestBaseTask_SetUpdatedAt(t *testing.T) {
+	task := NewBaseTask(TaskTypePreheat)
+	oldTime := task.UpdatedAt
+
+	task.UpdatedAt = oldTime + 1000
+	assert.Equal(t, oldTime+1000, task.UpdatedAt)
+}
+
+// TestBaseTask_SetRetries 测试设置 Retries
+func TestBaseTask_SetRetries(t *testing.T) {
+	task := NewBaseTask(TaskTypePreheat)
+	task.Retries = 5
+	assert.Equal(t, 5, task.Retries)
+}
+
+// TestBaseTask_Retry_BoundaryConditions 测试 Retry 边界条件
+func TestBaseTask_Retry_BoundaryConditions(t *testing.T) {
+	// 测试 MaxRetries 为 0
+	task := NewBaseTask(TaskTypePreheat)
+	task.MaxRetries = 0
+
+	err := task.Retry()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "max retries reached")
+}
+
+// TestQueue_Type 测试 TaskType 类型
+func TestQueue_TaskType(t *testing.T) {
+	var taskType TaskType = "custom"
+	assert.Equal(t, "custom", string(taskType))
+}
+
+// TestQueue_TaskStatus 测试 TaskStatus 类型
+func TestQueue_TaskStatus(t *testing.T) {
+	var taskStatus TaskStatus = "custom"
+	assert.Equal(t, "custom", string(taskStatus))
 }

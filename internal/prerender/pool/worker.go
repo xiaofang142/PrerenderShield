@@ -450,7 +450,11 @@ func (wp *WorkerPool) Stats() map[string]interface{} {
 	stats["total_tasks"] = totalTasks
 	stats["total_success"] = totalSuccess
 	stats["total_fail"] = totalFail
-	stats["avg_duration"] = totalDuration / time.Duration(totalTasks)
+	if totalTasks > 0 {
+		stats["avg_duration"] = totalDuration / time.Duration(totalTasks)
+	} else {
+		stats["avg_duration"] = 0
+	}
 
 	// 优先级队列长度
 	queueLengths := make(map[string]int)
