@@ -202,7 +202,7 @@ func TestHandleChallengeWithoutRedirect(t *testing.T) {
 }
 
 func TestNewEngine(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	config := Config{
 		Whitelist: []string{"127.0.0.1"},
 		Blacklist: []string{"10.0.0.1"},
@@ -217,7 +217,7 @@ func TestNewEngine(t *testing.T) {
 }
 
 func TestEngineCheckWhitelisted(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	config := Config{
 		Whitelist: []string{"127.0.0.1"},
 	}
@@ -233,7 +233,7 @@ func TestEngineCheckWhitelisted(t *testing.T) {
 }
 
 func TestEngineCheckBlacklisted(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	config := Config{
 		Blacklist: []string{"10.0.0.1"},
 	}
@@ -250,7 +250,7 @@ func TestEngineCheckBlacklisted(t *testing.T) {
 }
 
 func TestEngineCheckNormal(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	config := Config{}
 	engine := NewEngine("test-site", config, logger)
 
@@ -263,7 +263,7 @@ func TestEngineCheckNormal(t *testing.T) {
 }
 
 func TestEngineCheckCaching(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	config := Config{}
 	engine := NewEngine("test-site", config, logger)
 
@@ -287,7 +287,7 @@ func TestEngineCheckCaching(t *testing.T) {
 }
 
 func TestEngineCheckStats(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	config := Config{
 		Blacklist: []string{"10.0.0.1"},
 	}
@@ -314,7 +314,7 @@ func TestEngineCheckStats(t *testing.T) {
 }
 
 func TestEngineAddRule(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	config := Config{}
 	engine := NewEngine("test-site", config, logger)
 
@@ -327,7 +327,7 @@ func TestEngineAddRule(t *testing.T) {
 }
 
 func TestEngineRemoveRule(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	config := Config{}
 	engine := NewEngine("test-site", config, logger)
 
@@ -367,7 +367,7 @@ func TestEngineUpdateRules(t *testing.T) {
 }
 
 func TestEngineClose(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	config := Config{}
 	engine := NewEngine("test-site", config, logger)
 
@@ -376,7 +376,7 @@ func TestEngineClose(t *testing.T) {
 }
 
 func TestCacheExpiration(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	config := Config{}
 	engine := NewEngine("test-site", config, logger)
 
@@ -398,7 +398,7 @@ func TestCacheExpiration(t *testing.T) {
 }
 
 func TestGetCacheKey(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	config := Config{}
 	engine := NewEngine("test-site", config, logger)
 

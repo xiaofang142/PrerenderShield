@@ -13,7 +13,7 @@ import (
 type Engine struct {
 	siteName      string
 	config        *Config
-	logger        logging.Logger
+	logger        *logging.Logger
 	ruleManager   *RuleManager
 	actionHandler ActionHandler
 	requestCache  map[string]*cacheEntry
@@ -160,7 +160,7 @@ func (e *Engine) Close() error {
 }
 
 // NewEngine 创建新引擎
-func NewEngine(siteName string, config Config, logger logging.Logger) *Engine {
+func NewEngine(siteName string, config Config, logger *logging.Logger) *Engine {
 	ruleManager := NewRuleManager(config.RulesPath)
 	actionHandler := NewDefaultActionHandler(config.ActionConfig)
 

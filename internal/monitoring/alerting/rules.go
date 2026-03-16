@@ -11,7 +11,7 @@ import (
 
 // RuleEngine 告警规则引擎
 type RuleEngine struct {
-	rules    []Rule
+	rules    []*Rule
 	handlers []AlertHandler
 	mu       sync.RWMutex
 	stopChan chan struct{}
@@ -64,14 +64,14 @@ type MetricsFunc func(ctx context.Context, metric string) (float64, error)
 // NewRuleEngine 创建规则引擎
 func NewRuleEngine() *RuleEngine {
 	return &RuleEngine{
-		rules:    make([]Rule, 0),
+		rules:    make([]*Rule, 0),
 		handlers: make([]AlertHandler, 0),
 		stopChan: make(chan struct{}),
 	}
 }
 
 // AddRule 添加规则
-func (e *RuleEngine) AddRule(rule Rule) {
+func (e *RuleEngine) AddRule(rule *Rule) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.rules = append(e.rules, rule)
@@ -124,7 +124,7 @@ func (e *RuleEngine) evaluateLoop(getMetric MetricsFunc) {
 // evaluateAll 评估所有规则
 func (e *RuleEngine) evaluateAll(getMetric MetricsFunc) {
 	e.mu.RLock()
-	rules := make([]Rule, len(e.rules))
+	rules := make([]*Rule, len(e.rules))
 	copy(rules, e.rules)
 	handlers := e.handlers
 	e.mu.RUnlock()
@@ -132,7 +132,7 @@ func (e *RuleEngine) evaluateAll(getMetric MetricsFunc) {
 	ctx := context.Background()
 
 	for i := range rules {
-		rule := &rules[i]
+		rule := rules[i]
 		if !rule.Enabled {
 			continue
 		}
@@ -213,7 +213,18 @@ func (e *RuleEngine) LoadRulesFromFile(filename string) error {
 		return err
 	}
 
-	for _, rule := range rules {
+	for i := range rules {
+		// Create a new rule on the heap to avoid copying lock
+		rule := &Rule{
+			ID:          rules[i].ID,
+			Name:        rules[i].Name,
+			Description: rules[i].Description,
+			Enabled:     rules[i].Enabled,
+			Condition:   rules[i].Condition,
+			Severity:    rules[i].Severity,
+			Handlers:    rules[i].Handlers,
+			Cooldown:    rules[i].Cooldown,
+		}
 		e.AddRule(rule)
 	}
 
@@ -233,8 +244,8 @@ func (e *RuleEngine) SaveRulesToFile(filename string) error {
 }
 
 // 内置规则
-func DefaultRules() []Rule {
-	return []Rule{
+func DefaultRules() []*Rule {
+	return []*Rule{
 		{
 			ID:          "cpu_high",
 			Name:        "CPU 使用率过高",

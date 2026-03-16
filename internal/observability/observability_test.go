@@ -13,7 +13,7 @@ import (
 )
 
 func TestNewObservability(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	metricsRecorder := metrics.NewInMemoryRecorder()
 	eventBus := eventbus.NewInMemoryBus(nil)
 
@@ -25,7 +25,7 @@ func TestNewObservability(t *testing.T) {
 }
 
 func TestRecordRequest(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	metricsRecorder := metrics.NewInMemoryRecorder()
 	eventBus := eventbus.NewInMemoryBus(nil)
 
@@ -40,7 +40,7 @@ func TestRecordRequest(t *testing.T) {
 }
 
 func TestRecordError(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	metricsRecorder := metrics.NewInMemoryRecorder()
 	eventBus := eventbus.NewInMemoryBus(nil)
 
@@ -55,7 +55,7 @@ func TestRecordError(t *testing.T) {
 }
 
 func TestRecordWAFBlock(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	metricsRecorder := metrics.NewInMemoryRecorder()
 	eventBus := eventbus.NewInMemoryBus(nil)
 
@@ -70,7 +70,7 @@ func TestRecordWAFBlock(t *testing.T) {
 }
 
 func TestRecordCacheHit(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	metricsRecorder := metrics.NewInMemoryRecorder()
 	eventBus := eventbus.NewInMemoryBus(nil)
 
@@ -84,7 +84,7 @@ func TestRecordCacheHit(t *testing.T) {
 }
 
 func TestRecordCacheMiss(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	metricsRecorder := metrics.NewInMemoryRecorder()
 	eventBus := eventbus.NewInMemoryBus(nil)
 
@@ -98,7 +98,7 @@ func TestRecordCacheMiss(t *testing.T) {
 }
 
 func TestGetMetrics(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	metricsRecorder := metrics.NewInMemoryRecorder()
 	eventBus := eventbus.NewInMemoryBus(nil)
 
@@ -109,7 +109,7 @@ func TestGetMetrics(t *testing.T) {
 }
 
 func TestRecordRequestWithDifferentStatuses(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	metricsRecorder := metrics.NewInMemoryRecorder()
 	eventBus := eventbus.NewInMemoryBus(nil)
 
@@ -128,7 +128,7 @@ func TestRecordRequestWithDifferentStatuses(t *testing.T) {
 }
 
 func TestRecordMultipleErrors(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	metricsRecorder := metrics.NewInMemoryRecorder()
 	eventBus := eventbus.NewInMemoryBus(nil)
 
@@ -146,7 +146,7 @@ func TestRecordMultipleErrors(t *testing.T) {
 }
 
 func TestRecordMultipleWAFBlocks(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	metricsRecorder := metrics.NewInMemoryRecorder()
 	eventBus := eventbus.NewInMemoryBus(nil)
 
@@ -165,7 +165,7 @@ func TestRecordMultipleWAFBlocks(t *testing.T) {
 }
 
 func TestRecordCacheOperations(t *testing.T) {
-	logger := *logging.NewLogger(logging.Config{})
+	logger := logging.NewLogger(logging.Config{})
 	metricsRecorder := metrics.NewInMemoryRecorder()
 	eventBus := eventbus.NewInMemoryBus(nil)
 

@@ -11,14 +11,14 @@ import (
 
 // Observability 可观测性组件
 type Observability struct {
-	Logger          logging.Logger
+	Logger          *logging.Logger
 	MetricsRecorder *metrics.InMemoryRecorder
 	EventBus        *eventbus.InMemoryBus
 }
 
 // NewObservability 创建可观测性组件
 func NewObservability(
-	logger logging.Logger,
+	logger *logging.Logger,
 	metricsRecorder *metrics.InMemoryRecorder,
 	eventBus *eventbus.InMemoryBus,
 ) *Observability {

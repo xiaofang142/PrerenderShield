@@ -51,7 +51,7 @@ func TestRuleEngine_AddRule(t *testing.T) {
 		Severity: "warning",
 	}
 
-	engine.AddRule(rule)
+	engine.AddRule(&rule)
 
 	assert.Len(t, engine.rules, 1)
 	assert.Equal(t, "test_rule", engine.rules[0].ID)
@@ -64,14 +64,22 @@ func TestRuleEngine_RemoveRule(t *testing.T) {
 	rule2 := Rule{ID: "rule2", Name: "Rule 2"}
 	rule3 := Rule{ID: "rule3", Name: "Rule 3"}
 
-	engine.AddRule(rule1)
-	engine.AddRule(rule2)
-	engine.AddRule(rule3)
+	engine.AddRule(&rule1)
+	engine.AddRule(&rule2)
+	engine.AddRule(&rule3)
 
 	engine.RemoveRule("rule2")
 
 	assert.Len(t, engine.rules, 2)
-	assert.NotContains(t, engine.rules, rule2)
+	// Can't use assert.NotContains due to lock copying, check manually
+	found := false
+	for _, r := range engine.rules {
+		if r.ID == "rule2" {
+			found = true
+			break
+		}
+	}
+	assert.False(t, found)
 }
 
 func TestRuleEngine_AddHandler(t *testing.T) {
@@ -160,7 +168,7 @@ func TestRuleEngine_EvaluateAll(t *testing.T) {
 		Cooldown:  time.Millisecond,
 		Handlers:  []string{"test_handler"},
 	}
-	engine.AddRule(rule)
+	engine.AddRule(&rule)
 
 	// 指标值超过阈值
 	getMetric := func(ctx context.Context, metric string) (float64, error) {
@@ -195,7 +203,7 @@ func TestRuleEngine_EvaluateAll_Cooldown(t *testing.T) {
 		Cooldown: time.Hour, // 很长的冷却时间
 	}
 	rule.lastTriggered = time.Now() // 模拟刚触发过
-	engine.AddRule(rule)
+	engine.AddRule(&rule)
 
 	getMetric := func(ctx context.Context, metric string) (float64, error) {
 		return 150, nil
@@ -224,7 +232,7 @@ func TestRuleEngine_EvaluateAll_MetricError(t *testing.T) {
 		},
 		Severity: "warning",
 	}
-	engine.AddRule(rule)
+	engine.AddRule(&rule)
 
 	// 模拟指标获取错误
 	getMetric := func(ctx context.Context, metric string) (float64, error) {
@@ -279,8 +287,8 @@ func TestRuleEngine_LoadRulesFromFile_InvalidJSON(t *testing.T) {
 
 func TestRuleEngine_SaveRulesToFile(t *testing.T) {
 	engine := NewRuleEngine()
-	engine.AddRule(Rule{ID: "rule1", Name: "Rule 1"})
-	engine.AddRule(Rule{ID: "rule2", Name: "Rule 2"})
+	engine.AddRule(&Rule{ID: "rule1", Name: "Rule 1"})
+	engine.AddRule(&Rule{ID: "rule2", Name: "Rule 2"})
 
 	tmpFile := "/tmp/test_save_rules.json"
 	defer os.Remove(tmpFile)
