@@ -233,3 +233,159 @@ func TestRateLimitDetector_ConcurrentAccess(t *testing.T) {
 		<-done
 	}
 }
+
+// TestRateLimitDetector_DifferentIPs 测试不同 IP 的独立计数
+func TestRateLimitDetector_DifferentIPs(t *testing.T) {
+	detector := NewRateLimitDetector(2)
+
+	// IP1 用尽限制
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.RemoteAddr = "10.0.0.1"
+		assert.True(t, detector.Check(req).Allowed)
+	}
+
+	// IP1 的第三个请求应该被阻止
+	req1 := httptest.NewRequest("GET", "/test", nil)
+	req1.RemoteAddr = "10.0.0.1"
+	assert.False(t, detector.Check(req1).Allowed)
+
+	// IP2 仍然被允许
+	req2 := httptest.NewRequest("GET", "/test", nil)
+	req2.RemoteAddr = "10.0.0.2"
+	assert.True(t, detector.Check(req2).Allowed)
+	assert.True(t, detector.Check(req2).Allowed)
+
+	// IP2 的第三个请求也应该被阻止
+	req3 := httptest.NewRequest("GET", "/test", nil)
+	req3.RemoteAddr = "10.0.0.2"
+	assert.False(t, detector.Check(req3).Allowed)
+}
+
+// TestRateLimitDetector_ExactlyAtLimit 测试恰好在限制边界
+func TestRateLimitDetector_ExactlyAtLimit(t *testing.T) {
+	detector := NewRateLimitDetector(1)
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "192.168.1.1"
+
+	// 第一个请求应该被允许
+	assert.True(t, detector.Check(req).Allowed)
+
+	// 第二个请求应该被阻止
+	assert.False(t, detector.Check(req).Allowed)
+}
+
+// TestBlacklistDetector_EmptyState 测试空状态
+func TestBlacklistDetector_EmptyState(t *testing.T) {
+	detector := NewBlacklistDetector()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "any-ip"
+
+	result := detector.Check(req)
+	assert.True(t, result.Allowed)
+	assert.False(t, result.Blocked)
+	assert.Nil(t, result.Threat)
+}
+
+// TestBlacklistDetector_MultipleIPs 测试多个 IP 添加
+func TestBlacklistDetector_MultipleIPs(t *testing.T) {
+	detector := NewBlacklistDetector()
+	ips := []string{"1.1.1.1", "2.2.2.2", "3.3.3.3"}
+
+	for _, ip := range ips {
+		detector.AddIP(ip)
+	}
+
+	for _, ip := range ips {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.RemoteAddr = ip
+		result := detector.Check(req)
+		assert.False(t, result.Allowed)
+	}
+
+	// 不在黑名单的 IP 应该被允许
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "4.4.4.4"
+	assert.True(t, detector.Check(req).Allowed)
+}
+
+// TestBlacklistDetector_MultipleUAs 测试多个 UA 添加
+func TestBlacklistDetector_MultipleUAs(t *testing.T) {
+	detector := NewBlacklistDetector()
+	uas := []string{"Bot1", "Bot2", "Bot3"}
+
+	for _, ua := range uas {
+		detector.AddUserAgent(ua)
+	}
+
+	for _, ua := range uas {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("User-Agent", ua)
+		result := detector.Check(req)
+		assert.False(t, result.Allowed)
+	}
+}
+
+// TestBlacklistDetector_CaseSensitive 测试大小写敏感
+func TestBlacklistDetector_CaseSensitive(t *testing.T) {
+	detector := NewBlacklistDetector()
+	detector.AddUserAgent("BadBot")
+
+	// 完全匹配
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("User-Agent", "BadBot")
+	assert.False(t, detector.Check(req).Allowed)
+
+	// 小写不匹配（因为是子字符串匹配，实际上会匹配）
+	req2 := httptest.NewRequest("GET", "/test", nil)
+	req2.Header.Set("User-Agent", "badbot")
+	// 由于是 Contains 匹配，小写不会匹配
+	assert.True(t, detector.Check(req2).Allowed)
+}
+
+// TestRateLimitDetector_LargeLimit 测试大限制值
+func TestRateLimitDetector_LargeLimit(t *testing.T) {
+	detector := NewRateLimitDetector(1000)
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "192.168.1.1"
+
+	// 前 100 个请求应该都被允许
+	for i := 0; i < 100; i++ {
+		assert.True(t, detector.Check(req).Allowed)
+	}
+}
+
+// TestBlacklistDetector_WildcardUA 测试通配符 UA 匹配
+func TestBlacklistDetector_WildcardUA(t *testing.T) {
+	detector := NewBlacklistDetector()
+	detector.AddUserAgent("Bot")
+
+	// 所有包含 "Bot" 的 UA 都应该被阻止
+	testCases := []string{
+		"Bot/1.0",
+		"Mozilla/5.0 (compatible; Bot)",
+		"MyBot/2.0",
+		"Bot",
+	}
+
+	for _, ua := range testCases {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("User-Agent", ua)
+		result := detector.Check(req)
+		assert.False(t, result.Allowed, "UA '%s' should be blocked", ua)
+	}
+}
+
+// TestRateLimitDetector_ZeroLimit 测试零限制
+func TestRateLimitDetector_ZeroLimit(t *testing.T) {
+	detector := NewRateLimitDetector(0)
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "192.168.1.1"
+
+	// 第一个请求就应该被阻止
+	assert.False(t, detector.Check(req).Allowed)
+}
