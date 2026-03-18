@@ -1,0 +1,55 @@
+# 部署配置文件示例
+# 复制此文件为 config.production.yaml 并根据实际情况修改
+
+# 服务器配置
+server:
+  port: 9598
+  mode: "release"  # release, debug, test
+  cors_origins:
+    - "https://your-domain.com"
+    - "https://www.your-domain.com"
+
+# Redis 配置
+redis:
+  addr: "localhost:6379"
+  password: ""  # 生产环境请设置密码
+  db: 0
+  pool_size: 100
+
+# 数据库配置 (使用内嵌存储，无需额外配置)
+
+# JWT 配置
+jwt:
+  secret: "CHANGE_THIS_SECRET_KEY_IN_PRODUCTION"  # 生产环境必须修改！
+  expire_hours: 24
+
+# 日志配置
+logging:
+  level: "info"  # debug, info, warn, error
+  format: "json"  # json, console
+  output: "stdout"  # stdout, file
+  # file_path: "/var/log/prerender-shield/app.log"  # 如果输出到文件
+
+# 监控配置
+monitoring:
+  enabled: true
+  prometheus_port: 9090
+
+# 缓存配置
+cache:
+  ttl_seconds: 3600
+  max_size: 10000
+
+# SSL/TLS 配置 (可选，如需 HTTPS)
+# ssl:
+#   enabled: true
+#   cert_file: "/path/to/cert.pem"
+#   key_file: "/path/to/key.pem"
+#   # 或使用 Let's Encrypt 自动证书
+#   lets_encrypt:
+#     enabled: true
+#     domains:
+#       - "your-domain.com"
+#       - "www.your-domain.com"
+#     email: "admin@your-domain.com"
+#     cache_dir: "./certs"

@@ -1,0 +1,31 @@
+[Unit]
+Description=Prerender Shield - Web Pre-rendering Protection System
+Documentation=https://github.com/prerender-shield
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=prerender
+Group=prerender
+WorkingDirectory=/opt/prerender-shield
+ExecStart=/opt/prerender-shield/prerender-shield -config /opt/prerender-shield/config.production.yaml
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=prerender-shield
+
+# 安全设置
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/prerender-shield /opt/prerender-shield/certs
+
+# 资源限制
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,382 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ master, main, feat/* ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [ master, main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+env:
+  GO_VERSION: '1.25.0'
+  NODE_VERSION: '20.x'
+  REDIS_VERSION: '7'
+
+jobs:
+  # ========== Go 后端测试 ==========
+  go-test:
+    name: Go Tests
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:${{ env.REDIS_VERSION }}
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Run tests with coverage
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Check test coverage
+        run: |
+          go tool cover -func=coverage.out
+          echo "=== Coverage Summary ==="
+          go tool cover -func=coverage.out | grep total
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage-report
+          path: coverage.out
+          retention-days: 30
+
+      - name: Verify no test failures
+        if: failure()
+        run: echo "Go tests failed!" && exit 1
+
+  # ========== Go 代码质量检查 ==========
+  go-lint:
+    name: Go Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Check code formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Unformatted files found:"
+            echo "$unformatted"
+            exit 1
+          fi
+          echo "All files are properly formatted"
+
+  # ========== 前端测试 ==========
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Run TypeScript type check
+        working-directory: web
+        run: npx tsc --noEmit
+
+      - name: Run ESLint
+        working-directory: web
+        run: npm run lint || true
+
+      - name: Build frontend
+        working-directory: web
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: web/dist
+          retention-days: 7
+
+  # ========== 前端 E2E 测试 ==========
+  frontend-e2e:
+    name: Frontend E2E Tests
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:${{ env.REDIS_VERSION }}
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install Go dependencies
+        run: go mod download
+
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: web
+        run: npx playwright install --with-deps
+
+      - name: Start API server
+        run: |
+          go build -o api ./cmd/server/main.go
+          ./api &
+          sleep 5
+          # 健康检查
+          for i in {1..10}; do
+            if curl -s http://localhost:9598/api/v1/health > /dev/null 2>&1; then
+              echo "API server is ready"
+              exit 0
+            fi
+            echo "Waiting for API server... ($i/10)"
+            sleep 2
+          done
+          echo "API server failed to start"
+          exit 1
+
+      - name: Run E2E tests
+        working-directory: web
+        run: npx playwright test --reporter=list
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web/test-results/
+          retention-days: 7
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-html-report
+          path: web/playwright-report/
+          retention-days: 7
+
+  # ========== 构建二进制文件 ==========
+  build-binary:
+    name: Build Binary
+    runs-on: ubuntu-latest
+    needs: [go-test, go-lint]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build binary
+        run: |
+          go build -v -o prerender-shield ./cmd/server/main.go
+          chmod +x prerender-shield
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prerender-shield-binary
+          path: prerender-shield
+          retention-days: 7
+
+  # ========== Docker 镜像构建 ==========
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [go-test, go-lint, frontend-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+        if: ${{ secrets.DOCKER_USERNAME != '' }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ secrets.DOCKER_USERNAME != '' }}
+          tags: |
+            prerender-shield:latest
+            ${{ secrets.DOCKER_USERNAME }}/prerender-shield:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/prerender-shield:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/prerender-shield:buildcache,mode=max
+        if: ${{ secrets.DOCKER_USERNAME != '' }}
+
+      - name: Build Docker image (local only)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: prerender-shield:latest
+        if: ${{ secrets.DOCKER_USERNAME == '' }}
+
+  # ========== 部署到测试环境 ==========
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [go-test, go-lint, frontend-test, frontend-e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    environment:
+      name: staging
+      url: https://staging.prerender-shield.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: prerender-shield-binary
+
+      - name: Deploy to staging server
+        run: |
+          echo "Deploying to staging server..."
+          # TODO: 配置实际的部署步骤
+          # 例如：使用 SSH 复制文件并重启服务
+          # scp prerender-shield user@staging-server:/opt/prerender-shield/
+          # ssh user@staging-server "sudo systemctl restart prerender-shield"
+          echo "Staging deployment complete"
+
+  # ========== 发布到生产环境 ==========
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [go-test, go-lint, frontend-test, frontend-e2e, docker-build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: prerender-shield-binary
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: prerender-shield
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ========== 覆盖率检查门禁 ==========
+  coverage-gate:
+    name: Coverage Gate
+    runs-on: ubuntu-latest
+    needs: [go-test]
+    if: always()
+
+    steps:
+      - name: Check coverage results
+        run: |
+          echo "Checking if coverage tests passed..."
+          if [ "${{ needs.go-test.result }}" != "success" ]; then
+            echo "Coverage tests did not pass!"
+            exit 1
+          fi
+          echo "Coverage gate passed!"
