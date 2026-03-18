@@ -5,9 +5,9 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/http"
-	"prerender-shield/internal/ssl"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-acme/lego/v4/certificate"
 )
 
 // parseCertificateExpiry parse PEM certificate to get expiry date
@@ -25,14 +25,30 @@ func parseCertificateExpiry(certPEM []byte) (string, error) {
 	return cert.NotAfter.Format("2006-01-02T15:04:05Z07:00"), nil
 }
 
+// acmeClientInterface defines the interface for ACME operations
+type acmeClientInterface interface {
+	RequestCertificate(domains []string) (*certificate.Resource, error)
+	RenewCertificate(domain string) (*certificate.Resource, error)
+	GetCertificateInfo(domain string) (map[string]interface{}, error)
+	ListCertificates() ([]map[string]interface{}, error)
+	DeleteCertificate(domain string) error
+	GetExpiringCertificates(days int) ([]map[string]interface{}, error)
+	RequestWildcardCertificate(baseDomain string, subdomains []string) (*certificate.Resource, error)
+}
+
+// autoRenewerInterface defines the interface for auto-renewal operations
+type autoRenewerInterface interface {
+	GetRenewalHistory(domain string) ([]map[string]interface{}, error)
+}
+
 // SSLController SSL 控制器
 type SSLController struct {
-	acmeClient  *ssl.ACMEClient
-	autoRenewer *ssl.AutoRenewer
+	acmeClient  acmeClientInterface
+	autoRenewer autoRenewerInterface
 }
 
 // NewSSLController 创建 SSL 控制器
-func NewSSLController(acmeClient *ssl.ACMEClient, autoRenewer *ssl.AutoRenewer) *SSLController {
+func NewSSLController(acmeClient acmeClientInterface, autoRenewer autoRenewerInterface) *SSLController {
 	return &SSLController{
 		acmeClient:  acmeClient,
 		autoRenewer: autoRenewer,

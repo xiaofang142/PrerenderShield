@@ -22,20 +22,183 @@ import (
 	siteserver "prerender-shield/internal/site-server"
 )
 
+// ConfigManagerInterface defines the interface for configuration management
+type ConfigManagerInterface interface {
+	GetConfig() *config.Config
+	UpdateConfig(cfg *config.Config)
+	SaveConfig() error
+}
+
+// SiteServerManagerInterface defines the interface for site server management
+type SiteServerManagerInterface interface {
+	StartSiteServer(site config.SiteConfig, serverAddr, staticDir string, crawlerLogMgr *logging.CrawlerLogManager, siteHandler http.Handler)
+	StopSiteServer(siteID string) error
+	GetSiteServer(siteID string) (*http.Server, bool)
+}
+
+// SiteHandlerInterface defines the interface for site handler creation
+type SiteHandlerInterface interface {
+	CreateSiteHandler(site config.SiteConfig, crawlerLogMgr *logging.CrawlerLogManager, visitLogMgr *logging.VisitLogManager, monitor *monitoring.Monitor, staticDir string) http.Handler
+}
+
+// RedisClientInterface defines the interface for Redis operations
+type RedisClientInterface interface {
+	SetSiteStats(siteID string, stats map[string]interface{}) error
+	GetSiteStats(key string) (map[string]string, error)
+	DeleteSiteData(siteID string) error
+	AddURL(siteID, url string) error
+}
+
+// MonitorInterface defines the interface for monitoring
+type MonitorInterface interface {
+	GetStats() map[string]interface{}
+}
+
+// CrawlerLogManagerInterface defines the interface for crawler log management
+type CrawlerLogManagerInterface interface {
+	RecordCrawlerLog(crawlerLog logging.CrawlerLog)
+}
+
+// VisitLogManagerInterface defines the interface for visit log management
+type VisitLogManagerInterface interface {
+	RecordVisitLog(visitLog logging.VisitLog)
+}
+
 // SitesController 站点管理控制器
 type SitesController struct {
-	configManager *config.ConfigManager
-	siteServerMgr *siteserver.Manager
-	siteHandler   *sitehandler.Handler
-	redisClient   *redis.Client
-	monitor       *monitoring.Monitor
-	crawlerLogMgr *logging.CrawlerLogManager
-	visitLogMgr   *logging.VisitLogManager
-	cfg           *config.Config
+	configManager   ConfigManagerInterface
+	siteServerMgr   SiteServerManagerInterface
+	siteHandler     SiteHandlerInterface
+	redisClient     RedisClientInterface
+	monitor         MonitorInterface
+	crawlerLogMgr   CrawlerLogManagerInterface
+	visitLogMgr     VisitLogManagerInterface
+	cfg             *config.Config
+
+	// Concrete type references for use in wrapper methods
+	concreteSiteServerMgr *siteserver.Manager
+	concreteSiteHandler   *sitehandler.Handler
+	concreteCrawlerLogMgr *logging.CrawlerLogManager
+	concreteVisitLogMgr   *logging.VisitLogManager
+	concreteMonitor       *monitoring.Monitor
+}
+
+// configManagerWrapper wraps config.ConfigManager to implement ConfigManagerInterface
+type configManagerWrapper struct {
+	cm *config.ConfigManager
+}
+
+func (w *configManagerWrapper) GetConfig() *config.Config {
+	return w.cm.GetConfig()
+}
+
+func (w *configManagerWrapper) UpdateConfig(cfg *config.Config) {
+	w.cm.UpdateConfig(cfg)
+}
+
+func (w *configManagerWrapper) SaveConfig() error {
+	return w.cm.SaveConfig()
+}
+
+// siteServerMgrWrapper wraps siteserver.Manager to implement SiteServerManagerInterface
+type siteServerMgrWrapper struct {
+	ctrl *SitesController
+}
+
+func (w *siteServerMgrWrapper) StartSiteServer(site config.SiteConfig, serverAddr, staticDir string, crawlerLogMgr *logging.CrawlerLogManager, siteHandler http.Handler) {
+	w.ctrl.concreteSiteServerMgr.StartSiteServer(site, serverAddr, staticDir, crawlerLogMgr, siteHandler)
+}
+
+func (w *siteServerMgrWrapper) StopSiteServer(siteID string) error {
+	return w.ctrl.concreteSiteServerMgr.StopSiteServer(siteID)
+}
+
+func (w *siteServerMgrWrapper) GetSiteServer(siteID string) (*http.Server, bool) {
+	return w.ctrl.concreteSiteServerMgr.GetSiteServer(siteID)
+}
+
+// siteHandlerWrapper wraps sitehandler.Handler to implement SiteHandlerInterface
+type siteHandlerWrapper struct {
+	ctrl *SitesController
+}
+
+func (w *siteHandlerWrapper) CreateSiteHandler(site config.SiteConfig, crawlerLogMgr *logging.CrawlerLogManager, visitLogMgr *logging.VisitLogManager, monitor *monitoring.Monitor, staticDir string) http.Handler {
+	return w.ctrl.concreteSiteHandler.CreateSiteHandler(site, crawlerLogMgr, visitLogMgr, monitor, staticDir)
+}
+
+// redisClientWrapper wraps redis.Client to implement RedisClientInterface
+type redisClientWrapper struct {
+	client *redis.Client
+}
+
+func (w *redisClientWrapper) SetSiteStats(siteID string, stats map[string]interface{}) error {
+	return w.client.SetSiteStats(siteID, stats)
+}
+
+func (w *redisClientWrapper) GetSiteStats(key string) (map[string]string, error) {
+	return w.client.GetSiteStats(key)
+}
+
+func (w *redisClientWrapper) DeleteSiteData(siteID string) error {
+	return w.client.DeleteSiteData(siteID)
+}
+
+func (w *redisClientWrapper) AddURL(siteID, url string) error {
+	return w.client.AddURL(siteID, url)
+}
+
+// monitorWrapper wraps monitoring.Monitor to implement MonitorInterface
+type monitorWrapper struct {
+	ctrl *SitesController
+}
+
+func (w *monitorWrapper) GetStats() map[string]interface{} {
+	return w.ctrl.concreteMonitor.GetStats()
+}
+
+// crawlerLogMgrWrapper wraps logging.CrawlerLogManager to implement CrawlerLogManagerInterface
+type crawlerLogMgrWrapper struct {
+	ctrl *SitesController
+}
+
+func (w *crawlerLogMgrWrapper) RecordCrawlerLog(crawlerLog logging.CrawlerLog) {
+	w.ctrl.concreteCrawlerLogMgr.RecordCrawlerLog(crawlerLog)
+}
+
+// visitLogMgrWrapper wraps logging.VisitLogManager to implement VisitLogManagerInterface
+type visitLogMgrWrapper struct {
+	ctrl *SitesController
+}
+
+func (w *visitLogMgrWrapper) RecordVisitLog(visitLog logging.VisitLog) {
+	w.ctrl.concreteVisitLogMgr.RecordVisitLog(visitLog)
 }
 
 // NewSitesController 创建站点管理控制器实例
 func NewSitesController(
+	configManager ConfigManagerInterface,
+	siteServerMgr SiteServerManagerInterface,
+	siteHandler SiteHandlerInterface,
+	redisClient RedisClientInterface,
+	monitor MonitorInterface,
+	crawlerLogMgr CrawlerLogManagerInterface,
+	visitLogMgr VisitLogManagerInterface,
+	cfg *config.Config,
+) *SitesController {
+	return &SitesController{
+		configManager:   configManager,
+		siteServerMgr:   siteServerMgr,
+		siteHandler:     siteHandler,
+		redisClient:     redisClient,
+		monitor:         monitor,
+		crawlerLogMgr:   crawlerLogMgr,
+		visitLogMgr:     visitLogMgr,
+		cfg:             cfg,
+	}
+}
+
+// NewSitesControllerWithConcreteDeps creates a SitesController from concrete implementations
+func NewSitesControllerWithConcreteDeps(
 	configManager *config.ConfigManager,
 	siteServerMgr *siteserver.Manager,
 	siteHandler *sitehandler.Handler,
@@ -45,16 +208,70 @@ func NewSitesController(
 	visitLogMgr *logging.VisitLogManager,
 	cfg *config.Config,
 ) *SitesController {
-	return &SitesController{
-		configManager: configManager,
-		siteServerMgr: siteServerMgr,
-		siteHandler:   siteHandler,
-		redisClient:   redisClient,
-		monitor:       monitor,
-		crawlerLogMgr: crawlerLogMgr,
-		visitLogMgr:   visitLogMgr,
-		cfg:           cfg,
+	var cm ConfigManagerInterface
+	var ssm SiteServerManagerInterface
+	var sh SiteHandlerInterface
+	var rc RedisClientInterface
+	var m MonitorInterface
+	var clm CrawlerLogManagerInterface
+	var vlm VisitLogManagerInterface
+
+	if configManager != nil {
+		cm = &configManagerWrapper{cm: configManager}
 	}
+	if siteServerMgr != nil {
+		ssm = &siteServerMgrWrapper{ctrl: nil} // Will set ctrl after creating controller
+	}
+	if siteHandler != nil {
+		sh = &siteHandlerWrapper{ctrl: nil}
+	}
+	if redisClient != nil {
+		rc = &redisClientWrapper{client: redisClient}
+	}
+	if monitor != nil {
+		m = &monitorWrapper{ctrl: nil}
+	}
+	if crawlerLogMgr != nil {
+		clm = &crawlerLogMgrWrapper{ctrl: nil}
+	}
+	if visitLogMgr != nil {
+		vlm = &visitLogMgrWrapper{ctrl: nil}
+	}
+
+	controller := &SitesController{
+		configManager:         cm,
+		siteServerMgr:         ssm,
+		siteHandler:           sh,
+		redisClient:           rc,
+		monitor:               m,
+		crawlerLogMgr:         clm,
+		visitLogMgr:           vlm,
+		cfg:                   cfg,
+		concreteSiteServerMgr: siteServerMgr,
+		concreteSiteHandler:   siteHandler,
+		concreteCrawlerLogMgr: crawlerLogMgr,
+		concreteVisitLogMgr:   visitLogMgr,
+		concreteMonitor:       monitor,
+	}
+
+	// Set controller references in wrappers
+	if ssm != nil {
+		ssm.(*siteServerMgrWrapper).ctrl = controller
+	}
+	if sh != nil {
+		sh.(*siteHandlerWrapper).ctrl = controller
+	}
+	if m != nil {
+		m.(*monitorWrapper).ctrl = controller
+	}
+	if clm != nil {
+		clm.(*crawlerLogMgrWrapper).ctrl = controller
+	}
+	if vlm != nil {
+		vlm.(*visitLogMgrWrapper).ctrl = controller
+	}
+
+	return controller
 }
 
 // GetSites 获取站点列表
@@ -212,10 +429,10 @@ func (c *SitesController) AddSite(ctx *gin.Context) {
 	}
 
 	// 启动新站点的服务器实例
-	siteHandler := c.siteHandler.CreateSiteHandler(site, c.crawlerLogMgr, c.visitLogMgr, c.monitor, c.cfg.Dirs.StaticDir)
+	siteHandler := c.siteHandler.CreateSiteHandler(site, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
 
 	// 启动站点服务器
-	c.siteServerMgr.StartSiteServer(site, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.crawlerLogMgr, siteHandler)
+	c.siteServerMgr.StartSiteServer(site, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 	// 保存站点配置到Redis
 	if c.redisClient != nil {
@@ -403,10 +620,10 @@ func (c *SitesController) UpdateSite(ctx *gin.Context) {
 	}
 
 	// 启动新的站点服务器
-	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.crawlerLogMgr, c.visitLogMgr, c.monitor, c.cfg.Dirs.StaticDir)
+	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
 
 	// 启动站点服务器
-	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.crawlerLogMgr, siteHandler)
+	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 	// 保存站点配置到Redis
 	if c.redisClient != nil {
@@ -564,8 +781,8 @@ func (c *SitesController) UpdateSitePrerenderConfig(ctx *gin.Context) {
 	if _, exists := c.siteServerMgr.GetSiteServer(oldSite.ID); exists {
 		c.siteServerMgr.StopSiteServer(oldSite.ID)
 	}
-	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.crawlerLogMgr, c.visitLogMgr, c.monitor, c.cfg.Dirs.StaticDir)
-	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.crawlerLogMgr, siteHandler)
+	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
+	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 	// 保存预渲染配置到Redis
 	if c.redisClient != nil {
@@ -647,8 +864,8 @@ func (c *SitesController) UpdateSitePushConfig(ctx *gin.Context) {
 	if _, exists := c.siteServerMgr.GetSiteServer(oldSite.ID); exists {
 		c.siteServerMgr.StopSiteServer(oldSite.ID)
 	}
-	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.crawlerLogMgr, c.visitLogMgr, c.monitor, c.cfg.Dirs.StaticDir)
-	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.crawlerLogMgr, siteHandler)
+	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
+	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 	if c.redisClient != nil {
 		pushConfig := map[string]interface{}{
@@ -724,8 +941,8 @@ func (c *SitesController) UpdateSiteFirewallConfig(ctx *gin.Context) {
 	if _, exists := c.siteServerMgr.GetSiteServer(oldSite.ID); exists {
 		c.siteServerMgr.StopSiteServer(oldSite.ID)
 	}
-	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.crawlerLogMgr, c.visitLogMgr, c.monitor, c.cfg.Dirs.StaticDir)
-	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.crawlerLogMgr, siteHandler)
+	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
+	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 	if c.redisClient != nil {
 		wafConfig := map[string]interface{}{

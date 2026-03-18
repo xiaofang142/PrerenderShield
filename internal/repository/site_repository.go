@@ -10,6 +10,22 @@ import (
 	"prerender-shield/internal/redis"
 )
 
+// RedisClient Redis 客户端接口
+type RedisClient interface {
+	HashSetAll(key string, values map[string]interface{}) error
+	Set(key string, value interface{}, expiration time.Duration) error
+	SetAdd(key string, members ...interface{}) error
+	HashGetAll(key string) (map[string]string, error)
+	Del(key string) error
+	SetRemove(key string, members ...interface{}) error
+	DeleteSiteData(siteID string) error
+	Get(key string) (string, error)
+	SetMembers(key string) ([]string, error)
+}
+
+// 确保 redis.Client 实现 RedisClient 接口
+var _ RedisClient = (*redis.Client)(nil)
+
 // SiteRepository 站点存储库接口
 type SiteRepository interface {
 	Create(site *models.Site) error
@@ -22,11 +38,11 @@ type SiteRepository interface {
 
 // siteRepository 站点存储库实现
 type siteRepository struct {
-	redisClient *redis.Client
+	redisClient RedisClient
 }
 
 // NewSiteRepository 创建新的站点存储库
-func NewSiteRepository(redisClient *redis.Client) SiteRepository {
+func NewSiteRepository(redisClient RedisClient) SiteRepository {
 	return &siteRepository{
 		redisClient: redisClient,
 	}
@@ -50,7 +66,7 @@ func (r *siteRepository) Create(site *models.Site) error {
 		"id":         site.ID,
 		"domain":     site.Domain,
 		"name":       site.Name,
-		"enabled":    site.Enabled,
+		"enabled":    site.EnabledInt(),
 		"created_at": site.CreatedAt.Unix(),
 		"updated_at": site.UpdatedAt.Unix(),
 	}
@@ -99,13 +115,22 @@ func (r *siteRepository) Get(id string) (*models.Site, error) {
 
 // Update 更新站点信息
 func (r *siteRepository) Update(site *models.Site) error {
+	// 先检查站点是否存在
+	existingSite, err := r.Get(site.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get site: %w", err)
+	}
+	if existingSite == nil {
+		return fmt.Errorf("site not found")
+	}
+
 	site.UpdatedAt = time.Now()
 
 	siteKey := fmt.Sprintf("site:%s", site.ID)
 	siteData := map[string]interface{}{
 		"domain":     site.Domain,
 		"name":       site.Name,
-		"enabled":    site.Enabled,
+		"enabled":    site.EnabledInt(),
 		"updated_at": site.UpdatedAt.Unix(),
 	}
 

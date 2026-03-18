@@ -180,14 +180,18 @@ func (h *healthChecker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	first := true
 	for name, result := range results {
-		if name == "healthy" || name == "timestamp" || name == "uptime" {
+		if name == "healthy" || name == "timestamp" || name == "uptime" || name == "memory" || name == "goroutines" {
+			continue
+		}
+		// 确保 result 是 map[string]interface{} 类型
+		checkResult, ok := result.(map[string]interface{})
+		if !ok {
 			continue
 		}
 		if !first {
 			response += `,`
 		}
 		first = false
-		checkResult := result.(map[string]interface{})
 		response += `		"` + name + `": {
 			"healthy": `
 		if checkResult["healthy"].(bool) {

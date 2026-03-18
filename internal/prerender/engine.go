@@ -13,6 +13,20 @@ import (
 	"prerender-shield/internal/redis"
 )
 
+// RedisClient 是 redis.Client 的接口，用于测试 mock
+type RedisClient interface {
+	SaveJSON(key string, value interface{}, ttl time.Duration) error
+	GetJSON(key string, value interface{}) error
+	SetAdd(key string, members ...interface{}) error
+	SetMembers(key string) ([]string, error)
+	Del(key string) error
+	Keys(pattern string) ([]string, error)
+	SetURLPreheatStatus(site, route, status string, params ...interface{}) error
+}
+
+// 确保 redis.Client 实现 RedisClient 接口
+var _ RedisClient = (*redis.Client)(nil)
+
 // RenderOptions 渲染选项
 type RenderOptions struct {
 	Timeout        time.Duration
@@ -65,14 +79,14 @@ type Engine interface {
 
 // engine 渲染引擎实现
 type engine struct {
-	redisClient        *redis.Client
+	redisClient        RedisClient
 	cacheManager       cache.Manager
 	maxConcurrent      int
 	concurrencyManager *ConcurrencyManager
 }
 
 // NewEngine 创建新的渲染引擎
-func NewEngine(redisClient *redis.Client, cacheManager cache.Manager, maxConcurrent int) Engine {
+func NewEngine(redisClient RedisClient, cacheManager cache.Manager, maxConcurrent int) Engine {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 5
 	}

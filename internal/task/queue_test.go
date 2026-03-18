@@ -2,6 +2,8 @@ package task
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -523,4 +525,457 @@ func TestQueue_TaskType(t *testing.T) {
 func TestQueue_TaskStatus(t *testing.T) {
 	var taskStatus TaskStatus = "custom"
 	assert.Equal(t, "custom", string(taskStatus))
+}
+
+// ============== MockRedisClient 用于队列测试 ==============
+
+// MockRedisClient 是 redis.Client 的 mock 实现
+type MockRedisClient struct {
+	data map[string]interface{}
+}
+
+func NewMockRedisClient() *MockRedisClient {
+	return &MockRedisClient{
+		data: make(map[string]interface{}),
+	}
+}
+
+func (m *MockRedisClient) SaveJSON(key string, value interface{}, expiration time.Duration) error {
+	m.data[key] = value
+	return nil
+}
+
+func (m *MockRedisClient) Set(key string, value interface{}, expiration time.Duration) error {
+	// 直接存储原始值，不做转换
+	m.data[key] = value
+	return nil
+}
+
+func (m *MockRedisClient) Get(key string) (string, error) {
+	if val, ok := m.data[key]; ok {
+		// 如果是字符串，直接返回
+		if str, ok := val.(string); ok {
+			return str, nil
+		}
+		// 如果是 []byte，转换为字符串
+		if bytes, ok := val.([]byte); ok {
+			return string(bytes), nil
+		}
+		// 其他类型，序列化为 JSON 字符串
+		data, err := json.Marshal(val)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	}
+	return "", nil
+}
+
+func (m *MockRedisClient) GetJSON(key string, dest interface{}) error {
+	if val, ok := m.data[key]; ok {
+		// 如果已经是目标类型，直接复制
+		if destMap, ok := dest.(*map[string]interface{}); ok {
+			if valMap, ok := val.(map[string]interface{}); ok {
+				*destMap = valMap
+				return nil
+			}
+		}
+		// 否则尝试序列化再反序列化
+		data, err := json.Marshal(val)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(data, dest)
+	}
+	return fmt.Errorf("key not found")
+}
+
+func (m *MockRedisClient) ListPush(key string, values ...interface{}) error {
+	m.data[key] = values
+	return nil
+}
+
+func (m *MockRedisClient) ListPop(key string) (string, error) {
+	if val, ok := m.data[key]; ok {
+		if list, ok := val.([]interface{}); ok && len(list) > 0 {
+			m.data[key] = list[1:]
+			if str, ok := list[0].(string); ok {
+				return str, nil
+			}
+		}
+	}
+	return "", nil
+}
+
+func (m *MockRedisClient) SetAdd(key string, members ...interface{}) error {
+	existing, ok := m.data[key].([]interface{})
+	if !ok {
+		existing = []interface{}{}
+	}
+	m.data[key] = append(existing, members...)
+	return nil
+}
+
+func (m *MockRedisClient) SetRemove(key string, members ...interface{}) error {
+	if val, ok := m.data[key].([]interface{}); ok {
+		newList := []interface{}{}
+		for _, v := range val {
+			keep := true
+			for _, remove := range members {
+				// 将两个值都转换为字符串进行比较
+				vStr, vOk := v.(string)
+				removeStr, removeOk := remove.(string)
+				if vOk && removeOk && vStr == removeStr {
+					keep = false
+					break
+				}
+			}
+			if keep {
+				newList = append(newList, v)
+			}
+		}
+		m.data[key] = newList
+	}
+	return nil
+}
+
+func (m *MockRedisClient) SetMembers(key string) ([]string, error) {
+	if val, ok := m.data[key].([]interface{}); ok {
+		result := make([]string, len(val))
+		for i, v := range val {
+			if str, ok := v.(string); ok {
+				result[i] = str
+			}
+		}
+		return result, nil
+	}
+	return []string{}, nil
+}
+
+func (m *MockRedisClient) Keys(pattern string) ([]string, error) {
+	keys := []string{}
+	for k := range m.data {
+		if strings.Contains(k, strings.TrimSuffix(pattern, "*")) {
+			keys = append(keys, k)
+		}
+	}
+	return keys, nil
+}
+
+func (m *MockRedisClient) Del(key string) error {
+	delete(m.data, key)
+	return nil
+}
+
+// TestQueue_Enqueue_Success 测试 Enqueue 成功路径
+func TestQueue_Enqueue_Success(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	mockTask := NewBaseTask(TaskTypePreheat)
+	mockTask.PriorityValue = 5
+
+	err := q.Enqueue(mockTask)
+
+	assert.NoError(t, err)
+	// 验证任务被存储
+	taskID := mockTask.ID()
+	assert.Contains(t, mockRedis.data, fmt.Sprintf("task:%s", taskID))
+	assert.Contains(t, mockRedis.data, fmt.Sprintf("task:%s:data", taskID))
+	assert.Contains(t, mockRedis.data, "queue:preheat")
+	assert.Contains(t, mockRedis.data, "tasks:pending")
+}
+
+// TestQueue_Dequeue_Success 测试 Dequeue 成功路径
+func TestQueue_Dequeue_Success(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	// 先入队一个任务
+	mockTask := NewBaseTask(TaskTypeSSL)
+	err := q.Enqueue(mockTask)
+	assert.NoError(t, err)
+
+	// 出队任务
+	dequeued, err := q.Dequeue(TaskTypeSSL)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, dequeued)
+	// 验证状态被更新为 running
+	assert.Contains(t, mockRedis.data, "tasks:running")
+}
+
+// TestQueue_Dequeue_Empty 测试空队列
+func TestQueue_Dequeue_Empty(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	_, err := q.Dequeue(TaskTypePreheat)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "queue is empty")
+}
+
+// TestQueue_GetTask_Success 测试获取任务成功
+func TestQueue_GetTask_Success(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	mockTask := NewBaseTask(TaskTypeMonitor)
+	err := q.Enqueue(mockTask)
+	assert.NoError(t, err)
+
+	retrieved, err := q.GetTask(mockTask.ID())
+
+	assert.NoError(t, err)
+	assert.NotNil(t, retrieved)
+	assert.Equal(t, mockTask.ID(), retrieved.ID())
+	assert.Equal(t, TaskTypeMonitor, retrieved.Type())
+}
+
+// TestQueue_GetTask_NotFound 测试获取不存在的任务
+func TestQueue_GetTask_NotFound(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	_, err := q.GetTask("nonexistent-id")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "task not found")
+}
+
+// TestQueue_UpdateTaskStatus_Success 测试更新任务状态成功
+func TestQueue_UpdateTaskStatus_Success(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	mockTask := NewBaseTask(TaskTypeCleanup)
+	err := q.Enqueue(mockTask)
+	assert.NoError(t, err)
+
+	err = q.UpdateTaskStatus(mockTask.ID(), TaskStatusRunning)
+
+	assert.NoError(t, err)
+	// 验证状态已更新
+	taskInfo := make(map[string]interface{})
+	err = mockRedis.GetJSON(fmt.Sprintf("task:%s", mockTask.ID()), &taskInfo)
+	assert.NoError(t, err)
+	// 状态可能是 TaskStatus 类型（底层是 string）
+	status := taskInfo["status"]
+	assert.NotNil(t, status)
+	// 尝试转换为 string 或 TaskStatus
+	switch s := status.(type) {
+	case string:
+		assert.Equal(t, "running", s)
+	case TaskStatus:
+		assert.Equal(t, TaskStatusRunning, s)
+	default:
+		t.Errorf("unexpected status type: %T", status)
+	}
+}
+
+// TestQueue_ListTasks_Success 测试列出任务成功
+func TestQueue_ListTasks_Success(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	// 入队多个任务
+	task1 := NewBaseTask(TaskTypePreheat)
+	task2 := NewBaseTask(TaskTypePreheat)
+	err := q.Enqueue(task1)
+	assert.NoError(t, err)
+	err = q.Enqueue(task2)
+	assert.NoError(t, err)
+
+	tasks, err := q.ListTasks(TaskStatusPending)
+
+	assert.NoError(t, err)
+	assert.Len(t, tasks, 2)
+}
+
+// TestQueue_Cleanup_Success 测试清理任务成功
+func TestQueue_Cleanup_Success(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	// 创建一个已完成的旧任务
+	oldTaskID := "old-task-id"
+	oldTime := time.Now().Add(-25 * time.Hour).Unix()
+	taskInfo := map[string]interface{}{
+		"id":         oldTaskID,
+		"status":     string(TaskStatusCompleted),
+		"created_at": float64(oldTime),
+	}
+	mockRedis.data["task:"+oldTaskID] = taskInfo
+
+	err := q.Cleanup()
+
+	assert.NoError(t, err)
+	// 验证旧任务被清理
+	_, exists := mockRedis.data["task:"+oldTaskID]
+	assert.False(t, exists)
+}
+
+// TestQueue_Cleanup_NoExpiredTasks 测试清理没有过期任务
+func TestQueue_Cleanup_NoExpiredTasks(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	// 创建一个新任务
+	recentTaskID := "recent-task-id"
+	recentTime := time.Now().Unix()
+	taskInfo := map[string]interface{}{
+		"id":         recentTaskID,
+		"status":     string(TaskStatusCompleted),
+		"created_at": float64(recentTime),
+	}
+	mockRedis.data["task:"+recentTaskID] = taskInfo
+
+	err := q.Cleanup()
+
+	assert.NoError(t, err)
+	// 验证新任务没有被清理
+	_, exists := mockRedis.data["task:"+recentTaskID]
+	assert.True(t, exists)
+}
+
+// TestQueue_Enqueue_Integration 测试完整的入队流程
+func TestQueue_Enqueue_Integration(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	// 创建并序列化任务
+	task := &BaseTask{
+		IDValue:       "integration-test-id",
+		TypeValue:     TaskTypeSSL,
+		StatusValue:   TaskStatusPending,
+		PriorityValue: 10,
+		Retries:       0,
+		MaxRetries:    3,
+	}
+
+	err := q.Enqueue(task)
+
+	assert.NoError(t, err)
+	// 验证所有相关键都被设置
+	assert.Contains(t, mockRedis.data, "task:integration-test-id")
+	assert.Contains(t, mockRedis.data, "task:integration-test-id:data")
+	assert.Contains(t, mockRedis.data, "queue:ssl")
+	assert.Contains(t, mockRedis.data, "tasks:pending")
+}
+
+// TestQueue_Dequeue_Integration 测试完整的出队流程
+func TestQueue_Dequeue_Integration(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	// 创建任务
+	task := NewBaseTask(TaskTypePreheat)
+	initialTaskID := task.ID()
+
+	err := q.Enqueue(task)
+	assert.NoError(t, err)
+
+	// 出队任务
+	dequeuedTask, err := q.Dequeue(TaskTypePreheat)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, dequeuedTask)
+	assert.Equal(t, initialTaskID, dequeuedTask.ID())
+	assert.Equal(t, TaskTypePreheat, dequeuedTask.Type())
+}
+
+// TestQueue_UpdateTaskStatus_Integration 测试完整的状态更新流程
+func TestQueue_UpdateTaskStatus_Integration(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	// 创建任务
+	task := NewBaseTask(TaskTypeMonitor)
+	err := q.Enqueue(task)
+	assert.NoError(t, err)
+
+	// 验证初始状态是 pending
+	pendingMembers, _ := mockRedis.SetMembers("tasks:pending")
+	assert.Contains(t, pendingMembers, task.ID())
+
+	// 更新状态为 Running
+	err = q.UpdateTaskStatus(task.ID(), TaskStatusRunning)
+	assert.NoError(t, err)
+
+	// 验证状态集合已更新
+	pendingMembers, _ = mockRedis.SetMembers("tasks:pending")
+	runningMembers, _ := mockRedis.SetMembers("tasks:running")
+
+	// 调试输出
+	t.Logf("pending members: %v", pendingMembers)
+	t.Logf("running members: %v", runningMembers)
+	t.Logf("task ID: %s", task.ID())
+
+	assert.NotContains(t, pendingMembers, task.ID(), "task should be removed from pending")
+	assert.Contains(t, runningMembers, task.ID(), "task should be added to running")
+
+	// 更新状态为 Completed
+	err = q.UpdateTaskStatus(task.ID(), TaskStatusCompleted)
+	assert.NoError(t, err)
+
+	runningMembers2, _ := mockRedis.SetMembers("tasks:running")
+	completedMembers, _ := mockRedis.SetMembers("tasks:completed")
+
+	assert.NotContains(t, runningMembers2, task.ID(), "task should be removed from running")
+	assert.Contains(t, completedMembers, task.ID(), "task should be added to completed")
+}
+
+// TestQueue_ListTasks_WithSkippedErrors 测试列出任务时跳过错误
+func TestQueue_ListTasks_WithSkippedErrors(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	// 手动添加一个任务信息但没有数据
+	invalidTaskID := "invalid-task"
+	mockRedis.data["tasks:pending"] = []interface{}{invalidTaskID}
+
+	tasks, err := q.ListTasks(TaskStatusPending)
+
+	assert.NoError(t, err)
+	assert.Empty(t, tasks) // 无效任务被跳过
+}
+
+// TestQueue_Cleanup_SkipsInvalidTasks 测试清理时跳过无效任务
+func TestQueue_Cleanup_SkipsInvalidTasks(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	// 添加一个没有 created_at 的任务
+	invalidTaskID := "invalid-task"
+	mockRedis.data["task:"+invalidTaskID] = map[string]interface{}{
+		"id":     invalidTaskID,
+		"status": string(TaskStatusCompleted),
+		// 缺少 created_at
+	}
+
+	err := q.Cleanup()
+
+	assert.NoError(t, err)
+	// 无效任务应该被跳过（不被清理）
+	_, exists := mockRedis.data["task:"+invalidTaskID]
+	assert.True(t, exists)
+}
+
+// TestQueue_Enqueue_GeneratesIDForEmptyTask 测试 Enqueue 为空 ID 的任务生成 ID
+func TestQueue_Enqueue_GeneratesIDForEmptyTask(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	q := NewQueue(mockRedis)
+
+	// 创建空 ID 的任务
+	task := &BaseTask{
+		TypeValue:   TaskTypeSSL,
+		StatusValue: TaskStatusPending,
+	}
+
+	err := q.Enqueue(task)
+
+	assert.NoError(t, err)
+	// 验证生成了新的 ID
+	assert.NotEmpty(t, task.IDValue)
 }

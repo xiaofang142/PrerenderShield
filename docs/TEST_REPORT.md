@@ -1,8 +1,8 @@
 # Prerender Shield 全链路测试报告
 
-**任务 ID:** JJC-20260308-012-V2  
-**测试日期:** 2026-03-08  
-**测试版本:** 2.0  
+**任务 ID:** JJC-20260308-012-V2
+**测试日期:** 2026-03-18 (更新)
+**测试版本:** 2.1
 **测试状态:** ✅ 完成
 
 ---
@@ -17,9 +17,10 @@
 - ✅ 完整渲染流程测试
 
 **测试结果:**
-- Go 测试：全部通过 (13 个测试文件)
+- Go 测试：全部通过 (16 个测试文件，新增 3 个)
 - Playwright 测试：148 个测试用例
 - 新增补充测试：2 个完整测试文件 (25+ 测试场景)
+- **最新覆盖率改进**: monitoring 包从 38.4% → 78.5%
 
 ---
 
@@ -32,6 +33,10 @@
 | internal/config | config_test.go | ✅ PASS | 配置加载和热更新 |
 | internal/firewall | engine_test.go | ✅ PASS | 防火墙引擎 |
 | internal/firewall/detectors | injection_test.go | ✅ PASS | SQL 注入检测 |
+| internal/monitoring | metrics_test.go, health_checker_test.go | ✅ PASS | 监控指标和健康检查 (新增) |
+| internal/monitoring/alerting | alerting_test.go | ✅ PASS | 告警引擎 |
+| internal/monitoring/dashboard | dashboard_test.go | ✅ PASS | 仪表板 |
+| internal/monitoring/telemetry | telemetry_test.go | ✅ PASS | 遥测数据 (覆盖率待提升) |
 | internal/proxy | proxy_test.go | ✅ PASS | 反向代理 |
 | internal/redis | client_test.go | ⚠️ SKIP | 需要 Redis 服务 |
 | internal/site-handler | handler_test.go | ✅ PASS | 站点处理器 |
@@ -408,18 +413,25 @@ npx playwright show-report
 
 ### 7.1 Go 代码覆盖率
 
-| 模块 | 覆盖率 | 状态 |
-|------|-------|------|
-| internal/config | 85% | ✅ 良好 |
-| internal/firewall | 78% | ✅ 良好 |
-| internal/proxy | 82% | ✅ 良好 |
-| internal/redis | 65% | ⚠️ 需改进 |
-| internal/site-handler | 75% | ✅ 良好 |
-| internal/site-server | 80% | ✅ 良好 |
-| internal/ssl | 70% | ✅ 良好 |
-| internal/utils | 90% | ✅ 优秀 |
+| 模块 | 覆盖率 | 状态 | 备注 |
+|------|-------|------|------|
+| internal/config | 85% | ✅ 良好 | |
+| internal/firewall | 78% | ✅ 良好 | |
+| internal/firewall/detectors | 95% | ✅ 优秀 | |
+| internal/monitoring | 78.5% | ✅ 良好 | **从 38.4% 提升** (任务 #22) |
+| internal/monitoring/alerting | 89.6% | ✅ 良好 | |
+| internal/monitoring/dashboard | 95.9% | ✅ 优秀 | |
+| internal/monitoring/telemetry | 58.6% | ⚠️ 需改进 | 待补充测试 |
+| internal/proxy | 82% | ✅ 良好 | |
+| internal/redis | 65% | ⚠️ 需改进 | 部分测试需要 Redis 服务 |
+| internal/site-handler | 75% | ✅ 良好 | |
+| internal/site-server | 80% | ✅ 良好 | |
+| internal/ssl | 70% | ✅ 良好 | |
+| internal/utils | 90% | ✅ 优秀 | |
+| internal/security/ratelimit | 92% | ✅ 优秀 | Schema 验证器 |
+| internal/task | 75% | ✅ 良好 | 任务队列 |
 
-**整体覆盖率:** ~78%
+**整体覆盖率:** ~80% (改进前 ~78%)
 
 ### 7.2 前端测试覆盖率
 
@@ -456,6 +468,11 @@ npx playwright show-report
 4. **增加安全测试**
    - OWASP ZAP 集成
    - 依赖漏洞扫描 (govulncheck)
+
+5. **提升 telemetry 包覆盖率**
+   - 当前覆盖率：58.6%
+   - 目标覆盖率：>80%
+   - 需要补充：采集器、处理器、导出器测试
 
 ### 8.2 CI/CD 集成
 
@@ -526,10 +543,10 @@ jobs:
 | 维度 | 评分 | 说明 |
 |------|------|------|
 | 功能完整性 | ⭐⭐⭐⭐⭐ | 所有核心功能已测试 |
-| 测试覆盖率 | ⭐⭐⭐⭐ | 78% 代码覆盖率 |
+| 测试覆盖率 | ⭐⭐⭐⭐☆ | 80% 代码覆盖率 (改进中) |
 | 代码质量 | ⭐⭐⭐⭐⭐ | go vet 无警告 |
 | 文档完整性 | ⭐⭐⭐⭐⭐ | 架构文档、API 文档齐全 |
-| 可维护性 | ⭐⭐⭐⭐ | 测试代码结构清晰 |
+| 可维护性 | ⭐⭐⭐⭐⭐ | 测试代码结构清晰 |
 
 **总体评分:** ⭐⭐⭐⭐☆ (4.5/5)
 
@@ -554,6 +571,13 @@ internal/firewall/engine_test.go
 internal/firewall/detectors/injection_test.go
 internal/site-handler/handler_test.go
 internal/site-server/manager_test.go
+internal/monitoring/metrics_test.go (新增)
+internal/monitoring/health_checker_test.go (新增)
+internal/monitoring/alerting_test.go
+internal/monitoring/dashboard_test.go
+internal/monitoring/telemetry_test.go
+internal/security/ratelimit/schema_test.go (新增)
+internal/task/queue_test.go (新增)
 ```
 
 **Playwright 测试文件:**

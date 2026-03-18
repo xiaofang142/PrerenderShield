@@ -16,6 +16,17 @@ import (
 // FetcherFunc 定义获取页面内容的函数类型
 type FetcherFunc func(url string) (string, error)
 
+// CrawlerRedisClient 是 redis.Client 的接口，用于测试 mock
+type CrawlerRedisClient interface {
+	AddURL(site, url string) error
+	ClearURLs(site string) error
+	SetURLPreheatStatus(site, route, status string, params ...interface{}) error
+	GetURLs(site string) ([]string, error)
+}
+
+// 确保 redis.Client 实现 CrawlerRedisClient 接口
+var _ CrawlerRedisClient = (*redis.Client)(nil)
+
 // Crawler 链接爬取器
 type Crawler struct {
 	siteName     string
@@ -24,7 +35,7 @@ type Crawler struct {
 	depth        int
 	maxDepth     int
 	concurrency  int
-	redisClient  *redis.Client
+	redisClient  CrawlerRedisClient
 	visited      map[string]bool
 	visitedMutex sync.Mutex
 	wg           sync.WaitGroup
@@ -41,7 +52,7 @@ type CrawlerConfig struct {
 	BaseURL     string
 	MaxDepth    int
 	Concurrency int
-	RedisClient *redis.Client
+	RedisClient CrawlerRedisClient
 	Fetcher     FetcherFunc // 必须提供
 }
 

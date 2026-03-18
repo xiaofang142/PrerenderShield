@@ -7,9 +7,22 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
-	"prerender-shield/internal/redis"
 )
+
+// redisClient 定义需要的 Redis 操作接口（用于测试）
+type redisClient interface {
+	Set(key string, value interface{}, expiration time.Duration) error
+	SaveJSON(key string, value interface{}, expiration time.Duration) error
+	Get(key string) (string, error)
+	GetJSON(key string, dest interface{}) error
+	ListPush(key string, values ...interface{}) error
+	ListPop(key string) (string, error)
+	SetAdd(key string, members ...interface{}) error
+	SetRemove(key string, members ...interface{}) error
+	SetMembers(key string) ([]string, error)
+	Keys(pattern string) ([]string, error)
+	Del(key string) error
+}
 
 // TaskType 任务类型
 type TaskType string
@@ -57,11 +70,11 @@ type Queue interface {
 
 // queue 任务队列实现
 type queue struct {
-	redisClient *redis.Client
+	redisClient redisClient
 }
 
 // NewQueue 创建新的任务队列
-func NewQueue(redisClient *redis.Client) Queue {
+func NewQueue(redisClient redisClient) Queue {
 	return &queue{
 		redisClient: redisClient,
 	}
@@ -76,6 +89,10 @@ func (q *queue) Enqueue(task Task) error {
 	taskID := task.ID()
 	if taskID == "" {
 		taskID = uuid.New().String()
+		// 如果任务是 *BaseTask 类型，更新其 ID
+		if baseTask, ok := task.(*BaseTask); ok {
+			baseTask.IDValue = taskID
+		}
 	}
 
 	// 创建任务信息
@@ -164,13 +181,13 @@ func (q *queue) GetTask(taskID string) (Task, error) {
 		return nil, fmt.Errorf("task not found")
 	}
 
-	// 反序列化任务
-	var task Task
-	if err := json.Unmarshal([]byte(taskData), &task); err != nil {
+	// 反序列化任务到 BaseTask 具体类型
+	baseTask := &BaseTask{}
+	if err := json.Unmarshal([]byte(taskData), baseTask); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal task: %w", err)
 	}
 
-	return task, nil
+	return baseTask, nil
 }
 
 // UpdateTaskStatus 更新任务状态
@@ -185,7 +202,13 @@ func (q *queue) UpdateTaskStatus(taskID string, status TaskStatus) error {
 	}
 
 	// 获取旧状态
-	oldStatus, _ := taskInfo["status"].(string)
+	var oldStatus string
+	switch s := taskInfo["status"].(type) {
+	case string:
+		oldStatus = s
+	case TaskStatus:
+		oldStatus = string(s)
+	}
 
 	// 更新任务状态
 	taskInfo["status"] = status

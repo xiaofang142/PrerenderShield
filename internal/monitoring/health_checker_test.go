@@ -1,6 +1,8 @@
 package monitoring
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -144,11 +146,6 @@ func TestHealthChecker_Check_Concurrent(t *testing.T) {
 	}
 }
 
-func TestHealthChecker_ServeHTTP(t *testing.T) {
-	// 跳过测试，因为 ServeHTTP 方法有代码问题（memory 字段被覆盖）
-	t.Skip("ServeHTTP has a bug with memory field overwriting")
-}
-
 func TestHealthChecker_SetACMEClient(t *testing.T) {
 	checker := NewHealthChecker(nil).(*healthChecker)
 
@@ -207,4 +204,49 @@ func TestHealthChecker_Check_UptimeCalculation(t *testing.T) {
 
 	uptime := results["uptime"].(float64)
 	assert.GreaterOrEqual(t, uptime, 0.0)
+}
+
+func TestHealthChecker_IsHealthy(t *testing.T) {
+	checker := NewHealthChecker(nil)
+
+	// 测试健康情况
+	// 由于没有配置 Redis，redis 检查会失败，所以整体不健康
+	healthy := checker.IsHealthy()
+
+	// Redis 检查失败会导致整体不健康
+	assert.False(t, healthy)
+}
+
+func TestHealthChecker_ServeHTTP_OK(t *testing.T) {
+	checker := NewHealthChecker(nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rr := httptest.NewRecorder()
+
+	checker.ServeHTTP(rr, req)
+
+	// 由于没有配置 Redis，返回服务不可用状态
+	// 但响应仍然是有效的健康检查响应
+	// 验证响应格式
+	// 注意：由于没有配置 Redis，status 是 "error" 而不是 "ok"
+	assert.Contains(t, rr.Body.String(), `"status"`)
+	assert.Contains(t, rr.Body.String(), `"checks"`)
+}
+
+func TestHealthChecker_ServeHTTP_BodyStructure(t *testing.T) {
+	checker := NewHealthChecker(nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rr := httptest.NewRecorder()
+
+	checker.ServeHTTP(rr, req)
+
+	body := rr.Body.String()
+	// 验证基本结构
+	assert.Contains(t, body, `"status"`)
+	assert.Contains(t, body, `"checks"`)
+	assert.Contains(t, body, `"timestamp"`)
+	assert.Contains(t, body, `"uptime"`)
+	assert.Contains(t, body, `"redis"`)
+	assert.Contains(t, body, `"system"`)
 }

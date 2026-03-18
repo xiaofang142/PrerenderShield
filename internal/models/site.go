@@ -17,3 +17,11 @@ type Site struct {
 	WafConfig  *WafConfig  `json:"waf_config,omitempty"`
 	AccessLogs []AccessLog `json:"-"`
 }
+
+// EnabledInt returns 1 if Enabled is true, 0 otherwise
+func (s *Site) EnabledInt() int {
+	if s.Enabled {
+		return 1
+	}
+	return 0
+}

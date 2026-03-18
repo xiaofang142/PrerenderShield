@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -14,13 +15,77 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
+// WafRedisClient defines the interface for WAF Redis operations
+type WafRedisClient interface {
+	Context() context.Context
+	Get(ctx context.Context, key string) (string, error)
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error
+	LPush(ctx context.Context, key string, value interface{}) error
+	LRange(ctx context.Context, key string, start, stop int64) ([]string, error)
+	LLen(ctx context.Context, key string) (int64, error)
+	LTrim(ctx context.Context, key string, start, stop int64) error
+	HIncrBy(ctx context.Context, key, field string, incr int64) error
+	Incr(ctx context.Context, key string) error
+	HGetAll(ctx context.Context, key string) (map[string]string, error)
+	Expire(ctx context.Context, key string, expiration time.Duration) error
+}
+
+// RedisClientWrapper wraps redisPkg.Client to implement WafRedisClient
+type RedisClientWrapper struct {
+	Client *redisPkg.Client
+}
+
+func (w *RedisClientWrapper) Context() context.Context {
+	return w.Client.Context()
+}
+
+func (w *RedisClientWrapper) Get(ctx context.Context, key string) (string, error) {
+	return w.Client.GetRawClient().Get(ctx, key).Result()
+}
+
+func (w *RedisClientWrapper) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+	return w.Client.GetRawClient().Set(ctx, key, value, expiration).Err()
+}
+
+func (w *RedisClientWrapper) LPush(ctx context.Context, key string, value interface{}) error {
+	return w.Client.GetRawClient().LPush(ctx, key, value).Err()
+}
+
+func (w *RedisClientWrapper) LRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+	return w.Client.GetRawClient().LRange(ctx, key, start, stop).Result()
+}
+
+func (w *RedisClientWrapper) LLen(ctx context.Context, key string) (int64, error) {
+	return w.Client.GetRawClient().LLen(ctx, key).Result()
+}
+
+func (w *RedisClientWrapper) LTrim(ctx context.Context, key string, start, stop int64) error {
+	return w.Client.GetRawClient().LTrim(ctx, key, start, stop).Err()
+}
+
+func (w *RedisClientWrapper) HIncrBy(ctx context.Context, key, field string, incr int64) error {
+	return w.Client.GetRawClient().HIncrBy(ctx, key, field, incr).Err()
+}
+
+func (w *RedisClientWrapper) Incr(ctx context.Context, key string) error {
+	return w.Client.GetRawClient().Incr(ctx, key).Err()
+}
+
+func (w *RedisClientWrapper) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	return w.Client.GetRawClient().HGetAll(ctx, key).Result()
+}
+
+func (w *RedisClientWrapper) Expire(ctx context.Context, key string, expiration time.Duration) error {
+	return w.Client.GetRawClient().Expire(ctx, key, expiration).Err()
+}
+
 // WafRepository handles WAF related database operations using Redis
 type WafRepository struct {
-	client *redisPkg.Client
+	client WafRedisClient
 }
 
 // NewWafRepository creates a new WafRepository
-func NewWafRepository(client *redisPkg.Client) *WafRepository {
+func NewWafRepository(client WafRedisClient) *WafRepository {
 	return &WafRepository{
 		client: client,
 	}
@@ -31,7 +96,7 @@ func (r *WafRepository) GetWafConfigBySiteID(siteID string) (*models.WafConfig, 
 	ctx := r.client.Context()
 	key := fmt.Sprintf("waf:config:%s", siteID)
 
-	data, err := r.client.GetRawClient().Get(ctx, key).Result()
+	data, err := r.client.Get(ctx, key)
 	if err == redis.Nil {
 		return nil, nil
 	} else if err != nil {
@@ -65,7 +130,7 @@ func (r *WafRepository) saveWafConfig(config *models.WafConfig) error {
 		return err
 	}
 
-	return r.client.GetRawClient().Set(ctx, key, data, 0).Err()
+	return r.client.Set(ctx, key, data, 0)
 }
 
 // UpdateBlockedCountries replaces the list of blocked countries
@@ -109,12 +174,12 @@ func (r *WafRepository) GetAccessLogs(siteID string, page, limit int) ([]models.
 	start := int64((page - 1) * limit)
 	end := start + int64(limit) - 1
 
-	total, err := r.client.GetRawClient().LLen(ctx, key).Result()
+	total, err := r.client.LLen(ctx, key)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	rawLogs, err := r.client.GetRawClient().LRange(ctx, key, start, end).Result()
+	rawLogs, err := r.client.LRange(ctx, key, start, end)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -138,12 +203,12 @@ func (r *WafRepository) GetAttackLogs(siteID string, page, limit int) ([]models.
 	start := int64((page - 1) * limit)
 	end := start + int64(limit) - 1
 
-	total, err := r.client.GetRawClient().LLen(ctx, key).Result()
+	total, err := r.client.LLen(ctx, key)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	rawLogs, err := r.client.GetRawClient().LRange(ctx, key, start, end).Result()
+	rawLogs, err := r.client.LRange(ctx, key, start, end)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -241,22 +306,22 @@ func (r *WafRepository) CreateAccessLog(log *models.AccessLog) error {
 	}
 
 	// LPUSH to add to the beginning of the list
-	if err := r.client.GetRawClient().LPush(ctx, key, data).Err(); err != nil {
+	if err := r.client.LPush(ctx, key, data); err != nil {
 		return err
 	}
 
 	// Trim list to keep size manageable (e.g., 10000 logs)
-	r.client.GetRawClient().LTrim(ctx, key, 0, 9999)
+	r.client.LTrim(ctx, key, 0, 9999)
 
 	// If action is block, also add to attack logs list
 	if log.Action == "block" {
 		attackKey := fmt.Sprintf("waf:attacks:%s", log.SiteID)
-		if err := r.client.GetRawClient().LPush(ctx, attackKey, data).Err(); err != nil {
+		if err := r.client.LPush(ctx, attackKey, data); err != nil {
 			// Log error but don't fail the main log
 			fmt.Printf("Failed to push attack log: %v\n", err)
 		} else {
 			// Trim attack logs (keep 10000)
-			r.client.GetRawClient().LTrim(ctx, attackKey, 0, 9999)
+			r.client.LTrim(ctx, attackKey, 0, 9999)
 		}
 	}
 
@@ -269,20 +334,20 @@ func (r *WafRepository) CreateAccessLog(log *models.AccessLog) error {
 func (r *WafRepository) incrementStats(log *models.AccessLog) {
 	ctx := r.client.Context()
 	// Global Stats
-	r.client.GetRawClient().Incr(ctx, "waf:stats:global:total")
+	r.client.Incr(ctx, "waf:stats:global:total")
 	if log.Action == "block" {
-		r.client.GetRawClient().Incr(ctx, "waf:stats:global:blocked")
+		r.client.Incr(ctx, "waf:stats:global:blocked")
 	}
 
 	// Hourly Stats for Charts
 	// Key: waf:stats:hourly:{timestamp_hour}
 	hour := log.CreatedAt.Truncate(time.Hour).Unix()
 	hourKey := fmt.Sprintf("waf:stats:hourly:%d", hour)
-	r.client.GetRawClient().HIncrBy(ctx, hourKey, "total", 1)
+	r.client.HIncrBy(ctx, hourKey, "total", 1)
 	if log.Action == "block" {
-		r.client.GetRawClient().HIncrBy(ctx, hourKey, "blocked", 1)
+		r.client.HIncrBy(ctx, hourKey, "blocked", 1)
 	}
-	r.client.GetRawClient().Expire(ctx, hourKey, 7*24*time.Hour) // Keep stats for 7 days
+	r.client.Expire(ctx, hourKey, 7*24*time.Hour) // Keep stats for 7 days
 }
 
 // WafStats represents aggregated WAF statistics
@@ -300,13 +365,22 @@ func (r *WafRepository) GetGlobalStats(startTime, endTime string) (*WafStats, er
 	// Note: accurate time-range filtering is hard with simple counters.
 	// We will return total accumulated stats.
 
-	total, _ := r.client.GetRawClient().Get(ctx, "waf:stats:global:total").Int64()
-	blocked, _ := r.client.GetRawClient().Get(ctx, "waf:stats:global:blocked").Int64()
+	total, _ := r.client.Get(ctx, "waf:stats:global:total")
+	blocked, _ := r.client.Get(ctx, "waf:stats:global:blocked")
+
+	// Parse string values to int64
+	var totalInt, blockedInt int64
+	if total != "" {
+		totalInt, _ = strconv.ParseInt(total, 10, 64)
+	}
+	if blocked != "" {
+		blockedInt, _ = strconv.ParseInt(blocked, 10, 64)
+	}
 
 	return &WafStats{
-		TotalRequests:   total,
-		BlockedRequests: blocked,
-		AttackRequests:  blocked,
+		TotalRequests:   totalInt,
+		BlockedRequests: blockedInt,
+		AttackRequests:  blockedInt,
 	}, nil
 }
 
@@ -329,7 +403,7 @@ func (r *WafRepository) GetTrafficStats(startTime, endTime string) ([]map[string
 	// Iterate by hour
 	for t := start.Truncate(time.Hour); t.Before(end) || t.Equal(end); t = t.Add(time.Hour) {
 		hourKey := fmt.Sprintf("waf:stats:hourly:%d", t.Unix())
-		stats, err := r.client.GetRawClient().HGetAll(ctx, hourKey).Result()
+		stats, err := r.client.HGetAll(ctx, hourKey)
 		if err != nil {
 			continue
 		}

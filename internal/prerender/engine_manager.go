@@ -8,6 +8,9 @@ import (
 	"prerender-shield/internal/redis"
 )
 
+// 确保 redis.Client 实现 RedisClient 接口
+var _ RedisClient = (*redis.Client)(nil)
+
 // EngineManager 渲染引擎管理器
 // 管理多个渲染引擎实例，为不同站点提供独立的渲染能力
 // 支持引擎的创建、获取和销毁
@@ -39,7 +42,7 @@ import (
 //	result, _ := engine.Render("https://example.com")
 type EngineManager struct {
 	engines       map[string]Engine
-	redisClient   *redis.Client
+	redisClient   RedisClient
 	cacheManager  cache.Manager
 	mutex         sync.RWMutex
 	maxConcurrent int
@@ -61,7 +64,7 @@ type EngineManager struct {
 // 示例:
 //
 //	manager := NewEngineManager(redisClient, cacheManager, 5)
-func NewEngineManager(redisClient *redis.Client, cacheManager cache.Manager, maxConcurrent int) *EngineManager {
+func NewEngineManager(redisClient RedisClient, cacheManager cache.Manager, maxConcurrent int) *EngineManager {
 	return &EngineManager{
 		engines:       make(map[string]Engine),
 		redisClient:   redisClient,
