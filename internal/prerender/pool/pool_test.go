@@ -564,11 +564,12 @@ func TestPool_ScaleDown_NoIdleInstances(t *testing.T) {
 }
 
 // TestPool_AcquireContextCancelled 测试 context 取消
+// 当池子中没有可用实例时，上下文取消应该返回错误
 func TestPool_AcquireContextCancelled(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	cfg := Config{
-		MinInstances:        1,
-		MaxInstances:        2,
+		MinInstances:        0,  // 不预先创建实例
+		MaxInstances:        1,  // 只允许一个实例
 		Headless:            true,
 		HealthCheckInterval: 30 * time.Second,
 	}
@@ -576,11 +577,21 @@ func TestPool_AcquireContextCancelled(t *testing.T) {
 	pool := NewPool(cfg, logger)
 	defer pool.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // 立即取消
+	// 使用带超时的上下文，因为池子中没有实例，会阻塞等待
+	// 超时后应该返回错误
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
 
+	start := time.Now()
 	_, err := pool.Acquire(ctx)
+	elapsed := time.Since(start)
+
+	// 应该返回错误（context deadline exceeded）
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "context deadline exceeded")
+
+	// 耗时应该接近超时时间（至少 400ms）
+	assert.GreaterOrEqual(t, elapsed, 400*time.Millisecond, "Acquire should have waited for context timeout")
 }
 
 // TestPool_Stats_UseCountDistribution 测试使用次数分布统计
