@@ -14,15 +14,33 @@ import (
 	"prerender-shield/internal/redis"
 )
 
+// RedisClient 是 redis.Client 的接口，用于测试 mock
+type RedisClient interface {
+	GetURLs(siteID string) ([]string, error)
+	SetPushTask(siteID string, task map[string]interface{}) error
+	GetPushOffset(siteID string) (int64, error)
+	SetPushOffset(siteID string, offset int64) error
+	SetLastPushDate(siteID string, date string) error
+	IncrDailyPushCountWithCount(siteID string, count int) error
+	IncrPushStats(siteID string, stat string) error
+	AddPushLogStruct(siteID string, log interface{}) error
+	GetPushStatsWithURLCounts(siteID string) (map[string]interface{}, error)
+	GetLast15DaysPushCount(siteID string) (map[string]int64, error)
+	GetPushLogs(siteID string, limit, offset int) ([]interface{}, error)
+}
+
+// 确保 redis.Client 实现 RedisClient 接口
+var _ RedisClient = (*redis.Client)(nil)
+
 // PushManager 推送管理器
 type PushManager struct {
 	config      *config.Config
-	redisClient *redis.Client
+	redisClient RedisClient
 	mutex       sync.Mutex
 }
 
 // NewPushManager 创建推送管理器实例
-func NewPushManager(config *config.Config, redisClient *redis.Client) *PushManager {
+func NewPushManager(config *config.Config, redisClient RedisClient) *PushManager {
 	return &PushManager{
 		config:      config,
 		redisClient: redisClient,
@@ -139,6 +157,22 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 		return
 	}
 
+	// 检查 URL 列表是否为空
+	if len(allURLs) == 0 {
+		// URL 列表为空，标记任务为完成
+		task.Status = "completed"
+		task.CompletedAt = time.Now()
+		task.SuccessCount = 0
+		task.FailedCount = 0
+
+		// 保存任务到 Redis
+		taskMap, _ := json.Marshal(task)
+		var taskMapInterface map[string]interface{}
+		json.Unmarshal(taskMap, &taskMapInterface)
+		pm.redisClient.SetPushTask(task.SiteID, taskMapInterface)
+		return
+	}
+
 	pushConfig := siteConfig.Prerender.Push
 
 	// 获取今日日期
@@ -161,16 +195,19 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 		// 计算百度本次推送的URL数量
 		var baiduUrlsToPush []string
 
-		// 计算百度本次推送的URL数量
+		// 计算百度本次推送的 URL 数量
 		baiduStart := int(pushOffset % int64(len(allURLs)))
-		baiduEnd := baiduStart + pushConfig.BaiduDailyLimit
+		baiduUrlsNeeded := pushConfig.BaiduDailyLimit
 
-		// 如果超过URL总数，循环到开头
+		// 计算实际可推送的 URL 数量（不超过 URL 总数）
+		baiduActualCount := min(baiduUrlsNeeded, len(allURLs))
+
+		// 计算结束位置（处理循环）
+		baiduEnd := baiduStart + baiduActualCount
 		if baiduEnd > len(allURLs) {
-			// 推送剩余部分
+			// 需要循环：从 start 到末尾 + 从开头到剩余数量
 			baiduUrlsToPush = append(allURLs[baiduStart:], allURLs[:baiduEnd-len(allURLs)]...)
 		} else {
-			// 正常推送
 			baiduUrlsToPush = allURLs[baiduStart:baiduEnd]
 		}
 
@@ -196,16 +233,21 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 		// 计算必应本次推送的URL数量
 		var bingUrlsToPush []string
 
-		// 计算必应本次推送的URL数量
-		bingStart := int(pushOffset % int64(len(allURLs)))
-		bingEnd := bingStart + pushConfig.BingDailyLimit
+		// 计算必应本次推送的 URL 数量
 
-		// 如果超过URL总数，循环到开头
+		// 计算必应本次推送的 URL 数量
+		bingStart := int(pushOffset % int64(len(allURLs)))
+		bingUrlsNeeded := pushConfig.BingDailyLimit
+
+		// 计算实际可推送的 URL 数量（不超过 URL 总数）
+		bingActualCount := min(bingUrlsNeeded, len(allURLs))
+
+		// 计算结束位置（处理循环）
+		bingEnd := bingStart + bingActualCount
 		if bingEnd > len(allURLs) {
-			// 推送剩余部分
+			// 需要循环：从 start 到末尾 + 从开头到剩余数量
 			bingUrlsToPush = append(allURLs[bingStart:], allURLs[:bingEnd-len(allURLs)]...)
 		} else {
-			// 正常推送
 			bingUrlsToPush = allURLs[bingStart:bingEnd]
 		}
 
