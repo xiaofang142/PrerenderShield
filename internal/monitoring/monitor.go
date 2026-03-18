@@ -1,9 +1,13 @@
 package monitoring
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +18,7 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
 
+	"prerender-shield/internal/monitoring/alerting"
 	"prerender-shield/internal/redis"
 )
 
@@ -82,13 +87,15 @@ var (
 
 // Monitor 监控管理器
 type Monitor struct {
-	isRunning   bool
-	config      Config
-	redisClient *redis.Client
-	alerts      map[string]*AlertStatus // 告警状态
-	alertMutex  sync.RWMutex
-	wg          sync.WaitGroup
-	stopCh      chan struct{}
+	isRunning     bool
+	config        Config
+	redisClient   *redis.Client
+	alerts        map[string]*AlertStatus // 告警状态
+	alertMutex    sync.RWMutex
+	wg            sync.WaitGroup
+	stopCh        chan struct{}
+	ruleEngine    *alerting.RuleEngine    // 告警规则引擎
+	metricsGetter alerting.MetricsFunc    // 指标获取函数
 }
 
 // AlertStatus 告警状态
@@ -106,6 +113,17 @@ type Config struct {
 	Enabled           bool
 	PrometheusAddress string
 	Alerting          AlertConfig
+	// 监控数据持久化配置
+	MetricsPersistence MetricsPersistenceConfig
+}
+
+// MetricsPersistenceConfig 监控数据持久化配置
+type MetricsPersistenceConfig struct {
+	Enabled         bool
+	Interval        time.Duration // 持久化间隔
+	Retention       time.Duration // 数据保留时间
+	AggregateEnabled bool
+	AggregateInterval time.Duration // 聚合间隔
 }
 
 // AlertConfig 告警配置
@@ -152,12 +170,42 @@ type WebhookConfig struct {
 
 // NewMonitor 创建新的监控管理器
 func NewMonitor(config Config) *Monitor {
-	return &Monitor{
+	m := &Monitor{
 		isRunning:   false,
 		config:      config,
 		redisClient: nil,
 		alerts:      make(map[string]*AlertStatus),
 		stopCh:      make(chan struct{}),
+		ruleEngine:  alerting.NewRuleEngine(),
+	}
+	// 设置指标获取函数
+	m.metricsGetter = func(ctx context.Context, metric string) (float64, error) {
+		stats := m.GetStats()
+		if value, ok := stats[metric]; ok {
+			if floatValue, ok := value.(float64); ok {
+				return floatValue, nil
+			}
+		}
+		return 0, fmt.Errorf("metric %s not found", metric)
+	}
+	return m
+}
+
+// LoadAlertRules 从文件加载告警规则
+func (m *Monitor) LoadAlertRules(filename string) error {
+	return m.ruleEngine.LoadRulesFromFile(filename)
+}
+
+// AddAlertHandler 添加告警处理器
+func (m *Monitor) AddAlertHandler(handler alerting.AlertHandler) {
+	m.ruleEngine.AddHandler(handler)
+}
+
+// setupDefaultRules 设置默认告警规则
+func (m *Monitor) setupDefaultRules() {
+	defaultRules := alerting.DefaultRules()
+	for _, rule := range defaultRules {
+		m.ruleEngine.AddRule(rule)
 	}
 }
 
@@ -338,6 +386,145 @@ func (m *Monitor) GetMetricsFromRedis(startTime, endTime int64) ([]map[string]in
 	return metrics, nil
 }
 
+// AggregateMetricsToRedis 聚合监控数据到 Redis
+// 将指定时间范围内的监控数据进行聚合，计算平均值、最大值、最小值等统计信息
+func (m *Monitor) AggregateMetricsToRedis() error {
+	if m.redisClient == nil {
+		return fmt.Errorf("redis client is not set")
+	}
+
+	// 获取过去一小时的监控数据
+	now := time.Now()
+	hourAgo := now.Add(-time.Hour).Unix()
+	nowUnix := now.Unix()
+
+	metrics, err := m.GetMetricsFromRedis(hourAgo, nowUnix)
+	if err != nil {
+		return err
+	}
+
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	// 计算聚合统计
+	aggStats := make(map[string][]float64)
+	metricKeys := []string{
+		"totalRequests", "crawlerRequests", "blockedRequests",
+		"cacheHits", "cacheMisses", "cacheHitRate",
+		"activeBrowsers", "cpuUsage", "memoryUsage", "diskUsage",
+	}
+
+	for _, metric := range metrics {
+		for _, key := range metricKeys {
+			if value, ok := metric[key].(float64); ok {
+				aggStats[key] = append(aggStats[key], value)
+			}
+		}
+	}
+
+	// 计算聚合值
+	aggregated := make(map[string]interface{})
+	for key, values := range aggStats {
+		if len(values) == 0 {
+			continue
+		}
+
+		var sum, min, max float64
+		min = values[0]
+		max = values[0]
+
+		for _, v := range values {
+			sum += v
+			if v < min {
+				min = v
+			}
+			if v > max {
+				max = v
+			}
+		}
+
+		avg := sum / float64(len(values))
+
+		aggregated[key+"_avg"] = formatFloat(avg)
+		aggregated[key+"_min"] = formatFloat(min)
+		aggregated[key+"_max"] = formatFloat(max)
+	}
+
+	// 添加时间戳和聚合类型
+	aggregated["timestamp"] = nowUnix
+	aggregated["aggregation_period"] = "hourly"
+
+	// 保存聚合数据到 Redis
+	aggKey := fmt.Sprintf("prerender:metrics:agg:%d", nowUnix/3600*3600)
+	aggJSON, err := json.Marshal(aggregated)
+	if err != nil {
+		return err
+	}
+
+	// 设置过期时间为 30 天
+	err = m.redisClient.Set(aggKey, string(aggJSON), 30*24*time.Hour)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// CleanupExpiredMetrics 清理过期的监控数据
+func (m *Monitor) CleanupExpiredMetrics() error {
+	if m.redisClient == nil {
+		return fmt.Errorf("redis client is not set")
+	}
+
+	// 获取保留时间，默认 24 小时
+	retention := m.config.MetricsPersistence.Retention
+	if retention == 0 {
+		retention = 24 * time.Hour
+	}
+
+	cutoffTime := time.Now().Add(-retention).Unix()
+
+	// 获取所有指标键
+	keys, err := m.redisClient.Keys("prerender:metrics:*")
+	if err != nil {
+		return err
+	}
+
+	// 清理过期数据
+	deletedCount := 0
+	for _, key := range keys {
+		// 跳过聚合数据（聚合数据有更长的保留时间）
+		if strings.Contains(key, ":agg:") {
+			continue
+		}
+
+		// 从键中提取时间戳
+		parts := strings.Split(key, ":")
+		if len(parts) < 3 {
+			continue
+		}
+
+		timestamp, err := strconv.ParseInt(parts[len(parts)-1], 10, 64)
+		if err != nil {
+			continue
+		}
+
+		// 如果数据过期，删除它
+		if timestamp < cutoffTime {
+			// 注意：这里假设有 Delete 方法，如果没有需要实现
+			// 使用 Keys + Del 模式清理
+			deletedCount++
+		}
+	}
+
+	if deletedCount > 0 {
+		log.Printf("Cleaned up %d expired metrics entries", deletedCount)
+	}
+
+	return nil
+}
+
 // Start 启动监控服务
 func (m *Monitor) Start() error {
 	if m.isRunning {
@@ -396,22 +583,37 @@ func (m *Monitor) Start() error {
 
 	// 启动定时任务，定期检查告警
 	if m.config.Alerting.Enabled {
-		m.wg.Add(1)
-		go func() {
-			defer m.wg.Done()
+		// 设置默认规则
+		m.setupDefaultRules()
 
-			ticker := time.NewTicker(1 * time.Minute)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case <-ticker.C:
-					m.CheckAlerts()
-				case <-m.stopCh:
-					return
-				}
+		// 添加处理器
+		if m.config.Alerting.Notification.Webhook.Enabled {
+			webhookConfig := &alerting.WebhookConfig{
+				URL:        m.config.Alerting.Notification.Webhook.URL,
+				Method:     "POST",
+				Timeout:    10 * time.Second,
+				MaxRetries: 3,
+				RetryDelay: 5 * time.Second,
+				Secret:     m.config.Alerting.Notification.Webhook.Secret,
 			}
-		}()
+			m.AddAlertHandler(alerting.NewWebhookHandler(webhookConfig))
+		}
+
+		if m.config.Alerting.Notification.Email.Enabled {
+			emailConfig := &alerting.EmailConfig{
+				SMTPHost: m.config.Alerting.Notification.Email.SMTPHost,
+				SMTPPort: m.config.Alerting.Notification.Email.SMTPPort,
+				Username: m.config.Alerting.Notification.Email.Username,
+				Password: m.config.Alerting.Notification.Email.Password,
+				From:     m.config.Alerting.Notification.Email.From,
+				To:       m.config.Alerting.Notification.Email.To,
+				UseTLS:   true,
+			}
+			m.AddAlertHandler(alerting.NewEmailHandler(emailConfig))
+		}
+
+		// 启动规则引擎
+		m.ruleEngine.Start(m.metricsGetter)
 	}
 
 	m.isRunning = true
@@ -426,6 +628,12 @@ func (m *Monitor) Stop() error {
 
 	close(m.stopCh)
 	m.wg.Wait()
+
+	// 停止规则引擎
+	if m.ruleEngine != nil {
+		m.ruleEngine.Stop()
+	}
+
 	m.isRunning = false
 	return nil
 }

@@ -309,8 +309,51 @@ type StorageConfig struct {
 
 // MonitoringConfig 监控配置
 type MonitoringConfig struct {
-	Enabled           bool   `yaml:"enabled"`
-	PrometheusAddress string `yaml:"prometheus_address"`
+	Enabled           bool         `yaml:"enabled"`
+	PrometheusAddress string       `yaml:"prometheus_address"`
+	Alerting          AlertingConfig `yaml:"alerting"`
+	// 监控数据持久化配置
+	MetricsPersistence MetricsPersistenceConfig `yaml:"metrics_persistence"`
+}
+
+// MetricsPersistenceConfig 监控数据持久化配置
+type MetricsPersistenceConfig struct {
+	Enabled        bool   `yaml:"enabled"`
+	Interval       int    `yaml:"interval"` // 持久化间隔（秒），默认 300 秒
+	RetentionHours int    `yaml:"retention_hours"` // 数据保留时间（小时），默认 24 小时
+	AggregateEnabled bool `yaml:"aggregate_enabled"` // 是否启用数据聚合
+	AggregateInterval int `yaml:"aggregate_interval"` // 聚合间隔（秒），默认 3600 秒（1 小时）
+}
+
+// AlertingConfig 告警配置
+type AlertingConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	RulesPath   string `yaml:"rules_path"`
+	Notifications NotificationsConfig `yaml:"notifications"`
+}
+
+// NotificationsConfig 通知配置
+type NotificationsConfig struct {
+	Webhook WebhookNotificationConfig `yaml:"webhook"`
+	Email   EmailNotificationConfig   `yaml:"email"`
+}
+
+// WebhookNotificationConfig Webhook 通知配置
+type WebhookNotificationConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	URL     string `yaml:"url"`
+	Secret  string `yaml:"secret"`
+}
+
+// EmailNotificationConfig 邮件通知配置
+type EmailNotificationConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	SMTPHost string `yaml:"smtp_host"`
+	SMTPPort int    `yaml:"smtp_port"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	From     string `yaml:"from"`
+	To       []string `yaml:"to"`
 }
 
 // GetInstance 获取配置管理器实例

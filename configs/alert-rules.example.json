@@ -1,0 +1,147 @@
+{
+  "rules": [
+    {
+      "id": "cpu_high",
+      "name": "CPU 使用率过高",
+      "description": "当 CPU 使用率超过 90% 时触发告警",
+      "enabled": true,
+      "condition": {
+        "metric": "cpuUsage",
+        "operator": "gt",
+        "threshold": 90,
+        "duration": "1m"
+      },
+      "severity": "warning",
+      "handlers": ["webhook", "email"],
+      "cooldown": "5m"
+    },
+    {
+      "id": "memory_high",
+      "name": "内存使用率过高",
+      "description": "当内存使用率超过 85% 时触发告警",
+      "enabled": true,
+      "condition": {
+        "metric": "memoryUsage",
+        "operator": "gt",
+        "threshold": 85,
+        "duration": "1m"
+      },
+      "severity": "warning",
+      "handlers": ["webhook", "email"],
+      "cooldown": "5m"
+    },
+    {
+      "id": "disk_high",
+      "name": "磁盘使用率过高",
+      "description": "当磁盘使用率超过 90% 时触发告警",
+      "enabled": true,
+      "condition": {
+        "metric": "diskUsage",
+        "operator": "gt",
+        "threshold": 90,
+        "duration": "5m"
+      },
+      "severity": "warning",
+      "handlers": ["webhook"],
+      "cooldown": "10m"
+    },
+    {
+      "id": "threat_spike",
+      "name": "威胁检测激增",
+      "description": "当每分钟检测到的威胁数超过 100 时触发告警",
+      "enabled": true,
+      "condition": {
+        "metric": "blockedRequests",
+        "operator": "gt",
+        "threshold": 100,
+        "duration": "30s"
+      },
+      "severity": "critical",
+      "handlers": ["webhook", "email"],
+      "cooldown": "10m"
+    },
+    {
+      "id": "cache_hit_rate_low",
+      "name": "缓存命中率过低",
+      "description": "当缓存命中率低于 50% 时触发告警",
+      "enabled": true,
+      "condition": {
+        "metric": "cacheHitRate",
+        "operator": "lt",
+        "threshold": 50,
+        "duration": "5m"
+      },
+      "severity": "info",
+      "handlers": ["webhook"],
+      "cooldown": "30m"
+    },
+    {
+      "id": "high_request_volume",
+      "name": "请求量激增",
+      "description": "当总请求数超过 10000 时触发告警",
+      "enabled": true,
+      "condition": {
+        "metric": "totalRequests",
+        "operator": "gt",
+        "threshold": 10000,
+        "duration": "1m"
+      },
+      "severity": "info",
+      "handlers": ["webhook"],
+      "cooldown": "15m"
+    },
+    {
+      "id": "browser_pool_exhausted",
+      "name": "浏览器池耗尽",
+      "description": "当活跃浏览器数量超过 10 时触发告警",
+      "enabled": true,
+      "condition": {
+        "metric": "activeBrowsers",
+        "operator": "gt",
+        "threshold": 10,
+        "duration": "2m"
+      },
+      "severity": "warning",
+      "handlers": ["webhook"],
+      "cooldown": "5m"
+    },
+    {
+      "id": "render_time_slow",
+      "name": "渲染时间过长",
+      "description": "当平均渲染时间超过 5 秒时触发告警",
+      "enabled": true,
+      "condition": {
+        "metric": "renderTime",
+        "operator": "gt",
+        "threshold": 5,
+        "duration": "3m"
+      },
+      "severity": "warning",
+      "handlers": ["webhook", "email"],
+      "cooldown": "10m"
+    }
+  ],
+  "notifications": {
+    "webhook": {
+      "enabled": false,
+      "url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+      "secret": "",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "timeout": "10s",
+      "max_retries": 3,
+      "retry_delay": "5s"
+    },
+    "email": {
+      "enabled": false,
+      "smtp_host": "smtp.example.com",
+      "smtp_port": 587,
+      "username": "your-email@example.com",
+      "password": "your-password",
+      "from": "Prerender Shield <noreply@example.com>",
+      "to": ["admin@example.com", "ops@example.com"],
+      "use_tls": true
+    }
+  }
+}

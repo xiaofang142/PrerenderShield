@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -58,8 +59,11 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 	cfg := deps.Config
 	redisClient := deps.Redis
 
+	// 使用 wrapper 适配 redis.Client 到 WafRedisClient 接口
+	wafRedisClient := &repository.RedisClientWrapper{Client: redisClient}
+
 	// 初始化仓库
-	wafRepo := repository.NewWafRepository(redisClient)
+	wafRepo := repository.NewWafRepository(wafRedisClient)
 
 	// 初始化认证模块
 	userManager := auth.NewUserManager(cfg.Dirs.DataDir, redisClient)
@@ -88,7 +92,33 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 	monitor := monitoring.NewMonitor(monitoring.Config{
 		Enabled:           true,
 		PrometheusAddress: cfg.Monitoring.PrometheusAddress,
+		Alerting: monitoring.AlertConfig{
+			Enabled: cfg.Monitoring.Alerting.Enabled,
+		},
+		MetricsPersistence: monitoring.MetricsPersistenceConfig{
+			Enabled:         cfg.Monitoring.MetricsPersistence.Enabled,
+			Interval:        time.Duration(cfg.Monitoring.MetricsPersistence.Interval) * time.Second,
+			Retention:       time.Duration(cfg.Monitoring.MetricsPersistence.RetentionHours) * time.Hour,
+			AggregateEnabled: cfg.Monitoring.MetricsPersistence.AggregateEnabled,
+			AggregateInterval: time.Duration(cfg.Monitoring.MetricsPersistence.AggregateInterval) * time.Second,
+		},
 	})
+
+	// 加载告警规则配置文件
+	alertRulesPath := cfg.Monitoring.Alerting.RulesPath
+	if alertRulesPath == "" {
+		alertRulesPath = "configs/alert-rules.json"
+	}
+	if err := monitor.LoadAlertRules(alertRulesPath); err != nil {
+		// 如果配置文件不存在，使用默认规则
+		if !os.IsNotExist(err) {
+			// 其他错误需要记录日志但不中断启动
+			log.Printf("Warning: failed to load alert rules from %s: %v", alertRulesPath, err)
+		}
+	}
+
+	// 设置 Redis 客户端用于监控数据持久化
+	monitor.SetRedisClient(redisClient)
 
 	// 初始化健康检查
 	healthChecker := monitoring.NewHealthChecker(redisClient)

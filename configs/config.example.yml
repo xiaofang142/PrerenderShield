@@ -5,7 +5,7 @@ server:
   address: "0.0.0.0"
   api_port: 9598
   console_port: 9597
-  # API公网地址，用于控制台前端访问API
+  # API 公网地址，用于控制台前端访问 API
   public_api_url: "${API_PUBLIC_URL:-http://localhost:9598}"
 
 # 目录配置
@@ -18,7 +18,7 @@ dirs:
 # 缓存配置
 cache:
   type: "redis"
-  # Redis连接配置，支持环境变量替换
+  # Redis 连接配置，支持环境变量替换
   redis_url: "localhost:6379"
   memory_size: 1000
 
@@ -107,5 +107,36 @@ ssl:
     provider: ""  # DNS 服务商：cloudflare, aliyun, tencentcloud, aws 等
     credentials:
       # Cloudflare: CLOUDFLARE_DNS_API_TOKEN: "your-token"
-      # 阿里云: ALIBABA_CLOUD_ACCESS_KEY_ID: "xxx", ALIBABA_CLOUD_ACCESS_KEY_SECRET: "xxx"
-      # 腾讯云: TENCENTCLOUD_SECRET_ID: "xxx", TENCENTCLOUD_SECRET_KEY: "xxx"
+      # 阿里云：ALIBABA_CLOUD_ACCESS_KEY_ID: "xxx", ALIBABA_CLOUD_ACCESS_KEY_SECRET: "xxx"
+      # 腾讯云：TENCENTCLOUD_SECRET_ID: "xxx", TENCENTCLOUD_SECRET_KEY: "xxx"
+
+# 监控配置
+monitoring:
+  enabled: true
+  prometheus_address: ":9090"
+  # 告警规则配置文件路径
+  alerting:
+    enabled: true
+    rules_path: "configs/alert-rules.json"
+    # 通知配置
+    notifications:
+      webhook:
+        enabled: false
+        url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+        secret: ""
+      email:
+        enabled: false
+        smtp_host: "smtp.example.com"
+        smtp_port: 587
+        username: "your-email@example.com"
+        password: "your-password"
+        from: "Prerender Shield <noreply@example.com>"
+        to:
+          - "admin@example.com"
+  # 监控数据持久化配置
+  metrics_persistence:
+    enabled: true
+    interval: 300        # 持久化间隔（秒），默认 5 分钟
+    retention_hours: 24  # 数据保留时间（小时），默认 24 小时
+    aggregate_enabled: true
+    aggregate_interval: 3600  # 聚合间隔（秒），默认 1 小时
