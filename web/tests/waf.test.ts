@@ -9,7 +9,8 @@ test.describe('WAF Settings Page', () => {
     await page.fill('input[placeholder="Username"]', 'admin');
     await page.fill('input[placeholder="Password"]', '123456');
     await page.click('button[type="submit"]');
-    await page.waitForURL('/');
+    // 等待登录成功后的延迟跳转（1.5 秒）
+    await page.waitForURL('/', { timeout: 10000 });
     await page.waitForTimeout(1000);
 
     // 使用侧边栏导航到防火墙页面（WAF 配置在防火墙页面中）

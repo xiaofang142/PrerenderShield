@@ -37,8 +37,8 @@ test.describe('Crawler Page', () => {
       // 点击完成按钮
       await page.click('button:has-text("完成")');
 
-      // 等待页面跳转到首页
-      await page.waitForURL('/');
+      // 等待页面跳转到首页（等待登录成功后的延迟）
+      await page.waitForURL('/', { timeout: 10000 });
       // 等待首页元素出现
       await page.waitForSelector('h1.page-title, h1:has-text("概览")', { timeout: 5000 });
     } else {
@@ -49,8 +49,8 @@ test.describe('Crawler Page', () => {
       await page.fill('input[placeholder="Password"]', '123456');
       // 点击登录按钮
       await page.click('button[type="submit"]');
-      // 等待导航到首页
-      await page.waitForURL('/');
+      // 等待导航到首页（等待登录成功后的延迟）
+      await page.waitForURL('/', { timeout: 10000 });
       // 等待首页元素出现
       await page.waitForSelector('h1.page-title, h1:has-text("概览")', { timeout: 5000 });
     }

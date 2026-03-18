@@ -19,13 +19,13 @@ test.describe('System Configuration Page', () => {
       await page.click('button:has-text("下一步")');
       await page.waitForSelector('button:has-text("完成")');
       await page.click('button:has-text("完成")');
-      await page.waitForURL('/');
+      await page.waitForURL('/', { timeout: 10000 });
     } else {
       await page.waitForSelector('input[placeholder="Username"]');
       await page.fill('input[placeholder="Username"]', 'admin');
       await page.fill('input[placeholder="Password"]', '123456');
       await page.click('button[type="submit"]');
-      await page.waitForURL('/');
+      await page.waitForURL('/', { timeout: 10000 });
     }
 
     // 使用侧边栏导航到系统配置页面

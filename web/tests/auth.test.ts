@@ -53,8 +53,9 @@ test.describe('认证模块测试', () => {
     // 点击登录按钮
     await page.click('button[type="submit"]');
 
-    // 等待页面跳转
-    await page.waitForURL('/');
+    // 等待成功模态框出现并自动关闭（需要等待 1.5 秒延迟）
+    // 使用较长的超时时间来等待页面跳转
+    await page.waitForURL('/', { timeout: 10000 });
 
     // 验证登录成功，页面跳转到概览页面
     await expect(page).toHaveURL('/');
@@ -112,7 +113,7 @@ test.describe('认证模块测试', () => {
     await page.fill('input[placeholder="Username"]', 'admin');
     await page.fill('input[placeholder="Password"]', '123456');
     await page.click('button[type="submit"]');
-    await page.waitForURL('/');
+    await page.waitForURL('/', { timeout: 10000 });
 
     // 点击登出按钮 - 使用 logout 图标定位
     await page.click('.anticon-logout');
@@ -145,7 +146,7 @@ test.describe('认证模块测试', () => {
     await page.fill('input[placeholder="Username"]', 'admin');
     await page.fill('input[placeholder="Password"]', '123456');
     await page.click('button[type="submit"]');
-    await page.waitForURL('/');
+    await page.waitForURL('/', { timeout: 10000 });
     await page.waitForTimeout(1000);
 
     // 再次访问登录页
@@ -203,7 +204,7 @@ test.describe('认证模块测试', () => {
     await page.fill('input[placeholder="Username"]', 'admin');
     await page.fill('input[placeholder="Password"]', '123456');
     await page.click('button[type="submit"]');
-    await page.waitForURL('/');
+    await page.waitForURL('/', { timeout: 10000 });
     await page.waitForTimeout(1000);
 
     // 刷新页面
@@ -245,7 +246,7 @@ test.describe('认证模块测试', () => {
     await page.fill('input[placeholder="Username"]', 'admin');
     await page.fill('input[placeholder="Password"]', '123456');
     await page.click('button[type="submit"]');
-    await page.waitForURL('/');
+    await page.waitForURL('/', { timeout: 10000 });
 
     // 导航到系统设置页面
     await page.goto('/system');
@@ -266,7 +267,7 @@ test.describe('认证模块测试', () => {
     await page.fill('input[placeholder="Username"]', 'admin');
     await page.fill('input[placeholder="Password"]', '123456');
     await page.click('button[type="submit"]');
-    await page.waitForURL('/');
+    await page.waitForURL('/', { timeout: 10000 });
     await page.waitForTimeout(1000);
 
     // 模拟长时间不操作

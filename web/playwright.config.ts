@@ -26,6 +26,7 @@ export default defineConfig({
     /* Base URL for API requests */
     extraHTTPHeaders: {
       'Content-Type': 'application/json',
+      'X-API-Base': 'http://localhost:9598',
     },
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
@@ -79,5 +80,8 @@ export default defineConfig({
     command: 'npm run dev',
     url: 'http://localhost:5173',
     reuseExistingServer: true,
+    env: {
+      VITE_API_BASE_URL: 'http://localhost:9598/api/v1',
+    },
   },
 });

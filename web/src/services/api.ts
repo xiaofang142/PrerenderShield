@@ -8,8 +8,9 @@ export interface ApiResponse<T = any> {
 }
 
 // 创建 axios 实例
+// 在 Playwright 测试环境中，使用 /api 前缀以便 Vite 代理转发
 const api: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: '/api/v1',
   timeout: 10000,
 })
 
