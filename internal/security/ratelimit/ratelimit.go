@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -103,6 +104,11 @@ func NewRateLimiter(config *RateLimiterConfig, logger *zap.Logger) *RateLimiter 
 		logger = zap.NewNop()
 	}
 
+	// 确保清理间隔为正数
+	if config.CleanupInterval <= 0 {
+		config.CleanupInterval = 1 * time.Minute
+	}
+
 	limiter := &RateLimiter{
 		config:   config,
 		buckets:  make(map[string]*TokenBucket),
@@ -119,14 +125,14 @@ func NewRateLimiter(config *RateLimiterConfig, logger *zap.Logger) *RateLimiter 
 
 // Allow 检查是否允许请求
 func (r *RateLimiter) Allow(ctx context.Context, ip, userID, endpoint, method string) *LimitResult {
-	r.stats.TotalRequests++
+	atomic.AddInt64(&r.stats.TotalRequests, 1)
 
 	// 检查端点限制
 	if endpointLimit, ok := r.config.EndpointLimits[endpoint]; ok {
 		if endpointLimit.Method == "*" || endpointLimit.Method == method {
 			result := r.checkLimit(endpoint, endpointLimit.RequestsPerSecond, endpointLimit.BurstSize)
 			if !result.Allowed {
-				r.stats.DeniedRequests++
+				atomic.AddInt64(&r.stats.DeniedRequests, 1)
 				result.Reason = "endpoint_limit"
 				return result
 			}
@@ -136,7 +142,7 @@ func (r *RateLimiter) Allow(ctx context.Context, ip, userID, endpoint, method st
 	// 检查 IP 限制
 	ipResult := r.checkLimit("ip:"+ip, r.config.IPRequestsPerSecond, r.config.IPBurstSize)
 	if !ipResult.Allowed {
-		r.stats.DeniedRequests++
+		atomic.AddInt64(&r.stats.DeniedRequests, 1)
 		ipResult.Reason = "ip_limit"
 		return ipResult
 	}
@@ -145,7 +151,7 @@ func (r *RateLimiter) Allow(ctx context.Context, ip, userID, endpoint, method st
 	if userID != "" {
 		userResult := r.checkLimit("user:"+userID, r.config.UserRequestsPerSecond, r.config.UserBurstSize)
 		if !userResult.Allowed {
-			r.stats.DeniedRequests++
+			atomic.AddInt64(&r.stats.DeniedRequests, 1)
 			userResult.Reason = "user_limit"
 			return userResult
 		}
@@ -155,13 +161,13 @@ func (r *RateLimiter) Allow(ctx context.Context, ip, userID, endpoint, method st
 	if r.config.RequestsPerSecond > 0 && r.config.BurstSize > 0 {
 		globalResult := r.checkLimit("global", r.config.RequestsPerSecond, r.config.BurstSize)
 		if !globalResult.Allowed {
-			r.stats.DeniedRequests++
+			atomic.AddInt64(&r.stats.DeniedRequests, 1)
 			globalResult.Reason = "global_limit"
 			return globalResult
 		}
 	}
 
-	r.stats.AllowedRequests++
+	atomic.AddInt64(&r.stats.AllowedRequests, 1)
 	return ipResult // 返回 IP 限制结果作为通用结果
 }
 
@@ -309,15 +315,23 @@ func (r *RateLimiter) cleanup() {
 	}
 
 	if deleted > 0 {
-		r.stats.ActiveBuckets -= int64(deleted)
+		atomic.AddInt64(&r.stats.ActiveBuckets, -int64(deleted))
 		r.logger.Debug("清理过期桶", zap.Int("count", deleted))
 	}
 }
 
 // GetStats 获取统计信息
 func (r *RateLimiter) GetStats() *RateLimiterStats {
-	r.stats.ActiveBuckets = int64(len(r.buckets))
-	return r.stats
+	r.mu.RLock()
+	count := int64(len(r.buckets))
+	r.mu.RUnlock()
+	atomic.StoreInt64(&r.stats.ActiveBuckets, count)
+	return &RateLimiterStats{
+		TotalRequests:   atomic.LoadInt64(&r.stats.TotalRequests),
+		AllowedRequests: atomic.LoadInt64(&r.stats.AllowedRequests),
+		DeniedRequests:  atomic.LoadInt64(&r.stats.DeniedRequests),
+		ActiveBuckets:   count,
+	}
 }
 
 // Reset 重置所有限制
