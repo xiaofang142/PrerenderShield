@@ -8,8 +8,10 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"prerender-shield/internal/cache"
+	"prerender-shield/internal/prerender/pool"
 	"prerender-shield/internal/redis"
 )
 
@@ -75,6 +77,7 @@ type Engine interface {
 	CleanupPreheatTasks() error
 	IsCrawlerRequest(userAgent string) bool
 	RenderWithContext(c *gin.Context, url string, opts RenderOptions, userAgent string) (RenderWithCacheResult, error)
+	Close() error
 }
 
 // engine 渲染引擎实现
@@ -83,6 +86,7 @@ type engine struct {
 	cacheManager       cache.Manager
 	maxConcurrent      int
 	concurrencyManager *ConcurrencyManager
+	browserPool        *pool.Pool
 }
 
 // NewEngine 创建新的渲染引擎
@@ -94,37 +98,34 @@ func NewEngine(redisClient RedisClient, cacheManager cache.Manager, maxConcurren
 	// 创建动态并发管理器
 	concurrencyManager := NewConcurrencyManager(2, maxConcurrent*2, maxConcurrent)
 
+	// 创建浏览器实例池
+	browserPool := pool.NewPool(pool.DefaultConfig(), zap.NewNop())
+
 	return &engine{
 		redisClient:        redisClient,
 		cacheManager:       cacheManager,
 		maxConcurrent:      maxConcurrent,
 		concurrencyManager: concurrencyManager,
+		browserPool:        browserPool,
 	}
 }
 
 // Render 渲染页面
 func (e *engine) Render(url string, timeout time.Duration) ([]byte, error) {
-	// 创建上下文
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+	// 从池获取实例
+	instance, err := e.browserPool.AcquireWithTimeout(timeout)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire browser instance: %w", err)
+	}
+	defer e.browserPool.Release(instance)
 
-	// 创建Chrome实例
-	options := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", true),
-		chromedp.Flag("disable-gpu", true),
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-	)
-
-	allocCtx, cancel := chromedp.NewExecAllocator(ctx, options...)
-	defer cancel()
-
-	chromeCtx, cancel := chromedp.NewContext(allocCtx)
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(instance.ChromeCtx, timeout)
 	defer cancel()
 
 	// 导航到页面
 	var html string
-	err := chromedp.Run(chromeCtx,
+	err = chromedp.Run(ctx,
 		chromedp.Navigate(url),
 		chromedp.WaitVisible("body"),
 		chromedp.ActionFunc(func(ctx context.Context) error {
@@ -339,29 +340,29 @@ func (e *engine) IsCrawlerRequest(userAgent string) bool {
 	return false
 }
 
-// RenderWithContext 渲染页面（带gin.Context参数的版本）
+// RenderWithContext 渲染页面（带 gin.Context 参数的版本）
 func (e *engine) RenderWithContext(c *gin.Context, url string, opts RenderOptions, userAgent string) (RenderWithCacheResult, error) {
-	// 创建上下文
-	ctx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
-	defer cancel()
+	// 从池获取实例
+	instance, err := e.browserPool.AcquireWithTimeout(opts.Timeout)
+	if err != nil {
+		return RenderWithCacheResult{
+			Result: RenderResult{
+				HTML:    "",
+				Success: false,
+				Error:   err.Error(),
+			},
+			HitCache: false,
+		}, fmt.Errorf("failed to acquire browser instance: %w", err)
+	}
+	defer e.browserPool.Release(instance)
 
-	// 创建Chrome实例
-	options := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", true),
-		chromedp.Flag("disable-gpu", true),
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-	)
-
-	allocCtx, cancel := chromedp.NewExecAllocator(ctx, options...)
-	defer cancel()
-
-	chromeCtx, cancel := chromedp.NewContext(allocCtx)
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(instance.ChromeCtx, opts.Timeout)
 	defer cancel()
 
 	// 导航到页面
 	var html string
-	err := chromedp.Run(chromeCtx,
+	err = chromedp.Run(ctx,
 		chromedp.Navigate(url),
 		chromedp.WaitVisible("body"),
 		chromedp.ActionFunc(func(ctx context.Context) error {
@@ -422,6 +423,14 @@ func (e *engine) CleanupPreheatTasks() error {
 		}
 	}
 
+	return nil
+}
+
+// Close 关闭渲染引擎，释放资源
+func (e *engine) Close() error {
+	if e.browserPool != nil {
+		return e.browserPool.Close()
+	}
 	return nil
 }
 

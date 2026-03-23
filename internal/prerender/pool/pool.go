@@ -151,8 +151,11 @@ func (p *Pool) Acquire(ctx context.Context) (*Instance, error) {
 		p.mu.RUnlock()
 		return nil, fmt.Errorf("pool is closed")
 	}
+	// 检查是否有可用实例或可以创建新实例
+	canCreateMore := p.instanceCount < p.config.MaxInstances
 	p.mu.RUnlock()
 
+	// 尝试从 channel 获取实例
 	select {
 	case instance := <-p.available:
 		instance.mu.Lock()
@@ -171,6 +174,53 @@ func (p *Pool) Acquire(ctx context.Context) (*Instance, error) {
 
 	case <-p.ctx.Done():
 		return nil, fmt.Errorf("pool is closed")
+
+	default:
+		// 没有可用实例，尝试创建新实例
+		if canCreateMore {
+			p.mu.Lock()
+			// 再次检查，防止竞态条件
+			if p.instanceCount < p.config.MaxInstances && !p.closed {
+				instance := p.createInstance()
+				if instance != nil {
+					p.instances = append(p.instances, instance)
+					p.instanceCount++
+					p.mu.Unlock()
+
+					instance.mu.Lock()
+					instance.UseCount++
+					instance.mu.Unlock()
+
+					p.logger.Debug("acquired new instance",
+						zap.String("id", instance.ID),
+						zap.Int("use_count", instance.UseCount))
+
+					return instance, nil
+				}
+			}
+			p.mu.Unlock()
+		}
+
+		// 无法创建新实例，等待可用实例
+		select {
+		case instance := <-p.available:
+			instance.mu.Lock()
+			instance.LastUsedAt = time.Now()
+			instance.UseCount++
+			instance.mu.Unlock()
+
+			p.logger.Debug("acquired instance",
+				zap.String("id", instance.ID),
+				zap.Int("use_count", instance.UseCount))
+
+			return instance, nil
+
+		case <-ctx.Done():
+			return nil, ctx.Err()
+
+		case <-p.ctx.Done():
+			return nil, fmt.Errorf("pool is closed")
+		}
 	}
 }
 
@@ -220,7 +270,6 @@ func (p *Pool) Release(instance *Instance) error {
 // retireInstance 回收实例
 func (p *Pool) retireInstance(instance *Instance) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 
 	p.logger.Info("retiring instance",
 		zap.String("id", instance.ID),
@@ -234,15 +283,28 @@ func (p *Pool) retireInstance(instance *Instance) {
 		}
 	}
 
+	// 创建新实例补充（在释放锁之前）
+	needsNewInstance := p.instanceCount < p.config.MinInstances
+
+	p.mu.Unlock()
+
+	// 在锁外关闭实例，避免阻塞
 	p.closeInstance(instance)
 
-	// 创建新实例补充
-	if p.instanceCount < p.config.MinInstances {
+	// 在锁外创建新实例
+	if needsNewInstance {
 		newInstance := p.createInstance()
 		if newInstance != nil {
+			p.mu.Lock()
 			p.instances = append(p.instances, newInstance)
-			p.available <- newInstance
-			p.instanceCount++
+			p.mu.Unlock()
+
+			select {
+			case p.available <- newInstance:
+				p.instanceCount++
+			default:
+				p.closeInstance(newInstance)
+			}
 		}
 	}
 }

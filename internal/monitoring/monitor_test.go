@@ -337,10 +337,10 @@ func TestNotificationConfig_Struct(t *testing.T) {
 // TestMonitor_checkAlertRule_AllOperators 测试所有告警操作符
 func TestMonitor_checkAlertRule_AllOperators(t *testing.T) {
 	tests := []struct {
-		name          string
-		operator      string
-		value         float64
-		threshold     float64
+		name           string
+		operator       string
+		value          float64
+		threshold      float64
 		expectedFiring bool
 	}{
 		{"GreaterThan triggered", ">", 85.0, 80.0, true},
@@ -401,12 +401,12 @@ func TestMonitor_checkAlertRule_MissingMetric(t *testing.T) {
 	})
 
 	rule := AlertRule{
-		ID:       "test_rule",
-		Name:     "Test Rule",
-		Metric:   "missingMetric",
-		Operator: ">",
+		ID:        "test_rule",
+		Name:      "Test Rule",
+		Metric:    "missingMetric",
+		Operator:  ">",
 		Threshold: 80.0,
-		Severity: "warning",
+		Severity:  "warning",
 	}
 
 	stats := map[string]interface{}{
@@ -435,12 +435,12 @@ func TestMonitor_checkAlertRule_InvalidType(t *testing.T) {
 	})
 
 	rule := AlertRule{
-		ID:       "test_rule",
-		Name:     "Test Rule",
-		Metric:   "stringMetric",
-		Operator: ">",
+		ID:        "test_rule",
+		Name:      "Test Rule",
+		Metric:    "stringMetric",
+		Operator:  ">",
 		Threshold: 80.0,
-		Severity: "warning",
+		Severity:  "warning",
 	}
 
 	stats := map[string]interface{}{

@@ -1469,7 +1469,7 @@ func TestSitesController_UpdateSite_Success(t *testing.T) {
 	updateReq := map[string]interface{}{
 		"name":    "Updated Site Name",
 		"domains": []string{"127.0.0.1"},
-		"port":    9091,
+		"port":    19091, // Use port 19091 to avoid conflicts with common services
 		"mode":    "static",
 	}
 	body, _ := json.Marshal(updateReq)

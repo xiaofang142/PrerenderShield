@@ -106,3 +106,12 @@ browser/
 
 # Trae IDE 配置目录
 .trae/
+
+# 测试产物
+test-results/
+web/test-results/
+web/coverage/
+coverage.html
+
+# 前端测试目录
+web/src/**/__tests__/**/*.test.tsx.snap

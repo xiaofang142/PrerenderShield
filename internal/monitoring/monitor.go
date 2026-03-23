@@ -94,8 +94,8 @@ type Monitor struct {
 	alertMutex    sync.RWMutex
 	wg            sync.WaitGroup
 	stopCh        chan struct{}
-	ruleEngine    *alerting.RuleEngine    // 告警规则引擎
-	metricsGetter alerting.MetricsFunc    // 指标获取函数
+	ruleEngine    *alerting.RuleEngine // 告警规则引擎
+	metricsGetter alerting.MetricsFunc // 指标获取函数
 }
 
 // AlertStatus 告警状态
@@ -119,10 +119,10 @@ type Config struct {
 
 // MetricsPersistenceConfig 监控数据持久化配置
 type MetricsPersistenceConfig struct {
-	Enabled         bool
-	Interval        time.Duration // 持久化间隔
-	Retention       time.Duration // 数据保留时间
-	AggregateEnabled bool
+	Enabled           bool
+	Interval          time.Duration // 持久化间隔
+	Retention         time.Duration // 数据保留时间
+	AggregateEnabled  bool
 	AggregateInterval time.Duration // 聚合间隔
 }
 

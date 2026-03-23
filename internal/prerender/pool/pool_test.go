@@ -568,30 +568,39 @@ func TestPool_ScaleDown_NoIdleInstances(t *testing.T) {
 func TestPool_AcquireContextCancelled(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	cfg := Config{
-		MinInstances:        0,  // 不预先创建实例
-		MaxInstances:        1,  // 只允许一个实例
+		MinInstances:        1,  // Pre-create one instance
+		MaxInstances:        1,  // Only allow one instance
 		Headless:            true,
 		HealthCheckInterval: 30 * time.Second,
+		MaxUseCount:         100,
 	}
 
 	pool := NewPool(cfg, logger)
 	defer pool.Close()
 
-	// 使用带超时的上下文，因为池子中没有实例，会阻塞等待
-	// 超时后应该返回错误
+	// Acquire the only instance first
+	firstInstance, err := pool.Acquire(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, firstInstance)
+
+	// Now try to acquire another instance with timeout
+	// Since the only instance is in use, this should timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	start := time.Now()
-	_, err := pool.Acquire(ctx)
+	_, err = pool.Acquire(ctx)
 	elapsed := time.Since(start)
 
-	// 应该返回错误（context deadline exceeded）
+	// Should return error (context deadline exceeded)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "context deadline exceeded")
 
-	// 耗时应该接近超时时间（至少 400ms）
+	// Elapsed time should be close to timeout (at least 400ms)
 	assert.GreaterOrEqual(t, elapsed, 400*time.Millisecond, "Acquire should have waited for context timeout")
+
+	// Release the first instance
+	pool.Release(firstInstance)
 }
 
 // TestPool_Stats_UseCountDistribution 测试使用次数分布统计
@@ -851,17 +860,26 @@ func TestPool_ReleaseUnhealthyInstance(t *testing.T) {
 func TestPool_AcquireWithTimeout_Timeout(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	cfg := Config{
-		MinInstances:        0, // 没有初始实例
-		MaxInstances:        2,
+		MinInstances:        1, // Pre-create one instance
+		MaxInstances:        1, // Only allow one instance
 		Headless:            true,
 		HealthCheckInterval: 30 * time.Second,
+		MaxUseCount:         100,
 	}
 
 	pool := NewPool(cfg, logger)
 	defer pool.Close()
 
-	// 超时应该很快返回
-	instance, err := pool.AcquireWithTimeout(10 * time.Millisecond)
+	// Acquire the only instance first
+	firstInstance, err := pool.Acquire(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, firstInstance)
+
+	// Timeout should return error since no instance is available
+	instance, err := pool.AcquireWithTimeout(50 * time.Millisecond)
 	assert.Error(t, err)
 	assert.Nil(t, instance)
+
+	// Release the first instance
+	pool.Release(firstInstance)
 }
