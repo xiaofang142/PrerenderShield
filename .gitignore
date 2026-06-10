@@ -115,3 +115,4 @@ coverage.html
 
 # 前端测试目录
 web/src/**/__tests__/**/*.test.tsx.snap
+docs/
