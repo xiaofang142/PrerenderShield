@@ -1,5 +1,28 @@
 # PrerenderShield 快速入门指南
 
+## 🚀 一键安装
+
+```bash
+curl -fsSL https://prerender.websitetool.cn/install.sh | bash
+```
+
+> 安装后访问 `http://服务器IP:9597`，默认账号: `admin` / `123456`
+
+## 防火墙配置
+
+```bash
+# Ubuntu / Debian
+sudo ufw allow 9597/tcp
+sudo ufw allow 9598/tcp
+
+# CentOS / RHEL
+sudo firewall-cmd --add-port=9597/tcp --permanent
+sudo firewall-cmd --add-port=9598/tcp --permanent
+sudo firewall-cmd --reload
+```
+
+> 云平台安全组配置: https://prerender.websitetool.cn/installation
+
 ## 概述
 
 PrerenderShield 是一款集防火墙安全防护与渲染预热功能于一体的Web应用中间件，旨在解决前后端分离架构下的SEO优化和安全防护痛点。

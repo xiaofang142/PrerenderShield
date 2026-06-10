@@ -1,5 +1,33 @@
 # Prerender Shield
 
+<p align="center">
+  <a href="https://prerender.websitetool.cn"><strong>📖 在线文档</strong></a> ·
+  <a href="https://gitee.com/xhpmayun/prerender-shield"><strong>Gitee</strong></a> ·
+  <a href="https://github.com/xiaofang142/PrerenderShield"><strong>GitHub</strong></a>
+</p>
+
+<p align="center">
+  <a href="https://prerender.websitetool.cn">
+    <img src="https://img.shields.io/badge/官网-prerender.websitetool.cn-brightgreen" alt="官网">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
+  </a>
+  <a href="https://gitee.com/xhpmayun/prerender-shield">
+    <img src="https://gitee.com/xhpmayun/prerender-shield/badge/star.svg" alt="Gitee Stars">
+  </a>
+</p>
+
+## 🚀 一键安装
+
+```bash
+curl -fsSL https://prerender.websitetool.cn/install.sh | bash
+```
+
+> 安装完成后访问 `http://服务器IP:9597` 进入管理控制台。默认账号: `admin` / `123456`
+
+---
+
 ## 0. 前后端分离下的 SEO 痛点
 
 在现代化的 Web 开发中，前后端分离架构（SPA - 单页应用）已成为主流，React、Vue、Angular 等框架带来了极佳的开发体验。然而，这种架构也带来了显著的 SEO 挑战：
@@ -178,6 +206,28 @@ curl -fsSL https://prerender.websitetool.cn/install.sh | bash
 > 安装完成后访问 http://localhost:9597 进入管理控制台（默认账号: admin / 123456）。
 
 ## 4. 安装与部署
+
+### 🚀 **一键安装（推荐）**
+
+```bash
+curl -fsSL https://prerender.websitetool.cn/install.sh | bash
+```
+
+> 脚本自动检测环境，支持 Docker / 源码 / 二进制三种方式。详情请访问 [在线文档](https://prerender.websitetool.cn/installation)。
+
+### ⚙️ **防火墙 / 安全组配置**
+
+安装后需确保以下端口可访问：
+
+| 端口 | 服务 | 必需 |
+|------|------|------|
+| 9597 | 管理控制台 (Web) | ✅ 必需 |
+| 9598 | API 服务 | ✅ 必需 |
+| 6379 | Redis | 内网即可 |
+
+各云平台安全组配置指南请查看 [安装文档](https://prerender.websitetool.cn/installation)。
+
+---
 
 ### 📋 **系统要求**
 
