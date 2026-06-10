@@ -34,13 +34,13 @@ func NewFirewallController(wafRepo WafRepository) *FirewallController {
 func (c *FirewallController) GetWafConfig(ctx *gin.Context) {
 	siteID := ctx.Param("id")
 	if siteID == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Site ID is required"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Site ID is required"})
 		return
 	}
 
 	config, err := c.wafRepo.GetWafConfigBySiteID(siteID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get WAF config"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to get WAF config"})
 		return
 	}
 
@@ -49,14 +49,16 @@ func (c *FirewallController) GetWafConfig(ctx *gin.Context) {
 		// Return a default structure if not found, or create one on the fly.
 		// For now return empty object
 		ctx.JSON(http.StatusOK, gin.H{
-			"success": true,
+			"code":    200,
+			"message": "success",
 			"data":    gin.H{},
 		})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"success": true,
+		"code":    200,
+		"message": "success",
 		"data":    config,
 	})
 }
@@ -65,7 +67,7 @@ func (c *FirewallController) GetWafConfig(ctx *gin.Context) {
 func (c *FirewallController) UpdateWafConfig(ctx *gin.Context) {
 	siteID := ctx.Param("id")
 	if siteID == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Site ID is required"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Site ID is required"})
 		return
 	}
 
@@ -80,7 +82,7 @@ func (c *FirewallController) UpdateWafConfig(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
 
@@ -137,7 +139,7 @@ func (c *FirewallController) UpdateWafConfig(ctx *gin.Context) {
 	config.IPBlacklist = blacklistIPs
 
 	if err := c.wafRepo.UpdateWafConfig(config); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update WAF config"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to update WAF config"})
 		return
 	}
 
@@ -145,7 +147,8 @@ func (c *FirewallController) UpdateWafConfig(ctx *gin.Context) {
 	updatedConfig, _ := c.wafRepo.GetWafConfigBySiteID(siteID)
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"success": true,
+		"code":    200,
+		"message": "success",
 		"data":    updatedConfig,
 	})
 }
@@ -168,12 +171,13 @@ func (c *FirewallController) GetAccessLogs(ctx *gin.Context) {
 
 	logs, total, err := c.wafRepo.GetAccessLogs(siteID, page, limit)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get logs"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to get logs"})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"success": true,
+		"code":    200,
+		"message": "success",
 		"data": gin.H{
 			"logs":  logs,
 			"total": total,
@@ -201,12 +205,13 @@ func (c *FirewallController) GetAttackLogs(ctx *gin.Context) {
 
 	logs, total, err := c.wafRepo.GetAttackLogs(siteID, page, limit)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get attack logs"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to get attack logs"})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"success": true,
+		"code":    200,
+		"message": "success",
 		"data": gin.H{
 			"logs":  logs,
 			"total": total,
@@ -224,21 +229,21 @@ func (c *FirewallController) AddToWhitelist(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
 
 	if req.SiteID == "" || req.IP == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Site ID and IP are required"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Site ID and IP are required"})
 		return
 	}
 
 	if err := c.wafRepo.AddIPToWhitelist(req.SiteID, req.IP); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add to whitelist"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to add to whitelist"})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"success": true})
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success"})
 }
 
 // AddToBlacklist adds an IP to the blacklist
@@ -249,19 +254,19 @@ func (c *FirewallController) AddToBlacklist(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
 
 	if req.SiteID == "" || req.IP == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Site ID and IP are required"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Site ID and IP are required"})
 		return
 	}
 
 	if err := c.wafRepo.AddIPToBlacklist(req.SiteID, req.IP); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add to blacklist"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to add to blacklist"})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"success": true})
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success"})
 }

@@ -60,7 +60,7 @@ func NewSSLController(acmeClient acmeClientInterface, autoRenewer autoRenewerInt
 // Body: { "domains": ["example.com", "www.example.com"] }
 func (c *SSLController) RequestCert(ctx *gin.Context) {
 	if c.acmeClient == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "SSL service not initialized"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "SSL service not initialized"})
 		return
 	}
 
@@ -69,13 +69,13 @@ func (c *SSLController) RequestCert(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
 
 	cert, err := c.acmeClient.RequestCertificate(req.Domains)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
 
@@ -85,9 +85,12 @@ func (c *SSLController) RequestCert(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
+		"code":    200,
 		"message": "Certificate requested successfully",
-		"domain":  cert.Domain,
-		"expires": expires,
+		"data": gin.H{
+			"domain":  cert.Domain,
+			"expires": expires,
+		},
 	})
 }
 
@@ -95,7 +98,7 @@ func (c *SSLController) RequestCert(ctx *gin.Context) {
 // POST /api/v1/ssl/certificates/:domain/renew
 func (c *SSLController) RenewCert(ctx *gin.Context) {
 	if c.acmeClient == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "SSL service not initialized"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 503, "message": "SSL service not initialized"})
 		return
 	}
 
@@ -103,7 +106,7 @@ func (c *SSLController) RenewCert(ctx *gin.Context) {
 
 	cert, err := c.acmeClient.RenewCertificate(domain)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
 
@@ -113,9 +116,12 @@ func (c *SSLController) RenewCert(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
+		"code":    200,
 		"message": "Certificate renewed successfully",
-		"domain":  cert.Domain,
-		"expires": expires,
+		"data": gin.H{
+			"domain":  cert.Domain,
+			"expires": expires,
+		},
 	})
 }
 
@@ -123,7 +129,7 @@ func (c *SSLController) RenewCert(ctx *gin.Context) {
 // GET /api/v1/ssl/certificates/:domain
 func (c *SSLController) GetCertStatus(ctx *gin.Context) {
 	if c.acmeClient == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "SSL service not initialized"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 503, "message": "SSL service not initialized"})
 		return
 	}
 
@@ -131,13 +137,17 @@ func (c *SSLController) GetCertStatus(ctx *gin.Context) {
 
 	info, err := c.acmeClient.GetCertificateInfo(domain)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusNotFound, gin.H{"code": 404, "message": err.Error()})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"domain": domain,
-		"status": info,
+		"code":    200,
+		"message": "success",
+		"data": gin.H{
+			"domain": domain,
+			"status": info,
+		},
 	})
 }
 
@@ -145,19 +155,23 @@ func (c *SSLController) GetCertStatus(ctx *gin.Context) {
 // GET /api/v1/ssl/certificates
 func (c *SSLController) ListCerts(ctx *gin.Context) {
 	if c.acmeClient == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "SSL service not initialized"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 503, "message": "SSL service not initialized"})
 		return
 	}
 
 	certs, err := c.acmeClient.ListCertificates()
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"certificates": certs,
-		"total":        len(certs),
+		"code":    200,
+		"message": "success",
+		"data": gin.H{
+			"certificates": certs,
+			"total":        len(certs),
+		},
 	})
 }
 
@@ -165,7 +179,7 @@ func (c *SSLController) ListCerts(ctx *gin.Context) {
 // DELETE /api/v1/ssl/certificates/:domain
 func (c *SSLController) DeleteCert(ctx *gin.Context) {
 	if c.acmeClient == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "SSL service not initialized"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 503, "message": "SSL service not initialized"})
 		return
 	}
 
@@ -173,13 +187,16 @@ func (c *SSLController) DeleteCert(ctx *gin.Context) {
 
 	err := c.acmeClient.DeleteCertificate(domain)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
+		"code":    200,
 		"message": "Certificate deleted successfully",
-		"domain":  domain,
+		"data": gin.H{
+			"domain": domain,
+		},
 	})
 }
 
@@ -187,7 +204,7 @@ func (c *SSLController) DeleteCert(ctx *gin.Context) {
 // GET /api/v1/ssl/certificates/expiring?days=30
 func (c *SSLController) GetExpiringCerts(ctx *gin.Context) {
 	if c.acmeClient == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "SSL service not initialized"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 503, "message": "SSL service not initialized"})
 		return
 	}
 
@@ -199,14 +216,18 @@ func (c *SSLController) GetExpiringCerts(ctx *gin.Context) {
 
 	certs, err := c.acmeClient.GetExpiringCertificates(daysInt)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"expiring_in_days": daysInt,
-		"certificates":     certs,
-		"total":            len(certs),
+		"code":    200,
+		"message": "success",
+		"data": gin.H{
+			"expiring_in_days": daysInt,
+			"certificates":     certs,
+			"total":            len(certs),
+		},
 	})
 }
 
@@ -215,7 +236,7 @@ func (c *SSLController) GetExpiringCerts(ctx *gin.Context) {
 // Body: { "base_domain": "example.com", "subdomains": ["www", "api"] }
 func (c *SSLController) RequestWildcardCert(ctx *gin.Context) {
 	if c.acmeClient == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "SSL service not initialized"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 503, "message": "SSL service not initialized"})
 		return
 	}
 
@@ -225,13 +246,13 @@ func (c *SSLController) RequestWildcardCert(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
 
 	cert, err := c.acmeClient.RequestWildcardCertificate(req.BaseDomain, req.Subdomains)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
 
@@ -241,9 +262,12 @@ func (c *SSLController) RequestWildcardCert(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
+		"code":    200,
 		"message": "Wildcard certificate requested successfully",
-		"domain":  cert.Domain,
-		"expires": expires,
+		"data": gin.H{
+			"domain":  cert.Domain,
+			"expires": expires,
+		},
 	})
 }
 
@@ -251,7 +275,7 @@ func (c *SSLController) RequestWildcardCert(ctx *gin.Context) {
 // GET /api/v1/ssl/certificates/:domain/renewal-history
 func (c *SSLController) GetRenewalHistory(ctx *gin.Context) {
 	if c.autoRenewer == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "SSL service not initialized"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 503, "message": "SSL service not initialized"})
 		return
 	}
 
@@ -259,12 +283,16 @@ func (c *SSLController) GetRenewalHistory(ctx *gin.Context) {
 
 	history, err := c.autoRenewer.GetRenewalHistory(domain)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusNotFound, gin.H{"code": 404, "message": err.Error()})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"domain":  domain,
-		"history": history,
+		"code":    200,
+		"message": "success",
+		"data": gin.H{
+			"domain":  domain,
+			"history": history,
+		},
 	})
 }

@@ -1,12 +1,12 @@
 package detectors
 
 import (
-	"fmt"
 	"net/http"
 	"regexp"
 	"sync"
 
 	"prerender-shield/internal/firewall/types"
+	"prerender-shield/internal/logging"
 )
 
 // XSSDetector 跨站脚本攻击检测器
@@ -52,7 +52,7 @@ func (d *XSSDetector) compileRules() {
 		}
 		re, err := regexp.Compile(`(?i)` + rule.Pattern)
 		if err != nil {
-			fmt.Printf("Warning: failed to compile XSS rule %s: %v\n", rule.ID, err)
+			logging.DefaultLogger.Info("Warning: failed to compile XSS rule %s: %v\n", rule.ID, err)
 			continue
 		}
 		d.compiledRules = append(d.compiledRules, compiledRule{

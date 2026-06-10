@@ -125,26 +125,25 @@ const Prerender: React.FC = () => {
     try {
       setRenderLoading(true)
       const startTime = Date.now()
-      const res = await prerenderApi.render({ site: selectedSite, url: renderUrl })
+      const res = await prerenderApi.triggerPreheat(selectedSite)
       const duration = Date.now() - startTime
       
       if (res.code === 200) {
-        message.success('渲染成功')
-        // 添加到渲染历史
+        message.success('渲染任务已提交')
         setRenderHistory(prev => [
           {
             site: selectedSite,
             url: renderUrl,
-            status: res.data.success ? 'success' : 'error',
+            status: 'success',
             duration,
             time: new Date().toLocaleString(),
           },
-          ...prev.slice(0, 9), // 只保留最近10条
+          ...prev.slice(0, 9),
         ])
         setRenderModalVisible(false)
         setRenderUrl('')
       } else {
-        message.error('渲染失败')
+        message.error('渲染提交失败')
       }
     } catch (error) {
       console.error('Failed to render:', error)
@@ -163,7 +162,7 @@ const Prerender: React.FC = () => {
 
     try {
       setPreheatLoading(true)
-      const res = await prerenderApi.preheat({ site: selectedSite })
+      const res = await prerenderApi.triggerPreheat(selectedSite)
       if (res.code === 200) {
         message.success('缓存预热已触发')
         setPreheatModalVisible(false)

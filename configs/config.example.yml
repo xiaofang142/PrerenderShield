@@ -21,6 +21,12 @@ cache:
   # Redis 连接配置，支持环境变量替换
   redis_url: "localhost:6379"
   memory_size: 1000
+  # Redis 连接池配置
+  redis_pool:
+    max_active: 20
+    max_idle: 10
+    idle_timeout: 5m
+    pool_timeout: 30s
 
 # 站点配置
 sites:

@@ -14,15 +14,11 @@ const BaseChart: React.FC<BaseChartProps> = ({ option, style, onChartReady }) =>
   useEffect(() => {
     if (!chartRef.current) return
 
-    // 初始化图表
     const chart = echarts.init(chartRef.current)
     chartInstanceRef.current = chart
 
-    // 设置图表选项，添加错误处理
     try {
-      chart.setOption(option)
-
-      // 注册图表就绪回调
+      chart.setOption(option, true)
       if (onChartReady) {
         onChartReady(chart)
       }
@@ -30,30 +26,21 @@ const BaseChart: React.FC<BaseChartProps> = ({ option, style, onChartReady }) =>
       console.error('Failed to initialize chart:', error)
     }
 
-    // 响应窗口大小变化
-    const handleResize = () => {
-      chart.resize()
-    }
+    const handleResize = () => { chart.resize() }
     window.addEventListener('resize', handleResize)
 
-    // 清理函数
+    const observer = new ResizeObserver(() => chart.resize())
+    if (chartRef.current) {
+      observer.observe(chartRef.current)
+    }
+
     return () => {
       window.removeEventListener('resize', handleResize)
+      observer.disconnect()
       chart.dispose()
       chartInstanceRef.current = null
     }
   }, [option, onChartReady])
-
-  // 更新图表选项，添加错误处理
-  useEffect(() => {
-    if (chartInstanceRef.current) {
-      try {
-        chartInstanceRef.current.setOption(option, true)
-      } catch (error) {
-        console.error('Failed to update chart option:', error)
-      }
-    }
-  }, [option])
 
   return <div ref={chartRef} style={{ width: '100%', height: '100%', ...style }} />;
 }

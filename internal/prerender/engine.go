@@ -1,6 +1,8 @@
 package prerender
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"time"
@@ -110,37 +112,92 @@ func NewEngine(redisClient RedisClient, cacheManager cache.Manager, maxConcurren
 	}
 }
 
-// Render 渲染页面
+// RetryConfig 重试配置
+type RetryConfig struct {
+	MaxRetries  int
+	BaseDelay   time.Duration
+	MaxDelay    time.Duration
+}
+
+// DefaultRetryConfig 默认重试配置
+func DefaultRetryConfig() RetryConfig {
+	return RetryConfig{
+		MaxRetries: 3,
+		BaseDelay:  500 * time.Millisecond,
+		MaxDelay:   5 * time.Second,
+	}
+}
+
+// Render 渲染页面（带指数退避重试）
 func (e *engine) Render(url string, timeout time.Duration) ([]byte, error) {
-	// 从池获取实例
+	return e.renderWithRetry(url, timeout, DefaultRetryConfig())
+}
+
+// renderWithRetry 带指数退避重试的渲染
+func (e *engine) renderWithRetry(url string, timeout time.Duration, retry RetryConfig) ([]byte, error) {
+	var lastErr error
+
+	for attempt := 0; attempt <= retry.MaxRetries; attempt++ {
+		html, err := e.renderOnce(url, timeout)
+		if err == nil {
+			return html, nil
+		}
+
+		lastErr = err
+		if attempt < retry.MaxRetries {
+			delay := retry.BaseDelay * (1 << attempt)
+			if delay > retry.MaxDelay {
+				delay = retry.MaxDelay
+			}
+			time.Sleep(delay)
+		}
+	}
+
+	return nil, fmt.Errorf("render failed after %d retries: %w", retry.MaxRetries, lastErr)
+}
+
+// renderOnce 单次渲染
+func (e *engine) renderOnce(url string, timeout time.Duration) ([]byte, error) {
 	instance, err := e.browserPool.AcquireWithTimeout(timeout)
 	if err != nil {
-		return nil, fmt.Errorf("failed to acquire browser instance: %w", err)
+		return nil, fmt.Errorf("acquire browser: %w", err)
 	}
 	defer e.browserPool.Release(instance)
 
-	// 创建带超时的上下文
 	ctx, cancel := context.WithTimeout(instance.ChromeCtx, timeout)
 	defer cancel()
 
-	// 导航到页面
 	var html string
 	err = chromedp.Run(ctx,
 		chromedp.Navigate(url),
-		chromedp.WaitVisible("body"),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			// 等待页面加载完成
-			time.Sleep(2 * time.Second)
-			return nil
-		}),
+		chromedp.WaitReady("body"),
 		chromedp.OuterHTML("html", &html),
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to render page: %w", err)
+		return nil, fmt.Errorf("render page: %w", err)
 	}
 
 	return []byte(html), nil
+}
+
+// RenderWithGzip 渲染并返回gzip压缩结果
+func (e *engine) RenderWithGzip(url string, timeout time.Duration) ([]byte, error) {
+	html, err := e.Render(url, timeout)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	writer := gzip.NewWriter(&buf)
+	if _, err := writer.Write(html); err != nil {
+		return nil, fmt.Errorf("gzip write: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("gzip close: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }
 
 // CreatePreheatTask 创建预热任务

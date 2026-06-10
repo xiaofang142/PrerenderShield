@@ -66,13 +66,7 @@ const Overview: React.FC = () => {
     }
   })
   
-  const [accessStats] = useState({
-    pv: 0,
-    uv: 0,
-    ip: 0,
-    countryData: [],
-    mapData: []
-  })
+  const accessStats = { pv: 0, uv: 0, ip: 0, countryData: [], mapData: [] }
   const [loading, setLoading] = useState(true)
 
   const [isMapLoaded, setIsMapLoaded] = useState(false)

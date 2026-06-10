@@ -2,6 +2,7 @@ package routes
 
 import (
 	"prerender-shield/internal/api/controllers"
+	"prerender-shield/internal/audit"
 	"prerender-shield/internal/auth"
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/logging"
@@ -44,6 +45,7 @@ func SetupControllers(
 	crawlerLogMgr *logging.CrawlerLogManager,
 	visitLogMgr *logging.VisitLogManager,
 	wafRepo *repository.WafRepository,
+	auditLogger *audit.Logger,
 	cfg *config.Config,
 ) *Controllers {
 	// 创建推送管理器
@@ -93,7 +95,7 @@ func SetupControllers(
 
 	// 创建控制器实例
 	return &Controllers{
-		AuthController:       controllers.NewAuthController(userManager, jwtManager),
+		AuthController:       controllers.NewAuthController(userManager, jwtManager, auditLogger),
 		OverviewController:   controllers.NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, wafRepo),
 		MonitoringController: controllers.NewMonitoringController(monitor),
 		FirewallController:   controllers.NewFirewallController(wafRepo),

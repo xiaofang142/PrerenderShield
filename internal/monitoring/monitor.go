@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,6 +19,7 @@ import (
 
 	"prerender-shield/internal/monitoring/alerting"
 	"prerender-shield/internal/redis"
+	"prerender-shield/internal/logging"
 )
 
 // Metrics 监控指标
@@ -83,7 +83,48 @@ var (
 			Buckets: prometheus.DefBuckets,
 		},
 	)
+
+	// 预聚合指标
+	cacheHitRate = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "prerender_cache_hit_rate",
+		Help: "Cache hit rate (0-1)",
+	})
+
+	wafBlockRate = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "prerender_waf_block_rate",
+		Help: "WAF block rate (0-1)",
+	})
+
+	renderSuccessRate = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "prerender_render_success_rate",
+		Help: "Render success rate (0-1)",
+	})
+
+	avgRenderTime = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "prerender_avg_render_time_seconds",
+		Help: "Average render time in seconds",
+	})
+
+	activeSitesGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "prerender_active_sites",
+		Help: "Number of active sites",
+	})
 )
+
+// CacheHitRateGauge 返回缓存命中率指标
+func CacheHitRateGauge() prometheus.Gauge { return cacheHitRate }
+
+// WAFBlockRateGauge 返回 WAF 拦截率指标
+func WAFBlockRateGauge() prometheus.Gauge { return wafBlockRate }
+
+// RenderSuccessRateGauge 返回渲染成功率指标
+func RenderSuccessRateGauge() prometheus.Gauge { return renderSuccessRate }
+
+// AvgRenderTimeGauge 返回平均渲染时间指标
+func AvgRenderTimeGauge() prometheus.Gauge { return avgRenderTime }
+
+// ActiveSitesGauge 返回活跃站点数指标
+func ActiveSitesGauge() prometheus.Gauge { return activeSitesGauge }
 
 // Monitor 监控管理器
 type Monitor struct {
@@ -304,10 +345,10 @@ func (m *Monitor) sendEmailNotification(alert *AlertStatus, status string) {
 	// 邮件发送逻辑
 	// 这里只是一个示例，实际实现需要使用SMTP客户端
 	emailConfig := m.config.Alerting.Notification.Email
-	fmt.Printf("Sending email notification: %s - %s\n", alert.Rule.Name, status)
-	fmt.Printf("To: %v\n", emailConfig.To)
-	fmt.Printf("Subject: [%s] %s - %s\n", alert.Rule.Severity, alert.Rule.Name, status)
-	fmt.Printf("Message: Metric %s is %s threshold %.2f (current value: %.2f)\n",
+	logging.DefaultLogger.Info("Sending email notification: %s - %s\n", alert.Rule.Name, status)
+	logging.DefaultLogger.Info("To: %v\n", emailConfig.To)
+	logging.DefaultLogger.Info("Subject: [%s] %s - %s\n", alert.Rule.Severity, alert.Rule.Name, status)
+	logging.DefaultLogger.Info("Message: Metric %s is %s threshold %.2f (current value: %.2f)\n",
 		alert.Rule.Metric, alert.Rule.Operator, alert.Rule.Threshold, alert.Value)
 }
 
@@ -316,9 +357,9 @@ func (m *Monitor) sendWebhookNotification(alert *AlertStatus, status string) {
 	// Webhook发送逻辑
 	// 这里只是一个示例，实际实现需要使用HTTP客户端
 	webhookConfig := m.config.Alerting.Notification.Webhook
-	fmt.Printf("Sending webhook notification: %s - %s\n", alert.Rule.Name, status)
-	fmt.Printf("URL: %s\n", webhookConfig.URL)
-	fmt.Printf("Payload: {\"rule\": \"%s\", \"status\": \"%s\", \"severity\": \"%s\", \"value\": %.2f, \"threshold\": %.2f}\n",
+	logging.DefaultLogger.Info("Sending webhook notification: %s - %s\n", alert.Rule.Name, status)
+	logging.DefaultLogger.Info("URL: %s\n", webhookConfig.URL)
+	logging.DefaultLogger.Info("Payload: {\"rule\": \"%s\", \"status\": \"%s\", \"severity\": \"%s\", \"value\": %.2f, \"threshold\": %.2f}\n",
 		alert.Rule.Name, status, alert.Rule.Severity, alert.Value, alert.Rule.Threshold)
 }
 
@@ -519,7 +560,7 @@ func (m *Monitor) CleanupExpiredMetrics() error {
 	}
 
 	if deletedCount > 0 {
-		log.Printf("Cleaned up %d expired metrics entries", deletedCount)
+		logging.DefaultLogger.Info("Cleaned up %d expired metrics entries", deletedCount)
 	}
 
 	return nil
@@ -541,6 +582,11 @@ func (m *Monitor) Start() error {
 		cacheMisses,
 		activeBrowsers,
 		renderTime,
+		cacheHitRate,
+		wafBlockRate,
+		renderSuccessRate,
+		avgRenderTime,
+		activeSitesGauge,
 	)
 
 	// 启动Prometheus服务器
@@ -572,7 +618,7 @@ func (m *Monitor) Start() error {
 				case <-ticker.C:
 					err := m.SaveMetricsToRedis()
 					if err != nil {
-						fmt.Printf("Failed to save metrics to Redis: %v\n", err)
+						logging.DefaultLogger.Info("Failed to save metrics to Redis: %v\n", err)
 					}
 				case <-m.stopCh:
 					return

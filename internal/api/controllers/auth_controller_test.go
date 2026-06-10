@@ -23,7 +23,7 @@ func setupAuthController() (*AuthController, *gin.Engine) {
 		ExpireTime: 3600000000000, // 1 hour in nanoseconds
 	}, nil)
 
-	controller := NewAuthController(userManager, jwtManager)
+	controller := NewAuthController(userManager, jwtManager, nil)
 
 	router := gin.New()
 	router.POST("/auth/first-run", controller.CheckFirstRun)
@@ -164,7 +164,7 @@ func TestAuthController_Logout_WithToken(t *testing.T) {
 		ExpireTime: 3600000000000,
 	}, nil)
 
-	controller := NewAuthController(userManager, jwtManager)
+	controller := NewAuthController(userManager, jwtManager, nil)
 
 	router := gin.New()
 	router.POST("/auth/logout", controller.Logout)
@@ -186,7 +186,7 @@ func TestNewAuthController(t *testing.T) {
 		ExpireTime: 3600000000000,
 	}, nil)
 
-	controller := NewAuthController(userManager, jwtManager)
+	controller := NewAuthController(userManager, jwtManager, nil)
 
 	assert.NotNil(t, controller)
 	assert.NotNil(t, controller.userManager)

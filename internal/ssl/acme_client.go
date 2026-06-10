@@ -75,13 +75,14 @@ func NewACMEClient(config ACMEConfig) (*ACMEClient, error) {
 		directoryURL = lego.LEDirectoryProduction
 	}
 
-	// 创建 LEGO 客户端配置（先创建临时配置用于注册）
+	// 创建 LEGO 客户端配置（包含证书密钥类型）
 	legoConfig := &lego.Config{
 		CADirURL:  directoryURL,
 		UserAgent: "PrerenderShield/1.0",
 	}
+	legoConfig.Certificate.KeyType = certcrypto.RSA2048
 
-	// 创建客户端（用于注册）
+	// 创建 LEGO 客户端
 	client, err := lego.NewClient(legoConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create lego client: %w", err)
@@ -95,13 +96,6 @@ func NewACMEClient(config ACMEConfig) (*ACMEClient, error) {
 		return nil, fmt.Errorf("failed to register account: %w", err)
 	}
 	account.Registration = reg
-
-	// 重新创建客户端配置（使用已注册的账户）
-	legoConfig = &lego.Config{
-		CADirURL:  directoryURL,
-		UserAgent: "PrerenderShield/1.0",
-	}
-	legoConfig.Certificate.KeyType = certcrypto.RSA2048
 
 	// 设置 HTTP-01 挑战提供者
 	httpProvider := NewHTTPProvider(config.HTTPPort)

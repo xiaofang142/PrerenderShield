@@ -54,7 +54,7 @@ func TestFirewallController_GetWafConfig_NotFound(t *testing.T) {
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, true, response["success"])
+	assert.Equal(t, float64(200), response["code"])
 }
 
 func TestFirewallController_UpdateWafConfig_InvalidJSON(t *testing.T) {
@@ -92,7 +92,7 @@ func TestFirewallController_UpdateWafConfig_Success(t *testing.T) {
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, true, response["success"])
+	assert.Equal(t, float64(200), response["code"])
 }
 
 func TestFirewallController_GetAccessLogs(t *testing.T) {
@@ -107,7 +107,7 @@ func TestFirewallController_GetAccessLogs(t *testing.T) {
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, true, response["success"])
+	assert.Equal(t, float64(200), response["code"])
 }
 
 func TestFirewallController_GetAttackLogs(t *testing.T) {
@@ -122,7 +122,7 @@ func TestFirewallController_GetAttackLogs(t *testing.T) {
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, true, response["success"])
+	assert.Equal(t, float64(200), response["code"])
 }
 
 func TestFirewallController_AddToWhitelist_Success(t *testing.T) {
@@ -144,7 +144,7 @@ func TestFirewallController_AddToWhitelist_Success(t *testing.T) {
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, true, response["success"])
+	assert.Equal(t, float64(200), response["code"])
 }
 
 func TestFirewallController_AddToWhitelist_MissingFields(t *testing.T) {
@@ -183,7 +183,7 @@ func TestFirewallController_AddToBlacklist_Success(t *testing.T) {
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, true, response["success"])
+	assert.Equal(t, float64(200), response["code"])
 }
 
 func TestFirewallController_AddToBlacklist_MissingFields(t *testing.T) {

@@ -116,6 +116,11 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               label: <Link to="/firewall" style={{ color: '#333333' }}>{t('menu.firewall')}</Link>
             },
             {
+              key: '/prerender',
+              icon: <CodeOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/prerender" style={{ color: '#333333' }}>渲染预热</Link>
+            },
+            {
               key: '/prerender/preheat',
               icon: <CodeOutlined style={{ color: '#2f855a' }} />,
               label: <Link to="/prerender/preheat" style={{ color: '#333333' }}>{t('sites.prerenderConfig')}</Link>
@@ -135,6 +140,11 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               key: '/crawler',
               icon: <BugOutlined style={{ color: '#2f855a' }} />,
               label: <Link to="/crawler" style={{ color: '#333333' }}>{t('menu.crawler')}</Link>
+            },
+            {
+              key: '/logs',
+              icon: <FileTextOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/logs" style={{ color: '#333333' }}>日志管理</Link>
             },
             {
               key: '/system',

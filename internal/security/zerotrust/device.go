@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"prerender-shield/internal/logging"
 )
 
 // DeviceFingerprint 设备指纹
@@ -592,7 +593,7 @@ func (c *DeviceCache) cleanup() {
 	}
 
 	if deleted > 0 {
-		fmt.Printf("清理过期设备缓存：%d 条\n", deleted)
+		logging.DefaultLogger.Info("清理过期设备缓存：%d 条\n", deleted)
 	}
 }
 

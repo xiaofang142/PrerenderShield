@@ -288,13 +288,32 @@ type RouteRule struct {
 	Priority int    `yaml:"priority" json:"priority"`
 }
 
+// RedisPoolConfig Redis 连接池配置
+type RedisPoolConfig struct {
+	MaxActive   int           `yaml:"max_active" json:"max_active"`
+	MaxIdle     int           `yaml:"max_idle" json:"max_idle"`
+	IdleTimeout time.Duration `yaml:"idle_timeout" json:"idle_timeout"`
+	PoolTimeout time.Duration `yaml:"pool_timeout" json:"pool_timeout"`
+}
+
+// DefaultRedisPoolConfig 默认连接池配置
+func DefaultRedisPoolConfig() RedisPoolConfig {
+	return RedisPoolConfig{
+		MaxActive:   20,
+		MaxIdle:     10,
+		IdleTimeout: 5 * time.Minute,
+		PoolTimeout: 30 * time.Second,
+	}
+}
+
 // CacheConfig 缓存配置
 type CacheConfig struct {
-	Type          string `yaml:"type"`
-	RedisURL      string `yaml:"redis_url"`
-	RedisPassword string `yaml:"redis_password"`
-	RedisDB       int    `yaml:"redis_db"`
-	MemorySize    int    `yaml:"memory_size"`
+	Type          string          `yaml:"type"`
+	RedisURL      string          `yaml:"redis_url"`
+	RedisPassword string          `yaml:"redis_password"`
+	RedisDB       int             `yaml:"redis_db"`
+	MemorySize    int             `yaml:"memory_size"`
+	RedisPool     RedisPoolConfig `yaml:"redis_pool"`
 }
 
 // StorageConfig 存储配置

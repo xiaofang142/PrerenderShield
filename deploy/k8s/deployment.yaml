@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prerender-shield
+  labels:
+    app: prerender-shield
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prerender-shield
+  template:
+    metadata:
+      labels:
+        app: prerender-shield
+    spec:
+      containers:
+      - name: prerender-shield
+        image: prerender-shield:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9597
+          name: console
+        - containerPort: 9598
+          name: api
+        env:
+        - name: GIN_MODE
+          value: "release"
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: prerender-shield-config
+              key: redis_url
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: prerender-shield-secret
+              key: jwt_secret
+        volumeMounts:
+        - name: config
+          mountPath: /app/config.yml
+          subPath: config.yml
+        - name: data
+          mountPath: /app/data
+        - name: certs
+          mountPath: /app/certs
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2"
+      volumes:
+      - name: config
+        configMap:
+          name: prerender-shield-config
+      - name: data
+        emptyDir: {}
+      - name: certs
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prerender-shield
+  labels:
+    app: prerender-shield
+spec:
+  selector:
+    app: prerender-shield
+  ports:
+  - name: console
+    port: 9597
+    targetPort: 9597
+  - name: api
+    port: 9598
+    targetPort: 9598
+  type: ClusterIP

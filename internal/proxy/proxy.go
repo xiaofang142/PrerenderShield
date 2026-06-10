@@ -47,7 +47,7 @@ func NewProxy(domainResolver services.DomainResolver, redisClient *redis.Client)
 		redisClient:    redisClient,
 		backends:       make(map[string]*url.URL),
 		reverseProxies: make(map[string]*httputil.ReverseProxy),
-		transport:      transport,
+		transport: transport,
 	}
 
 	// 从Redis加载后端配置

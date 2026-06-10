@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/utils/redisutil"
+	"prerender-shield/internal/logging"
 )
 
 // Application 应用容器
@@ -86,7 +86,7 @@ func (a *Application) Run(ctx context.Context) error {
 
 // Shutdown 关闭应用
 func (a *Application) Shutdown(ctx context.Context) error {
-	log.Println("Shutting down application...")
+	logging.DefaultLogger.Info("Shutting down application...")
 
 	// 执行清理函数
 	a.mu.Lock()
@@ -106,11 +106,11 @@ func (a *Application) Shutdown(ctx context.Context) error {
 
 	for _, server := range servers {
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			log.Printf("Server shutdown error: %v", err)
+			logging.DefaultLogger.Info("Server shutdown error: %v", err)
 		}
 	}
 
-	log.Println("Application shutdown complete")
+	logging.DefaultLogger.Info("Application shutdown complete")
 	return nil
 }
 

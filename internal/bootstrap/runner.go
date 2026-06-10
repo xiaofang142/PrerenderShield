@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,6 +16,7 @@ import (
 	"prerender-shield/internal/di"
 	"prerender-shield/internal/firewall"
 	"prerender-shield/internal/redis"
+	"prerender-shield/internal/logging"
 )
 
 // AppRunner 应用运行器
@@ -117,7 +117,7 @@ func (r *AppRunner) startSite(site config.SiteConfig) error {
 	// 启动站点服务器
 	c.SiteServerMgr.StartSiteServer(site, r.config.Server.Address, r.config.Dirs.StaticDir, c.CrawlerLogMgr, siteHTTPHandler)
 
-	log.Printf("Site server started: %s (%s:%d)", site.Name, r.config.Server.Address, site.Port)
+	logging.DefaultLogger.Info("Site server started: %s (%s:%d)", site.Name, r.config.Server.Address, site.Port)
 	return nil
 }
 
@@ -139,6 +139,7 @@ func (r *AppRunner) startAPIServer(ctx context.Context) error {
 		c.CrawlerLogMgr,
 		c.VisitLogMgr,
 		c.WafRepo,
+		c.AuditLogger,
 		r.config,
 	)
 
@@ -151,9 +152,9 @@ func (r *AppRunner) startAPIServer(ctx context.Context) error {
 	}
 
 	go func() {
-		log.Printf("API server starting on %s", addr)
+		logging.DefaultLogger.Info("API server starting on %s", addr)
 		if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("API server error: %v", err)
+			logging.DefaultLogger.Fatal("API server error: %v", err)
 		}
 	}()
 
@@ -217,9 +218,9 @@ func (r *AppRunner) startConsoleServer(ctx context.Context) error {
 	}
 
 	go func() {
-		log.Printf("Admin console starting on %s", addr)
+		logging.DefaultLogger.Info("Admin console starting on %s", addr)
 		if err := adminServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Admin console error: %v", err)
+			logging.DefaultLogger.Fatal("Admin console error: %v", err)
 		}
 	}()
 

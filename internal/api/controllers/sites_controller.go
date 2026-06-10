@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -1004,10 +1003,10 @@ func (c *SitesController) DeleteSite(ctx *gin.Context) {
 			if _, err := os.Stat(staticDir); err == nil {
 				// 目录存在，删除它
 				if err := os.RemoveAll(staticDir); err != nil {
-					log.Printf("Failed to delete static files for site %s: %v", site.Name, err)
+					logging.DefaultLogger.Info("Failed to delete static files for site %s: %v", site.Name, err)
 					// 继续执行，不中断删除流程
 				} else {
-					log.Printf("Deleted static files for site %s", site.Name)
+					logging.DefaultLogger.Info("Deleted static files for site %s", site.Name)
 				}
 			}
 
@@ -1341,15 +1340,15 @@ func (c *SitesController) ExtractFile(ctx *gin.Context) {
 		})
 
 		if walkErr != nil {
-			log.Printf("Failed to walk extracted files: %v", walkErr)
+			logging.DefaultLogger.Info("Failed to walk extracted files: %v", walkErr)
 		} else {
 			// 将收集到的URL存储到Redis中
 			for _, url := range htmlFiles {
 				if err := c.redisClient.AddURL(site.ID, url); err != nil {
-					log.Printf("Failed to add URL to Redis: %v", err)
+					logging.DefaultLogger.Info("Failed to add URL to Redis: %v", err)
 					continue
 				}
-				log.Printf("Added URL to Redis: %s", url)
+				logging.DefaultLogger.Info("Added URL to Redis: %s", url)
 			}
 			// 更新站点统计信息
 			if len(htmlFiles) > 0 {
@@ -1358,7 +1357,7 @@ func (c *SitesController) ExtractFile(ctx *gin.Context) {
 					"url_count": len(htmlFiles),
 				}
 				if err := c.redisClient.SetSiteStats(site.ID, stats); err != nil {
-					log.Printf("Failed to update site stats: %v", err)
+					logging.DefaultLogger.Info("Failed to update site stats: %v", err)
 				}
 			}
 		}

@@ -3,6 +3,7 @@ package routes
 import (
 	"github.com/gin-gonic/gin"
 
+	"prerender-shield/internal/audit"
 	"prerender-shield/internal/auth"
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/logging"
@@ -31,6 +32,7 @@ type Router struct {
 	visitLogMgr      *logging.VisitLogManager
 	wafRepo          *repository.WafRepository
 	cfg              *config.Config
+	auditLogger      *audit.Logger
 }
 
 // NewRouter 创建API路由器实例
@@ -47,6 +49,7 @@ func NewRouter(
 	crawlerLogMgr *logging.CrawlerLogManager,
 	visitLogMgr *logging.VisitLogManager,
 	wafRepo *repository.WafRepository,
+	auditLogger *audit.Logger,
 	cfg *config.Config,
 ) *Router {
 	return &Router{
@@ -62,6 +65,7 @@ func NewRouter(
 		crawlerLogMgr:    crawlerLogMgr,
 		visitLogMgr:      visitLogMgr,
 		wafRepo:          wafRepo,
+		auditLogger:      auditLogger,
 		cfg:              cfg,
 	}
 }
@@ -92,6 +96,7 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 		r.crawlerLogMgr,
 		r.visitLogMgr,
 		r.wafRepo,
+		r.auditLogger,
 		r.cfg,
 	)
 

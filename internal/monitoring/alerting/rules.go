@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"prerender-shield/internal/logging"
 )
 
 // RuleEngine 告警规则引擎
@@ -170,7 +171,7 @@ func (e *RuleEngine) evaluateAll(getMetric MetricsFunc) {
 				if contains(rule.Handlers, handler.Name()) || len(rule.Handlers) == 0 {
 					go func(h AlertHandler) {
 						if err := h.Send(ctx, alert); err != nil {
-							fmt.Printf("发送告警失败 [%s]: %v\n", h.Name(), err)
+							logging.DefaultLogger.Info("发送告警失败 [%s]: %v\n", h.Name(), err)
 						}
 					}(handler)
 				}

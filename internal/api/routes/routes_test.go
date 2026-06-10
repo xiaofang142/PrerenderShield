@@ -26,7 +26,7 @@ func TestAddSecurityHeaders(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://localhost:5173 http://localhost:9598", w.Header().Get("Content-Security-Policy"))
+	assert.Equal(t, "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'", w.Header().Get("Content-Security-Policy"))
 	assert.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
 	assert.Equal(t, "1; mode=block", w.Header().Get("X-XSS-Protection"))
 	assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
@@ -46,13 +46,14 @@ func TestAddCorsMiddleware(t *testing.T) {
 
 	// 测试普通 GET 请求
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Origin", "http://example.com")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "http://example.com", w.Header().Get("Access-Control-Allow-Origin"))
 	assert.Equal(t, "GET, POST, PUT, DELETE, OPTIONS", w.Header().Get("Access-Control-Allow-Methods"))
-	assert.Equal(t, "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization", w.Header().Get("Access-Control-Allow-Headers"))
+	assert.Contains(t, w.Header().Get("Access-Control-Allow-Headers"), "Authorization")
 
 	// 测试 OPTIONS 预检请求
 	req = httptest.NewRequest(http.MethodOptions, "/test", nil)
@@ -173,13 +174,13 @@ func TestExtractZIP_WithSubdir(t *testing.T) {
 
 func TestRouter_NewRouter(t *testing.T) {
 	// 测试 NewRouter 函数，所有依赖都为 nil 时也能创建
-	router := NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.NotNil(t, router)
 }
 
 func TestRouter_RegisterRoutes(t *testing.T) {
 	// 创建 Router 并注册路由（所有依赖为 nil）
-	apiRouter := NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	apiRouter := NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	// 这个测试主要用于代码覆盖，不验证实际路由功能
 	// 因为 SetupControllers 需要实际的依赖

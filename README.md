@@ -579,7 +579,21 @@ npm run dev
 
 **Prerender Shield** - 让前后端分离网站既安全又 SEO 友好！
 
-**最后更新**：2026年1月8日  
-**版本**：v1.0.1  
+**最后更新**：2026年6月10日  
+**版本**：v3.0.0  
 **许可证**：MIT License  
 **项目状态**：生产就绪，欢迎试用和贡献
+
+---
+
+### 📚 文档导航
+
+| 文档 | 说明 |
+|------|------|
+| [架构清单](docs/architecture-inventory.md) | 完整模块架构、依赖关系、分层全景 |
+| [功能清单](docs/feature-inventory.md) | 64项功能实现状态、代码位置、覆盖 |
+| [业务流](docs/business-flow.md) | 六大核心业务流程、配置流、权限模型 |
+| [数据流](docs/data-flow.md) | 请求管道、缓存策略、Redis-only存储 |
+| [环境变量](docs/ENV_VARS.md) | 11个环境变量完整文档 |
+| [改进分析](docs/IMPROVEMENT_ANALYSIS_2026.md) | 17项改进建议+实施路线图 |
+| [CHANGELOG](CHANGELOG.md) | 版本历史与变更记录 |

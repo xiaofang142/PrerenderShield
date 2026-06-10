@@ -12,6 +12,7 @@ import (
 	"prerender-shield/internal/prerender"
 	"prerender-shield/internal/prerender/push"
 	"prerender-shield/internal/redis"
+	"prerender-shield/internal/logging"
 )
 
 // Scheduler 定时任务调度器
@@ -54,7 +55,7 @@ func (s *Scheduler) Start() {
 	s.wg.Add(1)
 	go s.monitorSites()
 
-	fmt.Println("Scheduler started")
+	logging.DefaultLogger.Info("Scheduler started")
 }
 
 // Stop 停止定时任务调度器
@@ -68,7 +69,7 @@ func (s *Scheduler) Stop() {
 	// 等待监控协程结束
 	s.wg.Wait()
 
-	fmt.Println("Scheduler stopped")
+	logging.DefaultLogger.Info("Scheduler stopped")
 }
 
 // monitorSites 监控站点配置变化，动态调整定时任务
@@ -144,9 +145,9 @@ func (s *Scheduler) createTask(siteName string, config config.PrerenderConfig) {
 		// 添加到cron调度器
 		_, err := s.cron.AddFunc(config.Preheat.Schedule, preheatTaskFunc)
 		if err != nil {
-			fmt.Printf("Failed to add preheat cron task for site %s: %v\n", siteName, err)
+			logging.DefaultLogger.Info("Failed to add preheat cron task for site %s: %v\n", siteName, err)
 		} else {
-			fmt.Printf("Created preheat cron task for site %s with schedule: %s\n", siteName, config.Preheat.Schedule)
+			logging.DefaultLogger.Info("Created preheat cron task for site %s with schedule: %s\n", siteName, config.Preheat.Schedule)
 		}
 	}
 
@@ -163,9 +164,9 @@ func (s *Scheduler) createTask(siteName string, config config.PrerenderConfig) {
 		// 添加到cron调度器
 		_, err := s.cron.AddFunc(cronExpr, pushTaskFunc)
 		if err != nil {
-			fmt.Printf("Failed to add push cron task for site %s: %v\n", siteName, err)
+			logging.DefaultLogger.Info("Failed to add push cron task for site %s: %v\n", siteName, err)
 		} else {
-			fmt.Printf("Created push cron task for site %s with schedule: %s\n", siteName, cronExpr)
+			logging.DefaultLogger.Info("Created push cron task for site %s with schedule: %s\n", siteName, cronExpr)
 		}
 	}
 }
@@ -196,52 +197,52 @@ func (s *Scheduler) removeTask(siteName string) {
 	delete(s.tasks, siteName)
 	s.tasksMutex.Unlock()
 
-	fmt.Printf("Removed cron task for site %s\n", siteName)
+	logging.DefaultLogger.Info("Removed cron task for site %s\n", siteName)
 }
 
 // executePreheat 执行站点的预热任务
 func (s *Scheduler) executePreheat(siteName string) {
-	fmt.Printf("Executing preheat for site %s at %s\n", siteName, time.Now().Format("2006-01-02 15:04:05"))
+	logging.DefaultLogger.Info("Executing preheat for site %s at %s\n", siteName, time.Now().Format("2006-01-02 15:04:05"))
 
 	// 获取站点的引擎实例
 	engine, exists := s.engineManager.GetEngine(siteName)
 	if !exists {
-		fmt.Printf("Engine not found for site %s\n", siteName)
+		logging.DefaultLogger.Info("Engine not found for site %s\n", siteName)
 		return
 	}
 
 	// 从Redis获取站点的URL列表
 	urls, err := s.redisClient.GetURLs(siteName)
 	if err != nil || len(urls) == 0 {
-		fmt.Printf("Failed to get URLs for site %s: %v\n", siteName, err)
+		logging.DefaultLogger.Info("Failed to get URLs for site %s: %v\n", siteName, err)
 		return
 	}
 
 	// 调用引擎的创建预热任务方法
 	taskID, err := engine.CreatePreheatTask(siteName, urls)
 	if err != nil {
-		fmt.Printf("Failed to trigger preheat for site %s: %v\n", siteName, err)
+		logging.DefaultLogger.Info("Failed to trigger preheat for site %s: %v\n", siteName, err)
 		return
 	}
 
 	// 存储当前预热任务ID
 	s.redisClient.Set(fmt.Sprintf("site:%s:preheat:current_task", siteName), taskID, 24*time.Hour)
 
-	fmt.Printf("Preheat triggered for site %s with task ID: %s\n", siteName, taskID)
+	logging.DefaultLogger.Info("Preheat triggered for site %s with task ID: %s\n", siteName, taskID)
 }
 
 // executePush 执行站点的推送任务
 func (s *Scheduler) executePush(siteName string) {
-	fmt.Printf("Executing push for site %s at %s\n", siteName, time.Now().Format("2006-01-02 15:04:05"))
+	logging.DefaultLogger.Info("Executing push for site %s at %s\n", siteName, time.Now().Format("2006-01-02 15:04:05"))
 
 	// 调用推送管理器的TriggerPush方法
 	_, err := s.pushManager.TriggerPush(siteName)
 	if err != nil {
-		fmt.Printf("Failed to trigger push for site %s: %v\n", siteName, err)
+		logging.DefaultLogger.Info("Failed to trigger push for site %s: %v\n", siteName, err)
 		return
 	}
 
-	fmt.Printf("Push completed for site %s\n", siteName)
+	logging.DefaultLogger.Info("Push completed for site %s\n", siteName)
 }
 
 // AddManualTask 添加手动触发的预热任务

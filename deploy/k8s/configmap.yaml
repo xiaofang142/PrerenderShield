@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prerender-shield-config
+data:
+  redis_url: "redis-service:6379"
+  config.yml: |
+    server:
+      address: "0.0.0.0"
+      api_port: 9598
+      console_port: 9597
+    cache:
+      type: "redis"
+      redis_url: "redis-service:6379"
+    dirs:
+      data_dir: /app/data
+      certs_dir: /app/certs
+      admin_static_dir: /app/web
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: prerender-shield-secret
+type: Opaque
+stringData:
+  jwt_secret: "change-me-in-production"

@@ -54,7 +54,10 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	endTime := time.Now()
 	startTime := endTime.Add(-24 * time.Hour)
 
-	totalRequests := int64(stats["totalRequests"].(float64))
+	totalRequests := int64(0)
+	if v, ok := stats["totalRequests"].(float64); ok {
+		totalRequests = int64(v)
+	}
 
 	// 如果 WAF stats 可用，优先使用 DB 中的数据
 	if c.wafRepo != nil {
@@ -126,7 +129,9 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 		}
 
 		if countryName != "" {
-			countryMap[countryName] += item["count"].(int64)
+			if count, ok := item["count"].(int64); ok {
+				countryMap[countryName] += count
+			}
 		}
 	}
 
@@ -144,8 +149,18 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 			"totalRequests":    totalRequests,
 			"crawlerRequests":  crawlerTotal,
 			"blockedRequests":  blockedTotal,
-			"cacheHitRate":     float64(int(stats["cacheHitRate"].(float64)*100)) / 100, // 保留两位小数
-			"activeBrowsers":   int(stats["activeBrowsers"].(float64)),
+			"cacheHitRate": func() float64 {
+			if v, ok := stats["cacheHitRate"].(float64); ok {
+				return float64(int(v*100)) / 100
+			}
+			return 0
+		}(),
+			"activeBrowsers": func() int {
+				if v, ok := stats["activeBrowsers"].(float64); ok {
+					return int(v)
+				}
+				return 0
+			}(),
 			"activeSites":      activeSites,
 			"sslCertificates":  sslCertificates,
 			"firewallEnabled":  firewallEnabled,

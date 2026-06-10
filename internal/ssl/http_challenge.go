@@ -3,9 +3,10 @@ package ssl
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
+
+	"prerender-shield/internal/logging"
 )
 
 // HTTPProvider HTTP-01 挑战提供者
@@ -75,9 +76,9 @@ func (h *HTTPProvider) handleChallenge(w http.ResponseWriter, r *http.Request) {
 // Start 启动挑战服务器
 func (h *HTTPProvider) Start() error {
 	go func() {
-		log.Printf("Starting HTTP-01 challenge server on port %d", h.port)
+		logging.DefaultLogger.Info("Starting HTTP-01 challenge server on port %d", h.port)
 		if err := h.server.ListenAndServe(); err != http.ErrServerClosed {
-			log.Printf("HTTP challenge server error: %v", err)
+			logging.DefaultLogger.Warn("HTTP challenge server error: %v", err)
 		}
 	}()
 	return nil

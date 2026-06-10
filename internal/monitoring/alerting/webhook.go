@@ -291,34 +291,17 @@ type EmailHandler struct {
 
 // EmailConfig 邮件配置
 type EmailConfig struct {
-	SMTPHost string   `json:"smtp_host"`
-	SMTPPort int      `json:"smtp_port"`
-	Username string   `json:"username"`
-	Password string   `json:"password"`
-	From     string   `json:"from"`
-	To       []string `json:"to"`
-	UseTLS   bool     `json:"use_tls"`
+	Enabled  bool     `yaml:"enabled" json:"enabled"`
+	SMTPHost string   `yaml:"smtp_host" json:"smtp_host"`
+	SMTPPort int      `yaml:"smtp_port" json:"smtp_port"`
+	Username string   `yaml:"username" json:"username"`
+	Password string   `yaml:"password" json:"password"`
+	From     string   `yaml:"from" json:"from"`
+	To       []string `yaml:"to" json:"to"`
+	UseTLS   bool     `yaml:"use_tls" json:"use_tls"`
 }
 
 // NewEmailHandler 创建邮件处理器
-func NewEmailHandler(config *EmailConfig) *EmailHandler {
-	return &EmailHandler{config: config}
-}
-
-// Name 返回处理器名称
-func (h *EmailHandler) Name() string {
-	return "email"
-}
-
-// Send 发送邮件（简化实现，实际应使用 SMTP 库）
-func (h *EmailHandler) Send(ctx context.Context, alert *Alert) error {
-	// 实际实现应使用 net/smtp 或 mail 库
-	// 这里仅作接口演示
-	subject := fmt.Sprintf("[%s] %s", alert.Severity, alert.RuleName)
-	body := fmt.Sprintf("告警：%s\n\n指标：%s\n当前值：%.2f\n阈值：%.2f\n时间：%s",
-		alert.Message, alert.Metric, alert.Value, alert.Details["threshold"], alert.Timestamp.Format("2006-01-02 15:04:05"))
-
-	// 日志记录
-	fmt.Printf("发送邮件：to=%v, subject=%s, body=%s\n", h.config.To, subject, body)
-	return nil
+func NewEmailHandler(config *EmailConfig) AlertHandler {
+	return NewEmailNotifier(*config)
 }

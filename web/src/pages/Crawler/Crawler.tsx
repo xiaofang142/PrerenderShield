@@ -271,7 +271,7 @@ const Crawler: React.FC = () => {
                 >
                   <Option value="all">所有站点</Option>
                   {sites.map((site) => (
-                    <Option key={site.name} value={site.name}>
+                    <Option key={site.id} value={site.id}>
                       {site.name}
                     </Option>
                   ))}

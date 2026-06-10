@@ -3,10 +3,10 @@ package redis
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/go-redis/redis/v8"
+	"prerender-shield/internal/logging"
 )
 
 // Subscriber Redis订阅者，用于监听Redis中的配置变更
@@ -53,12 +53,12 @@ func (s *Subscriber) Start() error {
 	go func() {
 		defer func() {
 			if err := pubsub.Close(); err != nil {
-				log.Printf("Failed to close pubsub: %v", err)
+				logging.DefaultLogger.Info("Failed to close pubsub: %v", err)
 			}
 		}()
 
 		s.isRunning = true
-		log.Println("Redis subscriber started")
+		logging.DefaultLogger.Info("Redis subscriber started")
 
 		for {
 			msg, err := pubsub.ReceiveMessage(s.ctx)
@@ -66,7 +66,7 @@ func (s *Subscriber) Start() error {
 				if strings.Contains(err.Error(), "context canceled") {
 					break
 				}
-				log.Printf("Failed to receive message: %v", err)
+				logging.DefaultLogger.Info("Failed to receive message: %v", err)
 				continue
 			}
 
@@ -77,7 +77,7 @@ func (s *Subscriber) Start() error {
 		}
 
 		s.isRunning = false
-		log.Println("Redis subscriber stopped")
+		logging.DefaultLogger.Info("Redis subscriber stopped")
 	}()
 
 	return nil

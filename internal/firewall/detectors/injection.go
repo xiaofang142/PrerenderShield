@@ -1,12 +1,12 @@
 package detectors
 
 import (
-	"fmt"
 	"net/http"
 	"regexp"
 	"sync"
 
 	"prerender-shield/internal/firewall/types"
+	"prerender-shield/internal/logging"
 )
 
 // InjectionDetector 注入攻击检测器
@@ -51,7 +51,7 @@ func (d *InjectionDetector) compileRules() {
 		}
 		re, err := regexp.Compile(rule.Pattern)
 		if err != nil {
-			fmt.Printf("Warning: failed to compile injection rule %s: %v\n", rule.ID, err)
+			logging.DefaultLogger.Info("Warning: failed to compile injection rule %s: %v\n", rule.ID, err)
 			continue
 		}
 		d.compiledRules = append(d.compiledRules, compiledRule{

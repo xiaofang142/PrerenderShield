@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"prerender-shield/internal/logging"
 )
 
 // FingerprintEngine 指纹识别引擎
@@ -515,7 +516,7 @@ func (c *FingerprintCache) cleanup() {
 	}
 
 	if deleted > 0 {
-		fmt.Printf("清理过期指纹缓存：%d 条\n", deleted)
+		logging.DefaultLogger.Info("清理过期指纹缓存：%d 条\n", deleted)
 	}
 }
 

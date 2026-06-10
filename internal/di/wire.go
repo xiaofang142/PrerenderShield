@@ -68,7 +68,7 @@ var ProviderSet = wire.NewSet(
 	scheduler.NewScheduler,
 
 	// Event Bus
-	event.NewInMemoryBus,
+	eventbus.NewInMemoryBus,
 
 	// Metrics
 	metrics.NewInMemoryRecorder,

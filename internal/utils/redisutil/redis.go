@@ -9,10 +9,10 @@ import (
 
 // ParseRedisURL 从 Redis URL 字符串解析连接参数
 // 支持格式：redis://password@host:port/db
-func ParseRedisURL(redisURL string) (*redis.Client, error) {
+// 支持传入可选连接池配置
+func ParseRedisURL(redisURL string, pool ...redis.PoolConfig) (*redis.Client, error) {
 	redisURL = strings.TrimPrefix(redisURL, "redis://")
 
-	// 默认参数
 	host := "localhost:6379"
 	password := ""
 	db := 0
@@ -36,5 +36,8 @@ func ParseRedisURL(redisURL string) (*redis.Client, error) {
 		}
 	}
 
+	if len(pool) > 0 {
+		return redis.NewClientWithPool(host, password, db, pool[0])
+	}
 	return redis.NewClient(host, password, db)
 }

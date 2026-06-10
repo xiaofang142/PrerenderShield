@@ -1,13 +1,13 @@
 package detectors
 
 import (
-	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
 	"sync"
 
 	"prerender-shield/internal/firewall/types"
+	"prerender-shield/internal/logging"
 )
 
 // compiledRule 预编译的规则
@@ -86,7 +86,7 @@ func (d *OWASPTop10Detector) compileRules() {
 		re, err := regexp.Compile(`(?i)` + rule.Pattern)
 		if err != nil {
 			// 规则编译失败，记录但不影响其他规则
-			fmt.Printf("Warning: failed to compile rule %s: %v\n", rule.ID, err)
+			logging.DefaultLogger.Info("Warning: failed to compile rule %s: %v\n", rule.ID, err)
 			continue
 		}
 		d.compiledRules = append(d.compiledRules, compiledRule{

@@ -15,8 +15,8 @@ import (
 // 添加安全头中间件
 func addSecurityHeaders(ginRouter *gin.Engine) {
 	ginRouter.Use(func(c *gin.Context) {
-		// Content-Security-Policy (CSP) 头，防止XSS攻击，允许跨域请求
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://localhost:5173 http://localhost:9598")
+		// Content-Security-Policy (CSP) 头，防止XSS攻击
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'")
 
 		// X-Frame-Options 头，防止Clickjacking攻击
 		c.Header("X-Frame-Options", "DENY")
@@ -43,9 +43,15 @@ func addSecurityHeaders(ginRouter *gin.Engine) {
 // 添加CORS中间件
 func addCorsMiddleware(ginRouter *gin.Engine) {
 	ginRouter.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		if origin == "" {
+			origin = c.Request.Header.Get("Referer")
+		}
+		// Only allow requests from same origin or configured public URL
+		c.Header("Access-Control-Allow-Origin", origin)
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, Authorization")
+		c.Header("Access-Control-Allow-Credentials", "true")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)

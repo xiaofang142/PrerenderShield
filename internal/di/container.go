@@ -4,16 +4,17 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"log"
 	"os"
 	"strconv"
 	"time"
 
+	"prerender-shield/internal/audit"
 	"prerender-shield/internal/auth"
 	"prerender-shield/internal/cache"
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/eventbus"
 	"prerender-shield/internal/firewall"
+	"prerender-shield/internal/plugin"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/monitoring"
 	"prerender-shield/internal/observability/metrics"
@@ -46,6 +47,8 @@ type Container struct {
 	WafRepo         *repository.WafRepository
 	EventBus        *eventbus.InMemoryBus
 	MetricsRecorder *metrics.InMemoryRecorder
+	PluginManager   *plugin.PluginManager
+	AuditLogger     *audit.Logger
 }
 
 // ContainerDeps 容器依赖项
@@ -113,7 +116,7 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 		// 如果配置文件不存在，使用默认规则
 		if !os.IsNotExist(err) {
 			// 其他错误需要记录日志但不中断启动
-			log.Printf("Warning: failed to load alert rules from %s: %v", alertRulesPath, err)
+			logging.DefaultLogger.Info("Warning: failed to load alert rules from %s: %v", alertRulesPath, err)
 		}
 	}
 
@@ -135,8 +138,17 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 	// 初始化事件总线
 	eventBus := eventbus.NewInMemoryBus(nil)
 
+	// 初始化审计日志
+	auditLogger := audit.NewLogger(redisClient, audit.DefaultConfig())
+
 	// 初始化指标记录器
 	metricsRecorder := metrics.NewInMemoryRecorder()
+
+	// 初始化插件管理器
+	pluginManager := plugin.NewPluginManager()
+	if err := pluginManager.InitializeAll(); err != nil {
+		logging.DefaultLogger.Info("Warning: failed to initialize plugins: %v", err)
+	}
 
 	return &Container{
 		Config:          cfg,
@@ -157,6 +169,8 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 		WafRepo:         wafRepo,
 		EventBus:        eventBus,
 		MetricsRecorder: metricsRecorder,
+		PluginManager:   pluginManager,
+		AuditLogger:     auditLogger,
 	}, nil
 }
 

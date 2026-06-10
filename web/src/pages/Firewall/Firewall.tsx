@@ -24,7 +24,7 @@ const Firewall: React.FC = () => {
       if (res.code === 200) {
         setSites(res.data)
         if (res.data.length > 0) {
-          setSelectedSite(res.data[0].name)
+          setSelectedSite(res.data[0].id)
         }
       }
     } catch (error) {
@@ -35,7 +35,10 @@ const Firewall: React.FC = () => {
 
   // Fetch Attack Logs
   const fetchLogs = async (page = 1) => {
-    if (!selectedSite) return
+    if (!selectedSite) {
+      message.warning('请先选择一个站点')
+      return
+    }
     
     try {
       setLoading(true)

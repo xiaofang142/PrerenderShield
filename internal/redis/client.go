@@ -9,6 +9,24 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
+// PoolConfig Redis 连接池配置
+type PoolConfig struct {
+	MaxActive   int           // 最大连接数 (PoolSize)
+	MaxIdle     int           // 最大空闲连接数 (MinIdleConns)
+	IdleTimeout time.Duration // 空闲连接超时
+	PoolTimeout time.Duration // 获取连接超时
+}
+
+// DefaultPoolConfig 默认连接池配置
+func DefaultPoolConfig() PoolConfig {
+	return PoolConfig{
+		MaxActive:   20,
+		MaxIdle:     10,
+		IdleTimeout: 5 * time.Minute,
+		PoolTimeout: 30 * time.Second,
+	}
+}
+
 // Client Redis 客户端结构体
 type Client struct {
 	client         *redis.Client
@@ -21,8 +39,18 @@ func NewClient(addr, password string, db int) (*Client, error) {
 	return NewClientWithConfig(addr, password, db, DefaultCircuitBreakerConfig())
 }
 
+// NewClientWithPool 创建带连接池配置的 Redis 客户端
+func NewClientWithPool(addr, password string, db int, pool PoolConfig) (*Client, error) {
+	return NewClientWithFullConfig(addr, password, db, pool, DefaultCircuitBreakerConfig())
+}
+
 // NewClientWithConfig 创建带熔断器配置的 Redis 客户端
 func NewClientWithConfig(addr, password string, db int, cbConfig CircuitBreakerConfig) (*Client, error) {
+	return NewClientWithFullConfig(addr, password, db, DefaultPoolConfig(), cbConfig)
+}
+
+// NewClientWithFullConfig 创建带完整配置的 Redis 客户端
+func NewClientWithFullConfig(addr, password string, db int, pool PoolConfig, cbConfig CircuitBreakerConfig) (*Client, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:         addr,
 		Password:     password,
@@ -30,11 +58,11 @@ func NewClientWithConfig(addr, password string, db int, cbConfig CircuitBreakerC
 		DialTimeout:  5 * time.Second,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
-		PoolSize:     20,
-		MinIdleConns: 10,
+		PoolSize:     pool.MaxActive,
+		MinIdleConns: pool.MaxIdle,
 		MaxRetries:   3,
-		PoolTimeout:  30 * time.Second,
-		IdleTimeout:  5 * time.Minute,
+		PoolTimeout:  pool.PoolTimeout,
+		IdleTimeout:  pool.IdleTimeout,
 	})
 
 	ctx := context.Background()

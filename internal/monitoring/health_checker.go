@@ -1,6 +1,7 @@
 package monitoring
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -157,58 +158,72 @@ func (h *healthChecker) checkSystem() (bool, string) {
 	return true, "System is healthy"
 }
 
+// healthResponse 健康检查响应结构
+type healthResponse struct {
+	Status    string                   `json:"status"`
+	Checks    map[string]checkResult   `json:"checks"`
+	Timestamp int64                    `json:"timestamp"`
+	Uptime    float64                  `json:"uptime"`
+	Memory    map[string]interface{}   `json:"memory,omitempty"`
+	Goroutines int                     `json:"goroutines,omitempty"`
+}
+
+type checkResult struct {
+	Healthy bool   `json:"healthy"`
+	Message string `json:"message"`
+}
+
 // ServeHTTP 处理健康检查请求
 func (h *healthChecker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	results := h.Check()
 
-	w.Header().Set("Content-Type", "application/json")
-	if !results["healthy"].(bool) {
-		w.WriteHeader(http.StatusServiceUnavailable)
+	resp := healthResponse{
+		Timestamp: 0,
+		Uptime:    0,
+		Checks:    make(map[string]checkResult),
 	}
 
-	// 构建JSON响应
-	response := `{
-	"status": "`
-	if results["healthy"].(bool) {
-		response += "ok"
+	if healthy, ok := results["healthy"].(bool); ok && healthy {
+		resp.Status = "ok"
 	} else {
-		response += "error"
+		resp.Status = "error"
 	}
-	response += `",
-	"checks": {
-`
 
-	first := true
+	if ts, ok := results["timestamp"].(int64); ok {
+		resp.Timestamp = ts
+	}
+	if up, ok := results["uptime"].(float64); ok {
+		resp.Uptime = up
+	}
+	if mem, ok := results["memory"].(map[string]interface{}); ok {
+		resp.Memory = mem
+	}
+	if g, ok := results["goroutines"].(int); ok {
+		resp.Goroutines = g
+	}
+
 	for name, result := range results {
 		if name == "healthy" || name == "timestamp" || name == "uptime" || name == "memory" || name == "goroutines" {
 			continue
 		}
-		// 确保 result 是 map[string]interface{} 类型
-		checkResult, ok := result.(map[string]interface{})
+		checkResultMap, ok := result.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		if !first {
-			response += `,`
+		cr := checkResult{}
+		if healthy, ok := checkResultMap["healthy"].(bool); ok {
+			cr.Healthy = healthy
 		}
-		first = false
-		response += `		"` + name + `": {
-			"healthy": `
-		if checkResult["healthy"].(bool) {
-			response += "true"
-		} else {
-			response += "false"
+		if msg, ok := checkResultMap["message"].(string); ok {
+			cr.Message = msg
 		}
-		response += `,
-			"message": "` + checkResult["message"].(string) + `"
-		}`
+		resp.Checks[name] = cr
 	}
 
-	response += `
-	},
-	"timestamp": ` + fmt.Sprintf("%d", results["timestamp"].(int64)) + `,
-	"uptime": ` + fmt.Sprintf("%f", results["uptime"].(float64)) + `
-}`
+	w.Header().Set("Content-Type", "application/json")
+	if resp.Status == "error" {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
 
-	w.Write([]byte(response))
+	json.NewEncoder(w).Encode(resp)
 }

@@ -11,6 +11,7 @@ import (
 	"prerender-shield/internal/firewall/detectors"
 	"prerender-shield/internal/firewall/detectors/ai"
 	"prerender-shield/internal/firewall/types"
+	"prerender-shield/internal/logging"
 )
 
 // DetectorManager 检测器管理器
@@ -187,7 +188,7 @@ func (dm *DetectorManager) setupAIDetector(aiConfig *AIEngineConfig) {
 
 	aiDetector, err := ai.NewAIDetector(config)
 	if err != nil {
-		fmt.Printf("AI detector initialization failed: %v\n", err)
+		logging.DefaultLogger.Info("AI detector initialization failed: %v\n", err)
 	} else {
 		dm.RegisterOWASPDetector("ai", aiDetector)
 	}

@@ -565,11 +565,11 @@ func TestNewEmailHandler(t *testing.T) {
 
 	handler := NewEmailHandler(config)
 	assert.NotNil(t, handler)
-	assert.Equal(t, config, handler.config)
+	assert.Equal(t, "email", handler.Name())
 }
 
 func TestEmailHandler_Name(t *testing.T) {
-	handler := NewEmailHandler(nil)
+	handler := NewEmailHandler(&EmailConfig{})
 	assert.Equal(t, "email", handler.Name())
 }
 

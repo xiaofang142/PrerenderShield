@@ -873,32 +873,37 @@ const Sites: React.FC = () => {
   }
 
   // 处理删除站点
-  const handleDelete = async (site: any) => {
-    try {
-      // 确保site对象有效且有id属性
-      if (!site || typeof site !== 'object') {
-        throw new Error('无效的站点对象')
-      }
-      
-      // 确保站点ID存在且不为空
-      const siteId = site.id || site.ID || '';
-      if (!siteId.trim()) {
-        throw new Error('站点ID不存在')
-      }
-      
-      console.log('Deleting site with id:', siteId);
-      const res = await sitesApi.deleteSite(siteId)
-      // 直接使用res.code，因为API响应拦截器已经返回了response.data
-      if (res.code === 200) {
-        messageApi.success('删除站点成功')
-        fetchSites()
-      } else {
-        messageApi.error('删除站点失败：' + res.message)
-      }
-    } catch (error) {
-      console.error('Failed to delete site:', error)
-      messageApi.error('删除站点失败：' + (error as any).message)
-    }
+  const handleDelete = (site: any) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除站点 "${site.name || site.Name || ''}" 吗？此操作不可恢复。`,
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          if (!site || typeof site !== 'object') {
+            throw new Error('无效的站点对象')
+          }
+          
+          const siteId = site.id || site.ID || '';
+          if (!siteId.trim()) {
+            throw new Error('站点ID不存在')
+          }
+          
+          const res = await sitesApi.deleteSite(siteId)
+          if (res.code === 200) {
+            messageApi.success('删除站点成功')
+            fetchSites()
+          } else {
+            messageApi.error('删除站点失败：' + res.message)
+          }
+        } catch (error) {
+          console.error('Failed to delete site:', error)
+          messageApi.error('删除站点失败：' + (error as any).message)
+        }
+      },
+    })
   }
   
   // 跳转到渲染预热配置页面

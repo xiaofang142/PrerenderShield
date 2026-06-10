@@ -1,7 +1,9 @@
 package ssl
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -163,17 +165,22 @@ func sendWebhook(url, event, domain string) {
 		"timestamp": time.Now().Unix(),
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	// 这里简化实现，实际应该使用 JSON 编码
 	logging.DefaultLogger.Info("Sending webhook notification: %s - %s", event, domain)
 
-	// 实际实现应该发送 HTTP POST 请求
-	// req, _ := json.Marshal(payload)
-	// client.Post(url, "application/json", bytes.NewBuffer(req))
+	body, err := json.Marshal(payload)
+	if err != nil {
+		logging.DefaultLogger.Error("Failed to marshal webhook payload: %v", err)
+		return
+	}
 
-	_ = client
-	_ = payload
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		logging.DefaultLogger.Warn("Webhook request failed for %s: %v", event, err)
+		return
+	}
+	resp.Body.Close()
+	logging.DefaultLogger.Info("Webhook sent successfully: %s - %s (status: %d)", event, domain, resp.StatusCode)
 }
 
 // GetRenewalHistory 获取续签历史

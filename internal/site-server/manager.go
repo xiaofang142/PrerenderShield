@@ -3,7 +3,6 @@ package siteserver
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -42,11 +41,11 @@ func (m *Manager) StartSiteServer(site config.SiteConfig, serverAddress string, 
 	// 启动站点服务器
 	go func(siteName, siteID, addr string, server *http.Server) {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("站点 %s(%s) 启动失败: %v", siteName, siteID, err)
+			logging.DefaultLogger.Fatal("站点 %s(%s) 启动失败: %v", siteName, siteID, err)
 		}
 	}(site.Name, site.ID, siteAddr, siteServer)
 
-	log.Printf("站点 %s(%s) 启动在 %s，模式: %s", site.Name, site.ID, siteAddr, site.Mode)
+	logging.DefaultLogger.Info("站点 %s(%s) 启动在 %s，模式: %s", site.Name, site.ID, siteAddr, site.Mode)
 }
 
 // StopSiteServer 停止站点服务器
@@ -57,10 +56,10 @@ func (m *Manager) StopSiteServer(siteID string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
-			log.Printf("关闭站点 %s 失败: %v", siteID, err)
+			logging.DefaultLogger.Info("关闭站点 %s 失败: %v", siteID, err)
 			return err
 		} else {
-			log.Printf("关闭站点 %s 成功", siteID)
+			logging.DefaultLogger.Info("关闭站点 %s 成功", siteID)
 			// 从映射中删除服务器
 			delete(m.siteServers, siteID)
 			return nil
@@ -84,7 +83,7 @@ func (m *Manager) ListSiteServers() map[string]*http.Server {
 func (m *Manager) StopAllServers() {
 	for siteName := range m.siteServers {
 		if err := m.StopSiteServer(siteName); err != nil {
-			log.Printf("停止站点 %s 失败: %v", siteName, err)
+			logging.DefaultLogger.Info("停止站点 %s 失败: %v", siteName, err)
 		}
 	}
 }

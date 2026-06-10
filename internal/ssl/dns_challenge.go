@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-acme/lego/v4/certificate"
@@ -11,6 +12,10 @@ import (
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/providers/dns"
 	"prerender-shield/internal/logging"
+)
+
+var (
+	dnsEnvMu sync.Mutex
 )
 
 // DNSConfig DNS 配置
@@ -36,20 +41,42 @@ func NewDNSProvider(name string, credentials map[string]string) (challenge.Provi
 		return nil, fmt.Errorf("unsupported DNS provider: %s (supported: cloudflare, aliyun, tencentcloud, aws, godaddy, namecheap, manual)", name)
 	}
 
-	// 设置环境变量
+	// 线程安全地设置环境变量，并保存旧值用于恢复
+	dnsEnvMu.Lock()
+	oldEnv := make(map[string]string, len(credentials))
 	for key, value := range credentials {
+		if oldVal, existed := lookupEnv(key); existed {
+			oldEnv[key] = oldVal
+		}
 		os.Setenv(key, value)
 	}
+	dnsEnvMu.Unlock()
 
 	// 使用 LEGO 的 DNS 提供者
 	provider, err := dns.NewDNSChallengeProviderByName(name)
 	if err != nil {
+		// 恢复环境变量
+		dnsEnvMu.Lock()
+		for key := range credentials {
+			if oldVal, ok := oldEnv[key]; ok {
+				os.Setenv(key, oldVal)
+			} else {
+				os.Unsetenv(key)
+			}
+		}
+		dnsEnvMu.Unlock()
 		return nil, fmt.Errorf("failed to create DNS provider: %w", err)
 	}
 
 	logging.DefaultLogger.Info("DNS provider '%s' initialized successfully", name)
 
 	return provider, nil
+}
+
+// lookupEnv 查找环境变量，os.LookupEnv is available in Go 1.x
+func lookupEnv(key string) (string, bool) {
+	val := os.Getenv(key)
+	return val, val != ""
 }
 
 // SetDNSProvider 为 ACME 客户端设置 DNS 提供者

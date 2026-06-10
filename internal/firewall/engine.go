@@ -21,6 +21,7 @@ import (
 	"prerender-shield/internal/firewall/detectors"
 	"prerender-shield/internal/firewall/detectors/ai"
 	"prerender-shield/internal/firewall/types"
+	"prerender-shield/internal/logging"
 )
 
 // FailStrategy 失败处理策略
@@ -134,7 +135,7 @@ func (rm *RuleManager) startAutoUpdate() {
 		case <-ticker.C:
 			err := rm.ReloadRules()
 			if err != nil {
-				fmt.Printf("Failed to update rules: %v\n", err)
+				logging.DefaultLogger.Info("Failed to update rules: %v\n", err)
 			}
 		case <-rm.stopChan:
 			return
@@ -534,7 +535,7 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 		aiDetector, err := ai.NewAIDetector(aiConfig)
 		if err != nil {
 			// AI 检测器初始化失败，记录错误但不影响其他检测器
-			fmt.Printf("AI detector initialization failed: %v\n", err)
+			logging.DefaultLogger.Info("AI detector initialization failed: %v\n", err)
 		} else {
 			e.owaspDetectors["ai"] = aiDetector
 		}

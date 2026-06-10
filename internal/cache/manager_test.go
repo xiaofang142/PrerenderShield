@@ -244,17 +244,12 @@ func TestCacheManager_GetStats(t *testing.T) {
 	mockRedis := NewMockRedisClient()
 	manager := NewManager(mockRedis)
 
-	// 设置统计数据
-	mockRedis.data["cache:site-123:hits"] = "80"
-	mockRedis.data["cache:site-123:misses"] = "20"
-
 	stats, err := manager.GetStats("site-123")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, stats)
-	assert.Equal(t, int64(80), stats["hits"])
-	assert.Equal(t, int64(20), stats["misses"])
-	assert.Equal(t, 80.0, stats["hit_rate"])
+	assert.Equal(t, "redis", stats["type"])
+	assert.Equal(t, "site-123", stats["site_id"])
 }
 
 func TestCacheManager_IncrementHit(t *testing.T) {

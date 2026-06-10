@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"prerender-shield/internal/logging"
 )
 
 // ChallengeEngine 挑战引擎
@@ -472,7 +473,7 @@ func (s *ChallengeSessionStore) cleanup() {
 	}
 
 	if deleted > 0 {
-		fmt.Printf("清理过期挑战会话：%d 条\n", deleted)
+		logging.DefaultLogger.Info("清理过期挑战会话：%d 条\n", deleted)
 	}
 }
 

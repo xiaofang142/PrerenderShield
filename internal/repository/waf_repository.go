@@ -13,6 +13,7 @@ import (
 	redisPkg "prerender-shield/internal/redis"
 
 	"github.com/go-redis/redis/v8"
+	"prerender-shield/internal/logging"
 )
 
 // WafRedisClient defines the interface for WAF Redis operations
@@ -318,7 +319,7 @@ func (r *WafRepository) CreateAccessLog(log *models.AccessLog) error {
 		attackKey := fmt.Sprintf("waf:attacks:%s", log.SiteID)
 		if err := r.client.LPush(ctx, attackKey, data); err != nil {
 			// Log error but don't fail the main log
-			fmt.Printf("Failed to push attack log: %v\n", err)
+			logging.DefaultLogger.Info("Failed to push attack log: %v\n", err)
 		} else {
 			// Trim attack logs (keep 10000)
 			r.client.LTrim(ctx, attackKey, 0, 9999)

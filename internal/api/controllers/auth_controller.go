@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"prerender-shield/internal/audit"
 	"prerender-shield/internal/auth"
 )
 
@@ -12,13 +13,15 @@ import (
 type AuthController struct {
 	userManager *auth.UserManager
 	jwtManager  *auth.JWTManager
+	auditLogger *audit.Logger
 }
 
 // NewAuthController 创建认证控制器实例
-func NewAuthController(userManager *auth.UserManager, jwtManager *auth.JWTManager) *AuthController {
+func NewAuthController(userManager *auth.UserManager, jwtManager *auth.JWTManager, auditLogger *audit.Logger) *AuthController {
 	return &AuthController{
 		userManager: userManager,
 		jwtManager:  jwtManager,
+		auditLogger: auditLogger,
 	}
 }
 
@@ -47,66 +50,54 @@ func (c *AuthController) Login(ctx *gin.Context) {
 
 	var user *auth.User
 	var err error
+	clientIP := ctx.ClientIP()
 
-	// 检查是否是首次登录
 	if c.userManager.IsFirstRun() {
-		// 首次登录，创建用户
 		user, err = c.userManager.CreateUser(req.Username, req.Password)
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{
-				"code":    http.StatusInternalServerError,
-				"message": "Failed to create user: " + err.Error(),
-			})
+			if c.auditLogger != nil {
+				c.auditLogger.Log(audit.Entry{UserID: req.Username, Action: audit.ActionLogin, Resource: "system", Detail: "first run user creation failed", Severity: audit.SeverityWarning, ClientIP: clientIP, Status: "failed"})
+			}
+			ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "Failed to create user: " + err.Error()})
 			return
 		}
 	} else {
-		// 非首次登录，验证用户
 		user, err = c.userManager.AuthenticateUser(req.Username, req.Password)
 		if err != nil {
-			ctx.JSON(http.StatusUnauthorized, gin.H{
-				"code":    http.StatusUnauthorized,
-				"message": "Invalid username or password",
-			})
+			if c.auditLogger != nil {
+				c.auditLogger.Log(audit.Entry{UserID: req.Username, Action: audit.ActionLogin, Resource: "system", Detail: "authentication failed", Severity: audit.SeverityWarning, ClientIP: clientIP, Status: "denied"})
+			}
+			ctx.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "Invalid username or password"})
 			return
 		}
 	}
 
-	// 生成JWT令牌
 	token, err := c.jwtManager.GenerateToken(user.ID, user.Username)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    http.StatusInternalServerError,
-			"message": "Failed to generate token",
-		})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "Failed to generate token"})
 		return
 	}
 
-	// 返回登录成功响应
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "Login successful",
-		"data": gin.H{
-			"token":    token,
-			"username": user.Username,
-		},
-	})
+	if c.auditLogger != nil {
+		c.auditLogger.Log(audit.Entry{UserID: user.ID, Action: audit.ActionLogin, Resource: "system", Detail: "login successful", ClientIP: clientIP, Status: "success"})
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "Login successful", "data": gin.H{"token": token, "username": user.Username}})
 }
 
 // Logout 用户退出登录
 func (c *AuthController) Logout(ctx *gin.Context) {
-	// 获取Authorization头
+	userID, _ := ctx.Get("user_id")
 	authHeader := ctx.GetHeader("Authorization")
 	if authHeader != "" && len(authHeader) > 7 {
-		token := authHeader[7:] // 去掉 "Bearer "
-		// 撤销令牌
-		if err := c.jwtManager.RevokeToken(token); err != nil {
-			// 记录错误但仍返回成功，因为用户意图是退出
-			// logging.DefaultLogger.Warn("Failed to revoke token: %v", err)
-		}
+		token := authHeader[7:]
+		c.jwtManager.RevokeToken(token)
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "Logout successful",
-	})
+	if c.auditLogger != nil {
+		uid, _ := userID.(string)
+		c.auditLogger.Log(audit.Entry{UserID: uid, Action: audit.ActionLogout, Resource: "system", Detail: "logout", ClientIP: ctx.ClientIP(), Status: "success"})
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "Logout successful"})
 }

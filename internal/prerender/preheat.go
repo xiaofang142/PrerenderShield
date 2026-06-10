@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"prerender-shield/internal/redis"
+	"prerender-shield/internal/logging"
 )
 
 // PreheatWorker 预热执行器
@@ -173,12 +174,12 @@ func (p *PreheatWorker) preheatURL(url string) bool {
 	headerIndex := int(time.Now().UnixNano() % int64(len(p.crawlerHeaders)))
 	userAgent := p.crawlerHeaders[headerIndex]
 
-	fmt.Printf("Preheating URL: %s with UA: %s\n", url, userAgent)
+	logging.DefaultLogger.Info("Preheating URL: %s with UA: %s\n", url, userAgent)
 
 	// 发送HTTP请求，模拟爬虫访问
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		fmt.Printf("Failed to create request for %s: %v\n", url, err)
+		logging.DefaultLogger.Info("Failed to create request for %s: %v\n", url, err)
 		p.redisClient.SetURLPreheatStatus(p.siteName, url, "failed", 0)
 		return false
 	}
@@ -197,7 +198,7 @@ func (p *PreheatWorker) preheatURL(url string) bool {
 	// 发送请求
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Printf("Failed to preheat %s: %v\n", url, err)
+		logging.DefaultLogger.Info("Failed to preheat %s: %v\n", url, err)
 		p.redisClient.SetURLPreheatStatus(p.siteName, url, "failed", 0)
 		return false
 	}
@@ -206,14 +207,14 @@ func (p *PreheatWorker) preheatURL(url string) bool {
 	// 读取响应内容
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("Failed to read response for %s: %v\n", url, err)
+		logging.DefaultLogger.Info("Failed to read response for %s: %v\n", url, err)
 		p.redisClient.SetURLPreheatStatus(p.siteName, url, "failed", 0)
 		return false
 	}
 
 	// 检查响应状态码
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Preheat failed for %s: status code %d\n", url, resp.StatusCode)
+		logging.DefaultLogger.Info("Preheat failed for %s: status code %d\n", url, resp.StatusCode)
 		p.redisClient.SetURLPreheatStatus(p.siteName, url, "failed", 0)
 		return false
 	}
@@ -221,10 +222,10 @@ func (p *PreheatWorker) preheatURL(url string) bool {
 	// 记录预热成功
 	cacheSize := int64(len(body))
 	if err := p.redisClient.SetURLPreheatStatus(p.siteName, url, "cached", cacheSize); err != nil {
-		fmt.Printf("Failed to set preheat status for %s: %v\n", url, err)
+		logging.DefaultLogger.Info("Failed to set preheat status for %s: %v\n", url, err)
 	}
 
-	fmt.Printf("Successfully preheated URL: %s (size: %d bytes)\n", url, cacheSize)
+	logging.DefaultLogger.Info("Successfully preheated URL: %s (size: %d bytes)\n", url, cacheSize)
 	return true
 }
 

@@ -10,6 +10,7 @@ import (
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/prerender/push"
 	"prerender-shield/internal/redis"
+	"prerender-shield/internal/logging"
 )
 
 // PushController 推送控制器
@@ -100,7 +101,7 @@ func (c *PushController) GetPushStats(ctx *gin.Context) {
 			stats, err := c.pushManager.GetPushStats(site.ID)
 			if err != nil {
 				// 记录错误但不中断处理
-				fmt.Printf("Failed to get push stats for site %s: %v\n", site.ID, err)
+				logging.DefaultLogger.Info("Failed to get push stats for site %s: %v\n", site.ID, err)
 				continue
 			}
 

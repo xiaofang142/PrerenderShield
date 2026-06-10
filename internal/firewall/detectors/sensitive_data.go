@@ -1,12 +1,12 @@
 package detectors
 
 import (
-	"fmt"
 	"net/http"
 	"regexp"
 	"sync"
 
 	"prerender-shield/internal/firewall/types"
+	"prerender-shield/internal/logging"
 )
 
 // SensitiveDataDetector 敏感数据泄露检测器
@@ -52,7 +52,7 @@ func (d *SensitiveDataDetector) compileRules() {
 		}
 		re, err := regexp.Compile(`(?i)` + rule.Pattern)
 		if err != nil {
-			fmt.Printf("Warning: failed to compile sensitive data rule %s: %v\n", rule.ID, err)
+			logging.DefaultLogger.Info("Warning: failed to compile sensitive data rule %s: %v\n", rule.ID, err)
 			continue
 		}
 		d.compiledRules = append(d.compiledRules, compiledRule{

@@ -134,29 +134,23 @@ export const firewallApi = {
 
 // 渲染预热 API
 export const prerenderApi = {
-  getStatus: (site?: string) => api.get('/prerender/status', { params: site ? { site } : {} }),
-  render: (data: { site: string; url: string }) => api.post('/prerender/render', data),
-  preheat: (data: { site: string }) => api.post('/prerender/preheat', data),
-  updateConfig: (site: string, config: any) => api.put('/prerender/config', { site, config }),
-  // 渲染预热扩展 API
-  getPreheatStats: (siteId?: string) => api.get('/preheat/stats', { params: siteId ? { siteId } : {} }),
+  getStatus: (siteId?: string) => api.get('/preheat/stats', { params: siteId ? { siteId } : {} }),
   triggerPreheat: (siteId: string) => api.post('/preheat/trigger', { siteId }),
   getUrls: (siteId?: string, page: number = 1, pageSize: number = 20) => api.get('/preheat/urls', { params: { siteId, page, pageSize } }),
   getCrawlerHeaders: () => api.get('/preheat/crawler-headers'),
   clearCache: (siteId: string) => api.post('/preheat/clear-cache', { siteId }),
+  getPreheatStats: (siteId?: string) => api.get('/preheat/stats', { params: siteId ? { siteId } : {} }),
 }
 
 // 路由 API
 export const routingApi = {
-  getRules: () => api.get('/routing/rules'),
-  addRule: (rule: any) => api.post('/routing/rules', rule),
-  deleteRule: (id: string) => api.delete(`/routing/rules/${id}`),
+  getRules: () => api.get('/system/config'),
 }
 
 // 监控 API
 export const monitoringApi = {
   getStats: () => api.get('/monitoring/stats'),
-  getLogs: () => api.get('/monitoring/logs'),
+  getLogs: (params?: { site_id?: string; page?: number; limit?: number }) => api.get('/logs', { params }),
 }
 
 // 站点管理 API
@@ -198,7 +192,6 @@ export const crawlerApi = {
 export const pushApi = {
   getStats: (siteId?: string) => api.get('/push/stats', { params: siteId ? { siteId } : {} }),
   getLogs: (siteId?: string, page: number = 1, pageSize: number = 20) => api.get('/push/logs', { params: { siteId, page, pageSize } }),
-  triggerPush: (siteId: string) => api.post('/push/trigger', { siteId }),
   getConfig: (siteId: string) => api.get('/push/config', { params: { siteId } }),
   updateConfig: (siteId: string, config: any) => api.post('/push/config', { siteId, config }),
   getSites: () => api.get('/push/sites'),

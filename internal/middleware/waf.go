@@ -13,6 +13,7 @@ import (
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/repository"
 	"prerender-shield/internal/services"
+	"prerender-shield/internal/logging"
 )
 
 // WafMiddleware implements the Web Application Firewall logic
@@ -52,7 +53,7 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 			go func() {
 				if wafRepo != nil {
 					if err := wafRepo.CreateAccessLog(&log); err != nil {
-						fmt.Printf("Failed to create access log: %v\n", err)
+						logging.DefaultLogger.Info("Failed to create access log: %v\n", err)
 					}
 				}
 			}()
@@ -70,7 +71,7 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 			c.Abort()
 
 			// 输出日志
-			fmt.Printf("[WAF Blocked] [%dms] %s %s from %s - %s (Rule: %s)\n",
+			logging.DefaultLogger.Info("[WAF Blocked] [%dms] %s %s from %s - %s (Rule: %s)\n",
 				duration, method, requestPath, clientIP, reason, ruleID)
 		}
 
