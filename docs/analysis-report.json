@@ -1,0 +1,80 @@
+{
+  "project": {
+    "name": "Prerender Shield",
+    "version": "3.0.0",
+    "lastUpdated": "2026-06-10",
+    "language": "Go + TypeScript/React"
+  },
+  "codeMetrics": {
+    "goSource": {
+      "files": 290,
+      "code": 79927,
+      "blank": 17502,
+      "comment": 9678
+    },
+    "frontend": {
+      "files": 31,
+      "code": 5815,
+      "blank": 511,
+      "comment": 297
+    },
+    "totalCode": 85742
+  },
+  "complexity": {
+    "averageComplexity": 2.1,
+    "mostComplex": [
+      {"file": "config/validator.go", "function": "ValidateConfig", "score": 66},
+      {"file": "logging/crawler_log.go", "function": "GetCrawlerStats", "score": 34},
+      {"file": "logging/visit_log.go", "function": "GetAccessStats", "score": 28}
+    ],
+    "recommendation": "ValidateConfig(66) should be broken into sub-functions"
+  },
+  "testCoverage": {
+    "overall": "73.1%",
+    "excellent": [
+      "models (100%)", "observability (100%)", "errors (100%)",
+      "eventbus (97.8%)", "routing (96.4%)", "security/waf/detectors (100%)",
+      "monitoring/dashboard (95.9%)"
+    ],
+    "needsImprovement": [
+      "cmd/api (0%)", "persistent_queue (0%)",
+      "constants (no statements)", "audit (32.7%)",
+      "di (34.0%)"
+    ]
+  },
+  "architecture": {
+    "pattern": "Modular monolith with DI container",
+    "backend": "Go 1.24 + Gin",
+    "frontend": "React 18 + TypeScript + Ant Design 5",
+    "cache": "Redis (go-redis)",
+    "rendering": "Headless Chromium (chromedp)",
+    "monitoring": "Prometheus + OpenTelemetry",
+    "auth": "JWT + optional 2FA (TOTP)",
+    "waf": "12 detectors + rule engine",
+    "ssl": "ACME/LetsEncrypt (LEGO)",
+    "deploy": "Docker + K8s + bare metal scripts"
+  },
+  "keyImprovements": {
+    "totalFixes": 48,
+    "critical": [
+      "Wire DI container injection bug (event→eventbus)",
+      "ACME client dead code path",
+      "DNS os.Setenv race condition",
+      "Health checker JSON injection vulnerability",
+      "8 SSL controller responses missing code field",
+      "9 Firewall controller responses using wrong format",
+      "4 Overview controller unsafe type assertions (panic risk)",
+      "Frontend calling deleted API methods (render/preheat)"
+    ],
+    "security": [
+      "CORS: Access-Control-Allow-Origin * → echo origin with credentials",
+      "CSP: removed hardcoded dev URLs",
+      "97 fmt/log.Printf → structured logging",
+      "Config encryption: AES-256-GCM"
+    ],
+    "coverage": {
+      "telemetry": "58.6% → 84.3%",
+      "newTests": ["audit (9)", "constants (6)", "redis mock (13)"]
+    }
+  }
+}

@@ -14,10 +14,12 @@ import (
 
 // TestConfigAndRedisIntegration 测试配置管理和Redis客户端的集成
 func TestConfigAndRedisIntegration(t *testing.T) {
-	// 这个测试需要实际的Redis服务器，我们暂时跳过
-	t.Skip("Skipping test that requires actual Redis server")
+	redisClient, err := redis.NewClient("localhost:6379", "", 0)
+	if err != nil {
+		t.Skipf("Redis not available: %v", err)
+	}
+	redisClient.Close()
 
-	// 确保从项目根目录运行测试，或者使用正确的相对路径
 	projectRoot := ".."
 	configPath := filepath.Join(projectRoot, "configs", "config.example.yml")
 
@@ -26,8 +28,8 @@ func TestConfigAndRedisIntegration(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, cfg)
 
-	// 测试Redis客户端连接
-	redisClient, err := redis.NewClientWithURL(cfg.Cache.RedisURL)
+	// 测试Redis客户端连接（使用配置文件中的地址）
+	redisClient, err = redis.NewClient(cfg.Cache.RedisURL, "", 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, redisClient)
 

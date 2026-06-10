@@ -19,11 +19,20 @@ func NewMockRedisClient() *MockRedisClient {
 }
 
 // TestNewClient 测试创建Redis客户端
-func TestNewClient(t *testing.T) {
-	// 这个测试需要实际的Redis服务器，我们暂时跳过
-	t.Skip("Skipping test that requires actual Redis server")
+func requireRedis(t *testing.T) {
+	addr := "localhost:6379"
+	password := ""
+	db := 0
+	client, err := NewClient(addr, password, db)
+	if err != nil {
+		t.Skipf("Redis not available at %s: %v", addr, err)
+	}
+	client.Close()
+}
 
-	// 测试使用默认端口连接
+func TestNewClient(t *testing.T) {
+	requireRedis(t)
+
 	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -45,7 +54,7 @@ func TestNewClient(t *testing.T) {
 // TestAddAndRemoveURL 测试添加和移除URL
 func TestAddAndRemoveURL(t *testing.T) {
 	// 这个测试需要实际的Redis服务器，我们暂时跳过
-	t.Skip("Skipping test that requires actual Redis server")
+	requireRedis(t)
 
 	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
@@ -84,7 +93,7 @@ func TestAddAndRemoveURL(t *testing.T) {
 // TestSetAndGetURLPreheatStatus 测试设置和获取URL预热状态
 func TestSetAndGetURLPreheatStatus(t *testing.T) {
 	// 这个测试需要实际的Redis服务器，我们暂时跳过
-	t.Skip("Skipping test that requires actual Redis server")
+	requireRedis(t)
 
 	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
@@ -104,7 +113,7 @@ func TestSetAndGetURLPreheatStatus(t *testing.T) {
 // TestSetAndGetSiteStats 测试设置和获取站点统计数据
 func TestSetAndGetSiteStats(t *testing.T) {
 	// 这个测试需要实际的Redis服务器，我们暂时跳过
-	t.Skip("Skipping test that requires actual Redis server")
+	requireRedis(t)
 
 	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
@@ -129,7 +138,7 @@ func TestSetAndGetSiteStats(t *testing.T) {
 // TestPreheatRunningStatus 测试预热任务运行状态
 func TestPreheatRunningStatus(t *testing.T) {
 	// 这个测试需要实际的Redis服务器，我们暂时跳过
-	t.Skip("Skipping test that requires actual Redis server")
+	requireRedis(t)
 
 	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
@@ -158,7 +167,7 @@ func TestPreheatRunningStatus(t *testing.T) {
 // TestSaveAndGetUser 测试保存和获取用户信息
 func TestSaveAndGetUser(t *testing.T) {
 	// 这个测试需要实际的Redis服务器，我们暂时跳过
-	t.Skip("Skipping test that requires actual Redis server")
+	requireRedis(t)
 
 	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)
@@ -185,7 +194,7 @@ func TestSaveAndGetUser(t *testing.T) {
 // TestGetAllUsers 测试获取所有用户
 func TestGetAllUsers(t *testing.T) {
 	// 这个测试需要实际的Redis服务器，我们暂时跳过
-	t.Skip("Skipping test that requires actual Redis server")
+	requireRedis(t)
 
 	client, err := NewClient("localhost:6379", "", 0)
 	assert.NoError(t, err)

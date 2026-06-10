@@ -17,8 +17,12 @@ fi
 # 检查Redis连接
 if [ -n "$REDIS_URL" ]; then
     echo "使用自定义Redis连接: $REDIS_URL"
+    # 替换配置文件中的Redis URL
+    if [ -f "./config.yml" ]; then
+        sed -i "s|redis_url:.*|redis_url: \"$REDIS_URL\"|" ./config.yml
+    fi
 else
-    echo "使用默认Redis连接: redis:6379"
+    echo "使用默认Redis连接: localhost:6379"
 fi
 
 # 启动应用

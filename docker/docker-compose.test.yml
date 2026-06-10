@@ -1,0 +1,46 @@
+version: '3.9'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: prerender-test-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: prerender-test-api
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "9598:9598"
+      - "9597:9597"
+    environment:
+      - GIN_MODE=test
+      - REDIS_URL=redis://redis:6379/0
+    command: ["./api", "--config", "./config.example.yml"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9598/api/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test
+    container_name: prerender-test-runner
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - API_URL=http://api:9598

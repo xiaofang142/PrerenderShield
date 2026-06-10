@@ -168,6 +168,15 @@ Prerender Shield 在市场上具有独特的定位，填补了现有产品的功
 | **审计日志** | ✅ 完整记录 | ✅ 企业版支持 | ✅ 支持 |
 | **DDoS 防护** | 基础限流 | ✅ 专业防护 | ✅ 专业防护 |
 
+## 🚀 一键安装
+
+```bash
+curl -fsSL https://prerender.websitetool.cn/install.sh | bash
+```
+
+> 自动检测环境，支持 Docker / 源码构建 / 预编译二进制 三种方式。
+> 安装完成后访问 http://localhost:9597 进入管理控制台（默认账号: admin / 123456）。
+
 ## 4. 安装与部署
 
 ### 📋 **系统要求**
