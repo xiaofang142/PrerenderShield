@@ -699,7 +699,7 @@ const Sites: React.FC = () => {
     message.info(`正在下载 ${file.name}`)
     // 创建临时下载链接
     const downloadLink = document.createElement('a');
-    downloadLink.href = `/api/sites/${currentSite?.id}/static${file.path}`;
+    downloadLink.href = `/api/v1/sites/${currentSite?.id}/static${file.path}`;
     downloadLink.download = file.name;
     downloadLink.target = '_blank';
     document.body.appendChild(downloadLink);

@@ -21,6 +21,57 @@ type RuleProvider interface {
 	GetRulesByCategory(category string) []types.Rule
 }
 
+// checkHTTPInputs 检查 HTTP 请求的所有输入来源
+// 包括 URL 参数、POST body (form)、请求头
+// 需要在 engine.calculateBodyHash 中先调用 req.ParseForm()
+func checkHTTPInputs(req *http.Request, compiledRules []compiledRule, threatType string) []types.Threat {
+	threats := make([]types.Threat, 0)
+
+	// 1. 检查 URL 查询参数 (适用于手动构造的请求和未 ParseForm 的场景)
+	for name, values := range req.URL.Query() {
+		threats = append(threats, matchValues(name, values, compiledRules, threatType, "")...)
+	}
+
+	// 2. 检查 POST body / Form 数据 (需 engine 先调用 req.ParseForm())
+	if req.Form != nil {
+		for name, values := range req.Form {
+			// 跳过已经在 URL.Query 中检查过的参数
+			if _, inQuery := req.URL.Query()[name]; inQuery {
+				continue
+			}
+			threats = append(threats, matchValues(name, values, compiledRules, threatType, "")...)
+		}
+	}
+
+	// 3. 检查请求头
+	for name, values := range req.Header {
+		threats = append(threats, matchValues(name, values, compiledRules, threatType, " in header")...)
+	}
+
+	return threats
+}
+
+func matchValues(name string, values []string, compiledRules []compiledRule, threatType, suffix string) []types.Threat {
+	var threats []types.Threat
+	for _, value := range values {
+		for _, cr := range compiledRules {
+			if cr.regex.MatchString(value) {
+				threats = append(threats, types.Threat{
+					Type:      threatType,
+					SubType:   cr.rule.Name,
+					Severity:  cr.rule.Severity,
+					Message:   cr.rule.Name + " detected" + suffix,
+					Parameter: name,
+					Value:     value,
+					RuleID:    cr.rule.ID,
+					RuleName:  cr.rule.Name,
+				})
+			}
+		}
+	}
+	return threats
+}
+
 // OWASPTop10Detector OWASP Top 10 攻击检测器
 // 支持规则动态更新，使用读写锁保证并发安全
 type OWASPTop10Detector struct {

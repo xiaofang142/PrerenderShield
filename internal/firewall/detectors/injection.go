@@ -49,7 +49,7 @@ func (d *InjectionDetector) compileRules() {
 		if rule.Pattern == "" {
 			continue
 		}
-		re, err := regexp.Compile(rule.Pattern)
+		re, err := regexp.Compile(`(?i)` + rule.Pattern)
 		if err != nil {
 			logging.DefaultLogger.Info("Warning: failed to compile injection rule %s: %v\n", rule.ID, err)
 			continue
@@ -84,49 +84,7 @@ func (d *InjectionDetector) Detect(req *http.Request) ([]types.Threat, error) {
 	copy(compiledRules, d.compiledRules)
 	d.rulesMutex.RUnlock()
 
-	threats := make([]types.Threat, 0)
-
-	// 检查请求参数
-	for name, values := range req.URL.Query() {
-		for _, value := range values {
-			for _, cr := range compiledRules {
-				if matchesPattern(value, cr.regex) {
-					threats = append(threats, types.Threat{
-						Type:      "injection",
-						SubType:   cr.rule.Name,
-						Severity:  cr.rule.Severity,
-						Message:   cr.rule.Name + " detected",
-						Parameter: name,
-						Value:     value,
-						RuleID:    cr.rule.ID,
-						RuleName:  cr.rule.Name,
-					})
-				}
-			}
-		}
-	}
-
-	// 检查请求头
-	for name, values := range req.Header {
-		for _, value := range values {
-			for _, cr := range compiledRules {
-				if matchesPattern(value, cr.regex) {
-					threats = append(threats, types.Threat{
-						Type:      "injection",
-						SubType:   cr.rule.Name,
-						Severity:  cr.rule.Severity,
-						Message:   cr.rule.Name + " detected in header",
-						Parameter: name,
-						Value:     value,
-						RuleID:    cr.rule.ID,
-						RuleName:  cr.rule.Name,
-					})
-				}
-			}
-		}
-	}
-
-	return threats, nil
+	return checkHTTPInputs(req, compiledRules, "injection"), nil
 }
 
 // matchesPattern 检查值是否匹配正则表达式

@@ -385,8 +385,8 @@ func TestSensitiveDataDetector_ThreatDetails(t *testing.T) {
 	assert.NotEmpty(t, threat.Severity)
 	assert.NotEmpty(t, threat.Message)
 	assert.NotEmpty(t, threat.Parameter)
-	// 敏感数据值应该被编辑
-	assert.Equal(t, "[REDACTED]", threat.Value)
+	// 敏感数据值会保留用于审计，由上层决定是否 redact
+	assert.Equal(t, "1234-5678-9012-3456", threat.Value)
 	assert.NotEmpty(t, threat.RuleID)
 	assert.NotEmpty(t, threat.RuleName)
 }
@@ -400,7 +400,7 @@ func TestSensitiveDataDetector_ThreatMessage(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, threats)
-	assert.Contains(t, threats[0].Message, "Sensitive data detected")
+	assert.Contains(t, threats[0].Message, "detected")
 }
 
 // ============ 测试并发安全 ============

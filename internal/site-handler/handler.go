@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"prerender-shield/internal/config"
+	"prerender-shield/internal/firewall"
 	"prerender-shield/internal/i18n"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/middleware"
@@ -24,43 +25,22 @@ import (
 )
 
 // Handler 站点处理器，负责处理站点的HTTP请求
-// 管理站点的请求路由、爬虫检测和响应处理
-//
-// 字段:
-//
-//	prerenderManager: 渲染预热引擎管理器，用于处理爬虫请求的渲染
-//	wafRepo: WAF仓库，用于记录WAF日志
-//	redisClient: Redis客户端，用于限流
-//	geoIP: GeoIP服务，用于地理位置访问控制
 type Handler struct {
 	prerenderManager *prerender.EngineManager
 	wafRepo          *repository.WafRepository
 	redisClient      *redis.Client
 	geoIP            services.GeoIPResolver
+	firewallManager  *firewall.EngineManager
 }
 
 // NewHandler 创建站点处理器实例
-//
-// 参数:
-//
-//		prerenderManager: 渲染预热引擎管理器，用于处理爬虫请求的渲染
-//		wafRepo: WAF仓库
-//		redisClient: Redis客户端
-//	 geoIP: GeoIP服务
-//
-// 返回值:
-//
-//	*Handler: 创建的站点处理器实例
-//
-// 示例:
-//
-//	handler := sitehandler.NewHandler(prerenderManager, wafRepo, redisClient, geoIPService)
-func NewHandler(prerenderManager *prerender.EngineManager, wafRepo *repository.WafRepository, redisClient *redis.Client, geoIP services.GeoIPResolver) *Handler {
+func NewHandler(prerenderManager *prerender.EngineManager, wafRepo *repository.WafRepository, redisClient *redis.Client, geoIP services.GeoIPResolver, firewallManager *firewall.EngineManager) *Handler {
 	return &Handler{
 		prerenderManager: prerenderManager,
 		wafRepo:          wafRepo,
 		redisClient:      redisClient,
 		geoIP:            geoIP,
+		firewallManager:  firewallManager,
 	}
 }
 
@@ -104,8 +84,27 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 	// 创建站点级别的Gin路由器
 	siteRouter := gin.Default()
 
+	// 创建 WAF 防火墙引擎
+	var siteWafEngine *firewall.Engine
+	if h.firewallManager != nil && site.Firewall.Enabled {
+		geoIPCfg := site.Firewall.GeoIPConfig
+		rateLimitCfg := site.Firewall.RateLimitConfig
+		wafConfig := firewall.Config{
+			RulesPath:    site.Firewall.RulesPath,
+			ActionConfig: firewall.ActionConfig{DefaultAction: site.Firewall.ActionConfig.DefaultAction, BlockMessage: site.Firewall.ActionConfig.BlockMessage},
+			GeoIPConfig:  &geoIPCfg,
+			RateLimitConfig: &rateLimitCfg,
+			RedisClient:  h.redisClient.GetRawClient(),
+			FailStrategy: firewall.FailClosed,
+		}
+		engine, err := firewall.NewEngine(site.ID, wafConfig)
+		if err == nil {
+			siteWafEngine = engine
+		}
+	}
+
 	// WAF中间件 - 最先执行，保护后续处理
-	siteRouter.Use(middleware.WafMiddleware(site, h.wafRepo, h.redisClient, h.geoIP))
+	siteRouter.Use(middleware.WafMiddleware(site, h.wafRepo, h.redisClient, h.geoIP, siteWafEngine))
 
 	// 爬虫检测中间件 - 第一个执行，确保爬虫请求得到正确处理
 	siteRouter.Use(func(c *gin.Context) {

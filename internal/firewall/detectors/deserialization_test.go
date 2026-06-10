@@ -107,10 +107,7 @@ func TestDeserializationDetector_Detect_CustomRules(t *testing.T) {
 	}
 	detector := NewDeserializationDetector(mockManager)
 
-	req := &http.Request{}
-	req.URL = &url.URL{
-		RawQuery: "data=CUSTOM_SER",
-	}
+	req := httptest.NewRequest("POST", "/api/data?data=CUSTOM_SER", nil)
 
 	threats, err := detector.Detect(req)
 	assert.NoError(t, err)
@@ -201,10 +198,7 @@ func TestDeserializationDetector_UpdateRules(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 验证新规则生效
-	req := &http.Request{}
-	req.URL = &url.URL{
-		RawQuery: "data=TEST_PATTERN",
-	}
+	req := httptest.NewRequest("GET", "/api?data=TEST_PATTERN", nil)
 	threats, err := detector.Detect(req)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, threats)

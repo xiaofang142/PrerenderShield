@@ -326,7 +326,7 @@ func TestCSRFDetector_ThreatDetails_MissingToken(t *testing.T) {
 	assert.Equal(t, "Missing CSRF Token", threat.SubType)
 	assert.Equal(t, "high", threat.Severity)
 	assert.Equal(t, "Missing CSRF token in request", threat.Message)
-	assert.Equal(t, "csrf_token", threat.Parameter)
+	assert.Equal(t, "X-CSRF-Token", threat.Parameter)
 	assert.Equal(t, "csrf-001", threat.RuleID)
 }
 

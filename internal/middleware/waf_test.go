@@ -38,7 +38,7 @@ func TestWafMiddleware_Disabled(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, nil))
+	router.Use(WafMiddleware(site, nil, nil, nil, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -62,7 +62,7 @@ func TestWafMiddleware_Whitelist(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, nil))
+	router.Use(WafMiddleware(site, nil, nil, nil, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -90,7 +90,7 @@ func TestWafMiddleware_Blacklist(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, nil))
+	router.Use(WafMiddleware(site, nil, nil, nil, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -126,7 +126,7 @@ func TestWafMiddleware_GeoIP_Blocked(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, mockGeoIP))
+	router.Use(WafMiddleware(site, nil, nil, mockGeoIP, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -162,7 +162,7 @@ func TestWafMiddleware_GeoIP_Allowed(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, mockGeoIP))
+	router.Use(WafMiddleware(site, nil, nil, mockGeoIP, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -197,7 +197,7 @@ func TestWafMiddleware_GeoIP_AllowList(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, mockGeoIP))
+	router.Use(WafMiddleware(site, nil, nil, mockGeoIP, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -233,7 +233,7 @@ func TestWafMiddleware_GeoIP_InAllowList(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, mockGeoIP))
+	router.Use(WafMiddleware(site, nil, nil, mockGeoIP, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -268,7 +268,7 @@ func TestWafMiddleware_GeoIP_Error(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, mockGeoIP))
+	router.Use(WafMiddleware(site, nil, nil, mockGeoIP, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -304,7 +304,7 @@ func TestWafMiddleware_GeoIP_EmptyCountryCode(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, mockGeoIP))
+	router.Use(WafMiddleware(site, nil, nil, mockGeoIP, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -336,7 +336,7 @@ func TestWafMiddleware_NilGeoIP(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, nil))
+	router.Use(WafMiddleware(site, nil, nil, nil, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -365,7 +365,7 @@ func TestWafMiddleware_NilWafRepo(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, nil))
+	router.Use(WafMiddleware(site, nil, nil, nil, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -398,7 +398,7 @@ func TestWafMiddleware_NilRedis(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, nil))
+	router.Use(WafMiddleware(site, nil, nil, nil, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -428,7 +428,7 @@ func TestWafMiddleware_Whitelist_Before_Blacklist(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, nil))
+	router.Use(WafMiddleware(site, nil, nil, nil, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -457,7 +457,7 @@ func TestWafMiddleware_Blacklist_Response(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, nil))
+	router.Use(WafMiddleware(site, nil, nil, nil, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -495,7 +495,7 @@ func TestWafMiddleware_GeoIP_Blocked_Response(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, mockGeoIP))
+	router.Use(WafMiddleware(site, nil, nil, mockGeoIP, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -533,7 +533,7 @@ func TestWafMiddleware_GeoIP_AllowList_Response(t *testing.T) {
 	}
 
 	router := gin.New()
-	router.Use(WafMiddleware(site, nil, nil, mockGeoIP))
+	router.Use(WafMiddleware(site, nil, nil, mockGeoIP, nil))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})

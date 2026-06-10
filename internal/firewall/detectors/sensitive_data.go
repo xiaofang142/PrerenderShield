@@ -85,27 +85,5 @@ func (d *SensitiveDataDetector) Detect(req *http.Request) ([]types.Threat, error
 	copy(compiledRules, d.compiledRules)
 	d.rulesMutex.RUnlock()
 
-	threats := make([]types.Threat, 0)
-
-	// 检查请求参数
-	for name, values := range req.URL.Query() {
-		for _, value := range values {
-			for _, cr := range compiledRules {
-				if cr.regex.MatchString(value) {
-					threats = append(threats, types.Threat{
-						Type:      "sensitive-data",
-						SubType:   cr.rule.Name,
-						Severity:  cr.rule.Severity,
-						Message:   "Sensitive data detected: " + cr.rule.Name,
-						Parameter: name,
-						Value:     "[REDACTED]",
-						RuleID:    cr.rule.ID,
-						RuleName:  cr.rule.Name,
-					})
-				}
-			}
-		}
-	}
-
-	return threats, nil
+	return checkHTTPInputs(req, compiledRules, "sensitive-data"), nil
 }

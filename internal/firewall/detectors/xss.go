@@ -85,47 +85,5 @@ func (d *XSSDetector) Detect(req *http.Request) ([]types.Threat, error) {
 	copy(compiledRules, d.compiledRules)
 	d.rulesMutex.RUnlock()
 
-	threats := make([]types.Threat, 0)
-
-	// 检查请求参数
-	for name, values := range req.URL.Query() {
-		for _, value := range values {
-			for _, cr := range compiledRules {
-				if cr.regex.MatchString(value) {
-					threats = append(threats, types.Threat{
-						Type:      "xss",
-						SubType:   cr.rule.Name,
-						Severity:  cr.rule.Severity,
-						Message:   cr.rule.Name + " detected",
-						Parameter: name,
-						Value:     value,
-						RuleID:    cr.rule.ID,
-						RuleName:  cr.rule.Name,
-					})
-				}
-			}
-		}
-	}
-
-	// 检查请求头
-	for name, values := range req.Header {
-		for _, value := range values {
-			for _, cr := range compiledRules {
-				if cr.regex.MatchString(value) {
-					threats = append(threats, types.Threat{
-						Type:      "xss",
-						SubType:   cr.rule.Name,
-						Severity:  cr.rule.Severity,
-						Message:   cr.rule.Name + " detected in header",
-						Parameter: name,
-						Value:     value,
-						RuleID:    cr.rule.ID,
-						RuleName:  cr.rule.Name,
-					})
-				}
-			}
-		}
-	}
-
-	return threats, nil
+	return checkHTTPInputs(req, compiledRules, "xss"), nil
 }

@@ -113,6 +113,13 @@ declare module 'axios' {
   }
 }
 
+// 登录 API
+export const authApi = {
+  firstRun: () => api.get('/auth/first-run'),
+  login: (username: string, password: string) => api.post('/auth/login', { username, password }),
+  logout: () => api.post('/auth/logout'),
+}
+
 // 概览 API
 export const overviewApi = {
   getStats: () => api.get('/overview'),
@@ -129,7 +136,6 @@ export const firewallApi = {
   addToBlacklist: (siteId: string, ip: string) => api.post(`/firewall/blacklist`, { site_id: siteId, ip }),
   getStatus: (siteId: string) => api.get(`/sites/${siteId}/waf`),
   getRules: (siteId: string) => api.get(`/sites/${siteId}/waf`), // 规则包含在配置中
-  scan: (data: { site: string; url: string }) => api.post(`/sites/${data.site}/scan`, data),
 }
 
 // 渲染预热 API

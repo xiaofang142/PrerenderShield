@@ -130,7 +130,7 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 	siteServerMgr := siteserver.NewManager(monitor)
 
 	// 初始化站点处理器
-	siteHandler := sitehandler.NewHandler(prerenderMgr, wafRepo, redisClient, geoIPService)
+	siteHandler := sitehandler.NewHandler(prerenderMgr, wafRepo, redisClient, geoIPService, firewallMgr)
 
 	// 初始化调度器
 	schedulerInstance := scheduler.NewScheduler(prerenderMgr, redisClient, cfg)

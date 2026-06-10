@@ -43,10 +43,9 @@ type Engine struct {
 	actionHandler  ActionHandler
 	ruleManager    *RuleManager
 	logger         Logger
-	requestCache   map[string]*CheckResult // 请求缓存，用于相同请求快速返回结果
-	cacheMutex     sync.RWMutex            // 请求缓存互斥锁
-	cacheTTL       time.Duration           // 请求缓存过期时间
-	failStrategy   FailStrategy            // 失败处理策略
+	redisClient    *redis.Client          // Redis 客户端，用于请求缓存
+	cacheTTL       time.Duration          // 请求缓存过期时间
+	failStrategy   FailStrategy           // 失败处理策略
 }
 
 // OWASPDetector OWASP Top 10 检测器接口
@@ -469,7 +468,7 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 		owaspDetectors: make(map[string]OWASPDetector),
 		coreDetectors:  make([]CoreDetector, 0),
 		ruleManager:    ruleManager,
-		requestCache:   make(map[string]*CheckResult),
+		redisClient:    config.RedisClient,
 		cacheTTL:       cacheTTL,
 		failStrategy:   failStrategy,
 	}
@@ -483,6 +482,9 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 	e.owaspDetectors["csrf"] = detectors.NewCSRFDetector(ruleManager)
 	e.owaspDetectors["deserialization"] = detectors.NewDeserializationDetector(ruleManager)
 	e.owaspDetectors["sensitive-data"] = detectors.NewSensitiveDataDetector(ruleManager)
+
+	// 初始化 User-Agent 检测器
+	e.owaspDetectors["user-agent"] = detectors.NewUserAgentDetector()
 
 	// 初始化核心检测器
 	// 检查 GeoIP 配置是否为 nil
@@ -540,9 +542,6 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 			e.owaspDetectors["ai"] = aiDetector
 		}
 	}
-
-	// 启动缓存清理协程
-	go e.cleanCacheLoop()
 
 	return e, nil
 }
@@ -644,9 +643,27 @@ func (e *Engine) CheckRequest(req *http.Request) (*CheckResult, error) {
 		})
 	}
 
-	// 如果有威胁，设置 Allow 为 false
-	if len(result.Threats) > 0 {
+	// 评估威胁严重度：只要有一个 high/critical 威胁就阻断
+	hasHighThreat := false
+	hasThreat := false
+	for _, t := range result.Threats {
+		hasThreat = true
+		if t.Severity == "high" || t.Severity == "critical" || t.Severity == "" {
+			// 空 Severity 也视为高危（fail secure）
+			hasHighThreat = true
+		}
+	}
+
+	if hasHighThreat {
 		result.Allow = false
+	} else if hasThreat {
+		// 低危威胁：记录日志但不阻断
+		result.Allow = true
+		if e.logger != nil {
+			for _, t := range result.Threats {
+				e.logger.Info("Low-severity threat logged: %s - %s", t.Type, t.Message)
+			}
+		}
 	}
 
 	// 将结果添加到缓存
@@ -823,6 +840,18 @@ func (e *Engine) calculateBodyHash(req *http.Request) string {
 	// 关闭原始 Body 并重新设置，以便后续处理
 	req.Body = io.NopCloser(strings.NewReader(string(body)))
 
+	// 解析 Form 数据 (包含 URL 参数和 POST body)
+	// 让 detectors 能通过 req.Form 访问所有输入
+	if len(body) > 0 {
+		if err := req.ParseForm(); err != nil {
+			logging.DefaultLogger.Warn("Failed to parse form data: %v", err)
+		}
+		if err := req.ParseMultipartForm(32 << 20); err != nil {
+			// 非 multipart 请求会返回错误，这是正常的
+			_ = err
+		}
+	}
+
 	if len(body) == 0 {
 		return ""
 	}
@@ -832,84 +861,51 @@ func (e *Engine) calculateBodyHash(req *http.Request) string {
 	return hex.EncodeToString(hash[:])
 }
 
-// getFromCache 从缓存获取结果
+// getFromCache 从 Redis 获取缓存结果
 func (e *Engine) getFromCache(key string) *CheckResult {
-	e.cacheMutex.RLock()
-	defer e.cacheMutex.RUnlock()
-
-	result, exists := e.requestCache[key]
-	if !exists {
+	if e.redisClient == nil {
 		return nil
 	}
 
-	// 检查缓存是否过期
-	if time.Since(result.CreatedAt) > e.cacheTTL {
+	cacheKey := fmt.Sprintf("firewall:cache:%s:%s", e.SiteName, key)
+	data, err := e.redisClient.Get(e.redisClient.Context(), cacheKey).Bytes()
+	if err != nil {
 		return nil
 	}
 
-	return result
+	var result CheckResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil
+	}
+	return &result
 }
 
-// addToCache 将结果添加到缓存
+// addToCache 将结果添加到 Redis 缓存
 func (e *Engine) addToCache(key string, result *CheckResult) {
-	e.cacheMutex.Lock()
-	defer e.cacheMutex.Unlock()
+	if e.redisClient == nil {
+		return
+	}
 
-	e.requestCache[key] = result
+	cacheKey := fmt.Sprintf("firewall:cache:%s:%s", e.SiteName, key)
+	data, err := json.Marshal(result)
+	if err != nil {
+		return
+	}
+	e.redisClient.Set(e.redisClient.Context(), cacheKey, data, e.cacheTTL)
 }
 
 // clearCache 清空缓存
 func (e *Engine) clearCache() {
-	e.cacheMutex.Lock()
-	defer e.cacheMutex.Unlock()
-
-	e.requestCache = make(map[string]*CheckResult)
-}
-
-// cleanCacheLoop 定期清理过期缓存
-func (e *Engine) cleanCacheLoop() {
-	ticker := time.NewTicker(constants.DefaultCacheCleanInterval)
-	defer ticker.Stop()
-
-	for {
-		<-ticker.C
-		e.cleanExpiredCache()
-	}
-}
-
-// cleanExpiredCache 清理过期缓存
-func (e *Engine) cleanExpiredCache() {
-	// 使用批量清理方式，减少锁持有时间
-	var expiredKeys []string
-	{
-		e.cacheMutex.RLock()
-		now := time.Now()
-		count := 0
-		for key, result := range e.requestCache {
-			if now.Sub(result.CreatedAt) > e.cacheTTL {
-				expiredKeys = append(expiredKeys, key)
-				count++
-				// 限制批次大小
-				if count >= constants.DefaultCacheBatchSize {
-					break
-				}
-			}
-		}
-		e.cacheMutex.RUnlock()
+	if e.redisClient == nil {
+		return
 	}
 
-	// 清理过期键
-	if len(expiredKeys) > 0 {
-		e.cacheMutex.Lock()
-		now := time.Now()
-		for _, key := range expiredKeys {
-			// 再次检查是否过期
-			if result, exists := e.requestCache[key]; exists {
-				if now.Sub(result.CreatedAt) > e.cacheTTL {
-					delete(e.requestCache, key)
-				}
-			}
-		}
-		e.cacheMutex.Unlock()
+	pattern := fmt.Sprintf("firewall:cache:%s:*", e.SiteName)
+	keys, err := e.redisClient.Keys(e.redisClient.Context(), pattern).Result()
+	if err != nil {
+		return
+	}
+	if len(keys) > 0 {
+		e.redisClient.Del(e.redisClient.Context(), keys...)
 	}
 }

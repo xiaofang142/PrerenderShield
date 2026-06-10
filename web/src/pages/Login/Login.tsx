@@ -3,7 +3,7 @@ import { Card, Form, Input, Button, Typography, Modal, message, Alert, Dropdown 
 import { LoginOutlined, LockOutlined, InfoCircleOutlined, GlobalOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import api from '../../services/api'
+import { authApi } from '../../services/api'
 import { useTranslation } from 'react-i18next'
 
 const { Title, Paragraph } = Typography
@@ -49,7 +49,7 @@ const Login: React.FC = () => {
   useEffect(() => {
     const checkFirstRun = async () => {
       try {
-        const response = await api.get('/auth/first-run')
+        const response = await authApi.firstRun()
         if (response.code === 200) {
           setIsFirstRun(response.data.isFirstRun)
         }
@@ -67,7 +67,7 @@ const Login: React.FC = () => {
   const handleLogin = async (values: { username: string; password: string }) => {
     setLoading(true)
     try {
-      const response = await api.post('/auth/login', values)
+      const response = await authApi.login(values.username, values.password)
       if (response.code === 200) {
         // 保存token并更新全局状态
         authLogin(response.data.token, response.data.username)

@@ -9,15 +9,17 @@ import (
 	"github.com/google/uuid"
 
 	"prerender-shield/internal/config"
+	"prerender-shield/internal/firewall"
+	"prerender-shield/internal/firewall/types"
+	"prerender-shield/internal/logging"
 	"prerender-shield/internal/models"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/repository"
 	"prerender-shield/internal/services"
-	"prerender-shield/internal/logging"
 )
 
 // WafMiddleware implements the Web Application Firewall logic
-func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, redisClient *redis.Client, geoIP services.GeoIPResolver) gin.HandlerFunc {
+func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, redisClient *redis.Client, geoIP services.GeoIPResolver, wafEngine *firewall.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !site.Firewall.Enabled {
 			c.Next()
@@ -32,7 +34,7 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 		startTime := time.Now()
 
 		// Helper to log and block
-		block := func(reason, ruleID string) {
+		block := func(reason, ruleID string, threat *types.Threat) {
 			// 记录 WAF 阻断日志
 			log := models.AccessLog{
 				ID:          uuid.New().String(),
@@ -86,7 +88,7 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 		// 2. Blacklist Check - 黑名单直接阻断
 		for _, ip := range site.Firewall.Blacklist {
 			if ip == clientIP {
-				block("IP is in blacklist", "ip_blacklist")
+				block("IP is in blacklist", "ip_blacklist", nil)
 				return
 			}
 		}
@@ -98,7 +100,7 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 				// Check BlockList
 				for _, blockedCode := range site.Firewall.GeoIPConfig.BlockList {
 					if blockedCode == countryCode {
-						block("Country is blocked: "+countryCode, "geoip_block")
+						block("Country is blocked: "+countryCode, "geoip_block", nil)
 						return
 					}
 				}
@@ -113,7 +115,7 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 						}
 					}
 					if !allowed {
-						block("Country not in allow list: "+countryCode, "geoip_allow")
+						block("Country not in allow list: "+countryCode, "geoip_allow", nil)
 						return
 					}
 				}
@@ -132,12 +134,24 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 			count, err := rdb.Incr(ctx, key).Result()
 			if err == nil {
 				if count == 1 {
-					// 设置过期时间
 					rdb.Expire(ctx, key, time.Duration(window)*time.Second)
 				}
 				if int(count) > limit {
-					block("Rate limit exceeded", "rate_limit")
+					block("Rate limit exceeded", "rate_limit", nil)
 					return
+				}
+			}
+		}
+
+		// 5. OWASP Content Detection - 内容威胁检测
+		if wafEngine != nil {
+			result, err := wafEngine.CheckRequest(c.Request)
+			if err == nil && result != nil && !result.Allow {
+				for _, t := range result.Threats {
+					if t.Severity == "high" || t.Severity == "critical" || t.Severity == "" {
+						block(fmt.Sprintf("OWASP threat: %s - %s", t.Type, t.Message), t.RuleID, &t)
+						return
+					}
 				}
 			}
 		}

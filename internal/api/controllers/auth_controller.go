@@ -11,17 +11,19 @@ import (
 
 // AuthController 认证控制器
 type AuthController struct {
-	userManager *auth.UserManager
-	jwtManager  *auth.JWTManager
-	auditLogger *audit.Logger
+	userManager  *auth.UserManager
+	jwtManager   *auth.JWTManager
+	auditLogger  *audit.Logger
+	twoFactorAuth *auth.TwoFactorAuth
 }
 
 // NewAuthController 创建认证控制器实例
-func NewAuthController(userManager *auth.UserManager, jwtManager *auth.JWTManager, auditLogger *audit.Logger) *AuthController {
+func NewAuthController(userManager *auth.UserManager, jwtManager *auth.JWTManager, auditLogger *audit.Logger, twoFactorAuth *auth.TwoFactorAuth) *AuthController {
 	return &AuthController{
-		userManager: userManager,
-		jwtManager:  jwtManager,
-		auditLogger: auditLogger,
+		userManager:  userManager,
+		jwtManager:   jwtManager,
+		auditLogger:  auditLogger,
+		twoFactorAuth: twoFactorAuth,
 	}
 }
 
@@ -100,4 +102,76 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "Logout successful"})
+}
+
+// Get2FAStatus 获取 2FA 状态
+func (c *AuthController) Get2FAStatus(ctx *gin.Context) {
+	if c.twoFactorAuth == nil {
+		ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success", "data": gin.H{"enabled": false, "available": false}})
+		return
+	}
+	userID, _ := ctx.Get("user_id")
+	uid, _ := userID.(string)
+	enabled, _ := c.twoFactorAuth.Is2FAEnabled(uid)
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success", "data": gin.H{"enabled": enabled, "available": true}})
+}
+
+// Enable2FA 开启 2FA
+func (c *AuthController) Enable2FA(ctx *gin.Context) {
+	if c.twoFactorAuth == nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "2FA not configured"})
+		return
+	}
+	userID, _ := ctx.Get("user_id")
+	uid, _ := userID.(string)
+	secret, qrURL, err := c.twoFactorAuth.Enable2FA(uid)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success", "data": gin.H{"secret": secret, "qr_code_url": qrURL}})
+}
+
+// Confirm2FA 确认 2FA 并激活
+func (c *AuthController) Confirm2FA(ctx *gin.Context) {
+	if c.twoFactorAuth == nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "2FA not configured"})
+		return
+	}
+	var req struct {
+		Code string `json:"code" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Missing code"})
+		return
+	}
+	userID, _ := ctx.Get("user_id")
+	uid, _ := userID.(string)
+	if err := c.twoFactorAuth.Confirm2FA(uid, req.Code); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "2FA enabled successfully"})
+}
+
+// Disable2FA 关闭 2FA
+func (c *AuthController) Disable2FA(ctx *gin.Context) {
+	if c.twoFactorAuth == nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "2FA not configured"})
+		return
+	}
+	var req struct {
+		Code string `json:"code" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Missing code"})
+		return
+	}
+	userID, _ := ctx.Get("user_id")
+	uid, _ := userID.(string)
+	if err := c.twoFactorAuth.Disable2FA(uid, req.Code); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "2FA disabled successfully"})
 }

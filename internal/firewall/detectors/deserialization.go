@@ -37,8 +37,8 @@ func NewDeserializationDetector(ruleProvider RuleProvider) *DeserializationDetec
 func (d *DeserializationDetector) compileRules() {
 	// 默认的反序列化规则
 	defaultRules := []types.Rule{
-		{ID: "deserialization-001", Name: "Java Serialization", Category: "deserialization", Pattern: `\\xac\\xed\\x00\\x05`, Severity: "high"},
-		{ID: "deserialization-002", Name: "Python Pickle", Category: "deserialization", Pattern: `\\x80\\x0[34]|c:|\(i|\(S|\(V`, Severity: "high"},
+		{ID: "deserialization-001", Name: "Java Serialization", Category: "deserialization", Pattern: `%AC%ED%00%05|rO0ABX|aced0005`, Severity: "high"},
+		{ID: "deserialization-002", Name: "Python Pickle", Category: "deserialization", Pattern: `%80%04|%80%03|c:|\(i|\(S|\(V`, Severity: "high"},
 		{ID: "deserialization-003", Name: "PHP Serialization", Category: "deserialization", Pattern: `O:\d+:|s:\d+:|a:\d+:`, Severity: "high"},
 	}
 
@@ -84,27 +84,5 @@ func (d *DeserializationDetector) Detect(req *http.Request) ([]types.Threat, err
 	copy(compiledRules, d.compiledRules)
 	d.rulesMutex.RUnlock()
 
-	threats := make([]types.Threat, 0)
-
-	// 检查请求参数
-	for name, values := range req.URL.Query() {
-		for _, value := range values {
-			for _, cr := range compiledRules {
-				if cr.regex.MatchString(value) {
-					threats = append(threats, types.Threat{
-						Type:      "deserialization",
-						SubType:   cr.rule.Name,
-						Severity:  cr.rule.Severity,
-						Message:   cr.rule.Name + " detected",
-						Parameter: name,
-						Value:     value,
-						RuleID:    cr.rule.ID,
-						RuleName:  cr.rule.Name,
-					})
-				}
-			}
-		}
-	}
-
-	return threats, nil
+	return checkHTTPInputs(req, compiledRules, "deserialization"), nil
 }

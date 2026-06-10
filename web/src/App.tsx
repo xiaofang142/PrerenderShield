@@ -28,6 +28,8 @@ import Crawler from './pages/Crawler/Crawler'
 import SystemConfig from './pages/System/SystemConfig'
 import WAFSettings from './pages/WAFSettings'
 import Dashboard from './pages/Dashboard'
+import SSLPage from './pages/SSL'
+import SettingsPage from './pages/Settings'
 
 // Import layout
 import MainLayout from './components/layouts/MainLayout'
@@ -216,6 +218,26 @@ function App() {
                 <PrivateRoute>
                   <MainLayout>
                     <SystemConfig />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/ssl" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <SSLPage />
+                  </MainLayout>
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/settings" 
+              element={
+                <PrivateRoute>
+                  <MainLayout>
+                    <SettingsPage />
                   </MainLayout>
                 </PrivateRoute>
               } 

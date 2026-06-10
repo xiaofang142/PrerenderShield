@@ -61,7 +61,13 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 			protectedGroup.GET("/system/config", controllers.SystemController.GetSystemConfig)
 			protectedGroup.POST("/system/config", controllers.SystemController.UpdateSystemConfig)
 
-			// 概览 API
+		// 2FA API (独立前缀避免 Gin 路由冲突)
+		protectedGroup.GET("/2fa/status", controllers.AuthController.Get2FAStatus)
+		protectedGroup.POST("/2fa/enable", controllers.AuthController.Enable2FA)
+		protectedGroup.POST("/2fa/confirm", controllers.AuthController.Confirm2FA)
+		protectedGroup.POST("/2fa/disable", controllers.AuthController.Disable2FA)
+
+		// 概览 API
 			protectedGroup.GET("/overview", controllers.OverviewController.GetOverview)
 
 			// 监控 API

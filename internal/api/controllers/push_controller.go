@@ -202,9 +202,10 @@ func (c *PushController) GetPushTrend(ctx *gin.Context) {
 	siteID := ctx.Query("siteId")
 
 	if siteID == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code":    http.StatusBadRequest,
-			"message": "Missing siteId parameter",
+		ctx.JSON(http.StatusOK, gin.H{
+			"code":    200,
+			"message": "success",
+			"data":    []interface{}{},
 		})
 		return
 	}

@@ -381,14 +381,23 @@ func (c *SitesController) AddSite(ctx *gin.Context) {
 	var site config.SiteConfig
 	if err := ctx.ShouldBindJSON(&site); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "Invalid request",
-		})
-		return
-	}
+				"code":    400,
+				"message": "Invalid request",
+			})
+			return
+		}
 
-	// 验证域名：只允许127.0.0.1或localhost
-	for _, domain := range site.Domains {
+		// 验证站点名称
+		if site.Name == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"code":    400,
+				"message": "Site name is required",
+			})
+			return
+		}
+
+		// 验证域名：只允许127.0.0.1或localhost
+		for _, domain := range site.Domains {
 		if domain != "127.0.0.1" && domain != "localhost" {
 			ctx.JSON(http.StatusBadRequest, gin.H{
 				"code":    400,

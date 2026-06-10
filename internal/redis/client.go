@@ -916,11 +916,36 @@ func (c *Client) DeleteSiteData(siteID string) error {
 // GetSystemConfig 获取系统配置
 func (c *Client) GetSystemConfig() (map[string]string, error) {
 	key := "system:config"
-	return c.HashGetAll(key)
+	val, err := c.Get(key)
+	if err != nil {
+		return nil, err
+	}
+	if val == "" {
+		return map[string]string{}, nil
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal([]byte(val), &config); err != nil {
+		return nil, err
+	}
+	result := make(map[string]string, len(config))
+	for k, v := range config {
+		switch val := v.(type) {
+		case string:
+			result[k] = val
+		default:
+			b, _ := json.Marshal(val)
+			result[k] = string(b)
+		}
+	}
+	return result, nil
 }
 
 // SaveSystemConfig 保存系统配置
 func (c *Client) SaveSystemConfig(config map[string]interface{}) error {
 	key := "system:config"
-	return c.HashSetAll(key, config)
+	data, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal system config: %w", err)
+	}
+	return c.Set(key, string(data), 0)
 }

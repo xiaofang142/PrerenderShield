@@ -93,9 +93,23 @@ func SetupControllers(
 		}
 	}
 
+	// 创建 2FA 管理器
+	var twoFactorAuth *auth.TwoFactorAuth
+	if cfg.SSL.Enabled || true { // 默认启用 2FA（可配置）
+		twoFactorAuth = auth.NewTwoFactorAuth(redisClient, "Prerender Shield")
+	}
+
+	// 创建 SSL 控制器 — 没有 ACME 时传 nil（接口 nil 而非类型 nil）
+	var sslController *controllers.SSLController
+	if cfg.SSL.Enabled && acmeClient != nil {
+		sslController = controllers.NewSSLController(acmeClient, autoRenewer)
+	} else {
+		sslController = controllers.NewSSLController(nil, nil)
+	}
+
 	// 创建控制器实例
 	return &Controllers{
-		AuthController:       controllers.NewAuthController(userManager, jwtManager, auditLogger),
+		AuthController:       controllers.NewAuthController(userManager, jwtManager, auditLogger, twoFactorAuth),
 		OverviewController:   controllers.NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, wafRepo),
 		MonitoringController: controllers.NewMonitoringController(monitor),
 		FirewallController:   controllers.NewFirewallController(wafRepo),
@@ -104,6 +118,6 @@ func SetupControllers(
 		PushController:       controllers.NewPushController(pushManager, redisClient, cfg),
 		SitesController:      controllers.NewSitesController(configManager, siteServerMgr, siteHandler, redisClient, monitor, crawlerLogMgr, visitLogMgr, cfg),
 		SystemController:     controllers.NewSystemController(redisClient),
-		SSLController:        controllers.NewSSLController(acmeClient, autoRenewer),
+		SSLController:        sslController,
 	}
 }

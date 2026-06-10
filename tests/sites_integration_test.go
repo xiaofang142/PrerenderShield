@@ -58,7 +58,7 @@ func setupTestEnv(t *testing.T) (*gin.Engine, *controllers.SitesController, stri
 
 	// Initialize SiteHandler with nil dependencies (PrerenderManager, WafRepo, RedisClient, GeoIP)
 	// This is risky but works for basic CRUD tests where we don't trigger WAF blocking or Prerender
-	siteHandler := sitehandler.NewHandler(nil, nil, nil, nil)
+	siteHandler := sitehandler.NewHandler(nil, nil, nil, nil, nil)
 
 	siteServerMgr := siteserver.NewManager(monitor)
 

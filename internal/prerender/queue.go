@@ -40,12 +40,20 @@ type TaskRenderResult struct {
 
 // RenderQueue 渲染优先级队列
 type RenderQueue struct {
-	mu      sync.Mutex
-	tasks   PriorityQueue
-	taskMap map[string]*RenderTask
-	cond    *sync.Cond
-	closed  bool
-	maxSize int
+	mu              sync.Mutex
+	tasks           PriorityQueue
+	taskMap         map[string]*RenderTask
+	cond            *sync.Cond
+	closed          bool
+	maxSize         int
+	persistentQueue *PersistentQueue
+}
+
+// SetPersistentQueue 设置持久化队列（崩溃恢复用）
+func (rq *RenderQueue) SetPersistentQueue(pq *PersistentQueue) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	rq.persistentQueue = pq
 }
 
 // PriorityQueue 实现 heap.Interface
@@ -111,6 +119,11 @@ func (rq *RenderQueue) Enqueue(task *RenderTask) error {
 	// 添加任务
 	heap.Push(&rq.tasks, task)
 	rq.taskMap[task.ID] = task
+
+	// 持久化到 Redis（用于崩溃恢复）
+	if rq.persistentQueue != nil {
+		rq.persistentQueue.Enqueue(task)
+	}
 
 	// 通知等待的消费者
 	rq.cond.Signal()
@@ -205,6 +218,26 @@ func (rq *RenderQueue) Close() {
 	defer rq.mu.Unlock()
 	rq.closed = true
 	rq.cond.Broadcast()
+}
+
+// RestoreFromPersistent 从持久化队列恢复任务（崩溃恢复）
+func (rq *RenderQueue) RestoreFromPersistent() int {
+	if rq.persistentQueue == nil {
+		return 0
+	}
+	restored := 0
+	for {
+		task, err := rq.persistentQueue.Dequeue()
+		if err != nil || task == nil {
+			break
+		}
+		rq.mu.Lock()
+		heap.Push(&rq.tasks, task)
+		rq.taskMap[task.ID] = task
+		rq.mu.Unlock()
+		restored++
+	}
+	return restored
 }
 
 // Len 获取队列长度

@@ -3,7 +3,6 @@ package prerender
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"prerender-shield/internal/redis"
 )
@@ -17,6 +16,10 @@ func NewPersistentQueue(redisCli *redis.Client, prefix string) *PersistentQueue 
 	return &PersistentQueue{redisCli: redisCli, prefix: prefix}
 }
 
+func (pq *PersistentQueue) persistKey() string {
+	return fmt.Sprintf("%s:list", pq.prefix)
+}
+
 func (pq *PersistentQueue) Enqueue(task *RenderTask) error {
 	if task == nil {
 		return fmt.Errorf("task is nil")
@@ -25,18 +28,11 @@ func (pq *PersistentQueue) Enqueue(task *RenderTask) error {
 	if err != nil {
 		return fmt.Errorf("marshal task: %w", err)
 	}
-	key := fmt.Sprintf("%s:task:%s", pq.prefix, task.ID)
-	return pq.redisCli.Set(key, string(data), 2*time.Hour)
+	return pq.redisCli.ListPush(pq.persistKey(), string(data))
 }
 
 func (pq *PersistentQueue) Dequeue() (*RenderTask, error) {
-	pattern := fmt.Sprintf("%s:task:*", pq.prefix)
-	keys, err := pq.redisCli.Keys(pattern)
-	if err != nil || len(keys) == 0 {
-		return nil, nil
-	}
-	key := keys[0]
-	val, err := pq.redisCli.Get(key)
+	val, err := pq.redisCli.ListPop(pq.persistKey())
 	if err != nil || val == "" {
 		return nil, nil
 	}
@@ -44,6 +40,9 @@ func (pq *PersistentQueue) Dequeue() (*RenderTask, error) {
 	if err := json.Unmarshal([]byte(val), &task); err != nil {
 		return nil, err
 	}
-	pq.redisCli.Del(key)
 	return &task, nil
+}
+
+func (pq *PersistentQueue) Clear() error {
+	return pq.redisCli.Del(pq.persistKey())
 }

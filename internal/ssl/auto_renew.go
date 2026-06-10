@@ -78,6 +78,11 @@ func (r *AutoRenewer) run() {
 }
 
 func (r *AutoRenewer) checkAndRenew() {
+	if r.acmeClient == nil {
+		logging.DefaultLogger.Warn("Auto-renewal skipped: ACME client not initialized")
+		return
+	}
+
 	logging.DefaultLogger.Info("Running scheduled certificate renewal check")
 
 	certs, err := r.acmeClient.ListCertificates()

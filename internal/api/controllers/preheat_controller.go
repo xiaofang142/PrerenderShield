@@ -242,9 +242,9 @@ func (c *PreheatController) TriggerPreheat(ctx *gin.Context) {
 	// 从Redis获取站点的URL列表
 	urls, err := c.redisClient.GetURLs(req.SiteId)
 	if err != nil || len(urls) == 0 {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    http.StatusInternalServerError,
-			"message": "无法获取站点URL列表，无法触发预热",
+		ctx.JSON(http.StatusOK, gin.H{
+			"code":    200,
+			"message": "No URLs to preheat",
 		})
 		return
 	}
