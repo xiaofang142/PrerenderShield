@@ -128,6 +128,7 @@ func (p *Pool) allocatorOptions() []chromedp.ExecAllocatorOption {
 		chromedp.Flag("disable-web-security", true),
 		chromedp.Flag("disable-features", "VizDisplayCompositor"),
 		chromedp.Flag("window-size", "1920,1080"),
+		chromedp.Flag("js-flags", "--max-old-space-size=512 --max-heap-size=512"),
 	)
 
 	// 添加性能优化选项
@@ -144,74 +145,32 @@ func (p *Pool) allocatorOptions() []chromedp.ExecAllocatorOption {
 	return options
 }
 
-// Acquire 获取可用实例（阻塞）
+// Acquire 获取可用实例（阻塞），自动跳过已关闭的陈旧实例
 func (p *Pool) Acquire(ctx context.Context) (*Instance, error) {
-	p.mu.RLock()
-	if p.closed {
-		p.mu.RUnlock()
-		return nil, fmt.Errorf("pool is closed")
-	}
-	// 检查是否有可用实例或可以创建新实例
-	canCreateMore := p.instanceCount < p.config.MaxInstances
-	p.mu.RUnlock()
-
-	// 尝试从 channel 获取实例
-	select {
-	case instance := <-p.available:
-		instance.mu.Lock()
-		instance.LastUsedAt = time.Now()
-		instance.UseCount++
-		instance.mu.Unlock()
-
-		p.logger.Debug("acquired instance",
-			zap.String("id", instance.ID),
-			zap.Int("use_count", instance.UseCount))
-
-		return instance, nil
-
-	case <-ctx.Done():
-		return nil, ctx.Err()
-
-	case <-p.ctx.Done():
-		return nil, fmt.Errorf("pool is closed")
-
-	default:
-		// 没有可用实例，尝试创建新实例
-		if canCreateMore {
-			p.mu.Lock()
-			// 再次检查，防止竞态条件
-			if p.instanceCount < p.config.MaxInstances && !p.closed {
-				instance := p.createInstance()
-				if instance != nil {
-					p.instances = append(p.instances, instance)
-					p.instanceCount++
-					p.mu.Unlock()
-
-					instance.mu.Lock()
-					instance.UseCount++
-					instance.mu.Unlock()
-
-					p.logger.Debug("acquired new instance",
-						zap.String("id", instance.ID),
-						zap.Int("use_count", instance.UseCount))
-
-					return instance, nil
-				}
-			}
-			p.mu.Unlock()
+	for {
+		p.mu.RLock()
+		if p.closed {
+			p.mu.RUnlock()
+			return nil, fmt.Errorf("pool is closed")
 		}
+		canCreateMore := p.instanceCount < p.config.MaxInstances
+		p.mu.RUnlock()
 
-		// 无法创建新实例，等待可用实例
 		select {
 		case instance := <-p.available:
+			// 跳过已关闭的陈旧实例（上下文已被 cancel）
+			instance.mu.RLock()
+			closed := instance.ChromeCancel == nil
+			instance.mu.RUnlock()
+
+			if closed {
+				continue
+			}
+
 			instance.mu.Lock()
 			instance.LastUsedAt = time.Now()
 			instance.UseCount++
 			instance.mu.Unlock()
-
-			p.logger.Debug("acquired instance",
-				zap.String("id", instance.ID),
-				zap.Int("use_count", instance.UseCount))
 
 			return instance, nil
 
@@ -220,6 +179,50 @@ func (p *Pool) Acquire(ctx context.Context) (*Instance, error) {
 
 		case <-p.ctx.Done():
 			return nil, fmt.Errorf("pool is closed")
+
+		default:
+			if canCreateMore {
+				p.mu.Lock()
+				if p.instanceCount < p.config.MaxInstances && !p.closed {
+					instance := p.createInstance()
+					if instance != nil {
+						p.instances = append(p.instances, instance)
+						p.instanceCount++
+						p.mu.Unlock()
+
+						instance.mu.Lock()
+						instance.UseCount++
+						instance.mu.Unlock()
+
+						return instance, nil
+					}
+				}
+				p.mu.Unlock()
+			}
+
+			select {
+			case instance := <-p.available:
+				instance.mu.RLock()
+				closed := instance.ChromeCancel == nil
+				instance.mu.RUnlock()
+
+				if closed {
+					continue
+				}
+
+				instance.mu.Lock()
+				instance.LastUsedAt = time.Now()
+				instance.UseCount++
+				instance.mu.Unlock()
+
+				return instance, nil
+
+			case <-ctx.Done():
+				return nil, ctx.Err()
+
+			case <-p.ctx.Done():
+				return nil, fmt.Errorf("pool is closed")
+			}
 		}
 	}
 }
@@ -275,15 +278,14 @@ func (p *Pool) retireInstance(instance *Instance) {
 		zap.String("id", instance.ID),
 		zap.Int("use_count", instance.UseCount))
 
-	// 从池中移除
 	for i, inst := range p.instances {
 		if inst.ID == instance.ID {
 			p.instances = append(p.instances[:i], p.instances[i+1:]...)
+			p.instanceCount--
 			break
 		}
 	}
 
-	// 创建新实例补充（在释放锁之前）
 	needsNewInstance := p.instanceCount < p.config.MinInstances
 
 	p.mu.Unlock()
@@ -297,28 +299,39 @@ func (p *Pool) retireInstance(instance *Instance) {
 		if newInstance != nil {
 			p.mu.Lock()
 			p.instances = append(p.instances, newInstance)
+			p.instanceCount++
 			p.mu.Unlock()
 
 			select {
 			case p.available <- newInstance:
-				p.instanceCount++
 			default:
+				p.mu.Lock()
+				for i, inst := range p.instances {
+					if inst.ID == newInstance.ID {
+						p.instances = append(p.instances[:i], p.instances[i+1:]...)
+						p.instanceCount--
+						break
+					}
+				}
+				p.mu.Unlock()
 				p.closeInstance(newInstance)
 			}
 		}
 	}
 }
 
-// closeInstance 关闭实例
+// closeInstance 关闭实例，标记已关闭（ChromeCancel 置 nil）
 func (p *Pool) closeInstance(instance *Instance) {
 	instance.mu.Lock()
 	defer instance.mu.Unlock()
 
 	if instance.ChromeCancel != nil {
 		instance.ChromeCancel()
+		instance.ChromeCancel = nil
 	}
 	if instance.AllocCancel != nil {
 		instance.AllocCancel()
+		instance.AllocCancel = nil
 	}
 
 	p.logger.Debug("closed instance", zap.String("id", instance.ID))
@@ -344,25 +357,24 @@ func (p *Pool) healthChecker() {
 // checkHealth 检查实例健康状态
 func (p *Pool) checkHealth() {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 
 	now := time.Now()
+	var toRetire []*Instance
 
 	for _, instance := range p.instances {
 		instance.mu.Lock()
 
-		// 检查是否超过最大使用次数
+		unhealthy := false
 		if instance.UseCount >= instance.MaxUseCount {
-			instance.IsHealthy = false
+			unhealthy = true
 			p.logger.Info("instance unhealthy: max use count reached",
 				zap.String("id", instance.ID),
 				zap.Int("use_count", instance.UseCount))
 		}
 
-		// 检查是否空闲超时
-		if now.Sub(instance.LastUsedAt) > p.config.IdleTimeout {
+		if !unhealthy && now.Sub(instance.LastUsedAt) > p.config.IdleTimeout {
 			if len(p.instances) > p.config.MinInstances {
-				instance.IsHealthy = false
+				unhealthy = true
 				p.logger.Info("instance unhealthy: idle timeout",
 					zap.String("id", instance.ID),
 					zap.Duration("idle_time", now.Sub(instance.LastUsedAt)))
@@ -371,34 +383,16 @@ func (p *Pool) checkHealth() {
 
 		instance.mu.Unlock()
 
-		// 回收不健康的实例
-		if !instance.IsHealthy {
-			p.retireInstanceLocked(instance)
-		}
-	}
-}
-
-// retireInstanceLocked 回收实例（已持有锁）
-func (p *Pool) retireInstanceLocked(instance *Instance) {
-	// 从池中移除
-	for i, inst := range p.instances {
-		if inst.ID == instance.ID {
-			p.instances = append(p.instances[:i], p.instances[i+1:]...)
-			p.instanceCount--
-			break
+		if unhealthy {
+			toRetire = append(toRetire, instance)
 		}
 	}
 
-	go p.closeInstance(instance)
+	p.mu.Unlock()
 
-	// 创建新实例补充
-	if p.instanceCount < p.config.MinInstances {
-		newInstance := p.createInstance()
-		if newInstance != nil {
-			p.instances = append(p.instances, newInstance)
-			p.available <- newInstance
-			p.instanceCount++
-		}
+	// 锁外回收，解除对 available channel 的持锁发送
+	for _, instance := range toRetire {
+		p.retireInstance(instance)
 	}
 }
 

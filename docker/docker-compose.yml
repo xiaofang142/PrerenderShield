@@ -28,6 +28,10 @@ services:
     ports:
       - "9598:9598"
       - "9597:9597"
+    shm_size: 256m
+    mem_limit: 4g
+    security_opt:
+      - seccomp:unconfined
     volumes:
       - app-data:/app/data
       - app-static:/app/static
@@ -36,6 +40,9 @@ services:
       - GIN_MODE=release
       - TZ=Asia/Shanghai
       - REDIS_URL=redis://redis:6379/0
+      - PRERENDER_MAX_INSTANCES=3
+      - PRERENDER_MIN_INSTANCES=1
+      - PRERENDER_WORKER_COUNT=3
     networks:
       - prerender-shield-network
     healthcheck:

@@ -31,7 +31,8 @@ RUN npm run build
 FROM alpine:3.18
 
 # 安装必要的依赖
-RUN apk add --no-cache tzdata ca-certificates chromium
+RUN apk add --no-cache tzdata ca-certificates chromium \
+    && adduser -D -h /home/chrome -s /sbin/nologin chrome-user
 
 # 设置时区
 ENV TZ=Asia/Shanghai
@@ -52,11 +53,18 @@ COPY configs/config.example.yml ./config.example.yml
 COPY docker/docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
+# 设置数据目录权限
+RUN mkdir -p /app/data /app/static && chown -R chrome-user:chrome-user /app
+
 # 暴露端口
 EXPOSE 9598 9597 8081
 
 # 设置环境变量
 ENV GIN_MODE=release
+ENV CHROME_PATH=/usr/bin/chromium-browser
+
+# 切换到非root用户
+USER chrome-user
 
 # 启动应用
 ENTRYPOINT ["./docker-entrypoint.sh"]

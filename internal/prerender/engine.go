@@ -5,6 +5,8 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -100,8 +102,19 @@ func NewEngine(redisClient RedisClient, cacheManager cache.Manager, maxConcurren
 	// 创建动态并发管理器
 	concurrencyManager := NewConcurrencyManager(2, maxConcurrent*2, maxConcurrent)
 
-	// 创建浏览器实例池
-	browserPool := pool.NewPool(pool.DefaultConfig(), zap.NewNop())
+	// 创建浏览器实例池，从环境变量读取池大小
+	poolCfg := pool.DefaultConfig()
+	if envMax := os.Getenv("PRERENDER_MAX_INSTANCES"); envMax != "" {
+		if n, err := strconv.Atoi(envMax); err == nil && n > 0 && n <= 100 {
+			poolCfg.MaxInstances = n
+		}
+	}
+	if envMin := os.Getenv("PRERENDER_MIN_INSTANCES"); envMin != "" {
+		if n, err := strconv.Atoi(envMin); err == nil && n >= 0 {
+			poolCfg.MinInstances = n
+		}
+	}
+	browserPool := pool.NewPool(poolCfg, zap.NewNop())
 
 	return &engine{
 		redisClient:        redisClient,

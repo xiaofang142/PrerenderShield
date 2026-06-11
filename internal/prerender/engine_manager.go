@@ -115,7 +115,7 @@ func (m *EngineManager) GetEngine(siteID string) (Engine, bool) {
 	return engine, true
 }
 
-// RemoveEngine 移除指定站点的渲染引擎
+// RemoveEngine 移除并关闭指定站点的渲染引擎
 //
 // 参数:
 //
@@ -128,10 +128,13 @@ func (m *EngineManager) RemoveEngine(siteID string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	delete(m.engines, siteID)
+	if engine, ok := m.engines[siteID]; ok {
+		engine.Close()
+		delete(m.engines, siteID)
+	}
 }
 
-// Cleanup 清理所有引擎实例
+// Cleanup 关闭并清理所有引擎实例
 //
 // 示例:
 //
@@ -140,7 +143,10 @@ func (m *EngineManager) Cleanup() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	m.engines = make(map[string]Engine)
+	for id, engine := range m.engines {
+		engine.Close()
+		delete(m.engines, id)
+	}
 }
 
 // SetMaxConcurrent 设置最大并发渲染数

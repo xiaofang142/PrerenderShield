@@ -1,8 +1,15 @@
+// DEPRECATED: WorkerPool 设计未完成（参见 docs/superpowers/plans/2026-06-10-chrome-pool-fix.md）。
+// 生产路径 engine.go → pool.Pool 不使用此模块。问题概述：
+//   - Worker.run()/waitForTask() 与 taskDispatcher() 之间缺少任务下发通道
+//   - waitForTask() 的 select default 导致立即返回，run() 循环不断 acquire Chrome 实例
+//   - dispatcher 仅设置 worker.currentTask 字段，从不调用 executeTask()
+// 如需启用，须用 channel 模型重写：worker 阻塞读取 taskChan，dispatcher 写入 taskChan。
 package pool
 
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -566,7 +573,9 @@ func (w *Worker) run() {
 		case <-w.stopChan:
 			return
 		default:
-			w.waitForTask()
+			// DEPRECATED: WorkerPool 未完成，此循环不应获取 Chrome 实例。
+			// 仅释放 CPU 防止空转，不做实际操作。
+			runtime.Gosched()
 		}
 	}
 }

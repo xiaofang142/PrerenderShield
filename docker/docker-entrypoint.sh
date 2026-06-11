@@ -25,11 +25,13 @@ else
     echo "使用默认Redis连接: localhost:6379"
 fi
 
-# 启动应用
+# 显示配置信息
 echo "启动 Prerender Shield 服务..."
 echo "API服务端口: 9598"
 echo "管理控制台端口: 9597"
-echo "静态站点端口: 由配置决定"
+echo "Chrome 最大实例数: ${PRERENDER_MAX_INSTANCES:-10}"
+echo "Chrome 最小实例数: ${PRERENDER_MIN_INSTANCES:-2}"
+echo "渲染工作线程数: ${PRERENDER_WORKER_COUNT:-5}"
 
 # 执行应用
 ./api --config ./config.yml
