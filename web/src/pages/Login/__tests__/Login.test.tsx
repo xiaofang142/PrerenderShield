@@ -31,7 +31,7 @@ beforeEach(() => {
     login: mockLogin, logout: vi.fn(),
   })
   vi.mocked(api.get).mockResolvedValue({
-    code: 200, data: { isFirstRun: false }
+    code: 200, message: 'success', data: { isFirstRun: false }
   })
 })
 
@@ -56,7 +56,8 @@ describe('Login', () => {
   it('calls API and authLogin on submit', async () => {
     vi.mocked(api.post).mockResolvedValue({
       code: 200,
-      data: { token: 't', username: 'u' },
+      message: 'Login successful',
+      data: { token: 't', username: 'u', force_change_password: false },
     })
 
     render(<MemoryRouter><Login /></MemoryRouter>)

@@ -200,7 +200,7 @@ jobs:
 
       - name: Start API server
         run: |
-          go build -o api ./cmd/server/main.go
+          go build -o api ./cmd/api/main.go
           ./api &
           sleep 5
           # 健康检查
@@ -253,7 +253,7 @@ jobs:
 
       - name: Build binary
         run: |
-          go build -v -o prerender-shield ./cmd/server/main.go
+          go build -v -o prerender-shield ./cmd/api/main.go
           chmod +x prerender-shield
 
       - name: Upload binary artifact

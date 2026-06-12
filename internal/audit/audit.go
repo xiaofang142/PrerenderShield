@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"prerender-shield/internal/redis"
 )
 
@@ -107,7 +108,7 @@ func (l *Logger) Log(entry Entry) error {
 		return fmt.Errorf("marshal audit entry: %w", err)
 	}
 
-	key := fmt.Sprintf("%s:%d", l.prefix, entry.Timestamp.Unix())
+	key := fmt.Sprintf("%s:%d:%s", l.prefix, entry.Timestamp.UnixNano(), uuid.New().String()[:8])
 	return l.redisClient.Set(key, string(data), l.ttl)
 }
 
@@ -123,7 +124,7 @@ func (l *Logger) Logf(userID string, action Action, resource, detail, status str
 	l.Log(entry)
 }
 
-// Query 查询审计日志
+// Query 查询审计日志（使用 SCAN 避免阻塞 Redis）
 func (l *Logger) Query(opts QueryOptions) ([]Entry, error) {
 	if l.redisClient == nil {
 		return nil, nil
@@ -136,7 +137,15 @@ func (l *Logger) Query(opts QueryOptions) ([]Entry, error) {
 	}
 
 	var results []Entry
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+
 	for _, key := range keys {
+		if len(results) >= limit {
+			break
+		}
 		val, err := l.redisClient.Get(key)
 		if err != nil {
 			continue

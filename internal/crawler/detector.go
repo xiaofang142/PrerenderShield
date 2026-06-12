@@ -73,20 +73,26 @@ func (d *detector) IsCrawler(r *http.Request) (bool, error) {
 	return false, nil
 }
 
-// getClientIP 获取客户端IP
+// getClientIP 获取客户端IP（优先使用 RemoteAddr，防止 X-Forwarded-For 伪造）
 func (d *detector) getClientIP(r *http.Request) string {
-	// 从X-Forwarded-For头获取
+	// 优先从 RemoteAddr 获取（不可伪造）
+	if r.RemoteAddr != "" {
+		ip := strings.Split(r.RemoteAddr, ":")[0]
+		if ip != "" && ip != "127.0.0.1" && ip != "::1" {
+			return ip
+		}
+	}
+
+	// 仅在 RemoteAddr 为本地回环地址时才信任 X-Forwarded-For（表示经过反向代理）
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		parts := strings.Split(xff, ",")
 		return strings.TrimSpace(parts[0])
 	}
 
-	// 从X-Real-IP头获取
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
 		return xri
 	}
 
-	// 从RemoteAddr获取
 	return strings.Split(r.RemoteAddr, ":")[0]
 }
 

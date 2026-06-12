@@ -2,6 +2,7 @@ package di
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -12,12 +13,10 @@ import (
 	"prerender-shield/internal/auth"
 	"prerender-shield/internal/cache"
 	"prerender-shield/internal/config"
-	"prerender-shield/internal/eventbus"
 	"prerender-shield/internal/firewall"
-	"prerender-shield/internal/plugin"
 	"prerender-shield/internal/logging"
+	"prerender-shield/internal/middleware"
 	"prerender-shield/internal/monitoring"
-	"prerender-shield/internal/observability/metrics"
 	"prerender-shield/internal/prerender"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/repository"
@@ -45,9 +44,6 @@ type Container struct {
 	SiteServerMgr   *siteserver.Manager
 	SiteHandler     *sitehandler.Handler
 	WafRepo         *repository.WafRepository
-	EventBus        *eventbus.InMemoryBus
-	MetricsRecorder *metrics.InMemoryRecorder
-	PluginManager   *plugin.PluginManager
 	AuditLogger     *audit.Logger
 }
 
@@ -84,9 +80,9 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 	// 初始化预渲染
 	prerenderMgr := prerender.NewEngineManager(redisClient, cacheMgr, getWorkerCount(cfg))
 
-	// 初始化日志管理
-	crawlerLogMgr := logging.NewCrawlerLogManager(cfg.Cache.RedisURL)
-	visitLogMgr := logging.NewVisitLogManager(cfg.Cache.RedisURL)
+	// 初始化日志管理（复用主 Redis 连接）
+	crawlerLogMgr := logging.NewCrawlerLogManagerWithClient(redisClient.GetRawClient())
+	visitLogMgr := logging.NewVisitLogManagerWithClient(redisClient.GetRawClient())
 
 	// 初始化 GeoIP
 	geoIPService := services.NewGeoIPService("")
@@ -129,26 +125,15 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 	// 初始化站点管理器
 	siteServerMgr := siteserver.NewManager(monitor)
 
-	// 初始化站点处理器
-	siteHandler := sitehandler.NewHandler(prerenderMgr, wafRepo, redisClient, geoIPService, firewallMgr)
+	// 初始化站点处理器（传入批量日志写入器）
+	wafLogWriter := middleware.NewWafLogWriter(wafRepo, 50, 5*time.Second)
+	siteHandler := sitehandler.NewHandler(prerenderMgr, wafRepo, redisClient, geoIPService, firewallMgr, wafLogWriter)
 
 	// 初始化调度器
 	schedulerInstance := scheduler.NewScheduler(prerenderMgr, redisClient, cfg)
 
-	// 初始化事件总线
-	eventBus := eventbus.NewInMemoryBus(nil)
-
 	// 初始化审计日志
 	auditLogger := audit.NewLogger(redisClient, audit.DefaultConfig())
-
-	// 初始化指标记录器
-	metricsRecorder := metrics.NewInMemoryRecorder()
-
-	// 初始化插件管理器
-	pluginManager := plugin.NewPluginManager()
-	if err := pluginManager.InitializeAll(); err != nil {
-		logging.DefaultLogger.Info("Warning: failed to initialize plugins: %v", err)
-	}
 
 	return &Container{
 		Config:          cfg,
@@ -167,31 +152,28 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 		SiteServerMgr:   siteServerMgr,
 		SiteHandler:     siteHandler,
 		WafRepo:         wafRepo,
-		EventBus:        eventBus,
-		MetricsRecorder: metricsRecorder,
-		PluginManager:   pluginManager,
 		AuditLogger:     auditLogger,
 	}, nil
 }
 
 // getSecretKey 获取 JWT 密钥
-// 优先从环境变量 JWT_SECRET 读取，如果不存在则使用 HMAC-SHA256 生成安全密钥
+// 优先从环境变量 JWT_SECRET 读取，不存在则自动生成随机密钥
 func getSecretKey(cfg *config.Config) string {
 	// 1. 优先从环境变量读取
 	if secret := os.Getenv("JWT_SECRET"); secret != "" {
 		return secret
 	}
 
-	// 2. 从配置读取（如果配置中有）
-	if cfg.App.Version != "" {
-		// 使用 HMAC-SHA256 生成安全密钥
-		h := hmac.New(sha256.New, []byte(cfg.App.Version))
+	// 2. 自动生成随机密钥（单机部署足够安全）
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		logging.DefaultLogger.Error("Failed to generate random JWT secret: %v", err)
+		// 极端情况回退：基于版本+时间生成
+		h := hmac.New(sha256.New, []byte(cfg.App.Version+"-"+time.Now().String()))
 		h.Write([]byte("prerender-shield-jwt-secret"))
 		return hex.EncodeToString(h.Sum(nil))
 	}
-
-	// 3. 默认密钥（仅用于开发环境，生产环境必须设置 JWT_SECRET）
-	return "prerender-shield-secret-dev-only"
+	return hex.EncodeToString(b)
 }
 
 // getWorkerCount 获取预渲染工作线程数
@@ -216,11 +198,6 @@ func (c *Container) Close() error {
 	// 关闭调度器
 	if c.Scheduler != nil {
 		c.Scheduler.Stop()
-	}
-
-	// 关闭事件总线
-	if c.EventBus != nil {
-		c.EventBus.Close()
 	}
 
 	// 关闭监控

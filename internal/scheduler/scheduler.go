@@ -101,36 +101,51 @@ func (s *Scheduler) reloadSites() {
 	// 记录当前所有站点名
 	currentSites := make(map[string]bool)
 
+	// 从配置管理器获取站点配置
+	cm := config.GetInstance()
+	cfg := cm.GetConfig()
+
+	// 构建站点ID -> 配置映射
+	siteConfigMap := make(map[string]config.PrerenderConfig)
+	for _, site := range cfg.Sites {
+		siteConfigMap[site.ID] = site.Prerender
+	}
+
 	// 为每个站点创建或更新定时任务
 	for _, siteName := range siteNames {
 		currentSites[siteName] = true
 
-		// 简化实现：直接创建或更新任务，不检查配置
-		// 检查是否已存在该站点的任务
 		s.tasksMutex.RLock()
 		_, taskExists := s.tasks[siteName]
 		s.tasksMutex.RUnlock()
 
-		// 简化实现：使用默认配置创建任务
-		defaultConfig := config.PrerenderConfig{}
+		// 获取站点的实际配置
+		prerenderCfg, exists := siteConfigMap[siteName]
+		if !exists {
+			prerenderCfg = config.PrerenderConfig{}
+		}
+
 		if taskExists {
-			// 任务已存在，更新任务
-			s.updateTask(siteName, defaultConfig)
+			s.updateTask(siteName, prerenderCfg)
 		} else {
-			// 任务不存在，创建新任务
-			s.createTask(siteName, defaultConfig)
+			s.createTask(siteName, prerenderCfg)
 		}
 	}
 
 	// 删除不再存在的站点的任务
 	s.tasksMutex.RLock()
+	var toRemove []string
 	for siteName := range s.tasks {
 		if !currentSites[siteName] {
-			// 站点已不存在，删除任务
-			go s.removeTask(siteName)
+			toRemove = append(toRemove, siteName)
 		}
 	}
 	s.tasksMutex.RUnlock()
+
+	// 在锁外执行删除
+	for _, siteName := range toRemove {
+		s.removeTask(siteName)
+	}
 }
 
 // createTask 为站点创建定时任务

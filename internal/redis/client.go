@@ -380,15 +380,24 @@ func (c *Client) Incr(key string) (int64, error) {
 	return val, nil
 }
 
-// Keys 获取匹配模式的键
+// Keys 获取匹配模式的键（使用 SCAN 替代 KEYS 避免阻塞 Redis）
 func (c *Client) Keys(pattern string) ([]string, error) {
 	if err := c.checkCircuitBreaker(); err != nil {
 		return nil, err
 	}
-	result, err := c.client.Keys(c.ctx, pattern).Result()
-	if err != nil {
-		c.recordFailure()
-		return nil, err
+	var result []string
+	var cursor uint64
+	for {
+		keys, nextCursor, err := c.client.Scan(c.ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			c.recordFailure()
+			return nil, err
+		}
+		result = append(result, keys...)
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
 	}
 	c.recordSuccess()
 	return result, nil
@@ -467,12 +476,17 @@ func (c *Client) Publish(channel string, message interface{}) error {
 	return nil
 }
 
-// Subscribe 订阅频道
+// Subscribe 订阅频道（返回 PubSub，调用方必须在完成后调用 Close()）
 func (c *Client) Subscribe(channels ...string) *redis.PubSub {
 	if err := c.checkCircuitBreaker(); err != nil {
 		return nil
 	}
 	return c.client.Subscribe(c.ctx, channels...)
+}
+
+// SubscribeWithContext 使用指定 context 订阅频道
+func (c *Client) SubscribeWithContext(ctx context.Context, channels ...string) *redis.PubSub {
+	return c.client.Subscribe(ctx, channels...)
 }
 
 // SaveJSON 保存 JSON 数据
@@ -613,7 +627,9 @@ func (c *Client) GetPushOffset(siteID string) (int64, error) {
 		return 0, nil
 	}
 	var offset int64
-	fmt.Sscanf(value, "%d", &offset)
+	if _, err := fmt.Sscanf(value, "%d", &offset); err != nil {
+		return 0, nil
+	}
 	return offset, nil
 }
 
@@ -940,8 +956,20 @@ func (c *Client) GetSystemConfig() (map[string]string, error) {
 	return result, nil
 }
 
-// SaveSystemConfig 保存系统配置
+// SaveSystemConfig 保存系统配置（带基础校验）
 func (c *Client) SaveSystemConfig(config map[string]interface{}) error {
+	// 基础校验：不允许覆盖关键系统字段
+	blockedKeys := map[string]bool{
+		"jwt_secret":   true,
+		"redis_url":    true,
+		"admin_password": true,
+	}
+	for k := range config {
+		if blockedKeys[k] {
+			return fmt.Errorf("system config key '%s' is read-only and cannot be modified via API", k)
+		}
+	}
+
 	key := "system:config"
 	data, err := json.Marshal(config)
 	if err != nil {

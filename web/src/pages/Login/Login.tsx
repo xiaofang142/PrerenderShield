@@ -19,6 +19,11 @@ const Login: React.FC = () => {
   // 首次运行状态
   const [isFirstRun, setIsFirstRun] = useState(false)
   const [checkingFirstRun, setCheckingFirstRun] = useState(true)
+  // 强制修改密码状态
+  const [forceChangeVisible, setForceChangeVisible] = useState(false)
+  const [forceChangeLoading, setForceChangeLoading] = useState(false)
+  const [pendingToken, setPendingToken] = useState('')
+  const [pendingUsername, setPendingUsername] = useState('')
   const navigate = useNavigate()
   const { login: authLogin } = useAuth()
 
@@ -69,34 +74,61 @@ const Login: React.FC = () => {
     try {
       const response = await authApi.login(values.username, values.password)
       if (response.code === 200) {
-        // 保存token并更新全局状态
-        authLogin(response.data.token, response.data.username)
-        // 显示成功提示
-        showModal('success', t('login.successTitle'), t('login.successContent'))
-        // 延迟跳转到首页
-        setTimeout(() => {
-          navigate('/')
-        }, 1500)
+        if (response.data.force_change_password) {
+          setPendingToken(response.data.token)
+          setPendingUsername(response.data.username)
+          authLogin(response.data.token, response.data.username)
+          setForceChangeVisible(true)
+        } else {
+          authLogin(response.data.token, response.data.username)
+          showModal('success', t('login.successTitle'), t('login.successContent'))
+          setTimeout(() => {
+            navigate('/')
+          }, 1500)
+        }
       } else {
-        // API返回错误，显示错误信息
         showModal('error', t('login.failedTitle'), response.message || t('login.failedDefault'))
       }
     } catch (error: any) {
-      // 网络错误或其他错误
       console.error('Login error:', error)
       if (error.response) {
-        // 服务器返回了错误响应
         const errorMsg = error.response.data?.message || t('login.failedDefault')
         showModal('error', t('login.failedTitle'), errorMsg)
       } else if (error.request) {
-        // 请求已发出，但没有收到响应
         showModal('error', t('login.failedNetwork'), t('login.failedNetwork'))
       } else {
-        // 请求配置错误
         showModal('error', t('login.failedTitle'), t('login.failedRetry'))
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 强制修改密码
+  const handleForceChangePassword = async (values: { old_password: string; new_password: string; confirm_password: string }) => {
+    if (values.new_password !== values.confirm_password) {
+      message.error(t('login.passwordMismatch') || '两次输入的密码不一致')
+      return
+    }
+    setForceChangeLoading(true)
+    try {
+      const res = await authApi.changePassword(values.old_password, values.new_password)
+      if (res.code === 200) {
+        message.success(t('login.passwordChanged') || '密码修改成功')
+        setForceChangeVisible(false)
+        authLogin(pendingToken, pendingUsername)
+        showModal('success', t('login.successTitle'), t('login.successContent'))
+        setTimeout(() => {
+          navigate('/')
+        }, 1500)
+      } else {
+        message.error(res.message || t('login.passwordChangeFailed') || '密码修改失败')
+      }
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || t('login.passwordChangeFailed') || '密码修改失败'
+      message.error(errorMsg)
+    } finally {
+      setForceChangeLoading(false)
     }
   }
 
@@ -225,6 +257,66 @@ const Login: React.FC = () => {
         <div style={{ color: modalType === 'error' ? '#ff4d4f' : modalType === 'success' ? '#52c41a' : '#1890ff' }}>
           {modalContent}
         </div>
+      </Modal>
+
+      {/* 强制修改密码弹窗 */}
+      <Modal
+        title={t('login.forceChangeTitle') || '安全提示：请修改默认密码'}
+        open={forceChangeVisible}
+        closable={false}
+        maskClosable={false}
+        keyboard={false}
+        footer={null}
+        width={420}
+      >
+        <Alert
+          message={t('login.forceChangeDesc') || '检测到您仍在使用默认密码，为了系统安全，请立即修改密码。'}
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+        <Form layout="vertical" onFinish={handleForceChangePassword}>
+          <Form.Item
+            name="old_password"
+            label={t('login.currentPassword') || '当前密码'}
+            rules={[{ required: true, message: t('login.inputPassword') || '请输入当前密码' }]}
+          >
+            <Input.Password prefix={<LockOutlined />} placeholder={t('login.currentPassword') || '当前密码'} size="large" />
+          </Form.Item>
+          <Form.Item
+            name="new_password"
+            label={t('login.newPassword') || '新密码'}
+            rules={[
+              { required: true, message: t('login.inputPassword') || '请输入新密码' },
+              { min: 6, message: t('login.passwordMin') || '密码至少6个字符' },
+            ]}
+          >
+            <Input.Password prefix={<LockOutlined />} placeholder={t('login.newPassword') || '新密码'} size="large" />
+          </Form.Item>
+          <Form.Item
+            name="confirm_password"
+            label={t('login.confirmPassword') || '确认新密码'}
+            dependencies={['new_password']}
+            rules={[
+              { required: true, message: t('login.inputPassword') || '请确认新密码' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('new_password') === value) {
+                    return Promise.resolve()
+                  }
+                  return Promise.reject(new Error(t('login.passwordMismatch') || '两次输入的密码不一致'))
+                },
+              }),
+            ]}
+          >
+            <Input.Password prefix={<LockOutlined />} placeholder={t('login.confirmPassword') || '确认新密码'} size="large" />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" loading={forceChangeLoading} style={{ width: '100%', background: '#2f855a', borderColor: '#2f855a' }} size="large">
+              {t('login.confirmChangeBtn') || '确认修改'}
+            </Button>
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   )

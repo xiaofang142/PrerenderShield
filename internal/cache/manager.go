@@ -45,6 +45,7 @@ type RedisClientInterface interface {
 	Keys(pattern string) ([]string, error)
 	Incr(key string) (int64, error)
 	HashSet(key, field string, value interface{}) error
+	HashSetAll(key string, values map[string]interface{}) error
 	HashGet(key, field string) (string, error)
 	HashGetAll(key string) (map[string]string, error)
 	Expire(key string, expiration time.Duration) error
@@ -87,15 +88,13 @@ func (m *manager) SetWithPriority(siteID, key string, value []byte, expiration t
 
 	metaKey := fmt.Sprintf("%s:meta", cacheKey)
 	meta := map[string]interface{}{
-		"created_at": now.Unix(),
-		"expires_at": now.Add(expiration).Unix(),
-		"priority":   priority,
-		"hit_count":  0,
+		"created_at":  now.Unix(),
+		"expires_at":  now.Add(expiration).Unix(),
+		"priority":    priority,
+		"hit_count":   0,
 		"last_hit_at": 0,
 	}
-	for k, v := range meta {
-		m.redisClient.HashSet(metaKey, k, v)
-	}
+	m.redisClient.HashSetAll(metaKey, meta)
 	m.redisClient.Expire(metaKey, expiration)
 	return nil
 }
@@ -112,7 +111,13 @@ func (m *manager) Get(siteID, key string) ([]byte, error) {
 	}
 
 	metaKey := fmt.Sprintf("%s:meta", cacheKey)
-	m.redisClient.HashSet(metaKey, "hit_count", nil)
+	if hc, err := m.redisClient.HashGet(metaKey, "hit_count"); err == nil && hc != "" {
+		var count int64
+		fmt.Sscanf(hc, "%d", &count)
+		m.redisClient.HashSet(metaKey, "hit_count", count+1)
+	} else {
+		m.redisClient.HashSet(metaKey, "hit_count", 1)
+	}
 	m.redisClient.HashSet(metaKey, "last_hit_at", time.Now().Unix())
 
 	return []byte(value), nil

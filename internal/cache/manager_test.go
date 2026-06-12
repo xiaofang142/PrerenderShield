@@ -75,6 +75,14 @@ func (m *MockRedisClient) ClearCache() error {
 	return nil
 }
 
+func (m *MockRedisClient) HashSetAll(key string, values map[string]interface{}) error {
+	for k, v := range values {
+		m.data[key+":"+k] = ""
+		_ = v
+	}
+	return nil
+}
+
 func (m *MockRedisClient) Incr(key string) (int64, error) {
 	return 1, nil
 }

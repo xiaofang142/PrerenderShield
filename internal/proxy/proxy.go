@@ -116,12 +116,21 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // getOrCreateReverseProxy 获取或创建反向代理实例
 func (p *proxy) getOrCreateReverseProxy(siteID, backendURL string) (*httputil.ReverseProxy, error) {
-	// 尝试从缓存获取
+	// 先尝试从缓存获取（读锁）
 	p.mutex.RLock()
 	reverseProxy, ok := p.reverseProxies[siteID]
 	p.mutex.RUnlock()
 
 	if ok {
+		return reverseProxy, nil
+	}
+
+	// 获取写锁，double-check
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	// 双重检查：其他 goroutine 可能已经创建
+	if reverseProxy, ok := p.reverseProxies[siteID]; ok {
 		return reverseProxy, nil
 	}
 
@@ -162,10 +171,8 @@ func (p *proxy) getOrCreateReverseProxy(siteID, backendURL string) (*httputil.Re
 		return nil
 	}
 
-	// 添加到缓存
-	p.mutex.Lock()
+	// 添加到缓存（已在写锁保护下）
 	p.reverseProxies[siteID] = newReverseProxy
-	p.mutex.Unlock()
 
 	return newReverseProxy, nil
 }

@@ -21,7 +21,7 @@ func setupMonitoringController() (*MonitoringController, *gin.Engine) {
 		PrometheusAddress: ":9090",
 	})
 
-	controller := NewMonitoringController(monitor)
+	controller := NewMonitoringController(monitor, nil)
 
 	router := gin.New()
 	router.GET("/monitoring/stats", controller.GetStats)

@@ -1,0 +1,93 @@
+{
+  "common": {
+    "loading": "読み込み中...",
+    "success": "操作成功",
+    "error": "操作失敗",
+    "confirm": "確認",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "edit": "編集",
+    "add": "追加",
+    "save": "保存",
+    "search": "検索",
+    "reset": "リセット",
+    "actions": "操作",
+    "view": "表示",
+    "download": "ダウンロード",
+    "upload": "アップロード",
+    "extract": "展開",
+    "batchDelete": "一括削除",
+    "deleteAll": "すべて削除",
+    "ok": "OK"
+  },
+  "menu": {
+    "overview": "概要",
+    "sites": "サイト管理",
+    "firewall": "WAFログ",
+    "logs": "ログ",
+    "crawler": "クローラーログ",
+    "monitor": "システム監視",
+    "settings": "システム設定"
+  },
+  "system": {
+    "visitOfficial": "公式サイト"
+  },
+  "overview": {
+    "totalRequests": "総リクエスト数",
+    "crawlerRequests": "クローラーリクエスト",
+    "blockedRequests": "ブロックリクエスト",
+    "cacheHitRate": "キャッシュヒット率",
+    "activeBrowsers": "アクティブブラウザ",
+    "activeSites": "アクティブサイト",
+    "prerenderEnabled": "プリレンダーサービス",
+    "firewallEnabled": "ファイアウォールサービス",
+    "trafficTrend": "トラフィックトレンド",
+    "accessStats": "アクセス統計",
+    "geoDistribution": "グローバル分布",
+    "countryRank": "国別ランキング"
+  },
+  "sites": {
+    "title": "サイト管理",
+    "addSite": "サイト追加",
+    "reload": "再読み込み",
+    "totalSites": "総サイト数",
+    "prerenderEnabledSites": "プリレンダー有効",
+    "firewallEnabledSites": "ファイアウォール有効",
+    "columns": {
+      "name": "サイト名",
+      "domain": "ドメイン",
+      "port": "ポート",
+      "mode": "モード",
+      "prerenderStatus": "プリレンダーステータス",
+      "firewallStatus": "ファイアウォールステータス"
+    },
+    "staticManage": "静的ファイル",
+    "wafConfig": "WAF設定",
+    "pushConfig": "プッシュ設定",
+    "prerenderConfig": "プリレンダー設定"
+  },
+  "login": {
+    "welcome": "管理システムにログイン",
+    "username": "ユーザー名",
+    "password": "パスワード",
+    "loginBtn": "ログイン",
+    "setupBtn": "セットアップ",
+    "successTitle": "ログイン成功",
+    "successContent": "ログインに成功しました。ホームページにリダイレクトします...",
+    "failedTitle": "ログイン失敗",
+    "failedDefault": "ログイン失敗",
+    "failedNetwork": "ネットワークエラー。接続を確認してください",
+    "failedRetry": "ログイン失敗。後でもう一度お試しください",
+    "inputUsername": "ユーザー名を入力してください！",
+    "usernameMin": "ユーザー名は3文字以上必要です！",
+    "usernameMax": "ユーザー名は20文字以下にしてください！",
+    "inputPassword": "パスワードを入力してください！",
+    "passwordMin": "パスワードは6文字以上必要です！",
+    "passwordMax": "パスワードは20文字以下にしてください！",
+    "firstRun": {
+      "title": "初回セットアップ",
+      "desc1": "初めてシステムにアクセスしました。設定するユーザー名とパスワードは以後のログインに使用されます。",
+      "desc2": "注意：初期設定のユーザー名とパスワードは変更できません。安全に保管してください！"
+    }
+  }
+}

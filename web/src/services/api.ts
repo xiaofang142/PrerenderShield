@@ -36,33 +36,18 @@ api.interceptors.request.use(
 
     // 非登录 API 需要携带 token
     if (token) {
-      // 为所有非登录 API 添加 Authorization 头
       if (!isAuthApi) {
-        // 使用 axios 的 headers.set 方法确保 Authorization 头被正确设置
         if (config.headers.set) {
           config.headers.set('Authorization', `Bearer ${token}`)
         } else {
-          // 兼容不同的 headers 对象类型
           config.headers.Authorization = `Bearer ${token}`
         }
       }
     }
 
-    // 开发环境调试日志
-    if (import.meta.env.DEV) {
-      console.log('=== API Request Debug ===')
-      console.log('Request URL:', url)
-      console.log('Token found:', !!token)
-      console.log('Is Auth API:', isAuthApi)
-    }
-
     return config
   },
   (error) => {
-    if (import.meta.env.DEV) {
-      console.error('=== API Request Error ===')
-      console.error('Error:', error)
-    }
     return Promise.reject(error)
   }
 )
@@ -70,23 +55,9 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
-    // 开发环境调试日志
-    if (import.meta.env.DEV) {
-      console.log('=== API Response Debug ===')
-      console.log('Response URL:', response.config.url)
-      console.log('Response Status:', response.status)
-    }
     return response.data
   },
   (error) => {
-    // 开发环境调试日志
-    if (import.meta.env.DEV) {
-      console.error('=== API Response Error Debug ===')
-      console.error('Error URL:', error.config?.url)
-      console.error('Error Status:', error.response?.status)
-      console.error('Error Message:', error.message)
-    }
-
     // 处理 401 未授权错误
     if (error.response && error.response.status === 401) {
       // 清除本地存储的 token
@@ -118,6 +89,10 @@ export const authApi = {
   firstRun: () => api.get('/auth/first-run'),
   login: (username: string, password: string) => api.post('/auth/login', { username, password }),
   logout: () => api.post('/auth/logout'),
+  changePassword: (oldPassword: string, newPassword: string) => api.post('/auth/change-password', { old_password: oldPassword, new_password: newPassword }),
+  listUsers: () => api.get('/auth/users'),
+  deleteUser: (id: string) => api.delete(`/auth/users/${id}`),
+  resetPassword: (id: string, newPassword: string) => api.post(`/auth/users/${id}/reset-password`, { new_password: newPassword }),
 }
 
 // 概览 API
@@ -130,7 +105,7 @@ export const firewallApi = {
   getWafConfig: (siteId: string) => api.get(`/sites/${siteId}/waf`),
   updateWafConfig: (siteId: string, config: any) => api.put(`/sites/${siteId}/waf`, config),
   getAccessLogs: (params: { site_id?: string; page?: number; limit?: number }) => api.get('/logs', { params }),
-  // 为了兼容 Firewall.tsx 增加的方法
+  exportLogs: (siteId?: string) => `/api/v1/logs/export${siteId ? `?site_id=${siteId}` : ''}`,
   getAttackLogs: (params: { site_id: string; page: number; limit: number }) => api.get('/firewall/attacks', { params }),
   addToWhitelist: (siteId: string, ip: string) => api.post(`/firewall/whitelist`, { site_id: siteId, ip }),
   addToBlacklist: (siteId: string, ip: string) => api.post(`/firewall/blacklist`, { site_id: siteId, ip }),
@@ -157,6 +132,7 @@ export const routingApi = {
 export const monitoringApi = {
   getStats: () => api.get('/monitoring/stats'),
   getLogs: (params?: { site_id?: string; page?: number; limit?: number }) => api.get('/logs', { params }),
+  getAlertHistory: (limit?: number) => api.get('/monitoring/alerts/history', { params: { limit: limit || 50 } }),
 }
 
 // 站点管理 API
@@ -209,6 +185,21 @@ export const systemApi = {
   version: () => api.get('/version'),
   getConfig: () => api.get('/system/config'),
   updateConfig: (config: any) => api.post('/system/config', config),
+  backup: () => api.post('/system/backup'),
+  restore: (backupKey: string) => api.post('/system/restore', { backup_key: backupKey }),
+  listBackups: () => api.get('/system/backups'),
+}
+
+// SSL 证书 API
+export const sslApi = {
+  listCertificates: () => api.get('/ssl/certificates'),
+  getCertificate: (domain: string) => api.get(`/ssl/certificates/${domain}`),
+  requestCertificate: (domains: string[]) => api.post('/ssl/certificates', { domains }),
+  renewCertificate: (domain: string) => api.post(`/ssl/certificates/${domain}/renew`),
+  deleteCertificate: (domain: string) => api.delete(`/ssl/certificates/${domain}`),
+  getExpiringCertificates: (days: number = 30) => api.get('/ssl/certificates/expiring', { params: { days } }),
+  requestWildcardCertificate: (baseDomain: string, subdomains: string[]) => api.post('/ssl/certificates/wildcard', { base_domain: baseDomain, subdomains }),
+  getRenewalHistory: (domain: string) => api.get(`/ssl/certificates/${domain}/renewal-history`),
 }
 
 export default api

@@ -88,6 +88,15 @@
       "title": "首次访问提示",
       "desc1": "当前是首次访问系统，您设置的账号密码将是后续登录使用的凭证。",
       "desc2": "注意：首次设置的账号密码不可修改，请妥善保管！"
-    }
+    },
+    "forceChangeTitle": "安全提示：请修改默认密码",
+    "forceChangeDesc": "检测到您仍在使用默认密码，为了系统安全，请立即修改密码。",
+    "currentPassword": "当前密码",
+    "newPassword": "新密码",
+    "confirmPassword": "确认新密码",
+    "confirmChangeBtn": "确认修改",
+    "passwordChanged": "密码修改成功",
+    "passwordChangeFailed": "密码修改失败",
+    "passwordMismatch": "两次输入的密码不一致"
   }
 }

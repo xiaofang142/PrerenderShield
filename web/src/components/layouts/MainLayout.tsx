@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { systemApi } from '../../services/api'
+import MultiTab from './MultiTab'
 
 const { Header, Sider, Content } = Layout
 
@@ -45,10 +46,8 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const langItems = [
     { key: 'zh', label: '简体中文' },
     { key: 'en', label: 'English' },
-    { key: 'ar', label: 'العربية' },
-    { key: 'fr', label: 'Français' },
-    { key: 'ru', label: 'Русский' },
-    { key: 'es', label: 'Español' },
+    { key: 'ja', label: '日本語' },
+    { key: 'ko', label: '한국어' },
   ]
 
   const handleLangChange = (key: string) => {
@@ -116,6 +115,11 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               label: <Link to="/firewall" style={{ color: '#333333' }}>{t('menu.firewall')}</Link>
             },
             {
+              key: '/firewall/rules',
+              icon: <SecurityScanOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/firewall/rules" style={{ color: '#333333' }}>WAF 规则管理</Link>
+            },
+            {
               key: '/prerender',
               icon: <CodeOutlined style={{ color: '#2f855a' }} />,
               label: <Link to="/prerender" style={{ color: '#333333' }}>渲染预热</Link>
@@ -135,6 +139,11 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               key: '/monitoring',
               icon: <BarChartOutlined style={{ color: '#2f855a' }} />,
               label: <Link to="/monitoring" style={{ color: '#333333' }}>{t('menu.monitor')}</Link>
+            },
+            {
+              key: '/monitoring/alerts',
+              icon: <BarChartOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/monitoring/alerts" style={{ color: '#333333' }}>告警配置</Link>
             },
             {
               key: '/crawler',
@@ -255,15 +264,20 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           className="site-layout-background"
           style={{
             margin: '24px 16px',
-            padding: 24,
+            padding: 0,
             minHeight: 280,
             background: '#ffffff',
             borderRadius: 8,
             border: '1px solid #e8e8e8',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+            overflow: 'hidden',
           }}
         >
-          {children}
+          <MultiTab>
+            <div style={{ padding: '0 24px 24px 24px' }}>
+              {children}
+            </div>
+          </MultiTab>
         </Content>
       </Layout>
     </Layout>

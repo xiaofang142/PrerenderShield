@@ -11,6 +11,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/google/wire v0.7.0
+	github.com/gorilla/websocket v1.4.2
 	github.com/oschwald/geoip2-golang v1.9.0
 	github.com/pquerna/otp v1.5.0
 	github.com/prometheus/client_golang v1.20.4

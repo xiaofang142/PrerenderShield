@@ -31,16 +31,18 @@ type Handler struct {
 	redisClient      *redis.Client
 	geoIP            services.GeoIPResolver
 	firewallManager  *firewall.EngineManager
+	logWriter        *middleware.WafLogWriter
 }
 
 // NewHandler 创建站点处理器实例
-func NewHandler(prerenderManager *prerender.EngineManager, wafRepo *repository.WafRepository, redisClient *redis.Client, geoIP services.GeoIPResolver, firewallManager *firewall.EngineManager) *Handler {
+func NewHandler(prerenderManager *prerender.EngineManager, wafRepo *repository.WafRepository, redisClient *redis.Client, geoIP services.GeoIPResolver, firewallManager *firewall.EngineManager, logWriter *middleware.WafLogWriter) *Handler {
 	return &Handler{
 		prerenderManager: prerenderManager,
 		wafRepo:          wafRepo,
 		redisClient:      redisClient,
 		geoIP:            geoIP,
 		firewallManager:  firewallManager,
+		logWriter:        logWriter,
 	}
 }
 
@@ -104,7 +106,7 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 	}
 
 	// WAF中间件 - 最先执行，保护后续处理
-	siteRouter.Use(middleware.WafMiddleware(site, h.wafRepo, h.redisClient, h.geoIP, siteWafEngine))
+	siteRouter.Use(middleware.WafMiddleware(site, h.wafRepo, h.redisClient, h.geoIP, siteWafEngine, h.logWriter))
 
 	// 爬虫检测中间件 - 第一个执行，确保爬虫请求得到正确处理
 	siteRouter.Use(func(c *gin.Context) {

@@ -1,0 +1,93 @@
+{
+  "common": {
+    "loading": "로딩 중...",
+    "success": "작업 성공",
+    "error": "작업 실패",
+    "confirm": "확인",
+    "cancel": "취소",
+    "delete": "삭제",
+    "edit": "편집",
+    "add": "추가",
+    "save": "저장",
+    "search": "검색",
+    "reset": "초기화",
+    "actions": "작업",
+    "view": "보기",
+    "download": "다운로드",
+    "upload": "업로드",
+    "extract": "압축풀기",
+    "batchDelete": "일괄 삭제",
+    "deleteAll": "전체 삭제",
+    "ok": "확인"
+  },
+  "menu": {
+    "overview": "개요",
+    "sites": "사이트 관리",
+    "firewall": "WAF 로그",
+    "logs": "로그",
+    "crawler": "크롤러 로그",
+    "monitor": "시스템 모니터",
+    "settings": "시스템 설정"
+  },
+  "system": {
+    "visitOfficial": "공식 사이트"
+  },
+  "overview": {
+    "totalRequests": "총 요청 수",
+    "crawlerRequests": "크롤러 요청",
+    "blockedRequests": "차단된 요청",
+    "cacheHitRate": "캐시 히트율",
+    "activeBrowsers": "활성 브라우저",
+    "activeSites": "활성 사이트",
+    "prerenderEnabled": "프리렌더 서비스",
+    "firewallEnabled": "방화벽 서비스",
+    "trafficTrend": "트래픽 트렌드",
+    "accessStats": "접속 통계",
+    "geoDistribution": "글로벌 분포",
+    "countryRank": "국가별 순위"
+  },
+  "sites": {
+    "title": "사이트 관리",
+    "addSite": "사이트 추가",
+    "reload": "새로고침",
+    "totalSites": "총 사이트 수",
+    "prerenderEnabledSites": "프리렌더 활성화",
+    "firewallEnabledSites": "방화벽 활성화",
+    "columns": {
+      "name": "사이트 이름",
+      "domain": "도메인",
+      "port": "포트",
+      "mode": "모드",
+      "prerenderStatus": "프리렌더 상태",
+      "firewallStatus": "방화벽 상태"
+    },
+    "staticManage": "정적 파일",
+    "wafConfig": "WAF 설정",
+    "pushConfig": "푸시 설정",
+    "prerenderConfig": "프리렌더 설정"
+  },
+  "login": {
+    "welcome": "관리 시스템 로그인",
+    "username": "사용자 이름",
+    "password": "비밀번호",
+    "loginBtn": "로그인",
+    "setupBtn": "설정 및 로그인",
+    "successTitle": "로그인 성공",
+    "successContent": "로그인에 성공했습니다. 홈페이지로 이동합니다...",
+    "failedTitle": "로그인 실패",
+    "failedDefault": "로그인 실패",
+    "failedNetwork": "네트워크 오류. 연결을 확인해주세요",
+    "failedRetry": "로그인 실패. 나중에 다시 시도해주세요",
+    "inputUsername": "사용자 이름을 입력하세요!",
+    "usernameMin": "사용자 이름은 3자 이상이어야 합니다!",
+    "usernameMax": "사용자 이름은 20자 이하여야 합니다!",
+    "inputPassword": "비밀번호를 입력하세요!",
+    "passwordMin": "비밀번호는 6자 이상이어야 합니다!",
+    "passwordMax": "비밀번호는 20자 이하여야 합니다!",
+    "firstRun": {
+      "title": "초기 설정",
+      "desc1": "처음 시스템에 접속했습니다. 설정한 사용자 이름과 비밀번호는 향후 로그인에 사용됩니다.",
+      "desc2": "주의: 초기 설정한 사용자 이름과 비밀번호는 변경할 수 없습니다. 안전하게 보관하세요!"
+    }
+  }
+}

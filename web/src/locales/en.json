@@ -88,6 +88,15 @@
       "title": "Initial Setup",
       "desc1": "This is the first time you are accessing the system. The username and password you set now will be used for future logins.",
       "desc2": "Note: The initial username and password cannot be changed, please keep them safe!"
-    }
+    },
+    "forceChangeTitle": "Security: Please Change Default Password",
+    "forceChangeDesc": "You are still using the default password. For security, please change it now.",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmPassword": "Confirm New Password",
+    "confirmChangeBtn": "Confirm Change",
+    "passwordChanged": "Password changed successfully",
+    "passwordChangeFailed": "Failed to change password",
+    "passwordMismatch": "Passwords do not match"
   }
 }

@@ -75,9 +75,10 @@ func extractZIP(archivePath, extractPath string) error {
 	return nil
 }
 
-// extractRAR 解压RAR文件（预留实现，需要外部库支持）
+// extractRAR 解压RAR文件
+// Go 标准库不支持 RAR 格式，需要安装 unrar 命令行工具
 func extractRAR(archivePath, extractPath string) error {
-	return fmt.Errorf("RAR extraction not implemented yet")
+	return fmt.Errorf("RAR format is not supported in Go standard library. Please convert to ZIP/TAR.GZ format, or install 'unrar' and use external extraction")
 }
 
 // EnsureDir 确保目录存在，如果不存在则创建

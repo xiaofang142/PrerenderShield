@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
@@ -11,6 +11,9 @@ import { useTranslation } from 'react-i18next'
 // Import Auth Context
 import { AuthProvider } from './context/AuthContext'
 
+// Import Error Boundary
+import ErrorBoundary from './components/common/ErrorBoundary'
+
 // Import Private Route
 import PrivateRoute from './components/PrivateRoute/PrivateRoute'
 
@@ -18,10 +21,12 @@ import PrivateRoute from './components/PrivateRoute/PrivateRoute'
 import Login from './pages/Login/Login'
 import Overview from './pages/Overview/Overview'
 import Firewall from './pages/Firewall/Firewall'
+import FirewallRules from './pages/Firewall/FirewallRules'
 import Prerender from './pages/Prerender/Prerender'
 import Preheat from './pages/Prerender/Preheat'
 import Push from './pages/Prerender/Push'
 import Monitoring from './pages/Monitoring/Monitoring'
+import AlertConfig from './pages/Monitoring/AlertConfig'
 import Logs from './pages/Logs/Logs'
 import Sites from './pages/Sites/Sites'
 import Crawler from './pages/Crawler/Crawler'
@@ -95,156 +100,33 @@ function App() {
 
   return (
     <ConfigProvider locale={getAntdLocale()} theme={theme}>
-      <AuthProvider>
-        <Router>
-          <Routes>
-            {/* 登录路由 - 不需要认证 */}
-            <Route path="/login" element={<Login />} />
-            
-            {/* 需要认证的路由 */}
-            <Route 
-              path="/" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <Overview />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/sites" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <Sites />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/sites/:id/waf" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <WAFSettings />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/dashboard" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <Dashboard />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/firewall" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <Firewall />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/prerender" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <Prerender />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/prerender/preheat" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <Preheat />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/prerender/push" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <Push />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/monitoring" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <Monitoring />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/logs" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <Logs />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/crawler" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <Crawler />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/system" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <SystemConfig />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/ssl" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <SSLPage />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/settings" 
-              element={
-                <PrivateRoute>
-                  <MainLayout>
-                    <SettingsPage />
-                  </MainLayout>
-                </PrivateRoute>
-              } 
-            />
-          </Routes>
-        </Router>
-      </AuthProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <Router>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route element={<PrivateRoute><MainLayout><Outlet /></MainLayout></PrivateRoute>}>
+                <Route path="/" element={<Overview />} />
+                <Route path="/sites" element={<Sites />} />
+                <Route path="/sites/:id/waf" element={<WAFSettings />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/firewall" element={<Firewall />} />
+                <Route path="/firewall/rules" element={<FirewallRules />} />
+                <Route path="/prerender" element={<Prerender />} />
+                <Route path="/prerender/preheat" element={<Preheat />} />
+                <Route path="/prerender/push" element={<Push />} />
+                <Route path="/monitoring" element={<Monitoring />} />
+                <Route path="/monitoring/alerts" element={<AlertConfig />} />
+                <Route path="/logs" element={<Logs />} />
+                <Route path="/crawler" element={<Crawler />} />
+                <Route path="/system" element={<SystemConfig />} />
+                <Route path="/ssl" element={<SSLPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+              </Route>
+            </Routes>
+          </Router>
+        </AuthProvider>
+      </ErrorBoundary>
     </ConfigProvider>
   )
 }

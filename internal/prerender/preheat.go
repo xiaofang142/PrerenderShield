@@ -3,7 +3,7 @@ package prerender
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -205,7 +205,7 @@ func (p *PreheatWorker) preheatURL(url string) bool {
 	defer resp.Body.Close()
 
 	// 读取响应内容
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logging.DefaultLogger.Info("Failed to read response for %s: %v\n", url, err)
 		p.redisClient.SetURLPreheatStatus(p.siteName, url, "failed", 0)
@@ -325,7 +325,7 @@ func (p *PreheatWorker) PreheatURLWithHeaders(url string, headers map[string]str
 	defer resp.Body.Close()
 
 	// 读取响应内容
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read response: %v", err)
 	}

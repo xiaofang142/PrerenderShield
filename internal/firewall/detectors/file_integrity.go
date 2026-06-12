@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -238,7 +237,7 @@ func (d *FileIntegrityDetector) checkFileIntegrity() {
 // calculateFileHash 计算文件哈希值，支持多种算法
 func (d *FileIntegrityDetector) calculateFileHash(path string) (string, error) {
 	// 读取文件内容
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}

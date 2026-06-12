@@ -111,7 +111,7 @@ func SetupControllers(
 	return &Controllers{
 		AuthController:       controllers.NewAuthController(userManager, jwtManager, auditLogger, twoFactorAuth),
 		OverviewController:   controllers.NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, wafRepo),
-		MonitoringController: controllers.NewMonitoringController(monitor),
+		MonitoringController: controllers.NewMonitoringController(monitor, redisClient),
 		FirewallController:   controllers.NewFirewallController(wafRepo),
 		CrawlerController:    controllers.NewCrawlerController(crawlerLogMgr),
 		PreheatController:    controllers.NewPreheatController(prerenderManager, redisClient, cfg),

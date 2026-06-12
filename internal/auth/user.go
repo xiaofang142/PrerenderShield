@@ -2,12 +2,34 @@ package auth
 
 import (
 	"errors"
+	"fmt"
+	"unicode"
 
 	"prerender-shield/internal/redis"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// ValidatePasswordStrength 校验密码强度：至少6位，包含字母和数字
+func ValidatePasswordStrength(password string) error {
+	if len(password) < 6 {
+		return fmt.Errorf("password must be at least 6 characters")
+	}
+	var hasLetter, hasDigit bool
+	for _, c := range password {
+		if unicode.IsLetter(c) {
+			hasLetter = true
+		}
+		if unicode.IsDigit(c) {
+			hasDigit = true
+		}
+	}
+	if !hasLetter || !hasDigit {
+		return fmt.Errorf("password must contain both letters and digits")
+	}
+	return nil
+}
 
 var (
 	// 错误定义
@@ -38,6 +60,10 @@ func NewUserManager(_ string, redisClient *redis.Client) *UserManager {
 
 // CreateUser 创建用户
 func (m *UserManager) CreateUser(username, password string) (*User, error) {
+	if err := ValidatePasswordStrength(password); err != nil {
+		return nil, err
+	}
+
 	// 检查是否已经有用户存在（只允许创建一个用户）
 	if m.redisClient != nil {
 		userIDs, err := m.redisClient.GetAllUsers()
@@ -121,6 +147,122 @@ func (m *UserManager) AuthenticateUser(username, password string) (*User, error)
 	}
 
 	return user, nil
+}
+
+// IsDefaultPassword 检查用户是否仍在使用默认密码
+func (m *UserManager) IsDefaultPassword(userID string) bool {
+	if m.redisClient == nil {
+		return false
+	}
+	key := fmt.Sprintf("user:%s", userID)
+	val, err := m.redisClient.HashGet(key, "password_changed")
+	if err != nil || val == "" {
+		return true
+	}
+	return val != "true"
+}
+
+// ListUsers 列出所有用户
+func (m *UserManager) ListUsers() ([]*User, error) {
+	if m.redisClient == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
+	userIDs, err := m.redisClient.GetAllUsers()
+	if err != nil {
+		return nil, err
+	}
+	var users []*User
+	for _, uid := range userIDs {
+		user, err := m.GetUserByID(uid)
+		if err != nil {
+			continue
+		}
+		users = append(users, user)
+	}
+	return users, nil
+}
+
+// DeleteUser 删除用户
+func (m *UserManager) DeleteUser(userID string) error {
+	if m.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
+	user, err := m.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+	// 删除用户数据
+	if err := m.redisClient.Del(fmt.Sprintf("user:%s", userID)); err != nil {
+		return err
+	}
+	// 删除用户名映射
+	if err := m.redisClient.Del(fmt.Sprintf("username:%s", user.Username)); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ResetPassword 重置用户密码（管理员操作）
+func (m *UserManager) ResetPassword(userID, newPassword string) error {
+	if err := ValidatePasswordStrength(newPassword); err != nil {
+		return err
+	}
+	if _, err := m.GetUserByID(userID); err != nil {
+		return ErrUserNotFound
+	}
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	key := fmt.Sprintf("user:%s", userID)
+	return m.redisClient.HashSet(key, "password", string(hashedPassword))
+}
+
+// ChangePassword 修改用户密码
+func (m *UserManager) ChangePassword(userID, oldPassword, newPassword string) error {
+	if err := ValidatePasswordStrength(newPassword); err != nil {
+		return err
+	}
+
+	user, err := m.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(oldPassword)); err != nil {
+		return ErrInvalidCredentials
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	key := fmt.Sprintf("user:%s", userID)
+	if err := m.redisClient.HashSet(key, "password", string(hashedPassword)); err != nil {
+		return err
+	}
+	if err := m.redisClient.HashSet(key, "password_changed", "true"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetUserByID 通过用户ID获取用户
+func (m *UserManager) GetUserByID(userID string) (*User, error) {
+	if m.redisClient == nil {
+		return nil, ErrUserNotFound
+	}
+	userData, err := m.redisClient.GetUser(userID)
+	if err != nil || len(userData) == 0 {
+		return nil, ErrUserNotFound
+	}
+	return &User{
+		ID:       userData["id"],
+		Username: userData["username"],
+		Password: userData["password"],
+	}, nil
 }
 
 // IsFirstRun 检查是否是首次运行（没有用户）

@@ -270,3 +270,26 @@ func (c *FirewallController) AddToBlacklist(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success"})
 }
+
+// ExportLogs 导出访问日志为CSV
+func (c *FirewallController) ExportLogs(ctx *gin.Context) {
+	siteID := ctx.Query("site_id")
+	if siteID == "" {
+		siteID = "default"
+	}
+
+	logs, _, err := c.wafRepo.GetAccessLogs(siteID, 1, 1000)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to fetch logs"})
+		return
+	}
+
+	ctx.Header("Content-Type", "text/csv")
+	ctx.Header("Content-Disposition", "attachment;filename=access_logs.csv")
+	ctx.String(http.StatusOK, "ID,IP,Method,Path,Status,Action,Reason,CreatedAt\n")
+	for _, log := range logs {
+		ctx.String(http.StatusOK, "%s,%s,%s,%s,%d,%s,%s,%s\n",
+			log.ID, log.IPAddress, log.Method, log.RequestPath,
+			log.StatusCode, log.Action, log.Reason, log.CreatedAt.Format("2006-01-02 15:04:05"))
+	}
+}

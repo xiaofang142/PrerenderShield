@@ -108,9 +108,10 @@ func TestAuthController_Logout_NoToken(t *testing.T) {
 func TestAuthController_Login_InvalidCredentials(t *testing.T) {
 	_, router := setupAuthController()
 
+	// 首次运行时会自动创建用户，密码必须包含字母和数字
 	loginData := map[string]string{
 		"username": "invalid",
-		"password": "wrongpassword",
+		"password": "wrongpass1",
 	}
 	body, _ := json.Marshal(loginData)
 

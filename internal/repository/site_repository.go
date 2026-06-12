@@ -220,6 +220,8 @@ func (r *siteRepository) GetByDomain(domain string) (*models.Site, error) {
 // parseInt64 将字符串转换为int64
 func parseInt64(s string) int64 {
 	var i int64
-	fmt.Sscanf(s, "%d", &i)
+	if _, err := fmt.Sscanf(s, "%d", &i); err != nil {
+		return 0
+	}
 	return i
 }

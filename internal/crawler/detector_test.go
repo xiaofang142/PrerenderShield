@@ -18,36 +18,34 @@ type mockDetectorFunctions struct {
 func TestDetector_GetClientIP(t *testing.T) {
 	d := &detector{}
 
-	// Test X-Forwarded-For header
+	// Test: RemoteAddr 优先（非回环地址）
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.RemoteAddr = "192.168.1.5:12345"
 	req.Header.Set("X-Forwarded-For", "192.168.1.1, 192.168.1.2")
 	ip := d.getClientIP(req)
+	assert.Equal(t, "192.168.1.5", ip)
+
+	// Test: RemoteAddr 为回环地址时信任 X-Forwarded-For
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	req.Header.Set("X-Forwarded-For", "192.168.1.1, 192.168.1.2")
+	ip = d.getClientIP(req)
 	assert.Equal(t, "192.168.1.1", ip)
 
-	// Test X-Forwarded-For with single IP
+	// Test: RemoteAddr 为回环地址时信任 X-Real-IP
 	req = httptest.NewRequest(http.MethodGet, "/test", nil)
-	req.Header.Set("X-Forwarded-For", "192.168.1.3")
-	ip = d.getClientIP(req)
-	assert.Equal(t, "192.168.1.3", ip)
-
-	// Test X-Real-IP header
-	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("X-Real-IP", "192.168.1.4")
 	ip = d.getClientIP(req)
 	assert.Equal(t, "192.168.1.4", ip)
 
-	// Test RemoteAddr fallback
+	// Test: RemoteAddr 非回环，忽略所有头
 	req = httptest.NewRequest(http.MethodGet, "/test", nil)
-	req.RemoteAddr = "192.168.1.5:12345"
+	req.RemoteAddr = "10.0.0.1:12345"
+	req.Header.Set("X-Forwarded-For", "1.1.1.1")
+	req.Header.Set("X-Real-IP", "2.2.2.2")
 	ip = d.getClientIP(req)
-	assert.Equal(t, "192.168.1.5", ip)
-
-	// Test RemoteAddr IPv6 - splits on first colon
-	req = httptest.NewRequest(http.MethodGet, "/test", nil)
-	req.RemoteAddr = "[::1]:12345"
-	ip = d.getClientIP(req)
-	// 代码使用 strings.Split(r.RemoteAddr, ":")[0]，所以对于 "[::1]:12345" 会得到 "["
-	assert.Equal(t, "[", ip)
+	assert.Equal(t, "10.0.0.1", ip)
 }
 
 func TestDetector_IsCrawler_UserAgentMatch(t *testing.T) {
@@ -117,38 +115,40 @@ func TestNewDetector(t *testing.T) {
 func TestDetector_GetClientIP_EdgeCases(t *testing.T) {
 	d := &detector{}
 
-	// Test empty X-Forwarded-For
+	// Test: RemoteAddr 非回环，X-Forwarded-For 被忽略
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.RemoteAddr = "192.168.1.1:12345"
 	req.Header.Set("X-Forwarded-For", "")
 	ip := d.getClientIP(req)
-	// 应该回退到 RemoteAddr
-	assert.NotEmpty(t, ip)
+	assert.Equal(t, "192.168.1.1", ip)
 
-	// Test X-Forwarded-For with spaces
+	// Test: RemoteAddr 为回环，X-Forwarded-For 被信任
 	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("X-Forwarded-For", "  192.168.1.1  , 192.168.1.2  ")
 	ip = d.getClientIP(req)
 	assert.Equal(t, "192.168.1.1", ip)
 
-	// Test X-Real-IP takes precedence over RemoteAddr
+	// Test: RemoteAddr 非回环，X-Real-IP 被忽略
 	req = httptest.NewRequest(http.MethodGet, "/test", nil)
-	req.Header.Set("X-Real-IP", "10.0.0.1")
-	req.RemoteAddr = "192.168.1.1:12345"
+	req.RemoteAddr = "10.0.0.1:12345"
+	req.Header.Set("X-Real-IP", "10.0.0.2")
 	ip = d.getClientIP(req)
 	assert.Equal(t, "10.0.0.1", ip)
 
-	// Test X-Forwarded-For takes precedence over X-Real-IP
+	// Test: RemoteAddr 为回环，X-Forwarded-For 优先于 X-Real-IP
 	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("X-Forwarded-For", "10.0.0.2")
 	req.Header.Set("X-Real-IP", "10.0.0.1")
 	ip = d.getClientIP(req)
 	assert.Equal(t, "10.0.0.2", ip)
 
-	// Test IPv6 RemoteAddr
+	// Test: RemoteAddr IPv6
 	req = httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "[2001:db8::1]:12345"
 	ip = d.getClientIP(req)
-	assert.Equal(t, "[2001", ip) // 代码使用 strings.Split 所以在第一个冒号处分割
+	assert.Equal(t, "[2001", ip)
 }
 
 // TestDetector_IsCrawler_NilRedis 测试 Redis 为 nil 时 IsCrawler 的行为
@@ -298,27 +298,32 @@ func TestDetector_Interface(t *testing.T) {
 func TestDetector_GetClientIP_AllHeaders(t *testing.T) {
 	d := &detector{}
 
-	// 测试优先级：X-Forwarded-For > X-Real-IP > RemoteAddr
+	// 测试优先级：RemoteAddr(非回环) > X-Forwarded-For > X-Real-IP
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-Forwarded-For", "1.1.1.1")
 	req.Header.Set("X-Real-IP", "2.2.2.2")
 	req.RemoteAddr = "3.3.3.3:12345"
-
 	ip := d.getClientIP(req)
+	assert.Equal(t, "3.3.3.3", ip)
+
+	// RemoteAddr 为回环时，X-Forwarded-For 生效
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-Forwarded-For", "1.1.1.1")
+	req.Header.Set("X-Real-IP", "2.2.2.2")
+	req.RemoteAddr = "127.0.0.1:12345"
+	ip = d.getClientIP(req)
 	assert.Equal(t, "1.1.1.1", ip)
 
-	// 没有 X-Forwarded-For 时，使用 X-Real-IP
+	// RemoteAddr 为回环且无 X-Forwarded-For 时，X-Real-IP 生效
 	req = httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-Real-IP", "2.2.2.2")
-	req.RemoteAddr = "3.3.3.3:12345"
-
+	req.RemoteAddr = "127.0.0.1:12345"
 	ip = d.getClientIP(req)
 	assert.Equal(t, "2.2.2.2", ip)
 
 	// 都没有时，使用 RemoteAddr
 	req = httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "3.3.3.3:12345"
-
 	ip = d.getClientIP(req)
 	assert.Equal(t, "3.3.3.3", ip)
 }

@@ -86,6 +86,19 @@ func NewVisitLogManager(redisURL string) *VisitLogManager {
 	return manager
 }
 
+// NewVisitLogManagerWithClient 使用已有 Redis 客户端创建访问日志管理器（复用连接池）
+func NewVisitLogManagerWithClient(client *redis.Client) *VisitLogManager {
+	ctx := context.Background()
+	manager := &VisitLogManager{
+		redisClient: client,
+		ctx:         ctx,
+		logChan:     make(chan VisitLog, 2000),
+	}
+	go manager.processLogs()
+	go manager.startCleanupTask()
+	return manager
+}
+
 // RecordVisitLog 记录访问日志
 func (vlm *VisitLogManager) RecordVisitLog(visitLog VisitLog) {
 	if visitLog.Time.IsZero() {

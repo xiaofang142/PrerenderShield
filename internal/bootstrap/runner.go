@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -189,9 +191,29 @@ func (r *AppRunner) startConsoleServer(ctx context.Context) error {
 		return slices.Contains(staticExts, ext)
 	}
 
+	// API 代理地址
+	apiAddr := fmt.Sprintf("http://%s:%d", r.config.Server.Address, r.config.Server.APIPort)
+	
+	// 创建反向代理
+	apiProxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			target, _ := url.Parse(apiAddr)
+			req.URL.Scheme = target.Scheme
+			req.URL.Host = target.Host
+			req.Host = target.Host
+		},
+	}
+
 	adminMux := http.NewServeMux()
 	adminMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.Split(r.URL.Path, "#")[0]
+		
+		// 代理 /api 请求到 API 服务器
+		if strings.HasPrefix(path, "/api/") {
+			apiProxy.ServeHTTP(w, r)
+			return
+		}
+
 		filePath := filepath.Join(actualStaticDir, strings.TrimPrefix(path, "/"))
 
 		if isStaticFile(filePath) {

@@ -44,7 +44,7 @@ func TestWafMiddleware_IPAccessControl(t *testing.T) {
 	// Setup router with WAF middleware
 	r := gin.New()
 	// Pass nil for repository, redis, and geoIP
-	r.Use(middleware.WafMiddleware(site, nil, nil, nil, nil))
+	r.Use(middleware.WafMiddleware(site, nil, nil, nil, nil, nil))
 	r.GET("/test", func(c *gin.Context) {
 		c.String(http.StatusOK, "OK")
 	})
@@ -149,7 +149,7 @@ func TestWafMiddleware_GeoIPAccessControl(t *testing.T) {
 		siteWithAllow.Firewall.GeoIPConfig.AllowList = []string{"CN"}
 
 		rAllow := gin.New()
-		rAllow.Use(middleware.WafMiddleware(siteWithAllow, nil, nil, mockGeoIP, nil))
+		rAllow.Use(middleware.WafMiddleware(siteWithAllow, nil, nil, mockGeoIP, nil, nil))
 		rAllow.GET("/test", func(c *gin.Context) { c.String(http.StatusOK, "OK") })
 
 		// CN is allowed

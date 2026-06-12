@@ -51,6 +51,21 @@ func (m *MockSystemRedisClient) SaveSystemConfig(config map[string]interface{}) 
 	return args.Error(0)
 }
 
+func (m *MockSystemRedisClient) Get(key string) (string, error) {
+	args := m.Called(key)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockSystemRedisClient) Set(key string, value interface{}, expiration time.Duration) error {
+	args := m.Called(key, value, expiration)
+	return args.Error(0)
+}
+
+func (m *MockSystemRedisClient) Keys(pattern string) ([]string, error) {
+	args := m.Called(pattern)
+	return args.Get(0).([]string), args.Error(1)
+}
+
 // MockRawRedisClient for redis operations
 type MockRawRedisClient struct {
 	mock.Mock

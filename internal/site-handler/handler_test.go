@@ -13,7 +13,7 @@ import (
 
 func TestCreateSiteHandler_RedirectMode(t *testing.T) {
 	// 创建sitehandler，传递所有必要的参数
-	handler := NewHandler(nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil)
 
 	// 创建测试站点配置
 	testSite := config.SiteConfig{

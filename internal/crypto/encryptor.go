@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -102,16 +103,10 @@ func (e *Encryptor) Decrypt(ciphertext string) (string, error) {
 	return string(plaintextBytes), nil
 }
 
-// hashKey 使用简单哈希将密钥扩展到 32 字节
+// hashKey 使用 SHA-256 将密钥扩展到 32 字节
 func hashKey(key string) []byte {
-	hash := make([]byte, 32)
-	for i := 0; i < len(key) && i < 32; i++ {
-		hash[i] = key[i]
-	}
-	for i := len(key); i < 32; i++ {
-		hash[i] = hash[i%len(key)]
-	}
-	return hash
+	hash := sha256.Sum256([]byte(key))
+	return hash[:]
 }
 
 // padKey 填充密钥到有效长度

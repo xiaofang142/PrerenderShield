@@ -84,7 +84,12 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		c.auditLogger.Log(audit.Entry{UserID: user.ID, Action: audit.ActionLogin, Resource: "system", Detail: "login successful", ClientIP: clientIP, Status: "success"})
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "Login successful", "data": gin.H{"token": token, "username": user.Username}})
+	forceChange := false
+	if !c.userManager.IsFirstRun() {
+		forceChange = c.userManager.IsDefaultPassword(user.ID)
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "Login successful", "data": gin.H{"token": token, "username": user.Username, "force_change_password": forceChange}})
 }
 
 // Logout 用户退出登录
@@ -174,4 +179,93 @@ func (c *AuthController) Disable2FA(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "2FA disabled successfully"})
+}
+
+// ChangePassword 修改密码
+func (c *AuthController) ChangePassword(ctx *gin.Context) {
+	var req struct {
+		OldPassword string `json:"old_password" binding:"required"`
+		NewPassword string `json:"new_password" binding:"required,min=6"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Invalid request: password must be at least 6 characters"})
+		return
+	}
+
+	userID, _ := ctx.Get("user_id")
+	uid, _ := userID.(string)
+
+	if err := c.userManager.ChangePassword(uid, req.OldPassword, req.NewPassword); err != nil {
+		statusCode := http.StatusBadRequest
+		message := err.Error()
+		if err == auth.ErrInvalidCredentials {
+			message = "Current password is incorrect"
+		} else if err == auth.ErrUserNotFound {
+			statusCode = http.StatusNotFound
+		}
+		ctx.JSON(statusCode, gin.H{"code": statusCode, "message": message})
+		return
+	}
+
+	if c.auditLogger != nil {
+		c.auditLogger.Log(audit.Entry{UserID: uid, Action: audit.ActionLogin, Resource: "system", Detail: "password changed", ClientIP: ctx.ClientIP(), Status: "success"})
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "Password changed successfully"})
+}
+
+// ListUsers 列出所有用户
+func (c *AuthController) ListUsers(ctx *gin.Context) {
+	users, err := c.userManager.ListUsers()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		return
+	}
+	// 隐藏密码字段
+	type UserVO struct {
+		ID       string `json:"id"`
+		Username string `json:"username"`
+	}
+	var result []UserVO
+	for _, u := range users {
+		result = append(result, UserVO{ID: u.ID, Username: u.Username})
+	}
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success", "data": result})
+}
+
+// DeleteUser 删除用户
+func (c *AuthController) DeleteUser(ctx *gin.Context) {
+	userID := ctx.Param("id")
+	if userID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "User ID is required"})
+		return
+	}
+	// 不允许删除自己
+	currentUserID, _ := ctx.Get("user_id")
+	if currentUserID == userID {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Cannot delete yourself"})
+		return
+	}
+	if err := c.userManager.DeleteUser(userID); err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"code": 404, "message": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "User deleted successfully"})
+}
+
+// ResetUserPassword 管理员重置用户密码
+func (c *AuthController) ResetUserPassword(ctx *gin.Context) {
+	userID := ctx.Param("id")
+	var req struct {
+		NewPassword string `json:"new_password" binding:"required,min=6"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Invalid request: password must be at least 6 characters"})
+		return
+	}
+	if err := c.userManager.ResetPassword(userID, req.NewPassword); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "Password reset successfully"})
 }

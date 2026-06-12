@@ -109,6 +109,19 @@ func NewCrawlerLogManager(redisURL string) *CrawlerLogManager {
 	return manager
 }
 
+// NewCrawlerLogManagerWithClient 使用已有 Redis 客户端创建爬虫日志管理器（复用连接池）
+func NewCrawlerLogManagerWithClient(client *redis.Client) *CrawlerLogManager {
+	ctx := context.Background()
+	manager := &CrawlerLogManager{
+		redisClient: client,
+		ctx:         ctx,
+		logChan:     make(chan CrawlerLog, 1000),
+	}
+	go manager.processLogs()
+	go manager.startCleanupTask()
+	return manager
+}
+
 // RecordCrawlerLog 记录爬虫访问日志
 func (clm *CrawlerLogManager) RecordCrawlerLog(crawlerLog CrawlerLog) {
 	// 设置默认值

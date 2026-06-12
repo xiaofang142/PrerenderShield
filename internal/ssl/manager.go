@@ -8,7 +8,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -203,13 +202,13 @@ func (m *manager) ImportCertificate(domain, certPath, keyPath string) error {
 		return fmt.Errorf("redis client is nil")
 	}
 	// 读取证书文件
-	certData, err := ioutil.ReadFile(certPath)
+	certData, err := os.ReadFile(certPath)
 	if err != nil {
 		return fmt.Errorf("failed to read certificate file: %w", err)
 	}
 
 	// 读取密钥文件
-	keyData, err := ioutil.ReadFile(keyPath)
+	keyData, err := os.ReadFile(keyPath)
 	if err != nil {
 		return fmt.Errorf("failed to read key file: %w", err)
 	}
@@ -229,11 +228,11 @@ func (m *manager) ImportCertificate(domain, certPath, keyPath string) error {
 	newCertPath := filepath.Join(m.certDir, fmt.Sprintf("%s.crt", domain))
 	newKeyPath := filepath.Join(m.certDir, fmt.Sprintf("%s.key", domain))
 
-	if err := ioutil.WriteFile(newCertPath, certData, 0644); err != nil {
+	if err := os.WriteFile(newCertPath, certData, 0644); err != nil {
 		return fmt.Errorf("failed to write certificate file: %w", err)
 	}
 
-	if err := ioutil.WriteFile(newKeyPath, keyData, 0600); err != nil {
+	if err := os.WriteFile(newKeyPath, keyData, 0600); err != nil {
 		return fmt.Errorf("failed to write key file: %w", err)
 	}
 
@@ -431,7 +430,7 @@ func savePrivateKey(path string, key *rsa.PrivateKey) error {
 	})
 
 	// 保存私钥到文件
-	if err := ioutil.WriteFile(path, privateKeyPEM, 0600); err != nil {
+	if err := os.WriteFile(path, privateKeyPEM, 0600); err != nil {
 		return fmt.Errorf("failed to write private key: %w", err)
 	}
 
@@ -441,7 +440,7 @@ func savePrivateKey(path string, key *rsa.PrivateKey) error {
 // saveCertificate 保存证书
 func saveCertificate(path string, certData []byte) error {
 	// 保存证书到文件
-	if err := ioutil.WriteFile(path, certData, 0644); err != nil {
+	if err := os.WriteFile(path, certData, 0644); err != nil {
 		return fmt.Errorf("failed to write certificate: %w", err)
 	}
 
@@ -496,9 +495,6 @@ func (m *manager) requestCertificateWithACME(domain string, privateKey *rsa.Priv
 	challengeKey := fmt.Sprintf("acme:challenge:%s", domain)
 	challengeValue := "test-challenge-value"
 	m.redisClient.Set(challengeKey, challengeValue, 1*time.Hour)
-
-	// 模拟ACME申请过程
-	time.Sleep(1 * time.Second)
 
 	// 返回自签名证书作为示例
 	return m.createSelfSignedCertificate(domain, privateKey)

@@ -482,6 +482,7 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 	e.owaspDetectors["csrf"] = detectors.NewCSRFDetector(ruleManager)
 	e.owaspDetectors["deserialization"] = detectors.NewDeserializationDetector(ruleManager)
 	e.owaspDetectors["sensitive-data"] = detectors.NewSensitiveDataDetector(ruleManager)
+	e.owaspDetectors["xxe"] = detectors.NewXXEDetector(ruleManager)
 
 	// 初始化 User-Agent 检测器
 	e.owaspDetectors["user-agent"] = detectors.NewUserAgentDetector()

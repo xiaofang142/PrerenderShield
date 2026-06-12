@@ -59,8 +59,6 @@ func TestNewContainer(t *testing.T) {
 	assert.NotNil(t, container.SiteServerMgr)
 	assert.NotNil(t, container.SiteHandler)
 	assert.NotNil(t, container.WafRepo)
-	assert.NotNil(t, container.EventBus)
-	assert.NotNil(t, container.MetricsRecorder)
 }
 
 func TestGetSecretKey(t *testing.T) {
@@ -90,12 +88,14 @@ func TestGetSecretKeyFromConfig(t *testing.T) {
 }
 
 func TestGetSecretKeyDefault(t *testing.T) {
-	// Test with no env var and no config version
+	// Test with no env var and no config version - should generate random key
 	os.Unsetenv("JWT_SECRET")
 
 	cfg := &config.Config{}
 	key := getSecretKey(cfg)
-	assert.Equal(t, "prerender-shield-secret-dev-only", key)
+	// 应生成 64 字符的 hex 编码密钥（32 字节）
+	assert.Len(t, key, 64)
+	assert.NotEmpty(t, key)
 }
 
 func TestGetWorkerCount(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -361,7 +361,7 @@ func (pm *PushManager) pushToBaidu(url, route string, pushConfig config.PushConf
 	defer resp.Body.Close()
 
 	// 读取响应
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		pm.logPushResult(siteConfig.ID, siteConfig.Name, url, route, "baidu", "failed", err.Error())
 		return err
@@ -417,7 +417,7 @@ func (pm *PushManager) pushToBing(url, route string, pushConfig config.PushConfi
 	defer resp.Body.Close()
 
 	// 读取响应
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		pm.logPushResult(siteConfig.ID, siteConfig.Name, url, route, "bing", "failed", err.Error())
 		return err

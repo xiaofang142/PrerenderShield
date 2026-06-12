@@ -2,11 +2,13 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"time"
 	appConfig "prerender-shield/internal/config"
 	"prerender-shield/internal/redis"
 	"runtime"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	redisV8 "github.com/go-redis/redis/v8"
@@ -20,6 +22,9 @@ type SystemRedisClient interface {
 	GetJSON(key string, value interface{}) error
 	GetSystemConfig() (map[string]string, error)
 	SaveSystemConfig(config map[string]interface{}) error
+	Get(key string) (string, error)
+	Set(key string, value interface{}, expiration time.Duration) error
+	Keys(pattern string) ([]string, error)
 }
 
 // RawRedisClient defines the interface for raw Redis client operations
@@ -67,6 +72,18 @@ func (w *systemRedisWrapper) GetSystemConfig() (map[string]string, error) {
 
 func (w *systemRedisWrapper) SaveSystemConfig(config map[string]interface{}) error {
 	return w.client.SaveSystemConfig(config)
+}
+
+func (w *systemRedisWrapper) Get(key string) (string, error) {
+	return w.client.Get(key)
+}
+
+func (w *systemRedisWrapper) Set(key string, value interface{}, expiration time.Duration) error {
+	return w.client.Set(key, value, expiration)
+}
+
+func (w *systemRedisWrapper) Keys(pattern string) ([]string, error) {
+	return w.client.Keys(pattern)
 }
 
 // SystemController 系统控制器
@@ -239,4 +256,104 @@ func (c *SystemController) UpdateSystemConfig(ctx *gin.Context) {
 		"code":    200,
 		"message": "System config updated successfully",
 	})
+}
+
+// BackupConfig 备份系统配置到Redis
+func (c *SystemController) BackupConfig(ctx *gin.Context) {
+	if c.redisClient == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Redis client not available"})
+		return
+	}
+
+	config, err := c.redisClient.GetSystemConfig()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to read config"})
+		return
+	}
+
+	backup := map[string]interface{}{
+		"config":    config,
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+
+	data, _ := json.Marshal(backup)
+	backupKey := fmt.Sprintf("system:backup:%s", time.Now().Format("20060102150405"))
+	if err := c.redisClient.Set(backupKey, string(data), 30*24*time.Hour); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to save backup"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "Backup created successfully", "data": gin.H{"key": backupKey}})
+}
+
+// RestoreConfig 从备份恢复系统配置
+func (c *SystemController) RestoreConfig(ctx *gin.Context) {
+	if c.redisClient == nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Redis client not available"})
+		return
+	}
+
+	var req struct {
+		BackupKey string `json:"backup_key" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Backup key is required"})
+		return
+	}
+
+	val, err := c.redisClient.Get(req.BackupKey)
+	if err != nil || val == "" {
+		ctx.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "Backup not found"})
+		return
+	}
+
+	var backup map[string]interface{}
+	if err := json.Unmarshal([]byte(val), &backup); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Invalid backup data"})
+		return
+	}
+
+	config, ok := backup["config"].(map[string]interface{})
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Invalid backup format"})
+		return
+	}
+
+	if err := c.redisClient.SaveSystemConfig(config); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to restore config"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "Config restored successfully"})
+}
+
+// ListBackups 列出所有备份
+func (c *SystemController) ListBackups(ctx *gin.Context) {
+	if c.redisClient == nil {
+		ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success", "data": []interface{}{}})
+		return
+	}
+
+	keys, err := c.redisClient.Keys("system:backup:*")
+	if err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success", "data": []interface{}{}})
+		return
+	}
+
+	var backups []map[string]string
+	for _, key := range keys {
+		val, err := c.redisClient.Get(key)
+		if err != nil || val == "" {
+			continue
+		}
+		var backup map[string]interface{}
+		if err := json.Unmarshal([]byte(val), &backup); err == nil {
+			backups = append(backups, map[string]string{
+				"key":       key,
+				"timestamp": fmt.Sprintf("%v", backup["timestamp"]),
+			})
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success", "data": backups})
 }

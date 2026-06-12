@@ -3,6 +3,8 @@ package middleware
 import (
 	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -19,7 +21,7 @@ import (
 )
 
 // WafMiddleware implements the Web Application Firewall logic
-func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, redisClient *redis.Client, geoIP services.GeoIPResolver, wafEngine *firewall.Engine) gin.HandlerFunc {
+func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, redisClient *redis.Client, geoIP services.GeoIPResolver, wafEngine *firewall.Engine, logWriter *WafLogWriter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !site.Firewall.Enabled {
 			c.Next()
@@ -35,7 +37,6 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 
 		// Helper to log and block
 		block := func(reason, ruleID string, threat *types.Threat) {
-			// 记录 WAF 阻断日志
 			log := models.AccessLog{
 				ID:          uuid.New().String(),
 				SiteID:      site.ID,
@@ -51,14 +52,12 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 				CreatedAt:   time.Now(),
 			}
 
-			// 使用 goroutine 异步记录日志，不阻塞响应
-			go func() {
-				if wafRepo != nil {
-					if err := wafRepo.CreateAccessLog(&log); err != nil {
-						logging.DefaultLogger.Info("Failed to create access log: %v\n", err)
-					}
-				}
-			}()
+			// 异步批量写入日志
+			if logWriter != nil {
+				logWriter.Write(log)
+			} else if wafRepo != nil {
+				wafRepo.CreateAccessLog(&log)
+			}
 
 			// 记录请求持续时间
 			duration := time.Since(startTime).Milliseconds()
@@ -122,7 +121,13 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 			}
 		}
 
-		// 4. Rate Limiting - 频率限制
+		// 4. Path Traversal Detection - 路径遍历检测
+		if isPathTraversal(requestPath) || isPathTraversal(userAgent) {
+			block("Path traversal detected", "path_traversal", nil)
+			return
+		}
+
+		// 5. Rate Limiting - 频率限制
 		if site.Firewall.RateLimitConfig.Enabled && redisClient != nil {
 			limit := site.Firewall.RateLimitConfig.Requests
 			window := site.Firewall.RateLimitConfig.Window
@@ -159,4 +164,40 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 		// If passed all checks - 通过所有检查，放行
 		c.Next()
 	}
+}
+
+// pathTraversalPatterns 路径遍历检测正则
+var pathTraversalPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\.\./|\.\.\\`),
+	regexp.MustCompile(`%2e%2e%2f|%2e%2e/|%2e%2e%5c`),
+	regexp.MustCompile(`\.\.%2f|\.\.%5c`),
+	regexp.MustCompile(`%252e%252e`),
+	regexp.MustCompile(`\.\./\.\./`),
+}
+
+// sensitivePatterns 敏感文件路径
+var sensitivePatterns = []string{
+	"/etc/passwd", "/etc/shadow", "/etc/hosts",
+	"/proc/self", "/proc/version",
+	"web.config", ".env", ".git/",
+	"/win.ini", "/winnt/system32",
+}
+
+// isPathTraversal 检测路径遍历攻击
+func isPathTraversal(path string) bool {
+	if path == "" {
+		return false
+	}
+	lower := strings.ToLower(path)
+	for _, re := range pathTraversalPatterns {
+		if re.MatchString(lower) {
+			return true
+		}
+	}
+	for _, sensitive := range sensitivePatterns {
+		if strings.Contains(lower, sensitive) {
+			return true
+		}
+	}
+	return false
 }

@@ -74,7 +74,8 @@ func TestManager_RenewCertificate_Integration(t *testing.T) {
 		assert.NoError(t, err)
 		oldExpiresAt := certInfo["expires_at"]
 
-		time.Sleep(100 * time.Millisecond)
+		// 等待足够时间确保时间戳不同
+		time.Sleep(1100 * time.Millisecond)
 
 		err = manager.RenewCertificate(testDomain)
 		assert.NoError(t, err)

@@ -1,5 +1,5 @@
 # 使用官方Go镜像作为构建环境
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # 设置工作目录
 WORKDIR /app
@@ -25,7 +25,7 @@ WORKDIR /app/web
 COPY web/package*.json ./
 RUN npm install --legacy-peer-deps
 COPY web ./
-RUN npm run build
+RUN npm run build -- --mode production
 
 # 使用轻量级的Alpine Linux作为运行环境
 FROM alpine:3.18

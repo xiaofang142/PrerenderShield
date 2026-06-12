@@ -4,12 +4,15 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 
 import zh from './locales/zh.json';
 import en from './locales/en.json';
+import ja from './locales/ja.json';
+import ko from './locales/ko.json';
 
-// 当前支持的语言：中文和英文
-// 如需添加更多语言，需要在 locales 目录创建对应的翻译文件
+// 支持的语言：中文、英文、日文、韩文
 const resources = {
   zh: { translation: zh },
-  en: { translation: en }
+  en: { translation: en },
+  ja: { translation: ja },
+  ko: { translation: ko }
 };
 
 i18n
