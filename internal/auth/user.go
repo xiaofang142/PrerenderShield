@@ -162,62 +162,6 @@ func (m *UserManager) IsDefaultPassword(userID string) bool {
 	return val != "true"
 }
 
-// ListUsers 列出所有用户
-func (m *UserManager) ListUsers() ([]*User, error) {
-	if m.redisClient == nil {
-		return nil, fmt.Errorf("redis client is nil")
-	}
-	userIDs, err := m.redisClient.GetAllUsers()
-	if err != nil {
-		return nil, err
-	}
-	var users []*User
-	for _, uid := range userIDs {
-		user, err := m.GetUserByID(uid)
-		if err != nil {
-			continue
-		}
-		users = append(users, user)
-	}
-	return users, nil
-}
-
-// DeleteUser 删除用户
-func (m *UserManager) DeleteUser(userID string) error {
-	if m.redisClient == nil {
-		return fmt.Errorf("redis client is nil")
-	}
-	user, err := m.GetUserByID(userID)
-	if err != nil {
-		return ErrUserNotFound
-	}
-	// 删除用户数据
-	if err := m.redisClient.Del(fmt.Sprintf("user:%s", userID)); err != nil {
-		return err
-	}
-	// 删除用户名映射
-	if err := m.redisClient.Del(fmt.Sprintf("username:%s", user.Username)); err != nil {
-		return err
-	}
-	return nil
-}
-
-// ResetPassword 重置用户密码（管理员操作）
-func (m *UserManager) ResetPassword(userID, newPassword string) error {
-	if err := ValidatePasswordStrength(newPassword); err != nil {
-		return err
-	}
-	if _, err := m.GetUserByID(userID); err != nil {
-		return ErrUserNotFound
-	}
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	key := fmt.Sprintf("user:%s", userID)
-	return m.redisClient.HashSet(key, "password", string(hashedPassword))
-}
-
 // ChangePassword 修改用户密码
 func (m *UserManager) ChangePassword(userID, oldPassword, newPassword string) error {
 	if err := ValidatePasswordStrength(newPassword); err != nil {

@@ -11,6 +11,7 @@ import {
   CloseCircleOutlined,
   SaveOutlined
 } from '@ant-design/icons'
+import { monitoringApi } from '../../services/api'
 
 const { Option } = Select
 const { TabPane } = Tabs
@@ -116,77 +117,22 @@ const AlertConfig: React.FC = () => {
 
   // 初始化数据
   useEffect(() => {
-    // 模拟加载告警规则
-    setAlertRules([
-      {
-        id: 'cpu_high',
-        name: 'CPU 使用率过高',
-        metric: 'system_cpu_usage',
-        operator: 'gt',
-        threshold: 90,
-        severity: 'warning',
-        enabled: true,
-        cooldown: 300,
-        description: '当 CPU 使用率超过 90% 时触发告警',
-      },
-      {
-        id: 'memory_high',
-        name: '内存使用率过高',
-        metric: 'system_memory_usage',
-        operator: 'gt',
-        threshold: 85,
-        severity: 'warning',
-        enabled: true,
-        cooldown: 300,
-        description: '当内存使用率超过 85% 时触发告警',
-      },
-      {
-        id: 'threat_spike',
-        name: '威胁检测激增',
-        metric: 'threats_per_minute',
-        operator: 'gt',
-        threshold: 100,
-        severity: 'critical',
-        enabled: true,
-        cooldown: 600,
-        description: '当每分钟检测到的威胁数超过 100 时触发告警',
-      },
-    ])
-    
-    // 模拟加载告警记录
-    setAlertRecords([
-      {
-        id: 'alert-1',
-        ruleId: 'cpu_high',
-        ruleName: 'CPU 使用率过高',
-        severity: 'warning',
-        message: 'CPU 使用率: 92.5%',
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-        value: 92.5,
-        status: 'resolved',
-      },
-      {
-        id: 'alert-2',
-        ruleId: 'memory_high',
-        ruleName: '内存使用率过高',
-        severity: 'warning',
-        message: '内存使用率: 87.3%',
-        timestamp: new Date(Date.now() - 7200000).toISOString(),
-        value: 87.3,
-        status: 'resolved',
-      },
-      {
-        id: 'alert-3',
-        ruleId: 'threat_spike',
-        ruleName: '威胁检测激增',
-        severity: 'critical',
-        message: '威胁检测: 156 次/分钟',
-        timestamp: new Date(Date.now() - 1800000).toISOString(),
-        value: 156,
-        status: 'active',
-      },
-    ])
+    fetchAlertData()
   }, [])
+
+  const fetchAlertData = async () => {
+    setLoading(true)
+    try {
+      const res = await monitoringApi.getAlertHistory(50)
+      if (res.code === 200 && res.data) {
+        setAlertRecords(res.data || [])
+      }
+    } catch {
+      // Alert history may not be available, use empty state
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // 添加/编辑规则
   const handleSaveRule = async (values: any) => {

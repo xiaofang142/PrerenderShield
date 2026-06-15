@@ -114,7 +114,7 @@ func TestWafMiddleware_GeoIPAccessControl(t *testing.T) {
 
 	// Setup router
 	r := gin.New()
-	r.Use(middleware.WafMiddleware(site, nil, nil, mockGeoIP, nil))
+	r.Use(middleware.WafMiddleware(site, nil, nil, mockGeoIP, nil, nil))
 	r.GET("/test", func(c *gin.Context) {
 		c.String(http.StatusOK, "OK")
 	})

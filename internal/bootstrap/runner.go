@@ -166,22 +166,30 @@ func (r *AppRunner) startAPIServer(ctx context.Context) error {
 
 // startConsoleServer 启动管理控制台
 func (r *AppRunner) startConsoleServer(ctx context.Context) error {
-	// 确定静态目录
-	currentDir, _ := os.Getwd()
+	// 确定静态目录 - 按优先级尝试多个路径
 	appDir := filepath.Dir(os.Args[0])
-	var webDir string
-	if filepath.Base(appDir) == "bin" {
-		webDir = filepath.Join(appDir, "web")
-	} else {
-		webDir = filepath.Join(currentDir, "bin", "web")
+	currentDir, _ := os.Getwd()
+
+	candidates := []string{
+		filepath.Join(appDir, "web", "dist"),   // /opt/prerender-shield/web/dist
+		filepath.Join(appDir, "web"),            // /opt/prerender-shield/web
+		filepath.Join(appDir, "bin", "web", "dist"), // /opt/prerender-shield/bin/web/dist
+		filepath.Join(appDir, "bin", "web"),     // /opt/prerender-shield/bin/web
+		filepath.Join(currentDir, "web", "dist"), // ./web/dist
+		filepath.Join(currentDir, "web"),         // ./web
+		filepath.Join(currentDir, "bin", "web", "dist"), // ./bin/web/dist
+		filepath.Join(currentDir, "bin", "web"),  // ./bin/web
 	}
 
-	actualStaticDir := webDir
-	if _, err := os.Stat(webDir); err == nil {
-		distDir := filepath.Join(webDir, "dist")
-		if _, err := os.Stat(distDir); err == nil {
-			actualStaticDir = distDir
+	var actualStaticDir string
+	for _, dir := range candidates {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			actualStaticDir = dir
+			break
 		}
+	}
+	if actualStaticDir == "" {
+		actualStaticDir = candidates[0]
 	}
 
 	staticExts := []string{".html", ".htm", ".css", ".js", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico", ".webp", ".woff", ".woff2", ".ttf", ".eot", ".json"}

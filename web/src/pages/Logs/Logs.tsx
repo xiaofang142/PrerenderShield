@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
-import { Card, Table, Select, message, Spin, Row, Col, Statistic, Tabs, Input, DatePicker, Button, Space } from 'antd'
-import { SearchOutlined, DownloadOutlined, BarChartOutlined, GlobalOutlined } from '@ant-design/icons'
+import React, { useState, useEffect, useRef } from 'react'
+import { Card, Table, Select, message, Spin, Row, Col, Statistic, Tabs, Input, DatePicker, Button, Space, Switch } from 'antd'
+import { SearchOutlined, DownloadOutlined, BarChartOutlined, GlobalOutlined, SyncOutlined } from '@ant-design/icons'
 import { firewallApi } from '../../services/api'
 import dayjs from 'dayjs'
 import ExportButton from '../../components/common/ExportButton'
@@ -15,6 +15,8 @@ const Logs: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
+  const [autoRefresh, setAutoRefresh] = useState(false)
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
   
   // 筛选条件
   const [filterIP, setFilterIP] = useState('')
@@ -130,6 +132,15 @@ const Logs: React.FC = () => {
 
   useEffect(() => { fetchLogs() }, [pageSize])
 
+  useEffect(() => {
+    if (autoRefresh) {
+      intervalRef.current = setInterval(() => fetchLogs(currentPage), 10000)
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [autoRefresh, currentPage])
+
   // 筛选后的日志
   const filteredLogs = logs.filter(log => {
     if (filterIP && !log.ip?.includes(filterIP)) return false
@@ -142,6 +153,14 @@ const Logs: React.FC = () => {
     <Spin spinning={loading}>
       <div>
         <h1 className="page-title">日志管理</h1>
+        
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+          <Space>
+            <SyncOutlined spin={autoRefresh} />
+            <span>自动刷新 (10s)</span>
+            <Switch checked={autoRefresh} onChange={setAutoRefresh} size="small" />
+          </Space>
+        </div>
         
         <Tabs defaultActiveKey="logs">
           {/* 访问日志 */}

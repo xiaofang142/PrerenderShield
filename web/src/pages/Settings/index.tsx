@@ -1,16 +1,13 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Form, InputNumber, Button, Space, message, Row, Col, Divider, Tabs, Tag, Statistic, Table, Popconfirm, Input } from 'antd'
+import { Card, Form, InputNumber, Button, Space, message, Row, Col, Divider, Tabs, Tag, Statistic, Popconfirm } from 'antd'
 import { 
   SaveOutlined, 
   ReloadOutlined, 
   SettingOutlined,
   CloudServerOutlined,
   ToolOutlined,
-  UserOutlined,
-  DeleteOutlined,
-  KeyOutlined
 } from '@ant-design/icons'
-import { systemApi, authApi } from '../../services/api'
+import { systemApi } from '../../services/api'
 
 const SettingsPage: React.FC = () => {
   const [form] = Form.useForm()
@@ -19,59 +16,10 @@ const SettingsPage: React.FC = () => {
   const [healthData, setHealthData] = useState<any>(null)
   const [versionData, setVersionData] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('config')
-  // User management
-  const [users, setUsers] = useState<any[]>([])
-  const [usersLoading, setUsersLoading] = useState(false)
-  const [resetModalVisible, setResetModalVisible] = useState(false)
-  const [resetUserId, setResetUserId] = useState('')
-  const [resetForm] = Form.useForm()
   // Backup state
   const [backups, setBackups] = useState<any[]>([])
   const [backupsLoading, setBackupsLoading] = useState(false)
   const [backupLoading, setBackupLoading] = useState(false)
-
-  const fetchUsers = async () => {
-    try {
-      setUsersLoading(true)
-      const res = await authApi.listUsers()
-      if (res.code === 200) {
-        setUsers(res.data || [])
-      }
-    } catch (error) {
-      console.error('Failed to fetch users:', error)
-    } finally {
-      setUsersLoading(false)
-    }
-  }
-
-  const handleDeleteUser = async (id: string) => {
-    try {
-      const res = await authApi.deleteUser(id)
-      if (res.code === 200) {
-        message.success('用户删除成功')
-        fetchUsers()
-      } else {
-        message.error(res.message || '删除失败')
-      }
-    } catch (error: any) {
-      message.error(error.response?.data?.message || '删除失败')
-    }
-  }
-
-  const handleResetPassword = async (values: { new_password: string }) => {
-    try {
-      const res = await authApi.resetPassword(resetUserId, values.new_password)
-      if (res.code === 200) {
-        message.success('密码重置成功')
-        setResetModalVisible(false)
-        resetForm.resetFields()
-      } else {
-        message.error(res.message || '重置失败')
-      }
-    } catch (error: any) {
-      message.error(error.response?.data?.message || '重置失败')
-    }
-  }
 
   const fetchBackups = async () => {
     try {
@@ -163,7 +111,6 @@ const SettingsPage: React.FC = () => {
     fetchConfig()
     fetchHealth()
     fetchVersion()
-    fetchUsers()
     fetchBackups()
   }, [])
 
@@ -199,45 +146,6 @@ const SettingsPage: React.FC = () => {
       <h1 className="page-title">系统设置</h1>
       
       <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
-        {
-          key: 'users',
-          label: <Space><UserOutlined /><span>用户管理</span></Space>,
-          children: (
-            <Card className="card" title="用户列表" extra={<Button icon={<ReloadOutlined />} onClick={fetchUsers} loading={usersLoading}>刷新</Button>}>
-              <Table
-                dataSource={users}
-                rowKey="id"
-                loading={usersLoading}
-                columns={[
-                  { title: '用户ID', dataIndex: 'id', key: 'id', ellipsis: true },
-                  { title: '用户名', dataIndex: 'username', key: 'username' },
-                  {
-                    title: '操作', key: 'action',
-                    render: (_: any, record: any) => (
-                      <Space>
-                        <Button type="link" size="small" icon={<KeyOutlined />} onClick={() => { setResetUserId(record.id); setResetModalVisible(true) }}>重置密码</Button>
-                        <Popconfirm title="确定要删除该用户吗？" onConfirm={() => handleDeleteUser(record.id)} okText="确定" cancelText="取消">
-                          <Button type="link" size="small" danger icon={<DeleteOutlined />}>删除</Button>
-                        </Popconfirm>
-                      </Space>
-                    ),
-                  },
-                ]}
-                pagination={false}
-              />
-              <Modal title="重置用户密码" open={resetModalVisible} onCancel={() => { setResetModalVisible(false); resetForm.resetFields() }} footer={null}>
-                <Form form={resetForm} layout="vertical" onFinish={handleResetPassword}>
-                  <Form.Item name="new_password" label="新密码" rules={[{ required: true, message: '请输入新密码' }, { min: 6, message: '密码至少6个字符' }]}>
-                    <Input.Password placeholder="输入新密码" />
-                  </Form.Item>
-                  <Form.Item>
-                    <Button type="primary" htmlType="submit">确认重置</Button>
-                  </Form.Item>
-                </Form>
-              </Modal>
-            </Card>
-          ),
-        },
         {
           key: 'config',
           label: <Space><SettingOutlined /><span>系统配置</span></Space>,
@@ -364,7 +272,7 @@ const SettingsPage: React.FC = () => {
                 <h2 style={{ marginBottom: 16 }}>Prerender Shield</h2>
                 <p style={{ color: '#666', marginBottom: 24 }}>企业级 Web 应用中间件，集成 OWASP Top 10 安全防护与智能渲染预热功能</p>
                 <Row gutter={[24, 24]} justify="center">
-                  <Col span={8}><Card size="small"><Statistic title="版本" value={versionData?.version || 'v3.0.0'} valueStyle={{ color: '#52c41a' }} /></Card></Col>
+                  <Col span={8}><Card size="small"><Statistic title="版本" value={versionData?.version || 'v1.0.1'} valueStyle={{ color: '#52c41a' }} /></Card></Col>
                   <Col span={8}><Card size="small"><Statistic title="许可证" value="MIT License" valueStyle={{ color: '#1890ff' }} /></Card></Col>
                   <Col span={8}><Card size="small"><Statistic title="技术栈" value="Go + React" valueStyle={{ color: '#722ed1' }} /></Card></Col>
                 </Row>

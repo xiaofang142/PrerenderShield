@@ -283,15 +283,12 @@ const FirewallRules: React.FC = () => {
     }
   }
 
-  // 保存规则
+  // 保存规则 — 规则通过站点WAF配置管理，此处为前端本地状态
   const handleSaveRules = async () => {
     try {
       setLoading(true)
-      // 这里应该调用API保存规则
-      // 暂时模拟保存
-      await new Promise(resolve => setTimeout(resolve, 500))
-      message.success('规则保存成功')
-    } catch (error) {
+      message.success('规则已更新（前端本地状态）')
+    } catch {
       message.error('规则保存失败')
     } finally {
       setLoading(false)

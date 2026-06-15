@@ -69,10 +69,7 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 		// 修改密码
 		protectedGroup.POST("/auth/change-password", controllers.AuthController.ChangePassword)
 
-		// 用户管理
-		protectedGroup.GET("/auth/users", controllers.AuthController.ListUsers)
-		protectedGroup.DELETE("/auth/users/:id", controllers.AuthController.DeleteUser)
-		protectedGroup.POST("/auth/users/:id/reset-password", controllers.AuthController.ResetUserPassword)
+
 
 		// 2FA API (独立前缀避免 Gin 路由冲突)
 		protectedGroup.GET("/2fa/status", controllers.AuthController.Get2FAStatus)

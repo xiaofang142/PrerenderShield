@@ -1,122 +1,140 @@
 package errors
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestError_Error(t *testing.T) {
-	// Test with cause
-	err := &Error{
-		Code:    "TEST_CODE",
-		Message: "test message",
-		Cause:   assert.AnError,
+func TestAppError_Error(t *testing.T) {
+	// Test with internal error
+	err := &AppError{
+		Code:     CodeInternalError,
+		Message:  "test message",
+		Internal: errors.New("internal cause"),
 	}
-	assert.Contains(t, err.Error(), "TEST_CODE")
 	assert.Contains(t, err.Error(), "test message")
-	assert.Contains(t, err.Error(), "assert.AnError")
+	assert.Contains(t, err.Error(), "internal cause")
 
-	// Test without cause
-	err = &Error{
-		Code:    "TEST_CODE",
-		Message: "test message",
+	// Test without internal error
+	err = &AppError{
+		Code:    CodeBadRequest,
+		Message: "bad request",
 	}
-	assert.Equal(t, "TEST_CODE: test message", err.Error())
+	assert.Equal(t, "bad request", err.Error())
 }
 
-func TestError_Unwrap(t *testing.T) {
-	cause := assert.AnError
-	err := &Error{
-		Code:    "TEST_CODE",
-		Message: "test message",
-		Cause:   cause,
+func TestAppError_Unwrap(t *testing.T) {
+	cause := errors.New("original error")
+	err := &AppError{
+		Code:     CodeInternalError,
+		Message:  "test message",
+		Internal: cause,
 	}
 	assert.Equal(t, cause, err.Unwrap())
 }
 
-func TestError_WithContext(t *testing.T) {
-	err := &Error{
-		Code:    "TEST_CODE",
-		Message: "test message",
-	}
-
-	result := err.WithContext("key1", "value1")
-	assert.Equal(t, "value1", result.Context["key1"])
-
-	// Chain multiple contexts
-	result.WithContext("key2", 123)
-	assert.Equal(t, 123, err.Context["key2"])
-}
-
-func TestWrap(t *testing.T) {
-	cause := assert.AnError
-	err := Wrap(cause, "TEST_CODE", "wrapped message")
-
-	assert.Equal(t, "TEST_CODE", err.Code)
-	assert.Equal(t, "wrapped message", err.Message)
-	assert.Equal(t, cause, err.Cause)
-	assert.ErrorContains(t, err, "TEST_CODE: wrapped message")
-}
-
-func TestNew(t *testing.T) {
-	err := New("TEST_CODE", "new error message")
-
-	assert.Equal(t, "TEST_CODE", err.Code)
+func TestNewError(t *testing.T) {
+	err := NewError(CodeBadRequest, "new error message")
+	assert.Equal(t, CodeBadRequest, err.Code)
 	assert.Equal(t, "new error message", err.Message)
-	assert.Nil(t, err.Cause)
+	assert.Nil(t, err.Internal)
+}
+
+func TestWrapError(t *testing.T) {
+	cause := errors.New("original error")
+	err := WrapError(cause, CodeInternalError, "wrapped message")
+
+	assert.Equal(t, CodeInternalError, err.Code)
+	assert.Equal(t, "wrapped message", err.Message)
+	assert.Equal(t, cause, err.Internal)
+	assert.NotEmpty(t, err.Stack)
 }
 
 func TestPredefinedErrors(t *testing.T) {
-	assert.Equal(t, ErrInternal, ErrInternalServer.Code)
-	assert.Equal(t, ErrInvalidParam, ErrInvalidRequest.Code)
-	assert.Equal(t, ErrUnauthorized, ErrUnauthorizedReq.Code)
-	assert.Equal(t, ErrForbidden, ErrForbiddenReq.Code)
-	assert.Equal(t, ErrNotFound, ErrNotFoundGeneric.Code)
+	// ErrBadRequest
+	err := ErrBadRequest("bad input")
+	assert.Equal(t, CodeBadRequest, err.Code)
+	assert.Equal(t, "bad input", err.Message)
+
+	// ErrUnauthorized
+	err = ErrUnauthorized("unauthorized")
+	assert.Equal(t, CodeUnauthorized, err.Code)
+
+	// ErrForbidden
+	err = ErrForbidden("forbidden")
+	assert.Equal(t, CodeForbidden, err.Code)
+
+	// ErrNotFound
+	err = ErrNotFound("not found")
+	assert.Equal(t, CodeNotFound, err.Code)
+
+	// ErrInternal
+	err = ErrInternal(errors.New("internal"))
+	assert.Equal(t, CodeInternalError, err.Code)
+	assert.NotEmpty(t, err.Stack)
+
+	// ErrServiceUnavailable
+	err = ErrServiceUnavailable("down")
+	assert.Equal(t, CodeServiceUnavailable, err.Code)
+
+	// ErrRateLimit
+	err = ErrRateLimit("too many")
+	assert.Equal(t, CodeRateLimit, err.Code)
+
+	// ErrValidation
+	err = ErrValidation("invalid", map[string]string{"field": "name"})
+	assert.Equal(t, CodeValidation, err.Code)
+	assert.NotNil(t, err.Details)
 }
 
 func TestErrorCodes(t *testing.T) {
-	// Common errors
-	assert.Equal(t, "UNKNOWN", ErrUnknown)
-	assert.Equal(t, "INTERNAL_ERROR", ErrInternal)
-	assert.Equal(t, "INVALID_PARAM", ErrInvalidParam)
-	assert.Equal(t, "NOT_FOUND", ErrNotFound)
-	assert.Equal(t, "ALREADY_EXISTS", ErrAlreadyExists)
-	assert.Equal(t, "UNAUTHORIZED", ErrUnauthorized)
-	assert.Equal(t, "FORBIDDEN", ErrForbidden)
-	assert.Equal(t, "TIMEOUT", ErrTimeout)
-
-	// WAF errors
-	assert.Equal(t, "WAF_BLOCKED", ErrWAFBlocked)
-	assert.Equal(t, "WAF_RULE_INVALID", ErrWAFRuleInvalid)
-	assert.Equal(t, "WAF_CHECK_FAILED", ErrWAFCheckFailed)
-
-	// Render errors
-	assert.Equal(t, "RENDER_TIMEOUT", ErrRenderTimeout)
-	assert.Equal(t, "RENDER_FAILED", ErrRenderFailed)
-	assert.Equal(t, "CRAWLER_BLOCKED", ErrCrawlerBlocked)
-
-	// Cache errors
-	assert.Equal(t, "CACHE_MISS", ErrCacheMiss)
-	assert.Equal(t, "CACHE_INVALID", ErrCacheInvalid)
-
-	// Auth errors
-	assert.Equal(t, "TOKEN_INVALID", ErrTokenInvalid)
-	assert.Equal(t, "TOKEN_EXPIRED", ErrTokenExpired)
-	assert.Equal(t, "USER_NOT_FOUND", ErrUserNotFound)
-	assert.Equal(t, "INVALID_PASSWORD", ErrInvalidPassword)
-
-	// Site errors
-	assert.Equal(t, "SITE_NOT_FOUND", ErrSiteNotFound)
-	assert.Equal(t, "SITE_EXISTS", ErrSiteExists)
-	assert.Equal(t, "SITE_CONFIG_INVALID", ErrSiteConfigInvalid)
+	assert.Equal(t, 200, CodeSuccess)
+	assert.Equal(t, 400, CodeBadRequest)
+	assert.Equal(t, 401, CodeUnauthorized)
+	assert.Equal(t, 403, CodeForbidden)
+	assert.Equal(t, 404, CodeNotFound)
+	assert.Equal(t, 429, CodeRateLimit)
+	assert.Equal(t, 422, CodeValidation)
+	assert.Equal(t, 500, CodeInternalError)
+	assert.Equal(t, 503, CodeServiceUnavailable)
 }
 
-func TestError_Is(t *testing.T) {
-	err1 := New(ErrNotFound, "resource not found")
-	err2 := New(ErrNotFound, "another not found")
+func TestGetHTTPStatus(t *testing.T) {
+	assert.Equal(t, 200, getHTTPStatus(CodeSuccess))
+	assert.Equal(t, 400, getHTTPStatus(CodeBadRequest))
+	assert.Equal(t, 401, getHTTPStatus(CodeUnauthorized))
+	assert.Equal(t, 403, getHTTPStatus(CodeForbidden))
+	assert.Equal(t, 404, getHTTPStatus(CodeNotFound))
+	assert.Equal(t, 429, getHTTPStatus(CodeRateLimit))
+	assert.Equal(t, 503, getHTTPStatus(CodeServiceUnavailable))
+	assert.Equal(t, 500, getHTTPStatus(99999)) // unknown code defaults to 500
+}
 
-	// Both have same code but are different instances
-	assert.Equal(t, err1.Code, err2.Code)
-	assert.NotEqual(t, err1.Message, err2.Message)
+func TestResponse_Structure(t *testing.T) {
+	resp := Response{
+		Code:    CodeSuccess,
+		Message: "success",
+		Data:    map[string]string{"key": "value"},
+	}
+	assert.Equal(t, CodeSuccess, resp.Code)
+	assert.Equal(t, "success", resp.Message)
+	assert.NotNil(t, resp.Data)
+}
+
+func TestResponse_WithDetails(t *testing.T) {
+	resp := Response{
+		Code:    CodeBadRequest,
+		Message: "validation failed",
+		Details: []string{"field1 is required", "field2 is invalid"},
+	}
+	assert.Equal(t, CodeBadRequest, resp.Code)
+	assert.NotNil(t, resp.Details)
+}
+
+func TestGetStack(t *testing.T) {
+	stack := getStack()
+	assert.NotEmpty(t, stack)
+	assert.Contains(t, stack, "Stack trace:")
 }

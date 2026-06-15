@@ -26,7 +26,6 @@ const (
 	ActionWAFRule     Action = "waf.rule.update"
 	ActionBlacklist   Action = "blacklist.update"
 	ActionWhitelist   Action = "whitelist.update"
-	ActionUserManage  Action = "user.manage"
 	ActionSystemConfig Action = "system.config"
 )
 

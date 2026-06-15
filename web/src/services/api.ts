@@ -90,9 +90,6 @@ export const authApi = {
   login: (username: string, password: string) => api.post('/auth/login', { username, password }),
   logout: () => api.post('/auth/logout'),
   changePassword: (oldPassword: string, newPassword: string) => api.post('/auth/change-password', { old_password: oldPassword, new_password: newPassword }),
-  listUsers: () => api.get('/auth/users'),
-  deleteUser: (id: string) => api.delete(`/auth/users/${id}`),
-  resetPassword: (id: string, newPassword: string) => api.post(`/auth/users/${id}/reset-password`, { new_password: newPassword }),
 }
 
 // 概览 API
@@ -177,6 +174,7 @@ export const pushApi = {
   getConfig: (siteId: string) => api.get('/push/config', { params: { siteId } }),
   updateConfig: (siteId: string, config: any) => api.post('/push/config', { siteId, config }),
   getSites: () => api.get('/push/sites'),
+  getTrend: (siteId?: string) => api.get('/push/trend', { params: siteId ? { siteId } : {} }),
 }
 
 // 系统 API

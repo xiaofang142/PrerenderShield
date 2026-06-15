@@ -1,6 +1,6 @@
 import React from 'react'
 import { Layout, Menu, Button, message, Dropdown } from 'antd'
-import { MenuUnfoldOutlined, MenuFoldOutlined, DashboardOutlined, SecurityScanOutlined, CodeOutlined, BarChartOutlined, FileTextOutlined, BugOutlined, LogoutOutlined, CloudUploadOutlined, SettingOutlined, GlobalOutlined } from '@ant-design/icons'
+import { MenuUnfoldOutlined, MenuFoldOutlined, DashboardOutlined, SecurityScanOutlined, CodeOutlined, BarChartOutlined, FileTextOutlined, BugOutlined, LogoutOutlined, CloudUploadOutlined, SettingOutlined, GlobalOutlined, SafetyCertificateOutlined, ToolOutlined } from '@ant-design/icons'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useTranslation } from 'react-i18next'
@@ -161,6 +161,16 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               label: <Link to="/system" style={{ color: '#333333' }}>{t('menu.settings')}</Link>
             },
 
+            {
+              key: '/ssl',
+              icon: <SafetyCertificateOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/ssl" style={{ color: '#333333' }}>SSL 证书</Link>
+            },
+            {
+              key: '/settings',
+              icon: <ToolOutlined style={{ color: '#2f855a' }} />,
+              label: <Link to="/settings" style={{ color: '#333333' }}>系统设置</Link>
+            },
           ]}
         />
         

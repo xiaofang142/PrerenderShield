@@ -644,25 +644,14 @@ const Sites: React.FC = () => {
     setNewFolderName('')
   }
 
-  // 确认新建目录
+  // 确认新建目录 — 通过站点静态资源API管理
   const confirmNewFolder = () => {
     if (!newFolderName.trim()) {
       messageApi.warning('请输入目录名称')
       return
     }
-    
-    // 模拟新建目录
-    const newDir = {
-      key: Date.now().toString(),
-      name: newFolderName,
-      type: 'dir',
-      size: 0,
-      path: `${currentPath === '/' ? '' : currentPath}/${newFolderName}`
-    }
-    
-    setFileList(prev => [...prev, newDir])
+    messageApi.info('目录创建功能通过静态资源上传实现')
     setShowNewFolderModal(false)
-    messageApi.success('目录创建成功')
   }
 
   // 新建文件
@@ -671,17 +660,15 @@ const Sites: React.FC = () => {
     setNewFileName('')
   }
 
-  // 确认新建文件
+  // 确认新建文件 — 通过站点静态资源上传API管理
   const confirmNewFile = () => {
     if (!newFileName.trim()) {
       messageApi.warning('请输入文件名称')
       return
     }
-    
-    // 模拟新建文件
-    const newFile = {
-      key: Date.now().toString(),
-      name: newFileName,
+    messageApi.info('文件创建功能通过静态资源上传实现')
+    setShowNewFileModal(false)
+  }
       type: 'file',
       size: 0,
       path: `${currentPath === '/' ? '' : currentPath}/${newFileName}`

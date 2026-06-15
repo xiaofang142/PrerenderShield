@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Card, Row, Col, Statistic, Button, Table, Select, message } from 'antd'
 import { ReloadOutlined, UploadOutlined, BarChartOutlined } from '@ant-design/icons'
+import BaseChart from '../../components/charts/BaseChart'
 import { sitesApi, pushApi } from '../../services/api'
 
 const { Option } = Select
@@ -8,6 +9,7 @@ const { Option } = Select
 const Push: React.FC = () => {
   const [sites, setSites] = useState<any[]>([])
   const [selectedSiteId, setSelectedSiteId] = useState<string>('')
+  const [trendData, setTrendData] = useState<Record<string, number>>({})
   const [stats, setStats] = useState({
     total: 0,
     success: 0,
@@ -113,13 +115,19 @@ const Push: React.FC = () => {
   const fetchStats = async () => {
     try {
       setLoading(true)
-      const res = await pushApi.getStats(selectedSiteId)
-      if (res.code === 200) {
+      const [statsRes, trendRes] = await Promise.all([
+        pushApi.getStats(selectedSiteId),
+        pushApi.getTrend(selectedSiteId)
+      ])
+      if (statsRes.code === 200) {
         setStats({
-          total: res.data.stats.total || 0,
-          success: res.data.stats.success || 0,
-          failed: res.data.stats.failed || 0,
+          total: statsRes.data.stats.total || 0,
+          success: statsRes.data.stats.success || 0,
+          failed: statsRes.data.stats.failed || 0,
         })
+      }
+      if (trendRes.code === 200) {
+        setTrendData(trendRes.data || {})
       }
     } catch (error) {
       console.error('Failed to fetch stats:', error)
@@ -236,6 +244,23 @@ const Push: React.FC = () => {
             />
           </Col>
         </Row>
+      </Card>
+      
+      {/* 推送趋势图 */}
+      <Card className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginBottom: 16 }}>30天推送趋势</h3>
+        <BaseChart option={{
+          tooltip: { trigger: 'axis' },
+          xAxis: { type: 'category', data: Object.keys(trendData) },
+          yAxis: { type: 'value', name: '推送数' },
+          series: [{
+            name: '推送数', type: 'line',
+            data: Object.values(trendData),
+            smooth: true,
+            itemStyle: { color: '#1890ff' },
+            areaStyle: { color: 'rgba(24,144,255,0.1)' }
+          }]
+        }} style={{ height: 300 }} />
       </Card>
       
       {/* 推送日志列表 */}

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Row, Col, Statistic, Spin, Select, Tag } from 'antd'
+import { Card, Row, Col, Statistic, Spin, Select, Tag, Progress } from 'antd'
 import * as echarts from 'echarts'
 import BaseChart from '../../components/charts/BaseChart'
-import { overviewApi } from '../../services/api'
+import { overviewApi, monitoringApi } from '../../services/api'
 import { useTranslation } from 'react-i18next'
 
 const { Option } = Select
@@ -68,6 +68,7 @@ const Overview: React.FC = () => {
   
   const accessStats = { pv: 0, uv: 0, ip: 0, countryData: [], mapData: [] }
   const [loading, setLoading] = useState(true)
+  const [systemHealth, setSystemHealth] = useState({ cpu: 0, memory: 0, disk: 0 })
 
   const [isMapLoaded, setIsMapLoaded] = useState(false)
 
@@ -176,10 +177,20 @@ const Overview: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true)
-      const overviewRes = await overviewApi.getStats()
+      const [overviewRes, monitoringRes] = await Promise.all([
+        overviewApi.getStats(),
+        monitoringApi.getStats()
+      ])
       
       if (overviewRes.code === 200) {
         setStats(overviewRes.data)
+      }
+      if (monitoringRes.code === 200 && monitoringRes.data) {
+        setSystemHealth({
+          cpu: monitoringRes.data.cpuUsage || 0,
+          memory: monitoringRes.data.memoryUsage || 0,
+          disk: monitoringRes.data.diskUsage || 0,
+        })
       }
     } catch (error) {
       console.error('Failed to fetch overview data:', error)
@@ -221,6 +232,40 @@ const Overview: React.FC = () => {
     <Spin spinning={loading} tip={t('common.loading')}>
       <div>
         <h1 className="page-title">{t('menu.overview')}</h1>
+        
+        {/* 系统健康状态 */}
+        <Card className="card" style={{ marginTop: 16 }}>
+          <h3 style={{ marginBottom: 16 }}>系统健康</h3>
+          <Row gutter={[16, 16]}>
+            <Col span={8}>
+              <Card variant="outlined" bodyStyle={{ padding: '16px' }}>
+                <Statistic title="CPU 使用率" value={systemHealth.cpu} suffix="%" precision={1}
+                  valueStyle={{ color: systemHealth.cpu > 90 ? '#ff4d4f' : systemHealth.cpu > 70 ? '#faad14' : '#52c41a' }} />
+                <Progress percent={systemHealth.cpu} showInfo={false} strokeColor={
+                  systemHealth.cpu > 90 ? '#ff4d4f' : systemHealth.cpu > 70 ? '#faad14' : '#52c41a'
+                } style={{ marginTop: 8 }} />
+              </Card>
+            </Col>
+            <Col span={8}>
+              <Card variant="outlined" bodyStyle={{ padding: '16px' }}>
+                <Statistic title="内存使用率" value={systemHealth.memory} suffix="%" precision={1}
+                  valueStyle={{ color: systemHealth.memory > 85 ? '#ff4d4f' : systemHealth.memory > 70 ? '#faad14' : '#52c41a' }} />
+                <Progress percent={systemHealth.memory} showInfo={false} strokeColor={
+                  systemHealth.memory > 85 ? '#ff4d4f' : systemHealth.memory > 70 ? '#faad14' : '#52c41a'
+                } style={{ marginTop: 8 }} />
+              </Card>
+            </Col>
+            <Col span={8}>
+              <Card variant="outlined" bodyStyle={{ padding: '16px' }}>
+                <Statistic title="磁盘使用率" value={systemHealth.disk} suffix="%" precision={1}
+                  valueStyle={{ color: systemHealth.disk > 90 ? '#ff4d4f' : systemHealth.disk > 80 ? '#faad14' : '#52c41a' }} />
+                <Progress percent={systemHealth.disk} showInfo={false} strokeColor={
+                  systemHealth.disk > 90 ? '#ff4d4f' : systemHealth.disk > 80 ? '#faad14' : '#52c41a'
+                } style={{ marginTop: 8 }} />
+              </Card>
+            </Col>
+          </Row>
+        </Card>
         
         {/* 全球访问分布 */}
         <Card className="card" style={{ marginTop: 16 }}>
@@ -314,6 +359,22 @@ const Overview: React.FC = () => {
               </Card>
             </Col>
           </Row>
+        </Card>
+
+        {/* 流量趋势图 */}
+        <Card className="card" style={{ marginTop: 16 }}>
+          <h3 style={{ marginBottom: 16 }}>24小时流量趋势</h3>
+          <BaseChart option={{
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['总请求', '爬虫请求', '拦截请求'] },
+            xAxis: { type: 'category', data: (stats.trafficData || []).map((d: any) => d.time || '') },
+            yAxis: { type: 'value' },
+            series: [
+              { name: '总请求', type: 'line', data: (stats.trafficData || []).map((d: any) => d.totalRequests || 0), smooth: true, itemStyle: { color: '#1890ff' } },
+              { name: '爬虫请求', type: 'line', data: (stats.trafficData || []).map((d: any) => d.crawlerRequests || 0), smooth: true, itemStyle: { color: '#52c41a' } },
+              { name: '拦截请求', type: 'line', data: (stats.trafficData || []).map((d: any) => d.blockedRequests || 0), smooth: true, itemStyle: { color: '#ff4d4f' } },
+            ]
+          }} style={{ height: 300 }} />
         </Card>
       </div>
     </Spin>
