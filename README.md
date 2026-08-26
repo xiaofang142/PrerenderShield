@@ -645,6 +645,9 @@ npm run dev
 
 | 文档 | 说明 |
 |------|------|
+| [官方文档](docs/OFFICIAL_DOCUMENTATION.md) | 产品手册：概念、功能、安装、配置、API 概览、FAQ |
+| [运维手册](docs/OPERATIONS_MANUAL.md) | 部署拓扑、日常操作、升级备份、监控告警、安全加固 |
+| [故障排查手册](docs/TROUBLESHOOTING_GUIDE.md) | 按症状索引的处置手册与诊断命令集 |
 | [架构清单](docs/architecture-inventory.md) | 完整模块架构、依赖关系、分层全景 |
 | [功能清单](docs/feature-inventory.md) | 96项功能实现状态、代码位置、覆盖 |
 | [业务流](docs/business-flow.md) | 六大核心业务流程、配置流、权限模型 |
