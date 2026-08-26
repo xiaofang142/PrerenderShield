@@ -14,6 +14,7 @@ import (
 
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/firewall"
+	"prerender-shield/internal/firewall/detectors"
 	"prerender-shield/internal/i18n"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/middleware"
@@ -91,13 +92,50 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 	if h.firewallManager != nil && site.Firewall.Enabled {
 		geoIPCfg := site.Firewall.GeoIPConfig
 		rateLimitCfg := site.Firewall.RateLimitConfig
+
+		// 构建 CC 防护配置
+		var ccCfg *detectors.CCProtectionConfig
+		if site.Firewall.CCProtection.Enabled {
+			rules := make([]detectors.CCProtectionRule, len(site.Firewall.CCProtection.Rules))
+			for i, r := range site.Firewall.CCProtection.Rules {
+				rules[i] = detectors.CCProtectionRule{
+					Name:       r.Name,
+					Path:       r.Path,
+					Method:     r.Method,
+					Dimensions: r.Dimensions,
+					Requests:   r.Requests,
+					Window:     r.Window,
+					BanTime:    r.BanTime,
+					Enabled:    r.Enabled,
+				}
+			}
+			ccCfg = &detectors.CCProtectionConfig{
+				Enabled: site.Firewall.CCProtection.Enabled,
+				Rules:   rules,
+			}
+		}
+
+		// 构建威胁情报配置
+		var tiCfg *detectors.ThreatIntelConfig
+		if site.Firewall.ThreatIntel.Enabled {
+			tiCfg = &detectors.ThreatIntelConfig{
+				Enabled:   true,
+				GlobalKey: site.Firewall.ThreatIntel.GlobalKey,
+			}
+			if tiCfg.GlobalKey == "" {
+				tiCfg.GlobalKey = "threatintel:global:blacklist"
+			}
+		}
+
 		wafConfig := firewall.Config{
-			RulesPath:    site.Firewall.RulesPath,
-			ActionConfig: firewall.ActionConfig{DefaultAction: site.Firewall.ActionConfig.DefaultAction, BlockMessage: site.Firewall.ActionConfig.BlockMessage},
-			GeoIPConfig:  &geoIPCfg,
-			RateLimitConfig: &rateLimitCfg,
-			RedisClient:  h.redisClient.GetRawClient(),
-			FailStrategy: firewall.FailClosed,
+			RulesPath:          site.Firewall.RulesPath,
+			ActionConfig:       firewall.ActionConfig{DefaultAction: site.Firewall.ActionConfig.DefaultAction, BlockMessage: site.Firewall.ActionConfig.BlockMessage},
+			GeoIPConfig:        &geoIPCfg,
+			RateLimitConfig:    &rateLimitCfg,
+			CCProtectionConfig: ccCfg,
+			ThreatIntelConfig:  tiCfg,
+			RedisClient:        h.redisClient.GetRawClient(),
+			FailStrategy:       firewall.FailClosed,
 		}
 		engine, err := firewall.NewEngine(site.ID, wafConfig)
 		if err == nil {
@@ -110,6 +148,9 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 
 	// 爬虫检测中间件 - 第一个执行，确保爬虫请求得到正确处理
 	siteRouter.Use(func(c *gin.Context) {
+		// 将站点ID注入上下文，供渲染引擎生成站点隔离的缓存键（避免多站点缓存互相覆盖）
+		c.Set("site_id", site.ID)
+
 		// 获取请求的User-Agent
 		userAgent := c.Request.UserAgent()
 
@@ -178,8 +219,11 @@ func (h *Handler) CreateSiteHandler(site config.SiteConfig, crawlerLogManager *l
 				WaitUntil: "networkidle0",
 			}, userAgent)
 			if err != nil {
+				// 记录真实渲染错误（获取实例失败/渲染异常等），
+				// 不能一律映射为 render_timeout，否则用户无法定位问题
+				logging.DefaultLogger.Error("render failed for %s: %v", fullURL, err)
 				lang := getLanguageFromRequest(c)
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": i18n.T(lang, "error.render_timeout")})
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": i18n.T(lang, "error.internal_server_error"), "detail": err.Error()})
 				monitor.RecordRequest(c.Request.Method, c.Request.URL.Path, http.StatusInternalServerError, 0)
 				c.Abort()
 				return

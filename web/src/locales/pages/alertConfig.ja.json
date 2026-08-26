@@ -1,0 +1,146 @@
+{
+  "alertConfig": {
+    "title": "アラート設定",
+    "tabs": {
+      "rules": "アラートルール",
+      "records": "アラート履歴",
+      "channels": "通知チャネル",
+      "templates": "ルールテンプレート"
+    },
+    "toolbar": {
+      "addRule": "ルール追加",
+      "refresh": "更新",
+      "refreshed": "ルールを更新しました",
+      "rulesTotal": "全 {{count}} 件のルール",
+      "rulesEnabled": "{{count}} 件有効"
+    },
+    "ruleColumns": {
+      "name": "ルール名",
+      "metric": "監視メトリクス",
+      "condition": "条件",
+      "severity": "重要度",
+      "cooldown": "クールダウン",
+      "cooldownMinutes": "{{minutes}} 分",
+      "status": "ステータス",
+      "actions": "操作"
+    },
+    "recordColumns": {
+      "ruleName": "アラートルール",
+      "severity": "重要度",
+      "message": "アラートメッセージ",
+      "triggerValue": "トリガー値",
+      "triggerTime": "発生日時",
+      "status": "ステータス"
+    },
+    "statusTag": {
+      "active": "アラート中",
+      "resolved": "解決済み"
+    },
+    "stats": {
+      "active": "アクティブなアラート",
+      "resolved": "解決済み",
+      "critical": "重大なアラート",
+      "warning": "警告"
+    },
+    "recordsTotal": "全 {{total}} 件の記録",
+    "channels": {
+      "description": "アラート通知チャネルを設定します。アラートが発生すると、有効なチャネルから通知が送信されます。",
+      "on": "有効",
+      "off": "無効",
+      "names": {
+        "webhook": "Webhook",
+        "email": "メール",
+        "slack": "Slack",
+        "dingtalk": "DingTalk（釘釘）"
+      }
+    },
+    "templates": {
+      "description": "テンプレートを選んでよく使うアラートルールを素早く追加",
+      "items": {
+        "cpu_high": {
+          "name": "CPU 使用率過高",
+          "description": "CPU 使用率が 90% を超えるとアラートが発生します"
+        },
+        "memory_high": {
+          "name": "メモリ使用率過高",
+          "description": "メモリ使用率が 85% を超えるとアラートが発生します"
+        },
+        "disk_high": {
+          "name": "ディスク使用率過高",
+          "description": "ディスク使用率が 90% を超えるとアラートが発生します"
+        },
+        "threat_spike": {
+          "name": "脅威検出の急増",
+          "description": "1分あたりの脅威検出数が 100 を超えるとアラートが発生します"
+        },
+        "render_queue_backlog": {
+          "name": "レンダリングキューの滞留",
+          "description": "レンダリングキューの滞留が 50 を超えるとアラートが発生します"
+        },
+        "ssl_expiring": {
+          "name": "SSL証明書の期限切れ間近",
+          "description": "SSL証明書の有効期限が 30 日以内に切れるとアラートが発生します"
+        }
+      }
+    },
+    "form": {
+      "addTitle": "アラートルール追加",
+      "editTitle": "アラートルール編集",
+      "name": "ルール名",
+      "nameRequired": "ルール名を入力してください",
+      "namePlaceholder": "例：CPU 使用率過高",
+      "description": "説明",
+      "descriptionPlaceholder": "ルールの説明",
+      "metric": "監視メトリクス",
+      "metricRequired": "監視メトリクスを選択してください",
+      "selectMetric": "メトリクスを選択",
+      "metricOptions": {
+        "system_cpu_usage": "CPU 使用率",
+        "system_memory_usage": "メモリ使用率",
+        "system_disk_usage": "ディスク使用率",
+        "threats_per_minute": "脅威検出/分",
+        "render_queue_size": "レンダリングキューサイズ",
+        "ssl_cert_days_remaining": "SSL証明書残り日数"
+      },
+      "severity": "重要度",
+      "severityRequired": "重要度を選択してください",
+      "selectSeverity": "重要度を選択",
+      "severityOptions": {
+        "critical": "重大",
+        "warning": "警告",
+        "info": "情報"
+      },
+      "operator": "オペレーター",
+      "operatorRequired": "オペレーターを選択してください",
+      "selectOperator": "オペレーターを選択",
+      "operatorOptions": {
+        "gt": "より大きい (>)",
+        "lt": "より小さい (<)",
+        "eq": "等しい (=)",
+        "ge": "以上 (>=)",
+        "le": "以下 (<=)"
+      },
+      "threshold": "しきい値",
+      "thresholdRequired": "しきい値を入力してください",
+      "thresholdPlaceholder": "しきい値",
+      "cooldown": "クールダウン（秒）",
+      "cooldownRequired": "クールダウン時間を入力してください",
+      "cooldownPlaceholder": "秒",
+      "updateRule": "ルール更新"
+    },
+    "messages": {
+      "updateSuccess": "ルールを更新しました",
+      "addSuccess": "ルールを追加しました",
+      "localSaveWarning": "ルールはローカルに保存されましたが、バックエンドとの同期に失敗しました",
+      "deleteSuccess": "ルールを削除しました",
+      "deleteFail": "削除に失敗しました",
+      "statusUpdateFail": "ステータスの更新に失敗しました",
+      "channelEnabled": "{{name}} を有効にしました",
+      "channelDisabled": "{{name}} を無効にしました",
+      "channelSyncFail": "チャネル設定のバックエンド同期に失敗しました",
+      "applyTemplateSuccess": "テンプレートを適用しました: {{name}}",
+      "applyTemplateFail": "テンプレートの適用に失敗しました"
+    },
+    "deleteConfirm": "このルールを削除してもよろしいですか？"
+  }
+}

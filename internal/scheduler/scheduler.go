@@ -9,10 +9,10 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"prerender-shield/internal/config"
+	"prerender-shield/internal/logging"
 	"prerender-shield/internal/prerender"
 	"prerender-shield/internal/prerender/push"
 	"prerender-shield/internal/redis"
-	"prerender-shield/internal/logging"
 )
 
 // Scheduler 定时任务调度器
@@ -21,7 +21,7 @@ type Scheduler struct {
 	engineManager *prerender.EngineManager
 	pushManager   *push.PushManager
 	redisClient   *redis.Client
-	tasks         map[string]cron.EntryID // 站点名 -> 任务ID
+	tasks         map[string][]cron.EntryID // 站点名 -> 任务ID 列表（预热+推送各一条）
 	tasksMutex    sync.RWMutex
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -40,7 +40,7 @@ func NewScheduler(engineManager *prerender.EngineManager, redisClient *redis.Cli
 		engineManager: engineManager,
 		pushManager:   push.NewPushManager(cfg, redisClient),
 		redisClient:   redisClient,
-		tasks:         make(map[string]cron.EntryID),
+		tasks:         make(map[string][]cron.EntryID),
 		ctx:           ctx,
 		cancel:        cancel,
 	}
@@ -111,111 +111,94 @@ func (s *Scheduler) reloadSites() {
 		siteConfigMap[site.ID] = site.Prerender
 	}
 
-	// 为每个站点创建或更新定时任务
+	// 全程持写锁完成"检查+创建/更新/删除"，消除 RLock→Lock 的 TOCTOU 竞态窗口
+	// （并发调用会导致重复 AddFunc 与旧 EntryID 永续泄漏）
+	s.tasksMutex.Lock()
+	defer s.tasksMutex.Unlock()
+
 	for _, siteName := range siteNames {
 		currentSites[siteName] = true
 
-		s.tasksMutex.RLock()
-		_, taskExists := s.tasks[siteName]
-		s.tasksMutex.RUnlock()
-
-		// 获取站点的实际配置
 		prerenderCfg, exists := siteConfigMap[siteName]
 		if !exists {
 			prerenderCfg = config.PrerenderConfig{}
 		}
 
-		if taskExists {
-			s.updateTask(siteName, prerenderCfg)
+		if _, taskExists := s.tasks[siteName]; taskExists {
+			s.updateTaskLocked(siteName, prerenderCfg)
 		} else {
-			s.createTask(siteName, prerenderCfg)
+			s.createTaskLocked(siteName, prerenderCfg)
 		}
 	}
 
 	// 删除不再存在的站点的任务
-	s.tasksMutex.RLock()
-	var toRemove []string
 	for siteName := range s.tasks {
 		if !currentSites[siteName] {
-			toRemove = append(toRemove, siteName)
+			s.removeTaskLocked(siteName)
 		}
-	}
-	s.tasksMutex.RUnlock()
-
-	// 在锁外执行删除
-	for _, siteName := range toRemove {
-		s.removeTask(siteName)
 	}
 }
 
-// createTask 为站点创建定时任务
-func (s *Scheduler) createTask(siteName string, config config.PrerenderConfig) {
+// createTaskLocked 为站点创建定时任务（调用方必须已持 tasksMutex 写锁）
+func (s *Scheduler) createTaskLocked(siteName string, config config.PrerenderConfig) {
+	ids := make([]cron.EntryID, 0, 2)
+
 	// 为预热任务创建定时任务
 	if config.Preheat.Enabled && config.Preheat.Schedule != "" {
-		// 创建预热任务函数
 		preheatTaskFunc := func() {
 			s.executePreheat(siteName)
 		}
-
-		// 添加到cron调度器
-		_, err := s.cron.AddFunc(config.Preheat.Schedule, preheatTaskFunc)
-		if err != nil {
+		if id, err := s.cron.AddFunc(config.Preheat.Schedule, preheatTaskFunc); err != nil {
 			logging.DefaultLogger.Info("Failed to add preheat cron task for site %s: %v\n", siteName, err)
 		} else {
+			ids = append(ids, id)
 			logging.DefaultLogger.Info("Created preheat cron task for site %s with schedule: %s\n", siteName, config.Preheat.Schedule)
 		}
 	}
 
 	// 为推送任务创建定时任务
 	if config.Push.Enabled {
-		// 创建推送任务函数
 		pushTaskFunc := func() {
 			s.executePush(siteName)
 		}
-
-		// 固定每天早上8点推送
-		cronExpr := "0 0 8 * * *"
-
-		// 添加到cron调度器
-		_, err := s.cron.AddFunc(cronExpr, pushTaskFunc)
-		if err != nil {
+		cronExpr := config.Push.Schedule
+		if cronExpr == "" {
+			cronExpr = "0 0 8 * * *"
+		}
+		if id, err := s.cron.AddFunc(cronExpr, pushTaskFunc); err != nil {
 			logging.DefaultLogger.Info("Failed to add push cron task for site %s: %v\n", siteName, err)
 		} else {
+			ids = append(ids, id)
 			logging.DefaultLogger.Info("Created push cron task for site %s with schedule: %s\n", siteName, cronExpr)
 		}
 	}
+
+	if len(ids) > 0 {
+		s.tasks[siteName] = ids
+	}
 }
 
-// updateTask 更新站点的定时任务
-func (s *Scheduler) updateTask(siteName string, config config.PrerenderConfig) {
-	// 简化实现：直接删除旧任务，创建新任务
-	s.removeTask(siteName)
-	s.createTask(siteName, config)
+// updateTaskLocked 更新站点的定时任务（调用方必须已持写锁）：先移除全部旧 Entry 再重建，
+// 避免配置变化后旧调度残留
+func (s *Scheduler) updateTaskLocked(siteName string, config config.PrerenderConfig) {
+	s.removeTaskLocked(siteName)
+	s.createTaskLocked(siteName, config)
 }
 
-// removeTask 移除站点的定时任务
-func (s *Scheduler) removeTask(siteName string) {
-	// 获取任务ID
-	s.tasksMutex.RLock()
-	entryID, exists := s.tasks[siteName]
-	s.tasksMutex.RUnlock()
-
+// removeTaskLocked 移除站点的全部定时任务（调用方必须已持写锁）。
+// 此前每站点仅记录单个 EntryID，预热+推送双任务时另一个必然泄漏在 cron 中
+func (s *Scheduler) removeTaskLocked(siteName string) {
+	entryIDs, exists := s.tasks[siteName]
 	if !exists {
 		return
 	}
-
-	// 从cron调度器中移除任务
-	s.cron.Remove(entryID)
-
-	// 从任务映射中移除
-	s.tasksMutex.Lock()
+	for _, entryID := range entryIDs {
+		s.cron.Remove(entryID)
+	}
 	delete(s.tasks, siteName)
-	s.tasksMutex.Unlock()
-
-	logging.DefaultLogger.Info("Removed cron task for site %s\n", siteName)
+	logging.DefaultLogger.Info("Removed cron tasks for site %s (%d entries)\n", siteName, len(entryIDs))
 }
 
-// executePreheat 执行站点的预热任务
 func (s *Scheduler) executePreheat(siteName string) {
 	logging.DefaultLogger.Info("Executing preheat for site %s at %s\n", siteName, time.Now().Format("2006-01-02 15:04:05"))
 
@@ -270,22 +253,32 @@ func (s *Scheduler) AddManualTask(siteName string) {
 func (s *Scheduler) GetTaskStatus(siteName string) (bool, string) {
 	// 检查任务是否存在
 	s.tasksMutex.RLock()
-	entryID, exists := s.tasks[siteName]
+	ids, exists := s.tasks[siteName]
 	s.tasksMutex.RUnlock()
 
 	if !exists {
 		return false, "not scheduled"
 	}
 
-	// 获取任务的下次执行时间
+	// 取该站点任一任务的下次执行时间（预热/推送取最早者）
+	idSet := make(map[cron.EntryID]bool, len(ids))
+	for _, id := range ids {
+		idSet[id] = true
+	}
 	entries := s.cron.Entries()
+	earliest := ""
 	for _, entry := range entries {
-		if entry.ID == entryID {
-			nextRun := entry.Next.Format("2006-01-02 15:04:05")
-			return true, nextRun
+		if !idSet[entry.ID] {
+			continue
+		}
+		next := entry.Next.Format("2006-01-02 15:04:05")
+		if earliest == "" || next < earliest {
+			earliest = next
 		}
 	}
-
+	if earliest != "" {
+		return true, earliest
+	}
 	return false, "not found"
 }
 
@@ -299,8 +292,10 @@ func (s *Scheduler) ListTasks() map[string]string {
 	// 反向映射：entryID -> siteName
 	s.tasksMutex.RLock()
 	entryToSite := make(map[cron.EntryID]string)
-	for siteName, entryID := range s.tasks {
-		entryToSite[entryID] = siteName
+	for siteName, entryIDs := range s.tasks {
+		for _, id := range entryIDs {
+			entryToSite[id] = siteName
+		}
 	}
 	s.tasksMutex.RUnlock()
 

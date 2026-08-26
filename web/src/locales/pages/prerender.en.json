@@ -1,0 +1,41 @@
+{
+  "prerender": {
+    "title": "Prerender & Preheat",
+    "selectSite": "Select Site: ",
+    "refreshStatus": "Refresh Status",
+    "statusTitle": "Prerender Status",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "browserPoolSize": "Browser Pool Size",
+    "renderTimeout": "Render Timeout (s)",
+    "cacheTTL": "Cache TTL (s)",
+    "manualOps": "Manual Operations",
+    "manualRender": "Manual Render",
+    "cachePreheat": "Cache Preheat",
+    "preheatConfig": "Cache Preheat Config",
+    "preheatStatus": "Preheat Status",
+    "preheatSchedule": "Preheat Schedule",
+    "renderHistory": "Render History",
+    "columns": {
+      "site": "Site",
+      "status": "Status",
+      "duration": "Duration (ms)",
+      "time": "Time"
+    },
+    "startRender": "Start Render",
+    "urlLabel": "URL: ",
+    "urlPlaceholder": "Enter the URL to render",
+    "renderNote": "Note: Rendering may take a while, please be patient",
+    "preheatConfirm": "Are you sure you want to trigger cache preheat?",
+    "startPreheat": "Start Preheat",
+    "preheatNote": "Note: Preheat may take a long time depending on the site size",
+    "fetchStatusFailed": "Failed to fetch prerender status",
+    "selectSiteWarning": "Please select a site",
+    "inputUrlWarning": "Please enter the URL to render",
+    "renderSubmitted": "Render task submitted",
+    "renderSubmitFailed": "Failed to submit render task",
+    "renderFailed": "Render failed",
+    "preheatTriggered": "Cache preheat triggered",
+    "preheatTriggerFailed": "Failed to trigger cache preheat"
+  }
+}

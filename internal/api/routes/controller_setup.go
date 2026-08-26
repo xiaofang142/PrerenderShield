@@ -29,6 +29,7 @@ type Controllers struct {
 	SitesController      *controllers.SitesController
 	SystemController     *controllers.SystemController
 	SSLController        *controllers.SSLController
+	SEOController        *controllers.SEOController
 }
 
 // SetupControllers 创建并配置所有控制器实例
@@ -94,9 +95,14 @@ func SetupControllers(
 	}
 
 	// 创建 2FA 管理器
-	var twoFactorAuth *auth.TwoFactorAuth
-	if cfg.SSL.Enabled || true { // 默认启用 2FA（可配置）
-		twoFactorAuth = auth.NewTwoFactorAuth(redisClient, "Prerender Shield")
+	twoFactorAuth := auth.NewTwoFactorAuth(redisClient, "Prerender Shield")
+
+	// 创建 SSL 管理器（用于概览页面展示证书状态）
+	var sslMgr ssl.Manager
+	if mgr, err := ssl.NewManager(redisClient, cfg.Dirs.CertsDir, cfg.SSL.Email, cfg.SSL.Production); err == nil {
+		sslMgr = mgr
+	} else {
+		logging.DefaultLogger.Warn("Failed to create SSL manager: %v", err)
 	}
 
 	// 创建 SSL 控制器 — 没有 ACME 时传 nil（接口 nil 而非类型 nil）
@@ -110,14 +116,15 @@ func SetupControllers(
 	// 创建控制器实例
 	return &Controllers{
 		AuthController:       controllers.NewAuthController(userManager, jwtManager, auditLogger, twoFactorAuth),
-		OverviewController:   controllers.NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, wafRepo),
+		OverviewController:   controllers.NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, wafRepo, sslMgr),
 		MonitoringController: controllers.NewMonitoringController(monitor, redisClient),
 		FirewallController:   controllers.NewFirewallController(wafRepo),
 		CrawlerController:    controllers.NewCrawlerController(crawlerLogMgr),
-		PreheatController:    controllers.NewPreheatController(prerenderManager, redisClient, cfg),
+		PreheatController:    controllers.NewPreheatController(prerenderManager, redisClient, scheduler, cfg),
 		PushController:       controllers.NewPushController(pushManager, redisClient, cfg),
 		SitesController:      controllers.NewSitesController(configManager, siteServerMgr, siteHandler, redisClient, monitor, crawlerLogMgr, visitLogMgr, cfg),
 		SystemController:     controllers.NewSystemController(redisClient),
 		SSLController:        sslController,
+		SEOController:        controllers.NewSEOController(cfg),
 	}
 }

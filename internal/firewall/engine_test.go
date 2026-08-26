@@ -346,14 +346,14 @@ func TestRuleManager_loadRulesFromFile_ValidJSON(t *testing.T) {
 // TestRuleManager_loadRulesFromFile_UnsupportedFormat 测试 loadRulesFromFile 不支持的格式
 func TestRuleManager_loadRulesFromFile_UnsupportedFormat(t *testing.T) {
 	tmpFile := t.TempDir() + "/rules.yaml"
-	err := os.WriteFile(tmpFile, []byte("yaml content"), 0644)
+	// 使用无效的 YAML 内容触发解析错误
+	err := os.WriteFile(tmpFile, []byte(": invalid: yaml: content: ["), 0644)
 	assert.NoError(t, err)
 
 	rm := NewRuleManager(tmpFile, false, 0, "", nil)
 	rules, err := rm.loadRulesFromFile()
 	assert.Error(t, err)
 	assert.Nil(t, rules)
-	assert.Contains(t, err.Error(), "YAML rules not yet implemented")
 }
 
 // TestRuleManager_loadRulesFromFile_DefaultFormat 测试 loadRulesFromFile 默认格式（无扩展名）
@@ -519,7 +519,7 @@ func TestRuleManager_loadRulesFromRedis_NilClient(t *testing.T) {
 type mockThreatDetector struct{}
 
 func (m *mockThreatDetector) Detect(req *http.Request) ([]types.Threat, error) {
-	return []types.Threat{{Type: "test", Message: "Mock threat detected"}}, nil
+	return []types.Threat{{Type: "test", Severity: "high", Message: "Mock threat detected"}}, nil
 }
 
 func (m *mockThreatDetector) Name() string {

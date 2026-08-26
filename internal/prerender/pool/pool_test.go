@@ -449,7 +449,7 @@ func TestPool_checkHealth_IdleTimeout(t *testing.T) {
 		MaxUseCount:         100,
 		IdleTimeout:         100 * time.Millisecond, // 很短的超时用于测试
 		Headless:            true,
-		HealthCheckInterval: 50 * time.Millisecond,  // 频繁检查
+		HealthCheckInterval: 50 * time.Millisecond, // 频繁检查
 	}
 
 	pool := NewPool(cfg, logger)
@@ -568,8 +568,8 @@ func TestPool_ScaleDown_NoIdleInstances(t *testing.T) {
 func TestPool_AcquireContextCancelled(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	cfg := Config{
-		MinInstances:        1,  // Pre-create one instance
-		MaxInstances:        1,  // Only allow one instance
+		MinInstances:        1, // Pre-create one instance
+		MaxInstances:        1, // Only allow one instance
 		Headless:            true,
 		HealthCheckInterval: 30 * time.Second,
 		MaxUseCount:         100,

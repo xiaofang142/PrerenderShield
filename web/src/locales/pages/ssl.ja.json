@@ -1,0 +1,90 @@
+{
+  "ssl": {
+    "title": "SSL証明書管理",
+    "stats": {
+      "total": "証明書総数",
+      "valid": "有効な証明書",
+      "expiringSoon": "まもなく期限切れ",
+      "expired": "期限切れ"
+    },
+    "actions": {
+      "requestCert": "証明書を申請",
+      "requestWildcard": "ワイルドカード証明書を申請",
+      "refresh": "更新"
+    },
+    "expiring": {
+      "title": "まもなく期限切れの証明書",
+      "renewNow": "今すぐ更新"
+    },
+    "list": {
+      "title": "証明書リスト"
+    },
+    "columns": {
+      "domain": "ドメイン",
+      "issuer": "発行者",
+      "expires": "有効期限",
+      "status": "ステータス"
+    },
+    "status": {
+      "unknown": "不明",
+      "expired": "期限切れ",
+      "valid": "有効",
+      "expiresInDays": "{{days}}日後に期限切れ"
+    },
+    "buttons": {
+      "detail": "詳細",
+      "renew": "更新"
+    },
+    "tooltips": {
+      "viewDetail": "詳細を見る",
+      "renew": "証明書を更新",
+      "delete": "証明書を削除"
+    },
+    "deleteConfirm": {
+      "title": "この証明書を削除してもよろしいですか？"
+    },
+    "table": {
+      "totalText": "合計 {{total}} 件の証明書",
+      "empty": "証明書はありません"
+    },
+    "modal": {
+      "requestTitle": "SSL証明書の申請",
+      "wildcardTitle": "ワイルドカードSSL証明書の申請",
+      "detailTitle": "証明書の詳細"
+    },
+    "form": {
+      "domains": "ドメインリスト",
+      "domainsRequired": "ドメインを入力してください",
+      "domainsHelp": "1行に1つのドメイン、例：example.com",
+      "baseDomain": "ベースドメイン",
+      "baseDomainRequired": "ベースドメインを入力してください",
+      "baseDomainHelp": "例：example.com",
+      "subdomains": "サブドメインリスト",
+      "subdomainsHelp": "1行に1つのサブドメイン。空欄の場合はワイルドカード証明書のみ申請します"
+    },
+    "detail": {
+      "basicInfo": "基本情報",
+      "domainLabel": "ドメイン：",
+      "issuerLabel": "発行者：",
+      "serialNumber": "シリアル番号：",
+      "validity": "有効期間",
+      "expiresLabel": "有効期限：",
+      "statusLabel": "ステータス：",
+      "sanDomains": "SANドメイン",
+      "fingerprint": "フィンガープリント"
+    },
+    "messages": {
+      "fetchListFailed": "証明書リストの取得に失敗しました",
+      "needDomain": "少なくとも1つのドメインを入力してください",
+      "requestSuccess": "証明書の申請に成功しました",
+      "requestFailed": "証明書の申請に失敗しました",
+      "wildcardSuccess": "ワイルドカード証明書の申請に成功しました",
+      "wildcardFailed": "ワイルドカード証明書の申請に失敗しました",
+      "renewSuccess": "証明書の更新に成功しました",
+      "renewFailed": "証明書の更新に失敗しました",
+      "deleteSuccess": "証明書の削除に成功しました",
+      "deleteFailed": "証明書の削除に失敗しました",
+      "detailFailed": "証明書の詳細の取得に失敗しました"
+    }
+  }
+}

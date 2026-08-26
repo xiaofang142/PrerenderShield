@@ -49,6 +49,13 @@ sites:
         block_message: "Request blocked by firewall"
       geoip:
         enabled: false
+        database_path: "./rules/GeoLite2-Country.mmdb"
+        # API 回退提供商（当 MaxMind 数据库不可用时）
+        # ip-api: 免费 45 次/分钟 (http://ip-api.com)
+        # ipinfo: 免费 50k 次/月 (https://ipinfo.io)
+        # ipapi-co: 免费 1k 次/天 (https://ipapi.co)
+        api_provider: "ip-api"
+        api_key: ""  # ipinfo 需要 token
         allow_list: []
         block_list: []
       rate_limit:
@@ -56,6 +63,41 @@ sites:
         requests: 100
         window: 60
         ban_time: 3600
+      cc_protection:
+        enabled: false
+        rules: []
+      threat_intel:
+        enabled: false
+        global_key: "threatintel:global:blacklist"
+        max_ips: 50000
+        concurrency: 3
+        sources:
+          - name: "Abuse.ch Feodo Tracker"
+            url: "https://feodotracker.abuse.ch/downloads/ipblocklist.csv"
+            format: "csv"
+            update_interval: "1h"
+            enabled: false
+            ip_field: "dst_ip"
+          - name: "Blocklist.de All"
+            url: "https://lists.blocklist.de/lists/all.txt"
+            format: "text"
+            update_interval: "6h"
+            enabled: false
+          - name: "Emerging Threats Compromised IPs"
+            url: "https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt"
+            format: "text"
+            update_interval: "12h"
+            enabled: false
+          - name: "Spamhaus DROP List"
+            url: "https://www.spamhaus.org/drop/drop.txt"
+            format: "text"
+            update_interval: "12h"
+            enabled: false
+          - name: "CINS Army Threat List"
+            url: "https://cinsscore.com/list/ci-badguys.txt"
+            format: "text"
+            update_interval: "6h"
+            enabled: false
     prerender:
       enabled: true
       pool_size: 5
@@ -95,6 +137,16 @@ sites:
       enabled: false
       check_interval: 300
       hash_algorithm: "sha256"
+    # 站点 SSL 配置
+    ssl:
+      enabled: false
+      http_port: 80  # HTTP 端口（用于重定向和 ACME 验证）
+      cert_file: ""  # 手动证书路径（可选）
+      key_file: ""   # 手动密钥路径（可选）
+      auto_cert: false  # 自动申请证书（需要全局 SSL 启用）
+      force_https: true  # 强制 HTTPS 重定向
+      hsts: true  # 启用 HSTS
+      hsts_max_age: 31536000  # 1 年
 
 # SSL 证书配置（Let's Encrypt 自动申请）
 ssl:
@@ -115,6 +167,68 @@ ssl:
       # Cloudflare: CLOUDFLARE_DNS_API_TOKEN: "your-token"
       # 阿里云：ALIBABA_CLOUD_ACCESS_KEY_ID: "xxx", ALIBABA_CLOUD_ACCESS_KEY_SECRET: "xxx"
       # 腾讯云：TENCENTCLOUD_SECRET_ID: "xxx", TENCENTCLOUD_SECRET_KEY: "xxx"
+
+# SEO 配置
+seo:
+  # Sitemap 自动生成
+  sitemap:
+    enabled: false
+    base_url: "https://example.com"
+    output_dir: "./static/default"
+    change_freq: "daily"
+    default_priority: "0.5"
+    include_patterns:
+      - "*.html"
+      - "*.htm"
+    exclude_patterns:
+      - "admin/*"
+      - "api/*"
+      - "login*"
+  # robots.txt 自动生成
+  robots:
+    enabled: false
+    output_dir: "./static/default"
+    sitemap_url: "https://example.com/sitemap.xml"
+    rules:
+      - user_agent: "*"
+        allow:
+          - "/"
+        disallow:
+          - "/admin/"
+          - "/api/"
+          - "/login"
+      - user_agent: "Baiduspider"
+        crawl_delay: 5
+      - user_agent: "Googlebot"
+        crawl_delay: 1
+  # LLM SEO 优化
+  llm:
+    enabled: false
+    provider: "openai"  # openai, zhipu, deepseek, ollama
+    api_key: ""
+    api_url: ""  # 自定义 API 地址（可选）
+    model: "gpt-4o-mini"
+    max_tokens: 500
+    temperature: 0.3
+    timeout: "10s"
+    max_retries: 2
+    prompts:
+      title_optimization: "优化以下标题用于SEO，要求简洁且包含关键词："
+      description_optimization: "为以下页面生成SEO友好的meta描述，120-160字符："
+      keyword_extraction: "从以下内容提取5-10个SEO关键词："
+      structured_data: "为以下页面生成Schema.org JSON-LD结构化数据："
+
+# 商业授权配置
+# 商业策略：
+# - 1 个站点永久免费，且不阉割功能
+# - 超过 1 个站点后，按站点数量收费：99 美元 / 站点 / 年
+# - 源码私有化部署交付：9999 美元软件费用
+# - 私有化源码授权可将 max_sites 设置为 -1 表示不限站点
+commercial:
+  plan: "free"  # free, per-site, private-source
+  max_sites: 1
+  site_price_usd_per_year: 99
+  private_deploy_price_usd: 9999
 
 # 监控配置
 monitoring:

@@ -1,0 +1,28 @@
+{
+  "firewallPage": {
+    "title": "防火墙拦截记录",
+    "subtitle": "查看被防火墙拦截的恶意请求记录",
+    "selectSite": "选择站点：",
+    "sitePlaceholder": "请选择站点",
+    "selectSiteFirst": "请先选择一个站点",
+    "refreshList": "刷新列表",
+    "logListTitle": "攻击记录列表",
+    "fetchLogsFailed": "获取攻击记录失败",
+    "whitelistAdded": "已将 IP {{ip}} 加入白名单",
+    "blacklistAdded": "已将 IP {{ip}} 加入黑名单",
+    "operationFailed": "操作失败",
+    "unknown": "未知",
+    "addToWhitelist": "加入白名单",
+    "addToBlacklist": "加入黑名单",
+    "whitelist": "白名单",
+    "blacklist": "黑名单",
+    "totalRecords": "共 {{total}} 条记录",
+    "columns": {
+      "ipAddress": "IP地址",
+      "location": "地理位置",
+      "attackTime": "攻击时间",
+      "blockReason": "拦截原因",
+      "actions": "操作"
+    }
+  }
+}

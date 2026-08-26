@@ -1,56 +1,67 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from '../../../context/AuthContext'
+import PrivateRoute from '../PrivateRoute'
 
-vi.mock('../../../context/AuthContext', () => ({
-  useAuth: vi.fn(),
-}))
+const LoginPage = () => <div data-testid="login-page">LoginPage</div>
 
-const { useAuth } = await import('../../../context/AuthContext')
-const PrivateRoute = (await import('../PrivateRoute')).default
+const renderWithAuth = (token?: { token: string; username: string }) => {
+  if (token) {
+    localStorage.setItem('token', token.token)
+    localStorage.setItem('username', token.username)
+  } else {
+    localStorage.clear()
+  }
 
-const TestChild = () => <div data-testid="child">Protected</div>
-const LocationDisplay = () => <div data-testid="location">{useLocation().pathname}</div>
+  return render(
+    <MemoryRouter initialEntries={['/dashboard']}>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="*"
+            element={
+              <PrivateRoute>
+                <div data-testid="child">Protected</div>
+              </PrivateRoute>
+            }
+          />
+        </Routes>
+      </AuthProvider>
+    </MemoryRouter>
+  )
+}
+
+const validToken = () => {
+  const payload = btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 }))
+  return `header.${payload}.signature`
+}
 
 describe('PrivateRoute', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    localStorage.clear()
   })
 
   it('redirects to login when not authenticated', () => {
-    vi.mocked(useAuth).mockReturnValue({
-      isAuthenticated: false,
-      username: null,
-      token: null,
-      login: vi.fn(),
-      logout: vi.fn(),
-    })
+    renderWithAuth()
 
-    render(
-      <MemoryRouter initialEntries={['/dashboard']}>
-        <PrivateRoute><TestChild /></PrivateRoute>
-        <LocationDisplay />
-      </MemoryRouter>
-    )
-
-    expect(screen.getByTestId('location').textContent).toBe('/login')
+    expect(screen.getByTestId('login-page')).toBeInTheDocument()
+    expect(screen.queryByTestId('child')).not.toBeInTheDocument()
   })
 
   it('renders children when authenticated', () => {
-    vi.mocked(useAuth).mockReturnValue({
-      isAuthenticated: true,
-      username: 'user',
-      token: 'token',
-      login: vi.fn(),
-      logout: vi.fn(),
-    })
-
-    render(
-      <MemoryRouter>
-        <PrivateRoute><TestChild /></PrivateRoute>
-      </MemoryRouter>
-    )
+    renderWithAuth({ token: validToken(), username: 'user' })
 
     expect(screen.getByTestId('child')).toBeInTheDocument()
+    expect(screen.queryByTestId('login-page')).not.toBeInTheDocument()
+  })
+
+  it('redirects to login when token is expired', () => {
+    const expiredPayload = btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) - 10 }))
+    renderWithAuth({ token: `header.${expiredPayload}.signature`, username: 'user' })
+
+    expect(screen.getByTestId('login-page')).toBeInTheDocument()
+    expect(screen.queryByTestId('child')).not.toBeInTheDocument()
   })
 })

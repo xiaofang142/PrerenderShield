@@ -1,14 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Dashboard from '../Dashboard'
 import { overviewApi } from '../../services/api'
+import i18n from '../../i18n'
 
 vi.mock('../../services/api', () => ({
   overviewApi: { getStats: vi.fn() },
 }))
 
 const mockGetStats = vi.mocked(overviewApi.getStats)
+
+beforeAll(async () => {
+  // 页面文案已接入 i18n，测试断言依赖中文文案，强制 zh
+  await i18n.changeLanguage('zh')
+})
 
 describe('Dashboard', () => {
   beforeEach(() => {
@@ -18,6 +24,7 @@ describe('Dashboard', () => {
   it('renders stats after loading', async () => {
     mockGetStats.mockResolvedValue({
       code: 200,
+      message: 'success',
       data: {
         totalRequests: 1000,
         crawlerRequests: 200,
@@ -46,6 +53,7 @@ describe('Dashboard', () => {
   it('renders system status', async () => {
     mockGetStats.mockResolvedValue({
       code: 200,
+      message: 'success',
       data: {
         totalRequests: 0,
         crawlerRequests: 0,

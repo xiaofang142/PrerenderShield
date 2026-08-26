@@ -1,17 +1,19 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, Row, Col, Statistic, Spin, Select, Table, Radio, Tabs } from 'antd'
 import { ArrowUpOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import BaseChart from '../../components/charts/BaseChart'
-import { crawlerApi, sitesApi } from '../../services/api'
+import { crawlerApi } from '../../services/api'
+import { useSites } from '../../hooks/useSites'
 import dayjs from 'dayjs'
-import * as echarts from 'echarts'
+import type { EChartsOption } from 'echarts'
 
 const { Option } = Select
 const { TabPane } = Tabs
 
 const Crawler: React.FC = () => {
-  const [sites, setSites] = useState<any[]>([])
-  const [selectedSite, setSelectedSite] = useState<string>('all')
+  const { t } = useTranslation()
+  const { sites, selectedSiteId: selectedSite, setSelectedSiteId: setSelectedSite } = useSites()
   const [granularity, setGranularity] = useState<string>('day') // day, week, month
   const [logs, setLogs] = useState<any[]>([])
   const [totalLogs, setTotalLogs] = useState<number>(0)
@@ -24,11 +26,13 @@ const Crawler: React.FC = () => {
     trafficByHour: []
   })
   const [loading, setLoading] = useState<boolean>(true)
+  // 竞态防护：筛选条件快速变化时，旧请求的响应不再写入 state
+  const requestVersionRef = useRef(0)
 
   // 日志表格列配置
   const logColumns = [
     {
-      title: '时间',
+      title: t('crawlerPage.columns.time'),
       dataIndex: 'time',
       key: 'time',
       render: (text: string) => {
@@ -36,30 +40,30 @@ const Crawler: React.FC = () => {
       }
     },
     {
-      title: '站点',
+      title: t('crawlerPage.columns.site'),
       dataIndex: 'site',
       key: 'site'
     },
     {
-      title: 'IP地址',
+      title: t('crawlerPage.columns.ip'),
       dataIndex: 'ip',
       key: 'ip'
     },
     {
-      title: '路由',
+      title: t('crawlerPage.columns.route'),
       dataIndex: 'route',
       key: 'route',
       ellipsis: true
     },
     {
-      title: 'User-Agent',
+      title: t('crawlerPage.columns.ua'),
       dataIndex: 'ua',
       key: 'ua',
       ellipsis: true,
       width: 300
     },
     {
-      title: '状态',
+      title: t('crawlerPage.columns.status'),
       dataIndex: 'status',
       key: 'status',
       render: (text: number) => {
@@ -68,17 +72,17 @@ const Crawler: React.FC = () => {
       }
     },
     {
-      title: '缓存命中',
+      title: t('crawlerPage.columns.hitCache'),
       dataIndex: 'hitCache',
       key: 'hitCache',
       render: (text: boolean) => {
         const color = text ? '#52c41a' : '#faad14'
-        const label = text ? '是' : '否'
+        const label = text ? t('crawlerPage.yes') : t('crawlerPage.no')
         return <span style={{ color }}>{label}</span>
       }
     },
     {
-      title: '渲染时间',
+      title: t('crawlerPage.columns.renderTime'),
       dataIndex: 'renderTime',
       key: 'renderTime',
       render: (text: number) => {
@@ -90,7 +94,7 @@ const Crawler: React.FC = () => {
   // 处理图表数据，直接使用后端返回的数据
   const processChartData = () => {
     const { trafficByHour = [] } = stats;
-    
+
     // 直接使用后端返回的数据，后端已经根据不同的粒度返回了相应格式的数据
     return {
       time: trafficByHour.map((item: any) => item.time),
@@ -111,7 +115,11 @@ const Crawler: React.FC = () => {
         }
       },
       legend: {
-        data: ['爬虫请求数', '缓存命中数', '缓存未命中数'],
+        data: [
+          t('crawlerPage.chartLegend.requests'),
+          t('crawlerPage.chartLegend.cacheHits'),
+          t('crawlerPage.chartLegend.cacheMisses')
+        ],
         bottom: 0
       },
       grid: {
@@ -134,7 +142,7 @@ const Crawler: React.FC = () => {
       },
       series: [
         {
-          name: '爬虫请求数',
+          name: t('crawlerPage.chartLegend.requests'),
           type: 'line',
           data: chartData.totalRequests,
           smooth: true,
@@ -143,7 +151,7 @@ const Crawler: React.FC = () => {
           }
         },
         {
-          name: '缓存命中数',
+          name: t('crawlerPage.chartLegend.cacheHits'),
           type: 'line',
           data: chartData.cacheHits,
           smooth: true,
@@ -152,7 +160,7 @@ const Crawler: React.FC = () => {
           }
         },
         {
-          name: '缓存未命中数',
+          name: t('crawlerPage.chartLegend.cacheMisses'),
           type: 'line',
           data: chartData.cacheMisses,
           smooth: true,
@@ -161,20 +169,8 @@ const Crawler: React.FC = () => {
           }
         }
       ]
-    } as echarts.EChartsOption;
-  }, [stats]); // 当stats变化时重新计算图表配置
-
-  // 获取站点列表
-  const fetchSites = async () => {
-    try {
-      const res = await sitesApi.getSites()
-      if (res.code === 200) {
-        setSites(res.data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch sites:', error)
-    }
-  }
+    } as EChartsOption;
+  }, [stats, t]); // 当stats或语言变化时重新计算图表配置
 
   // 获取爬虫访问日志
   const fetchLogs = async () => {
@@ -183,7 +179,7 @@ const Crawler: React.FC = () => {
       // 使用默认时间范围：最近7天
       const startTime = dayjs().subtract(7, 'day').format('YYYY-MM-DDTHH:mm:ssZ')
       const endTime = dayjs().format('YYYY-MM-DDTHH:mm:ssZ')
-      
+
       const res = await crawlerApi.getLogs({
         site: selectedSite === 'all' ? '' : selectedSite,
         startTime,
@@ -191,7 +187,7 @@ const Crawler: React.FC = () => {
         page,
         pageSize
       })
-      
+
       if (res.code === 200) {
         setLogs(res.data.items)
         setTotalLogs(res.data.total)
@@ -205,20 +201,21 @@ const Crawler: React.FC = () => {
 
   // 获取爬虫统计数据
   const fetchStats = async () => {
+    const version = ++requestVersionRef.current
     try {
       // 使用默认时间范围：最近7天
       const startTime = dayjs().subtract(7, 'day').format('YYYY-MM-DDTHH:mm:ssZ')
       const endTime = dayjs().format('YYYY-MM-DDTHH:mm:ssZ')
-      
+
       const res = await crawlerApi.getStats({
         site: selectedSite === 'all' ? '' : selectedSite,
         startTime,
         endTime,
         granularity
       })
-      
+
+      if (version !== requestVersionRef.current) return
       if (res.code === 200) {
-        console.log('Fetched stats:', res.data)
         setStats(res.data)
       }
     } catch (error) {
@@ -249,27 +246,27 @@ const Crawler: React.FC = () => {
   }
 
   useEffect(() => {
-    fetchSites()
+    // 站点列表由 useSites 自动加载一次，此处仅随筛选条件刷新日志/统计
     updateData()
   }, [selectedSite, page, pageSize, granularity])
 
   return (
-    <Spin spinning={loading} tip="加载中...">
+    <Spin spinning={loading} tip={t('common.loading')}>
       <div>
-        <h1 className="page-title">爬虫访问</h1>
-        
+        <h1 className="page-title">{t('crawlerPage.title')}</h1>
+
         {/* 筛选条件 */}
         <Card className="card" style={{ marginBottom: 16 }}>
           <Row gutter={[16, 16]} align="middle">
             <Col span={8}>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <label style={{ marginRight: 8, width: 100, textAlign: 'right' }}>站点：</label>
+                <label style={{ marginRight: 8, width: 100, textAlign: 'right' }}>{t('crawlerPage.site')}</label>
                 <Select
                   value={selectedSite}
                   onChange={handleSiteChange}
                   style={{ width: 200 }}
                 >
-                  <Option value="all">所有站点</Option>
+                  <Option value="all">{t('crawlerPage.allSites')}</Option>
                   {sites.map((site) => (
                     <Option key={site.id} value={site.id}>
                       {site.name}
@@ -280,34 +277,34 @@ const Crawler: React.FC = () => {
             </Col>
             <Col span={8}>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <label style={{ marginRight: 8, width: 100, textAlign: 'right' }}>时间粒度：</label>
+                <label style={{ marginRight: 8, width: 100, textAlign: 'right' }}>{t('crawlerPage.granularity')}</label>
                 <Radio.Group value={granularity} onChange={handleGranularityChange}>
-                  <Radio.Button value="day">日</Radio.Button>
-                  <Radio.Button value="week">周</Radio.Button>
-                  <Radio.Button value="month">月</Radio.Button>
+                  <Radio.Button value="day">{t('crawlerPage.granularityDay')}</Radio.Button>
+                  <Radio.Button value="week">{t('crawlerPage.granularityWeek')}</Radio.Button>
+                  <Radio.Button value="month">{t('crawlerPage.granularityMonth')}</Radio.Button>
                 </Radio.Group>
               </div>
             </Col>
           </Row>
         </Card>
-        
+
         {/* 统计卡片 */}
         <Row gutter={[16, 16]}>
           <Col span={6}>
             <Card className="stat-card">
               <Statistic
-                title="总请求数"
+                title={t('crawlerPage.totalRequests')}
                 value={stats.totalRequests || 0}
                 prefix={<ArrowUpOutlined />}
                 valueStyle={{ color: '#3f8600' }}
-                suffix="条"
+                suffix={t('crawlerPage.countUnit')}
               />
             </Card>
           </Col>
           <Col span={6}>
             <Card className="stat-card">
               <Statistic
-                title="缓存命中率"
+                title={t('crawlerPage.cacheHitRate')}
                 value={stats.cacheHitRate || 0}
                 prefix={<ArrowUpOutlined />}
                 valueStyle={{ color: '#1890ff' }}
@@ -319,8 +316,8 @@ const Crawler: React.FC = () => {
           <Col span={6}>
             <Card className="stat-card">
               <Statistic
-                title="平均渲染时间"
-                value={(stats.trafficByHour || []).length > 0 ? 
+                title={t('crawlerPage.avgRenderTime')}
+                value={(stats.trafficByHour || []).length > 0 ?
                   ((stats.trafficByHour || []).reduce((sum: any, item: any) => sum + (item.renderTime || 0), 0) / (stats.trafficByHour || []).length * 1000).toFixed(2) : 0}
                 valueStyle={{ color: '#faad14' }}
                 suffix="ms"
@@ -331,28 +328,28 @@ const Crawler: React.FC = () => {
           <Col span={6}>
             <Card className="stat-card">
               <Statistic
-                title="活跃爬虫UA数"
+                title={t('crawlerPage.activeUAs')}
                 value={(stats.topUAs || []).length}
                 valueStyle={{ color: '#722ed1' }}
-                suffix="种"
+                suffix={t('crawlerPage.kindUnit')}
               />
             </Card>
           </Col>
         </Row>
-        
+
         {/* 标签页 */}
         <Tabs defaultActiveKey="chart">
           {/* 图表标签页 */}
-          <TabPane tab="访问趋势" key="chart">
+          <TabPane tab={t('crawlerPage.tabTrend')} key="chart">
             <Card className="card">
               <div style={{ height: 400 }}>
                 <BaseChart option={chartOption} />
               </div>
             </Card>
           </TabPane>
-          
+
           {/* 日志列表标签页 */}
-          <TabPane tab="访问记录" key="logs">
+          <TabPane tab={t('crawlerPage.tabLogs')} key="logs">
             <Card className="card">
               <Table
                 columns={logColumns}
@@ -364,7 +361,7 @@ const Crawler: React.FC = () => {
                   total: totalLogs,
                   onChange: handlePageChange,
                   showSizeChanger: true,
-                  showTotal: (total) => `共 ${total} 条记录`
+                  showTotal: (total) => t('crawlerPage.totalRecords', { total })
                 }}
                 size="middle"
               />

@@ -12,6 +12,13 @@ func JWTAuthMiddleware(jwtManager *JWTManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 获取Authorization头
 		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" && strings.HasPrefix(c.Request.URL.Path, "/ws/") {
+			// WebSocket 场景：浏览器 WS API 无法携带 Authorization 头，
+			// 仅 /ws 端点允许 ?token= 查询参数（避免 JWT 泄入普通 API 访问日志）
+			if qt := c.Query("token"); qt != "" {
+				authHeader = "Bearer " + qt
+			}
+		}
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"code":    http.StatusUnauthorized,

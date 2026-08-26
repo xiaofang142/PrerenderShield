@@ -1,0 +1,146 @@
+{
+  "alertConfig": {
+    "title": "알림 설정",
+    "tabs": {
+      "rules": "알림 규칙",
+      "records": "알림 기록",
+      "channels": "알림 채널",
+      "templates": "규칙 템플릿"
+    },
+    "toolbar": {
+      "addRule": "규칙 추가",
+      "refresh": "새로고침",
+      "refreshed": "규칙이 새로고침되었습니다",
+      "rulesTotal": "총 {{count}}개의 규칙",
+      "rulesEnabled": "{{count}}개 활성화됨"
+    },
+    "ruleColumns": {
+      "name": "규칙 이름",
+      "metric": "모니터링 지표",
+      "condition": "조건",
+      "severity": "심각도",
+      "cooldown": "쿨다운",
+      "cooldownMinutes": "{{minutes}}분",
+      "status": "상태",
+      "actions": "작업"
+    },
+    "recordColumns": {
+      "ruleName": "알림 규칙",
+      "severity": "심각도",
+      "message": "알림 메시지",
+      "triggerValue": "트리거 값",
+      "triggerTime": "발생 시간",
+      "status": "상태"
+    },
+    "statusTag": {
+      "active": "알림 중",
+      "resolved": "해결됨"
+    },
+    "stats": {
+      "active": "활성 알림",
+      "resolved": "해결됨",
+      "critical": "심각한 알림",
+      "warning": "경고"
+    },
+    "recordsTotal": "총 {{total}}개의 기록",
+    "channels": {
+      "description": "알림 채널을 설정합니다. 알림이 발생하면 활성화된 채널을 통해 알림이 전송됩니다.",
+      "on": "켜기",
+      "off": "끄기",
+      "names": {
+        "webhook": "Webhook",
+        "email": "이메일",
+        "slack": "Slack",
+        "dingtalk": "딩톡(DingTalk)"
+      }
+    },
+    "templates": {
+      "description": "템플릿을 선택하여 자주 사용하는 알림 규칙을 빠르게 추가하세요",
+      "items": {
+        "cpu_high": {
+          "name": "CPU 사용률 과다",
+          "description": "CPU 사용률이 90%를 초과하면 알림이 발생합니다"
+        },
+        "memory_high": {
+          "name": "메모리 사용률 과다",
+          "description": "메모리 사용률이 85%를 초과하면 알림이 발생합니다"
+        },
+        "disk_high": {
+          "name": "디스크 사용률 과다",
+          "description": "디스크 사용률이 90%를 초과하면 알림이 발생합니다"
+        },
+        "threat_spike": {
+          "name": "위협 탐지 급증",
+          "description": "분당 위협 탐지 수가 100을 초과하면 알림이 발생합니다"
+        },
+        "render_queue_backlog": {
+          "name": "렌더링 대기열 적체",
+          "description": "렌더링 대기열이 50을 초과하면 알림이 발생합니다"
+        },
+        "ssl_expiring": {
+          "name": "SSL 인증서 만료 임박",
+          "description": "SSL 인증서가 30일 이내에 만료되면 알림이 발생합니다"
+        }
+      }
+    },
+    "form": {
+      "addTitle": "알림 규칙 추가",
+      "editTitle": "알림 규칙 편집",
+      "name": "규칙 이름",
+      "nameRequired": "규칙 이름을 입력하세요",
+      "namePlaceholder": "예: CPU 사용률 과다",
+      "description": "설명",
+      "descriptionPlaceholder": "규칙 설명",
+      "metric": "모니터링 지표",
+      "metricRequired": "모니터링 지표를 선택하세요",
+      "selectMetric": "지표 선택",
+      "metricOptions": {
+        "system_cpu_usage": "CPU 사용률",
+        "system_memory_usage": "메모리 사용률",
+        "system_disk_usage": "디스크 사용률",
+        "threats_per_minute": "위협 탐지/분",
+        "render_queue_size": "렌더링 대기열 크기",
+        "ssl_cert_days_remaining": "SSL 인증서 잔여 일수"
+      },
+      "severity": "심각도",
+      "severityRequired": "심각도를 선택하세요",
+      "selectSeverity": "심각도 선택",
+      "severityOptions": {
+        "critical": "치명적",
+        "warning": "경고",
+        "info": "정보"
+      },
+      "operator": "연산자",
+      "operatorRequired": "연산자를 선택하세요",
+      "selectOperator": "연산자 선택",
+      "operatorOptions": {
+        "gt": "보다 큼 (>)",
+        "lt": "보다 작음 (<)",
+        "eq": "같음 (=)",
+        "ge": "이상 (>=)",
+        "le": "이하 (<=)"
+      },
+      "threshold": "임계값",
+      "thresholdRequired": "임계값을 입력하세요",
+      "thresholdPlaceholder": "임계값",
+      "cooldown": "쿨다운(초)",
+      "cooldownRequired": "쿨다운 시간을 입력하세요",
+      "cooldownPlaceholder": "초",
+      "updateRule": "규칙 업데이트"
+    },
+    "messages": {
+      "updateSuccess": "규칙이 업데이트되었습니다",
+      "addSuccess": "규칙이 추가되었습니다",
+      "localSaveWarning": "규칙은 로컬에 저장되었지만 백엔드 동기화에 실패했습니다",
+      "deleteSuccess": "규칙이 삭제되었습니다",
+      "deleteFail": "삭제에 실패했습니다",
+      "statusUpdateFail": "상태 업데이트에 실패했습니다",
+      "channelEnabled": "{{name}} 이(가) 활성화되었습니다",
+      "channelDisabled": "{{name}} 이(가) 비활성화되었습니다",
+      "channelSyncFail": "채널 설정의 백엔드 동기화에 실패했습니다",
+      "applyTemplateSuccess": "템플릿이 적용되었습니다: {{name}}",
+      "applyTemplateFail": "템플릿 적용에 실패했습니다"
+    },
+    "deleteConfirm": "이 규칙을 삭제하시겠습니까?"
+  }
+}

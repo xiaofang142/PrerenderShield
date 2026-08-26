@@ -1,0 +1,22 @@
+{
+  "system": {
+    "title": "系统设置",
+    "subtitle": "管理系统的全局配置参数",
+    "saveConfig": "保存配置",
+    "logPolicyTitle": "日志保留策略",
+    "accessLogCard": "访问日志 (Access Logs)",
+    "crawlerLogCard": "爬虫日志 (Crawler Logs)",
+    "retentionDays": "保留天数",
+    "accessRetentionHelp": "超过该天数的访问日志将被自动删除",
+    "crawlerRetentionHelp": "超过该天数的爬虫日志将被自动删除",
+    "maxSize": "最大占用空间",
+    "maxSizeHelp": "当日志总大小超过该值时，将自动删除最早的日志",
+    "dayUnit": "天",
+    "messages": {
+      "fetchFailed": "获取系统配置失败",
+      "updateSuccess": "系统配置已更新",
+      "updateFailed": "更新失败",
+      "updateRequestFailed": "更新系统配置失败"
+    }
+  }
+}

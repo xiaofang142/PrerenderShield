@@ -14,12 +14,19 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* 共享包路径映射（与 vite.config.ts alias 保持一致） */
+    "baseUrl": ".",
+    "paths": {
+      "@prerender/utils": ["../../packages/utils/src/main.ts"],
+      "@prerender/design-tokens": ["../../packages/design-tokens/src/main.ts"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"],
+  "include": ["src", "../../packages/utils/src/index.ts", "../../packages/design-tokens/src/index.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

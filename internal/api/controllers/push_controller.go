@@ -8,9 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"prerender-shield/internal/config"
+	"prerender-shield/internal/logging"
 	"prerender-shield/internal/prerender/push"
 	"prerender-shield/internal/redis"
-	"prerender-shield/internal/logging"
 )
 
 // PushController 推送控制器
@@ -174,8 +174,11 @@ func (c *PushController) GetPushLogs(ctx *gin.Context) {
 		return
 	}
 
-	// 这里需要获取总数，暂时使用一个模拟值
-	total := len(logs) + offset
+	// 获取推送日志总数
+	total, err := c.pushManager.GetPushLogCount(siteID)
+	if err != nil {
+		total = int64(len(logs) + offset)
+	}
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,

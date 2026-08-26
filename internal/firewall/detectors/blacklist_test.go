@@ -1,12 +1,11 @@
 package detectors
 
 import (
-	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -171,11 +170,15 @@ type mockRedisBlacklistClient struct {
 	err      error
 }
 
-func (m *mockRedisBlacklistClient) SIsMember(ctx context.Context, key string, member interface{}) *redis.BoolCmd {
-	cmd := redis.NewBoolCmd(ctx)
-	cmd.SetVal(m.isMember)
+func (m *mockRedisBlacklistClient) SetContains(key string, member interface{}) (bool, error) {
 	if m.err != nil {
-		cmd.SetErr(m.err)
+		return false, m.err
 	}
-	return cmd
+	return m.isMember, nil
 }
+
+// Ensure mockRedisBlacklistClient is not unused
+var _ RedisBlacklistClient = (*mockRedisBlacklistClient)(nil)
+
+// Ensure fmt is used
+var _ = fmt.Sprint

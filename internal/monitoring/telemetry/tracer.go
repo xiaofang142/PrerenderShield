@@ -9,6 +9,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/propagation"
@@ -96,7 +97,7 @@ func InitTracer(cfg *TracerConfig, log *zap.Logger) error {
 				sdktrace.WithBatchTimeout(5*time.Second),
 				sdktrace.WithMaxExportBatchSize(512),
 			),
-			sdktrace.WithSpanProcessor(&errorRecorderSpanProcessor{}),
+			sdktrace.WithSpanProcessor(&errorRecorderSpanProcessor{logger: log}),
 		)
 
 		// 设置全局 TracerProvider
@@ -250,12 +251,27 @@ var (
 )
 
 // errorRecorderSpanProcessor 错误记录 Span 处理器
-type errorRecorderSpanProcessor struct{}
+type errorRecorderSpanProcessor struct {
+	logger *zap.Logger
+}
 
 func (p *errorRecorderSpanProcessor) OnStart(parent context.Context, s sdktrace.ReadWriteSpan) {}
 
 func (p *errorRecorderSpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
-	// 可以在 Span 结束时进行额外处理
+	// 记录有错误的 span
+	if s == nil {
+		return
+	}
+	if s.Status().Code == codes.Error {
+		if p.logger != nil {
+			p.logger.Warn("Span error",
+				zap.String("span_name", s.Name()),
+				zap.String("span_id", s.SpanContext().SpanID().String()),
+				zap.String("trace_id", s.SpanContext().TraceID().String()),
+				zap.String("error", s.Status().Description),
+			)
+		}
+	}
 }
 
 func (p *errorRecorderSpanProcessor) Shutdown(ctx context.Context) error {

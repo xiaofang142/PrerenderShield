@@ -1,0 +1,146 @@
+{
+  "alertConfig": {
+    "title": "Alert Configuration",
+    "tabs": {
+      "rules": "Alert Rules",
+      "records": "Alert History",
+      "channels": "Notification Channels",
+      "templates": "Rule Templates"
+    },
+    "toolbar": {
+      "addRule": "Add Rule",
+      "refresh": "Refresh",
+      "refreshed": "Rules refreshed",
+      "rulesTotal": "{{count}} rules in total",
+      "rulesEnabled": "{{count}} enabled"
+    },
+    "ruleColumns": {
+      "name": "Rule Name",
+      "metric": "Metric",
+      "condition": "Condition",
+      "severity": "Severity",
+      "cooldown": "Cooldown",
+      "cooldownMinutes": "{{minutes}} minutes",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "recordColumns": {
+      "ruleName": "Alert Rule",
+      "severity": "Severity",
+      "message": "Alert Message",
+      "triggerValue": "Trigger Value",
+      "triggerTime": "Triggered At",
+      "status": "Status"
+    },
+    "statusTag": {
+      "active": "Firing",
+      "resolved": "Resolved"
+    },
+    "stats": {
+      "active": "Active Alerts",
+      "resolved": "Resolved",
+      "critical": "Critical Alerts",
+      "warning": "Warnings"
+    },
+    "recordsTotal": "Total {{total}} records",
+    "channels": {
+      "description": "Configure alert notification channels. When an alert fires, notifications will be sent through the enabled channels.",
+      "on": "On",
+      "off": "Off",
+      "names": {
+        "webhook": "Webhook",
+        "email": "Email",
+        "slack": "Slack",
+        "dingtalk": "DingTalk"
+      }
+    },
+    "templates": {
+      "description": "Choose a template to quickly add common alert rules",
+      "items": {
+        "cpu_high": {
+          "name": "High CPU Usage",
+          "description": "Triggers an alert when CPU usage exceeds 90%"
+        },
+        "memory_high": {
+          "name": "High Memory Usage",
+          "description": "Triggers an alert when memory usage exceeds 85%"
+        },
+        "disk_high": {
+          "name": "High Disk Usage",
+          "description": "Triggers an alert when disk usage exceeds 90%"
+        },
+        "threat_spike": {
+          "name": "Threat Detection Spike",
+          "description": "Triggers an alert when threats per minute exceed 100"
+        },
+        "render_queue_backlog": {
+          "name": "Render Queue Backlog",
+          "description": "Triggers an alert when the render queue backlog exceeds 50"
+        },
+        "ssl_expiring": {
+          "name": "SSL Certificate Expiring Soon",
+          "description": "Triggers an alert when the SSL certificate expires within 30 days"
+        }
+      }
+    },
+    "form": {
+      "addTitle": "Add Alert Rule",
+      "editTitle": "Edit Alert Rule",
+      "name": "Rule Name",
+      "nameRequired": "Please enter the rule name",
+      "namePlaceholder": "e.g. High CPU Usage",
+      "description": "Description",
+      "descriptionPlaceholder": "Rule description",
+      "metric": "Metric",
+      "metricRequired": "Please select a metric",
+      "selectMetric": "Select metric",
+      "metricOptions": {
+        "system_cpu_usage": "CPU Usage",
+        "system_memory_usage": "Memory Usage",
+        "system_disk_usage": "Disk Usage",
+        "threats_per_minute": "Threats/Minute",
+        "render_queue_size": "Render Queue Size",
+        "ssl_cert_days_remaining": "SSL Certificate Days Remaining"
+      },
+      "severity": "Severity",
+      "severityRequired": "Please select a severity level",
+      "selectSeverity": "Select severity",
+      "severityOptions": {
+        "critical": "Critical",
+        "warning": "Warning",
+        "info": "Info"
+      },
+      "operator": "Operator",
+      "operatorRequired": "Please select an operator",
+      "selectOperator": "Select operator",
+      "operatorOptions": {
+        "gt": "Greater than (>)",
+        "lt": "Less than (<)",
+        "eq": "Equals (=)",
+        "ge": "Greater or equal (>=)",
+        "le": "Less or equal (<=)"
+      },
+      "threshold": "Threshold",
+      "thresholdRequired": "Please enter a threshold",
+      "thresholdPlaceholder": "Threshold",
+      "cooldown": "Cooldown (seconds)",
+      "cooldownRequired": "Please enter the cooldown time",
+      "cooldownPlaceholder": "Seconds",
+      "updateRule": "Update Rule"
+    },
+    "messages": {
+      "updateSuccess": "Rule updated successfully",
+      "addSuccess": "Rule added successfully",
+      "localSaveWarning": "Rule saved locally, but backend sync failed",
+      "deleteSuccess": "Rule deleted successfully",
+      "deleteFail": "Failed to delete",
+      "statusUpdateFail": "Failed to update status",
+      "channelEnabled": "{{name}} enabled",
+      "channelDisabled": "{{name}} disabled",
+      "channelSyncFail": "Channel configuration backend sync failed",
+      "applyTemplateSuccess": "Template applied: {{name}}",
+      "applyTemplateFail": "Failed to apply template"
+    },
+    "deleteConfirm": "Are you sure you want to delete this rule?"
+  }
+}

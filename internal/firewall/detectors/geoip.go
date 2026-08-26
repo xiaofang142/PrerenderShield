@@ -1,44 +1,74 @@
 package detectors
 
 import (
+	"net"
 	"net/http"
 	"strings"
+	"sync"
 
-	"github.com/oschwald/geoip2-golang"
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/firewall/types"
+	"prerender-shield/internal/geoip"
+	"prerender-shield/internal/logging"
+
+	"github.com/oschwald/geoip2-golang"
 )
 
 // GeoIPDetector 地理位置访问控制检测器
 type GeoIPDetector struct {
 	reader      *geoip2.Reader
+	apiProvider geoip.Provider
 	geoIPConfig *config.GeoIPConfig
 }
 
 // NewGeoIPDetector 创建新的地理位置访问控制检测器
 func NewGeoIPDetector(geoIPConfig *config.GeoIPConfig) *GeoIPDetector {
-	// 尝试加载GeoIP数据库
-	// 这里假设数据库文件在配置目录中，或者使用默认路径
-	// 由于环境限制，我们这里实现一个容错机制：
-	// 如果无法加载数据库，我们将使用模拟模式
+	// 处理 nil 配置，避免空指针异常
+	if geoIPConfig == nil {
+		geoIPConfig = &config.GeoIPConfig{Enabled: false}
+	}
 
 	var reader *geoip2.Reader
-	// 实际项目中应该从配置文件读取路径
-	dbPath := "./rules/GeoLite2-Country.mmdb"
+	dbPath := geoIPConfig.DatabasePath
+	if dbPath == "" {
+		dbPath = "./rules/GeoLite2-Country.mmdb"
+	}
 
 	r, err := geoip2.Open(dbPath)
 	if err != nil {
-		// Log error but continue with nil reader (will use fallback/mock)
-		// fmt.Printf("Warning: Failed to open GeoIP database: %v. Using mock mode.\n", err)
+		logging.DefaultLogger.Warn("Failed to open GeoIP database at %s: %v. Using API fallback.", dbPath, err)
 	} else {
 		reader = r
+		logging.DefaultLogger.Info("GeoIP database loaded successfully from %s", dbPath)
+	}
+
+	// Initialize API fallback provider
+	var apiProvider geoip.Provider
+	provider := geoIPConfig.APIProvider
+	if provider == "" {
+		provider = "ip-api"
+	}
+
+	switch provider {
+	case "ip-api":
+		apiProvider = geoip.NewIPAPIProvider()
+	case "ipinfo":
+		apiProvider = geoip.NewIPInfoProvider(geoIPConfig.APIKey)
+	case "ipapi-co":
+		apiProvider = geoip.NewIPAPIProviderCO()
+	default:
+		apiProvider = geoip.NewIPAPIProvider()
 	}
 
 	return &GeoIPDetector{
 		reader:      reader,
+		apiProvider: apiProvider,
 		geoIPConfig: geoIPConfig,
 	}
 }
+
+// warnOnce 确保无本地数据库的告警只打一次（Detect 会被每请求并发调用，必须同步）
+var geoIPNoDBWarned sync.Once
 
 // Detect 检测请求的地理位置是否在允许列表中
 func (d *GeoIPDetector) Detect(req *http.Request) ([]types.Threat, error) {
@@ -47,6 +77,14 @@ func (d *GeoIPDetector) Detect(req *http.Request) ([]types.Threat, error) {
 	// 如果地理位置访问控制未启用，直接返回
 	if d.geoIPConfig == nil || !d.geoIPConfig.Enabled {
 		return threats, nil
+	}
+
+	// 无本地数据库时显式告警一次：外部 API 有速率限制（如 ip-api 免费 45 次/分钟），
+	// 高流量站点必须配置 MaxMind MMDB 本地库
+	if d.reader == nil {
+		geoIPNoDBWarned.Do(func() {
+			logging.DefaultLogger.Warn("GeoIP enabled WITHOUT local MMDB — falling back to external API with strict rate limits. Configure geoip.database_path (GeoLite2-Country.mmdb) for production use")
+		})
 	}
 
 	// 获取请求IP地址
@@ -58,20 +96,40 @@ func (d *GeoIPDetector) Detect(req *http.Request) ([]types.Threat, error) {
 	// 获取国家/地区代码
 	countryCode := "UNKNOWN"
 
-	if d.reader != nil {
-		// 使用数据库查询
-		// net.ParseIP(ip)
-		// ...
-		// 暂时略过实际查询代码，因为需要引入net包
-	} else {
-		// 模拟模式/回退模式
-		// 本地IP视为中国(CN)以便测试
-		if ip == "127.0.0.1" || ip == "::1" || ip == "localhost" {
-			countryCode = "CN"
+	// 本地/私有 IP 使用 mock 模式（API 和数据库都无法查询私有 IP）
+	if isLocalIP(ip) {
+		countryCode = "CN"
+	} else if d.reader != nil {
+		ipAddr := net.ParseIP(ip)
+		if ipAddr == nil {
+			countryCode = "UNKNOWN"
 		} else {
-			// 其他IP随机或默认为US
-			countryCode = "US"
+			record, err := d.reader.Country(ipAddr)
+			if err != nil {
+				logging.DefaultLogger.Warn("GeoIP lookup failed for IP %s: %v", ip, err)
+				countryCode = "UNKNOWN"
+			} else if record != nil && record.Country.IsoCode != "" {
+				countryCode = record.Country.IsoCode
+			} else {
+				countryCode = "UNKNOWN"
+			}
 		}
+	} else if d.apiProvider != nil {
+		// Fallback to API provider
+		result, err := d.apiProvider.Lookup(ip)
+		if err != nil {
+			logging.DefaultLogger.Warn("GeoIP API lookup failed for IP %s: %v", ip, err)
+			countryCode = "UNKNOWN"
+		} else if result != nil && result.CountryCode != "" {
+			countryCode = result.CountryCode
+		} else {
+			countryCode = "UNKNOWN"
+		}
+	} else {
+		// 无任何数据源可用：标记为 UNKNOWN（fail-safe）
+		// BlockList 模式下 UNKNOWN 放行，AllowList 模式下 UNKNOWN 被拒
+		logging.DefaultLogger.Error("GeoIP enabled but no data source available (no MMDB, no API provider) for IP %s", ip)
+		countryCode = "UNKNOWN"
 	}
 
 	// 检查是否在阻止列表中
@@ -143,9 +201,20 @@ func getClientIP(req *http.Request) string {
 
 	// 直接使用RemoteAddr
 	remoteAddr := req.RemoteAddr
-	if idx := strings.LastIndex(remoteAddr, ":"); idx != -1 {
-		return remoteAddr[:idx]
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		return host
 	}
-
 	return remoteAddr
+}
+
+// isLocalIP 检查是否为本地/回环 IP
+func isLocalIP(ip string) bool {
+	if ip == "127.0.0.1" || ip == "::1" || ip == "localhost" {
+		return true
+	}
+	parsedIP := net.ParseIP(ip)
+	if parsedIP != nil && parsedIP.IsLoopback() {
+		return true
+	}
+	return false
 }

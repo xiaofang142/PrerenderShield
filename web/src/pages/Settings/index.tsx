@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Form, InputNumber, Button, Space, message, Row, Col, Divider, Tabs, Tag, Statistic, Popconfirm } from 'antd'
+import { Card, Form, InputNumber, Button, Space, message, Row, Col, Divider, Tabs, Tag, Statistic, Popconfirm, Table } from 'antd'
 import { 
   SaveOutlined, 
   ReloadOutlined, 
@@ -8,8 +8,10 @@ import {
   ToolOutlined,
 } from '@ant-design/icons'
 import { systemApi } from '../../services/api'
+import { useTranslation } from 'react-i18next'
 
 const SettingsPage: React.FC = () => {
+  const { t } = useTranslation()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -40,13 +42,13 @@ const SettingsPage: React.FC = () => {
       setBackupLoading(true)
       const res = await systemApi.backup()
       if (res.code === 200) {
-        message.success('备份创建成功')
+        message.success(t('settings.messages.backupSuccess'))
         fetchBackups()
       } else {
-        message.error(res.message || '备份失败')
+        message.error(res.message || t('settings.messages.backupFailed'))
       }
     } catch (error: any) {
-      message.error(error.response?.data?.message || '备份失败')
+      message.error(error.response?.data?.message || t('settings.messages.backupFailed'))
     } finally {
       setBackupLoading(false)
     }
@@ -56,13 +58,13 @@ const SettingsPage: React.FC = () => {
     try {
       const res = await systemApi.restore(backupKey)
       if (res.code === 200) {
-        message.success('配置恢复成功')
+        message.success(t('settings.messages.restoreSuccess'))
         fetchConfig()
       } else {
-        message.error(res.message || '恢复失败')
+        message.error(res.message || t('settings.messages.restoreFailed'))
       }
     } catch (error: any) {
-      message.error(error.response?.data?.message || '恢复失败')
+      message.error(error.response?.data?.message || t('settings.messages.restoreFailed'))
     }
   }
 
@@ -76,7 +78,7 @@ const SettingsPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch config:', error)
-      message.error('获取配置失败')
+      message.error(t('settings.messages.fetchConfigFailed'))
     } finally {
       setLoading(false)
     }
@@ -120,13 +122,13 @@ const SettingsPage: React.FC = () => {
       setSaving(true)
       const res = await systemApi.updateConfig(values)
       if (res.code === 200) {
-        message.success('配置保存成功')
+        message.success(t('settings.messages.saveSuccess'))
       } else {
-        message.error(res.message || '保存失败')
+        message.error(res.message || t('settings.messages.saveFailed'))
       }
     } catch (error) {
       console.error('Failed to save config:', error)
-      message.error('保存失败')
+      message.error(t('settings.messages.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -143,12 +145,12 @@ const SettingsPage: React.FC = () => {
 
   return (
     <div>
-      <h1 className="page-title">系统设置</h1>
+      <h1 className="page-title">{t('settings.title')}</h1>
       
       <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
         {
           key: 'config',
-          label: <Space><SettingOutlined /><span>系统配置</span></Space>,
+          label: <Space><SettingOutlined /><span>{t('settings.tabs.config')}</span></Space>,
           children: (
             <Card className="card" loading={loading}>
               <Form
@@ -162,36 +164,36 @@ const SettingsPage: React.FC = () => {
                   crawler_log_max_size: 128,
                 }}
               >
-                <Divider orientation="left">访问日志配置</Divider>
+                <Divider orientation="left">{t('settings.config.accessLogDivider')}</Divider>
                 <Row gutter={24}>
                   <Col span={12}>
-                    <Form.Item name="access_log_retention_days" label="日志保留天数" help="访问日志保留的天数，超过后自动清理">
-                      <InputNumber min={1} max={365} addonAfter="天" style={{ width: '100%' }} />
+                    <Form.Item name="access_log_retention_days" label={t('settings.config.accessLogRetention')} help={t('settings.config.accessLogRetentionHelp')}>
+                      <InputNumber min={1} max={365} addonAfter={t('settings.config.dayUnit')} style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
                   <Col span={12}>
-                    <Form.Item name="access_log_max_size" label="日志文件大小限制" help="单个日志文件的最大大小(MB)">
+                    <Form.Item name="access_log_max_size" label={t('settings.config.accessLogMaxSize')} help={t('settings.config.accessLogMaxSizeHelp')}>
                       <InputNumber min={1} max={1024} addonAfter="MB" style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
                 </Row>
-                <Divider orientation="left">爬虫日志配置</Divider>
+                <Divider orientation="left">{t('settings.config.crawlerLogDivider')}</Divider>
                 <Row gutter={24}>
                   <Col span={12}>
-                    <Form.Item name="crawler_log_retention_days" label="爬虫日志保留天数" help="爬虫日志保留的天数，超过后自动清理">
-                      <InputNumber min={1} max={365} addonAfter="天" style={{ width: '100%' }} />
+                    <Form.Item name="crawler_log_retention_days" label={t('settings.config.crawlerLogRetention')} help={t('settings.config.crawlerLogRetentionHelp')}>
+                      <InputNumber min={1} max={365} addonAfter={t('settings.config.dayUnit')} style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
                   <Col span={12}>
-                    <Form.Item name="crawler_log_max_size" label="爬虫日志大小限制" help="单个爬虫日志文件的最大大小(MB)">
+                    <Form.Item name="crawler_log_max_size" label={t('settings.config.crawlerLogMaxSize')} help={t('settings.config.crawlerLogMaxSizeHelp')}>
                       <InputNumber min={1} max={1024} addonAfter="MB" style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
                 </Row>
                 <Form.Item>
                   <Space>
-                    <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={saving}>保存配置</Button>
-                    <Button icon={<ReloadOutlined />} onClick={fetchConfig} loading={loading}>重置</Button>
+                    <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={saving}>{t('settings.config.saveConfig')}</Button>
+                    <Button icon={<ReloadOutlined />} onClick={fetchConfig} loading={loading}>{t('common.reset')}</Button>
                   </Space>
                 </Form.Item>
               </Form>
@@ -200,37 +202,37 @@ const SettingsPage: React.FC = () => {
         },
         {
           key: 'status',
-          label: <Space><CloudServerOutlined /><span>系统状态</span></Space>,
+          label: <Space><CloudServerOutlined /><span>{t('settings.tabs.status')}</span></Space>,
           children: (
             <>
-              <Card className="card" title="系统健康状态">
+              <Card className="card" title={t('settings.status.healthTitle')}>
                 {healthData ? (
                   <Row gutter={[24, 24]}>
-                    <Col span={8}><Card size="small"><Statistic title="服务状态" value={healthData.status === 'running' ? '运行中' : healthData.status} valueStyle={{ color: healthData.status === 'running' ? '#52c41a' : '#faad14' }} /></Card></Col>
-                    <Col span={8}><Card size="small"><Statistic title="Redis 状态" value={healthData.redis_status === 'connected' ? '已连接' : '未连接'} valueStyle={{ color: healthData.redis_status === 'connected' ? '#52c41a' : '#ff4d4f' }} /></Card></Col>
-                    <Col span={8}><Card size="small"><Statistic title="SSL 状态" value={healthData.ssl_status === 'active' ? '活跃' : healthData.ssl_status} valueStyle={{ color: healthData.ssl_status === 'active' ? '#52c41a' : '#1890ff' }} /></Card></Col>
+                    <Col span={8}><Card size="small"><Statistic title={t('settings.status.serviceStatus')} value={healthData.status === 'running' ? t('settings.status.running') : healthData.status} valueStyle={{ color: healthData.status === 'running' ? '#52c41a' : '#faad14' }} /></Card></Col>
+                    <Col span={8}><Card size="small"><Statistic title={t('settings.status.redisStatus')} value={healthData.redis_status === 'connected' ? t('settings.status.connected') : t('settings.status.disconnected')} valueStyle={{ color: healthData.redis_status === 'connected' ? '#52c41a' : '#ff4d4f' }} /></Card></Col>
+                    <Col span={8}><Card size="small"><Statistic title={t('settings.status.sslStatus')} value={healthData.ssl_status === 'active' ? t('settings.status.active') : healthData.ssl_status} valueStyle={{ color: healthData.ssl_status === 'active' ? '#52c41a' : '#1890ff' }} /></Card></Col>
                     {healthData.health_details && (
                       <>
-                        <Col span={6}><Card size="small"><Statistic title="内存使用" value={formatBytes(healthData.health_details.memory_allocated)} valueStyle={{ color: '#1890ff' }} /></Card></Col>
-                        <Col span={6}><Card size="small"><Statistic title="系统内存" value={formatBytes(healthData.health_details.memory_sys)} valueStyle={{ color: '#1890ff' }} /></Card></Col>
-                        <Col span={6}><Card size="small"><Statistic title="Goroutine 数量" value={healthData.health_details.num_goroutines} valueStyle={{ color: '#1890ff' }} /></Card></Col>
-                        <Col span={6}><Card size="small"><Statistic title="GC 次数" value={healthData.health_details.gc_cycles} valueStyle={{ color: '#1890ff' }} /></Card></Col>
+                        <Col span={6}><Card size="small"><Statistic title={t('settings.status.memoryUsage')} value={formatBytes(healthData.health_details.memory_allocated)} valueStyle={{ color: '#1890ff' }} /></Card></Col>
+                        <Col span={6}><Card size="small"><Statistic title={t('settings.status.sysMemory')} value={formatBytes(healthData.health_details.memory_sys)} valueStyle={{ color: '#1890ff' }} /></Card></Col>
+                        <Col span={6}><Card size="small"><Statistic title={t('settings.status.goroutines')} value={healthData.health_details.num_goroutines} valueStyle={{ color: '#1890ff' }} /></Card></Col>
+                        <Col span={6}><Card size="small"><Statistic title={t('settings.status.gcCycles')} value={healthData.health_details.gc_cycles} valueStyle={{ color: '#1890ff' }} /></Card></Col>
                       </>
                     )}
                   </Row>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '40px' }}><Tag color="processing">加载中...</Tag></div>
+                  <div style={{ textAlign: 'center', padding: '40px' }}><Tag color="processing">{t('common.loading')}</Tag></div>
                 )}
               </Card>
-              <Card className="card" title="版本信息" style={{ marginTop: 16 }}>
+              <Card className="card" title={t('settings.status.versionTitle')} style={{ marginTop: 16 }}>
                 {versionData ? (
                   <Row gutter={[24, 24]}>
-                    <Col span={8}><Card size="small"><Statistic title="当前版本" value={versionData.version || 'unknown'} valueStyle={{ color: '#52c41a' }} /></Card></Col>
-                    <Col span={8}><Card size="small"><Statistic title="服务名称" value={versionData.name || 'prerender-shield'} valueStyle={{ color: '#1890ff' }} /></Card></Col>
-                    <Col span={8}><Card size="small"><Statistic title="官方网址" value={versionData.official_url || 'N/A'} valueStyle={{ color: '#1890ff', fontSize: 14 }} /></Card></Col>
+                    <Col span={8}><Card size="small"><Statistic title={t('settings.status.currentVersion')} value={versionData.version || 'unknown'} valueStyle={{ color: '#52c41a' }} /></Card></Col>
+                    <Col span={8}><Card size="small"><Statistic title={t('settings.status.serviceName')} value={versionData.name || 'prerender-shield'} valueStyle={{ color: '#1890ff' }} /></Card></Col>
+                    <Col span={8}><Card size="small"><Statistic title={t('settings.status.officialUrl')} value={versionData.official_url || 'N/A'} valueStyle={{ color: '#1890ff', fontSize: 14 }} /></Card></Col>
                   </Row>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '40px' }}><Tag color="processing">加载中...</Tag></div>
+                  <div style={{ textAlign: 'center', padding: '40px' }}><Tag color="processing">{t('common.loading')}</Tag></div>
                 )}
               </Card>
             </>
@@ -238,49 +240,49 @@ const SettingsPage: React.FC = () => {
         },
         {
           key: 'backup',
-          label: <Space><CloudServerOutlined /><span>备份恢复</span></Space>,
+          label: <Space><CloudServerOutlined /><span>{t('settings.tabs.backup')}</span></Space>,
           children: (
-            <Card className="card" title="配置备份" extra={<Button type="primary" icon={<SaveOutlined />} onClick={handleBackup} loading={backupLoading}>创建备份</Button>}>
+            <Card className="card" title={t('settings.backup.configTitle')} extra={<Button type="primary" icon={<SaveOutlined />} onClick={handleBackup} loading={backupLoading}>{t('settings.backup.createBackup')}</Button>}>
               <Table
                 dataSource={backups}
                 rowKey="key"
                 loading={backupsLoading}
                 columns={[
-                  { title: '备份时间', dataIndex: 'timestamp', key: 'timestamp' },
-                  { title: '备份键', dataIndex: 'key', key: 'key', ellipsis: true },
+                  { title: t('settings.backup.backupTime'), dataIndex: 'timestamp', key: 'timestamp' },
+                  { title: t('settings.backup.backupKey'), dataIndex: 'key', key: 'key', ellipsis: true },
                   {
-                    title: '操作', key: 'action',
+                    title: t('common.actions'), key: 'action',
                     render: (_: any, record: any) => (
-                      <Popconfirm title="确定要恢复此备份吗？当前配置将被覆盖。" onConfirm={() => handleRestore(record.key)} okText="确定" cancelText="取消">
-                        <Button type="link" size="small">恢复</Button>
+                      <Popconfirm title={t('settings.backup.restoreConfirm')} onConfirm={() => handleRestore(record.key)} okText={t('common.ok')} cancelText={t('common.cancel')}>
+                        <Button type="link" size="small">{t('settings.backup.restore')}</Button>
                       </Popconfirm>
                     ),
                   },
                 ]}
                 pagination={false}
-                locale={{ emptyText: '暂无备份' }}
+                locale={{ emptyText: t('settings.backup.empty') }}
               />
             </Card>
           ),
         },
         {
           key: 'about',
-          label: <Space><ToolOutlined /><span>关于</span></Space>,
+          label: <Space><ToolOutlined /><span>{t('settings.tabs.about')}</span></Space>,
           children: (
             <Card className="card">
               <div style={{ textAlign: 'center', padding: '40px' }}>
                 <h2 style={{ marginBottom: 16 }}>Prerender Shield</h2>
-                <p style={{ color: '#666', marginBottom: 24 }}>企业级 Web 应用中间件，集成 OWASP Top 10 安全防护与智能渲染预热功能</p>
+                <p style={{ color: '#666', marginBottom: 24 }}>{t('settings.about.description')}</p>
                 <Row gutter={[24, 24]} justify="center">
-                  <Col span={8}><Card size="small"><Statistic title="版本" value={versionData?.version || 'v1.0.1'} valueStyle={{ color: '#52c41a' }} /></Card></Col>
-                  <Col span={8}><Card size="small"><Statistic title="许可证" value="MIT License" valueStyle={{ color: '#1890ff' }} /></Card></Col>
-                  <Col span={8}><Card size="small"><Statistic title="技术栈" value="Go + React" valueStyle={{ color: '#722ed1' }} /></Card></Col>
+                  <Col span={8}><Card size="small"><Statistic title={t('settings.about.version')} value={versionData?.version || 'v1.0.1'} valueStyle={{ color: '#52c41a' }} /></Card></Col>
+                  <Col span={8}><Card size="small"><Statistic title={t('settings.about.license')} value="MIT License" valueStyle={{ color: '#1890ff' }} /></Card></Col>
+                  <Col span={8}><Card size="small"><Statistic title={t('settings.about.techStack')} value="Go + React" valueStyle={{ color: '#722ed1' }} /></Card></Col>
                 </Row>
                 <div style={{ marginTop: 24 }}>
                   <Space>
                     <Button type="link" href="https://github.com/xiaofang142/PrerenderShield" target="_blank">GitHub</Button>
                     <Button type="link" href="https://gitee.com/xhpmayun/prerender-shield" target="_blank">Gitee</Button>
-                    <Button type="link" href="https://prerender.websitetool.cn" target="_blank">官方文档</Button>
+                    <Button type="link" href="https://prerender.websitetool.cn" target="_blank">{t('settings.about.docs')}</Button>
                   </Space>
                 </div>
               </div>

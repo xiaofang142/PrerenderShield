@@ -1,0 +1,30 @@
+{
+  "logs": {
+    "title": "ログ管理",
+    "autoRefresh": "自動更新 (10秒)",
+    "tabAccessLogs": "アクセスログ",
+    "tabStats": "統計分析",
+    "filterIp": "IP絞り込み",
+    "filterMethod": "リクエストメソッド",
+    "filterStatus": "ステータスコード",
+    "columns": {
+      "rank": "順位",
+      "time": "時間",
+      "ip": "IP",
+      "method": "メソッド",
+      "path": "パス",
+      "status": "ステータスコード",
+      "duration": "所要時間(ms)"
+    },
+    "totalRecords": "合計 {{total}} 件のレコード",
+    "topIps": "人気 IP (Top 10)",
+    "topUrls": "人気 URL (Top 10)",
+    "ipAddress": "IP アドレス",
+    "url": "URL",
+    "requestCount": "リクエスト数",
+    "methodDistribution": "リクエストメソッド分布",
+    "statusDistribution": "ステータスコード分布",
+    "percent": "割合",
+    "noData": "データなし"
+  }
+}

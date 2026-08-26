@@ -1,7 +1,9 @@
 package auth
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,6 +12,12 @@ import (
 	"github.com/pquerna/otp"
 	"prerender-shield/internal/redis"
 )
+
+// hashBackupCode 对备用码进行 SHA-256 哈希
+func hashBackupCode(code string) string {
+	h := sha256.Sum256([]byte(code))
+	return hex.EncodeToString(h[:])
+}
 
 // TwoFactorAuth 双因素认证管理器
 type TwoFactorAuth struct {
@@ -166,11 +174,11 @@ func (t *TwoFactorAuth) GenerateBackupCodes(userID string) ([]string, error) {
 		return nil, fmt.Errorf("failed to generate backup codes: %w", err)
 	}
 
-	// 存储备用码（哈希）
+	// 存储备用码（SHA-256 哈希）
 	backupKey := fmt.Sprintf("2fa:backup:%s", userID)
 	backupData := make(map[string]interface{})
 	for i, code := range codes {
-		backupData[fmt.Sprintf("code_%d", i)] = code
+		backupData[fmt.Sprintf("code_%d", i)] = hashBackupCode(code)
 	}
 	if err := t.redisClient.SaveJSON(backupKey, backupData, 0); err != nil {
 		return nil, fmt.Errorf("failed to save backup codes: %w", err)
@@ -190,9 +198,10 @@ func (t *TwoFactorAuth) VerifyBackupCode(userID, code string) error {
 		return fmt.Errorf("backup codes not found")
 	}
 
-	// 查找并删除匹配的备用码
+	// 查找并删除匹配的备用码（比对哈希值）
+	hashedCode := hashBackupCode(code)
 	for k, v := range backupData {
-		if vStr, ok := v.(string); ok && subtle.ConstantTimeCompare([]byte(vStr), []byte(code)) == 1 {
+		if vStr, ok := v.(string); ok && subtle.ConstantTimeCompare([]byte(vStr), []byte(hashedCode)) == 1 {
 			delete(backupData, k)
 			if err := t.redisClient.SaveJSON(backupKey, backupData, 0); err != nil {
 				return fmt.Errorf("failed to update backup codes: %w", err)

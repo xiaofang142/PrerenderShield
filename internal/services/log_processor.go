@@ -38,12 +38,20 @@ func NewLogProcessor(
 	}
 }
 
-func (p *LogProcessor) Start() {
+func (p *LogProcessor) Start(ctx context.Context) {
+	// 使用传入的 context 替代构造函数中的默认 context
+	p.ctx = ctx
 	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
 		for {
-			p.processCrawlerLogs()
-			p.processVisitLogs()
-			time.Sleep(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				p.processCrawlerLogs()
+				p.processVisitLogs()
+			}
 		}
 	}()
 }

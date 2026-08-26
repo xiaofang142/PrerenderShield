@@ -135,36 +135,62 @@ func (r *WafRepository) saveWafConfig(config *models.WafConfig) error {
 }
 
 // UpdateBlockedCountries replaces the list of blocked countries
-func (r *WafRepository) UpdateBlockedCountries(wafConfigID string, countries []string) error {
-	// In the Redis implementation, we store the full config including lists in one JSON key for simplicity,
-	// or we could use separate sets.
-	// However, since UpdateWafConfig saves the whole object, this method might be redundant
-	// or needs to fetch, update, and save.
-	// Given the previous implementation expected a separate update, we should fetch the siteID from wafConfigID first?
-	// Actually, the previous SQL model had normalized tables. In Redis, embedding is easier.
-	// But `wafConfigID` is just an ID. We need `SiteID`.
-	// Assuming `models.WafConfig` has `SiteID`.
-
-	// Issue: We only have `wafConfigID`.
-	// Workaround: In Redis version, `wafConfigID` might be same as `SiteID` or we maintain a mapping.
-	// But let's assume the caller has the SiteID context or we change the signature.
-	// Since I can't easily change all callers right now, I will try to implement it if possible.
-	// But wait, `WafConfig` model has `SiteID`.
-	// For now, let's assume we handle this in the Controller by updating the whole config object.
-	// If this method is called independently, it's tricky without SiteID.
-
-	// Let's check `models.WafConfig`.
-	return nil // Placeholder, callers should use UpdateWafConfig with full object
+func (r *WafRepository) UpdateBlockedCountries(siteID string, countries []string) error {
+	config, err := r.GetWafConfigBySiteID(siteID)
+	if err != nil {
+		return err
+	}
+	if config == nil {
+		config = &models.WafConfig{SiteID: siteID}
+	}
+	config.BlockedCountries = make([]models.BlockedCountry, 0, len(countries))
+	for _, cc := range countries {
+		config.BlockedCountries = append(config.BlockedCountries, models.BlockedCountry{
+			WafConfigID: config.ID,
+			CountryCode: cc,
+		})
+	}
+	return r.UpdateWafConfig(config)
 }
 
 // UpdateIPWhitelist replaces the IP whitelist
-func (r *WafRepository) UpdateIPWhitelist(wafConfigID string, ips []string) error {
-	return nil // Placeholder
+func (r *WafRepository) UpdateIPWhitelist(siteID string, ips []string) error {
+	config, err := r.GetWafConfigBySiteID(siteID)
+	if err != nil {
+		return err
+	}
+	if config == nil {
+		config = &models.WafConfig{SiteID: siteID}
+	}
+	config.IPWhitelist = make([]models.IPWhitelist, 0, len(ips))
+	for _, ip := range ips {
+		config.IPWhitelist = append(config.IPWhitelist, models.IPWhitelist{
+			IPAddress:   ip,
+			WafConfigID: config.ID,
+		})
+	}
+	return r.UpdateWafConfig(config)
 }
 
 // UpdateIPBlacklist replaces the IP blacklist
-func (r *WafRepository) UpdateIPBlacklist(wafConfigID string, ips []string) error {
-	return nil // Placeholder
+func (r *WafRepository) UpdateIPBlacklist(siteID string, ips []string) error {
+	config, err := r.GetWafConfigBySiteID(siteID)
+	if err != nil {
+		return err
+	}
+	if config == nil {
+		config = &models.WafConfig{SiteID: siteID}
+	}
+	config.IPBlacklist = make([]models.IPBlacklist, 0, len(ips))
+	for _, ip := range ips {
+		config.IPBlacklist = append(config.IPBlacklist, models.IPBlacklist{
+			IPAddress:   ip,
+			WafConfigID: config.ID,
+			Reason:      "Manual Block",
+			CreatedAt:   time.Now(),
+		})
+	}
+	return r.UpdateWafConfig(config)
 }
 
 // GetAccessLogs retrieves access logs with pagination and filters
@@ -258,6 +284,38 @@ func (r *WafRepository) AddIPToWhitelist(siteID, ip string) error {
 	config.IPBlacklist = newBlacklist
 
 	return r.UpdateWafConfig(config)
+}
+
+// GetBlacklist returns the blacklist IPs for a site
+func (r *WafRepository) GetBlacklist(siteID string) ([]string, error) {
+	config, err := r.GetWafConfigBySiteID(siteID)
+	if err != nil {
+		return nil, err
+	}
+	if config == nil {
+		return []string{}, nil
+	}
+	ips := make([]string, 0, len(config.IPBlacklist))
+	for _, item := range config.IPBlacklist {
+		ips = append(ips, item.IPAddress)
+	}
+	return ips, nil
+}
+
+// GetWhitelist returns the whitelist IPs for a site
+func (r *WafRepository) GetWhitelist(siteID string) ([]string, error) {
+	config, err := r.GetWafConfigBySiteID(siteID)
+	if err != nil {
+		return nil, err
+	}
+	if config == nil {
+		return []string{}, nil
+	}
+	ips := make([]string, 0, len(config.IPWhitelist))
+	for _, item := range config.IPWhitelist {
+		ips = append(ips, item.IPAddress)
+	}
+	return ips, nil
 }
 
 // AddIPToBlacklist adds an IP to the blacklist
@@ -534,4 +592,26 @@ func (r *WafRepositoryInMemory) AddIPToBlacklist(siteID, ip string) error {
 	}
 	r.ipWhitelists[siteID] = newWhitelist
 	return nil
+}
+
+// GetBlacklist returns the blacklist IPs for a site
+func (r *WafRepositoryInMemory) GetBlacklist(siteID string) ([]string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ips := make([]string, 0, len(r.ipBlacklists[siteID]))
+	for _, item := range r.ipBlacklists[siteID] {
+		ips = append(ips, item.IPAddress)
+	}
+	return ips, nil
+}
+
+// GetWhitelist returns the whitelist IPs for a site
+func (r *WafRepositoryInMemory) GetWhitelist(siteID string) ([]string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ips := make([]string, 0, len(r.ipWhitelists[siteID]))
+	for _, item := range r.ipWhitelists[siteID] {
+		ips = append(ips, item.IPAddress)
+	}
+	return ips, nil
 }

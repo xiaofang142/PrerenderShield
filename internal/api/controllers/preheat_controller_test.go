@@ -29,7 +29,7 @@ func setupPreheatController() (*PreheatController, *gin.Engine) {
 	}
 
 	// 使用 nil 依赖进行单元测试
-	controller := NewPreheatController(nil, nil, cfg)
+	controller := NewPreheatController(nil, nil, nil, cfg)
 
 	router := gin.New()
 	router.GET("/preheat/sites", controller.GetPreheatSites)
@@ -66,7 +66,7 @@ func TestPreheatController_GetPreheatSites_Success(t *testing.T) {
 
 func TestPreheatController_GetPreheatSites_NilConfig(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	controller := NewPreheatController(nil, nil, nil)
+	controller := NewPreheatController(nil, nil, nil, nil)
 
 	router := gin.New()
 	router.GET("/preheat/sites", controller.GetPreheatSites)
@@ -80,7 +80,7 @@ func TestPreheatController_GetPreheatSites_NilConfig(t *testing.T) {
 
 func TestPreheatController_GetPreheatStats_NilConfig(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	controller := NewPreheatController(nil, nil, nil)
+	controller := NewPreheatController(nil, nil, nil, nil)
 
 	router := gin.New()
 	router.GET("/preheat/stats", controller.GetPreheatStats)
@@ -105,7 +105,7 @@ func TestPreheatController_GetPreheatStats_NilPrerenderManager(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	controller := NewPreheatController(nil, nil, cfg)
+	controller := NewPreheatController(nil, nil, nil, cfg)
 
 	router := gin.New()
 	router.GET("/preheat/stats", controller.GetPreheatStats)
@@ -168,7 +168,7 @@ func TestPreheatController_GetPreheatUrls_NilRedis(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	controller := NewPreheatController(nil, nil, cfg)
+	controller := NewPreheatController(nil, nil, nil, cfg)
 
 	router := gin.New()
 	router.GET("/preheat/urls", controller.GetPreheatUrls)
@@ -194,7 +194,7 @@ func TestPreheatController_GetPreheatTaskStatus_NilPrerenderManager(t *testing.T
 	}
 
 	gin.SetMode(gin.TestMode)
-	controller := NewPreheatController(nil, nil, cfg)
+	controller := NewPreheatController(nil, nil, nil, cfg)
 
 	router := gin.New()
 	router.GET("/preheat/task/status", controller.GetPreheatTaskStatus)
@@ -233,7 +233,7 @@ func TestPreheatController_GetPreheatStats_InvalidSiteId(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	controller := NewPreheatController(nil, nil, cfg)
+	controller := NewPreheatController(nil, nil, nil, cfg)
 
 	router := gin.New()
 	router.GET("/preheat/stats", controller.GetPreheatStats)
@@ -271,7 +271,7 @@ func TestPreheatController_GetPreheatUrls_MissingSiteId(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	controller := NewPreheatController(nil, nil, cfg)
+	controller := NewPreheatController(nil, nil, nil, cfg)
 
 	router := gin.New()
 	router.GET("/preheat/urls", controller.GetPreheatUrls)
@@ -297,7 +297,7 @@ func TestPreheatController_GetPreheatTaskStatus_MissingSiteId(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	controller := NewPreheatController(nil, nil, cfg)
+	controller := NewPreheatController(nil, nil, nil, cfg)
 
 	router := gin.New()
 	router.GET("/preheat/task/status", controller.GetPreheatTaskStatus)
@@ -353,7 +353,7 @@ func TestPreheatController_GetPreheatStats_AllSites(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	controller := NewPreheatController(nil, nil, cfg)
+	controller := NewPreheatController(nil, nil, nil, cfg)
 
 	router := gin.New()
 	router.GET("/preheat/stats", controller.GetPreheatStats)
@@ -390,7 +390,7 @@ func TestPreheatController_GetPreheatStats_SingleSite(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	controller := NewPreheatController(nil, nil, cfg)
+	controller := NewPreheatController(nil, nil, nil, cfg)
 
 	router := gin.New()
 	router.GET("/preheat/stats", controller.GetPreheatStats)
@@ -416,7 +416,7 @@ func TestPreheatController_GetPreheatStats_NonExistentSite(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	controller := NewPreheatController(nil, nil, cfg)
+	controller := NewPreheatController(nil, nil, nil, cfg)
 
 	router := gin.New()
 	router.GET("/preheat/stats", controller.GetPreheatStats)

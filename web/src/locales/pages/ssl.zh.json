@@ -1,0 +1,90 @@
+{
+  "ssl": {
+    "title": "SSL 证书管理",
+    "stats": {
+      "total": "证书总数",
+      "valid": "有效证书",
+      "expiringSoon": "即将过期",
+      "expired": "已过期"
+    },
+    "actions": {
+      "requestCert": "申请证书",
+      "requestWildcard": "申请通配符证书",
+      "refresh": "刷新"
+    },
+    "expiring": {
+      "title": "即将过期的证书",
+      "renewNow": "立即续签"
+    },
+    "list": {
+      "title": "证书列表"
+    },
+    "columns": {
+      "domain": "域名",
+      "issuer": "颁发者",
+      "expires": "过期时间",
+      "status": "状态"
+    },
+    "status": {
+      "unknown": "未知",
+      "expired": "已过期",
+      "valid": "有效",
+      "expiresInDays": "{{days}}天后过期"
+    },
+    "buttons": {
+      "detail": "详情",
+      "renew": "续签"
+    },
+    "tooltips": {
+      "viewDetail": "查看详情",
+      "renew": "续签证书",
+      "delete": "删除证书"
+    },
+    "deleteConfirm": {
+      "title": "确定要删除这个证书吗？"
+    },
+    "table": {
+      "totalText": "共 {{total}} 个证书",
+      "empty": "暂无证书"
+    },
+    "modal": {
+      "requestTitle": "申请 SSL 证书",
+      "wildcardTitle": "申请通配符 SSL 证书",
+      "detailTitle": "证书详情"
+    },
+    "form": {
+      "domains": "域名列表",
+      "domainsRequired": "请输入域名",
+      "domainsHelp": "每行一个域名，例如：example.com",
+      "baseDomain": "基础域名",
+      "baseDomainRequired": "请输入基础域名",
+      "baseDomainHelp": "例如：example.com",
+      "subdomains": "子域名列表",
+      "subdomainsHelp": "每行一个子域名，留空则只申请通配符证书"
+    },
+    "detail": {
+      "basicInfo": "基本信息",
+      "domainLabel": "域名：",
+      "issuerLabel": "颁发者：",
+      "serialNumber": "序列号：",
+      "validity": "有效期",
+      "expiresLabel": "过期时间：",
+      "statusLabel": "状态：",
+      "sanDomains": "SAN 域名",
+      "fingerprint": "指纹"
+    },
+    "messages": {
+      "fetchListFailed": "获取证书列表失败",
+      "needDomain": "请输入至少一个域名",
+      "requestSuccess": "证书申请成功",
+      "requestFailed": "证书申请失败",
+      "wildcardSuccess": "通配符证书申请成功",
+      "wildcardFailed": "通配符证书申请失败",
+      "renewSuccess": "证书续签成功",
+      "renewFailed": "证书续签失败",
+      "deleteSuccess": "证书删除成功",
+      "deleteFailed": "证书删除失败",
+      "detailFailed": "获取证书详情失败"
+    }
+  }
+}

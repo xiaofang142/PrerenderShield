@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -148,19 +149,26 @@ func (r *ChunkedRenderer) Render(
 
 			// 写入分块
 			if _, werr := writer.Write(chunk.Data); werr != nil {
+				r.mu.Lock()
 				r.stats.Errors++
+				r.mu.Unlock()
 				return fmt.Errorf("写入分块失败：%w", werr)
 			}
 
 			// 刷新
 			if ferr := writer.Flush(); ferr != nil {
+				r.mu.Lock()
 				r.stats.Errors++
+				r.mu.Unlock()
 				return fmt.Errorf("刷新失败：%w", ferr)
 			}
 
+			// Render 可被并发调用（见 ConcurrentRendering 测试），stats 递增需持锁
+			r.mu.Lock()
 			r.stats.TotalChunks++
 			r.stats.TotalBytes += int64(n)
 			r.stats.FlushCount++
+			r.mu.Unlock()
 			totalBytes += n
 
 			// 回调
@@ -192,7 +200,9 @@ func (r *ChunkedRenderer) Render(
 			break
 		}
 		if err != nil {
+			r.mu.Lock()
 			r.stats.Errors++
+			r.mu.Unlock()
 			return fmt.Errorf("读取内容失败：%w", err)
 		}
 	}
@@ -255,13 +265,23 @@ func (r *ChunkedRenderer) RenderHTML(
 		}
 	}
 
-	// 发送 HTML 尾部
-	footer := "</body></html>"
-	if _, err := writer.Write([]byte(footer)); err != nil {
-		return err
-	}
-	if err := writer.Flush(); err != nil {
-		return err
+	// 发送 HTML 尾部（仅在输入未包含闭合标签时追加）
+	if !strings.Contains(html, "</body>") || !strings.Contains(html, "</html>") {
+		footer := ""
+		if !strings.Contains(html, "</body>") {
+			footer += "</body>"
+		}
+		if !strings.Contains(html, "</html>") {
+			footer += "</html>"
+		}
+		if footer != "" {
+			if _, err := writer.Write([]byte(footer)); err != nil {
+				return err
+			}
+			if err := writer.Flush(); err != nil {
+				return err
+			}
+		}
 	}
 
 	r.logger.Debug("HTML 流式渲染完成",

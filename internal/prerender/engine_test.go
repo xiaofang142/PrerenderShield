@@ -3,8 +3,10 @@ package prerender
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,7 +20,9 @@ import (
 var ErrKeyNotFound = errors.New("key not found")
 
 // mockRedisClientForEngine 模拟 Redis 客户端
+// CreatePreheatTask 会启动异步 goroutine 访问 data，必须加锁
 type mockRedisClientForEngine struct {
+	mu   sync.Mutex
 	data map[string]interface{}
 }
 
@@ -29,11 +33,15 @@ func newMockRedisClientForEngine() *mockRedisClientForEngine {
 }
 
 func (m *mockRedisClientForEngine) SaveJSON(key string, value interface{}, ttl time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.data[key] = value
 	return nil
 }
 
 func (m *mockRedisClientForEngine) GetJSON(key string, value interface{}) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	data, ok := m.data[key]
 	if !ok {
 		return ErrKeyNotFound
@@ -55,6 +63,8 @@ func (m *mockRedisClientForEngine) SetMembers(key string) ([]string, error) {
 }
 
 func (m *mockRedisClientForEngine) Del(key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.data, key)
 	return nil
 }
@@ -291,9 +301,9 @@ func TestEngine_IsCrawlerRequest(t *testing.T) {
 	engine := NewEngine(redisClient, cacheManager, 5)
 
 	tests := []struct {
-		name     string
+		name      string
 		userAgent string
-		expected bool
+		expected  bool
 	}{
 		{"Googlebot", "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", true},
 		{"Bingbot", "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)", true},
@@ -313,9 +323,9 @@ func TestEngine_IsCrawlerRequest(t *testing.T) {
 		{"Generic Spider", "Spider/1.0", true},
 		{"Generic Crawler", "Crawler/1.0", true},
 		{"Generic Robot", "Robot/1.0", true},
-		{"curl", "curl/7.64.1", true},
-		{"wget", "Wget/1.20.3", true},
-		{"Fetch", "Fetch/1.0", true},
+		{"curl", "curl/7.64.1", false},
+		{"wget", "Wget/1.20.3", false},
+		{"Fetch", "Fetch/1.0", false},
 		{"Chrome", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36", false},
 		{"Firefox", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0", false},
 		{"Safari", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15", false},
@@ -398,19 +408,29 @@ func TestEngine_RenderWithContext(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
+	// 本地测试服务器作为渲染目标：
+	// 1) 避免依赖外网（example.com）与系统代理导致的 30s 挂起与偶发超时
+	// 2) 无 Chrome 环境时仍走错误分支，测试对两种结果均容忍
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte("<!DOCTYPE html><html><head><title>ok</title></head><body><h1>hello</h1></body></html>"))
+	}))
+	defer srv.Close()
+
 	opts := RenderOptions{
-		Timeout: 30 * time.Second,
+		Timeout: 15 * time.Second,
 	}
 
-	// 注意：这个测试会尝试启动 Chrome，在没有 Chrome 的环境中会失败
+	// 注意：这个测试会尝试启动 Chrome，在没有 Chrome 的环境中会返回错误
 	// 但测试本身验证了接口和错误处理逻辑
-	result, err := engine.RenderWithContext(c, "http://example.com", opts, "Mozilla/5.0")
+	result, err := engine.RenderWithContext(c, srv.URL, opts, "Mozilla/5.0")
 
-	// 在没有 Chrome 的环境中，期望返回错误
 	if err != nil {
 		assert.False(t, result.Result.Success)
 		assert.NotEmpty(t, result.Result.Error)
 		assert.False(t, result.HitCache)
+	} else {
+		assert.True(t, result.Result.Success)
 	}
 }
 
@@ -586,9 +606,9 @@ func TestEngineManager_IsCrawlerRequest(t *testing.T) {
 	manager := NewEngineManager(redisClient, cacheManager, 5)
 
 	tests := []struct {
-		name     string
+		name      string
 		userAgent string
-		expected bool
+		expected  bool
 	}{
 		{"Googlebot", "Mozilla/5.0 (compatible; Googlebot/2.1)", true},
 		{"Chrome", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0", false},

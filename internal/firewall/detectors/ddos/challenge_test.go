@@ -1,6 +1,7 @@
 package ddos
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -237,10 +238,16 @@ func TestChallengeManager_GetStats_WithVerifiedAndExpired(t *testing.T) {
 func TestHandleChallengeAPI_Success(t *testing.T) {
 	cm := NewChallengeManager(5 * time.Minute)
 
+	// 先创建挑战
+	entry := cm.StartChallenge("127.0.0.1")
+	answer := cm.calculateAnswer(entry.Token, entry.Timestamp)
+
 	// 创建有效的 JSON 请求
-	jsonBody := `{"token":"test_token","timestamp":12345,"answer":"test_answer"}`
+	jsonBody := fmt.Sprintf(`{"token":"%s","timestamp":%d,"answer":"%s"}`, entry.Token, entry.Timestamp, answer)
 	req := httptest.NewRequest(http.MethodPost, "http://example.com/challenge", strings.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Challenge-Answer", answer)
+	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
 
 	HandleChallengeAPI(cm, w, req)

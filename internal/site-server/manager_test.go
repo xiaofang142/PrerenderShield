@@ -16,7 +16,7 @@ func TestNewManager(t *testing.T) {
 	defer monitor.Stop()
 
 	// 创建站点服务器管理器
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 	if manager == nil {
 		t.Error("NewManager returned nil")
 	}
@@ -37,7 +37,7 @@ func TestListSiteServers(t *testing.T) {
 	defer monitor.Stop()
 
 	// 创建站点服务器管理器
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	// 测试列出空的站点服务器列表
 	servers := manager.ListSiteServers()
@@ -59,7 +59,7 @@ func TestStopAllServers(t *testing.T) {
 	defer monitor.Stop()
 
 	// 创建站点服务器管理器
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	// 测试停止空的站点服务器列表
 	manager.StopAllServers()
@@ -78,7 +78,7 @@ func TestGetSiteServer(t *testing.T) {
 	defer monitor.Stop()
 
 	// 创建站点服务器管理器
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	// 测试获取不存在的站点服务器
 	server, exists := manager.GetSiteServer("non_existent_site")

@@ -13,19 +13,19 @@ import (
 type Action string
 
 const (
-	ActionLogin       Action = "login"
-	ActionLogout      Action = "logout"
+	ActionLogin        Action = "login"
+	ActionLogout       Action = "logout"
 	ActionConfigUpdate Action = "config.update"
-	ActionSiteCreate  Action = "site.create"
-	ActionSiteUpdate  Action = "site.update"
-	ActionSiteDelete  Action = "site.delete"
-	ActionCertRequest Action = "cert.request"
-	ActionCertRenew   Action = "cert.renew"
-	ActionCertDelete  Action = "cert.delete"
-	ActionPreheat     Action = "preheat.trigger"
-	ActionWAFRule     Action = "waf.rule.update"
-	ActionBlacklist   Action = "blacklist.update"
-	ActionWhitelist   Action = "whitelist.update"
+	ActionSiteCreate   Action = "site.create"
+	ActionSiteUpdate   Action = "site.update"
+	ActionSiteDelete   Action = "site.delete"
+	ActionCertRequest  Action = "cert.request"
+	ActionCertRenew    Action = "cert.renew"
+	ActionCertDelete   Action = "cert.delete"
+	ActionPreheat      Action = "preheat.trigger"
+	ActionWAFRule      Action = "waf.rule.update"
+	ActionBlacklist    Action = "blacklist.update"
+	ActionWhitelist    Action = "whitelist.update"
 	ActionSystemConfig Action = "system.config"
 )
 
@@ -130,10 +130,6 @@ func (l *Logger) Query(opts QueryOptions) ([]Entry, error) {
 	}
 
 	pattern := fmt.Sprintf("%s:*", l.prefix)
-	keys, err := l.redisClient.Keys(pattern)
-	if err != nil {
-		return nil, fmt.Errorf("query audit keys: %w", err)
-	}
 
 	var results []Entry
 	limit := opts.Limit
@@ -141,20 +137,36 @@ func (l *Logger) Query(opts QueryOptions) ([]Entry, error) {
 		limit = 100
 	}
 
-	for _, key := range keys {
-		if len(results) >= limit {
-			break
-		}
-		val, err := l.redisClient.Get(key)
+	rawClient := l.redisClient.GetRawClient()
+	ctx := l.redisClient.Context()
+	var cursor uint64
+
+	for {
+		keys, nextCursor, err := rawClient.Scan(ctx, cursor, pattern, 100).Result()
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("scan audit keys: %w", err)
 		}
-		var entry Entry
-		if err := json.Unmarshal([]byte(val), &entry); err != nil {
-			continue
+
+		for _, key := range keys {
+			if len(results) >= limit {
+				return results, nil
+			}
+			val, err := l.redisClient.Get(key)
+			if err != nil {
+				continue
+			}
+			var entry Entry
+			if err := json.Unmarshal([]byte(val), &entry); err != nil {
+				continue
+			}
+			if matchesFilter(entry, opts) {
+				results = append(results, entry)
+			}
 		}
-		if matchesFilter(entry, opts) {
-			results = append(results, entry)
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
 		}
 	}
 

@@ -1,10 +1,12 @@
 package monitoring
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/smtp"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,9 +19,10 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/net"
 
+	"prerender-shield/internal/logging"
 	"prerender-shield/internal/monitoring/alerting"
 	"prerender-shield/internal/redis"
-	"prerender-shield/internal/logging"
+	"prerender-shield/internal/repository"
 )
 
 // Metrics 监控指标
@@ -135,8 +138,10 @@ type Monitor struct {
 	alertMutex    sync.RWMutex
 	wg            sync.WaitGroup
 	stopCh        chan struct{}
-	ruleEngine    *alerting.RuleEngine // 告警规则引擎
-	metricsGetter alerting.MetricsFunc // 指标获取函数
+	ruleEngine    *alerting.RuleEngine                    // 告警规则引擎
+	metricsGetter alerting.MetricsFunc                    // 指标获取函数
+	onAlert       func(alert *AlertStatus, status string) // 告警回调（如 WebSocket 广播）
+	alertRepo     *repository.AlertRepository             // 告警历史持久化（SetRedisClient 时初始化）
 }
 
 // AlertStatus 告警状态
@@ -242,6 +247,31 @@ func (m *Monitor) AddAlertHandler(handler alerting.AlertHandler) {
 	m.ruleEngine.AddHandler(handler)
 }
 
+// SetOnAlertCallback 设置告警回调（在告警通知发出时同步调用，如 WebSocket 广播）
+func (m *Monitor) SetOnAlertCallback(fn func(alert *AlertStatus, status string)) {
+	m.onAlert = fn
+}
+
+// GetAlertRules 获取所有告警规则
+func (m *Monitor) GetAlertRules() []*alerting.Rule {
+	return m.ruleEngine.GetRules()
+}
+
+// AddAlertRule 添加告警规则
+func (m *Monitor) AddAlertRule(rule *alerting.Rule) {
+	m.ruleEngine.AddRule(rule)
+}
+
+// UpdateAlertRule 更新告警规则
+func (m *Monitor) UpdateAlertRule(rule *alerting.Rule) {
+	m.ruleEngine.UpdateRule(rule)
+}
+
+// DeleteAlertRule 删除告警规则
+func (m *Monitor) DeleteAlertRule(ruleID string) {
+	m.ruleEngine.RemoveRule(ruleID)
+}
+
 // setupDefaultRules 设置默认告警规则
 func (m *Monitor) setupDefaultRules() {
 	defaultRules := alerting.DefaultRules()
@@ -329,6 +359,14 @@ func (m *Monitor) checkAlertRule(rule AlertRule, stats map[string]interface{}) {
 
 // sendAlertNotification 发送告警通知
 func (m *Monitor) sendAlertNotification(alert *AlertStatus, status string) {
+	// 外部回调（WebSocket 实时广播）
+	if m.onAlert != nil {
+		m.onAlert(alert, status)
+	}
+
+	// 保存告警记录到 Redis
+	m.saveAlertToRedis(alert, status)
+
 	// 发送邮件通知
 	if m.config.Alerting.Notification.Email.Enabled {
 		m.sendEmailNotification(alert, status)
@@ -340,32 +378,83 @@ func (m *Monitor) sendAlertNotification(alert *AlertStatus, status string) {
 	}
 }
 
+// saveAlertToRedis 保存告警记录到 Redis
+// 委托 AlertRepository 统一持有告警历史的键名/格式/裁剪逻辑，避免双处维护
+func (m *Monitor) saveAlertToRedis(alert *AlertStatus, status string) {
+	if m.redisClient == nil {
+		return
+	}
+	now := time.Now()
+	m.alertRepo.AppendAlertHistory(repository.AlertRecord{
+		ID:        fmt.Sprintf("alert_%d", now.UnixNano()),
+		Level:     alert.Rule.Severity,
+		Rule:      alert.Rule.Name,
+		Message:   fmt.Sprintf("%s is %s threshold %.2f (current: %.2f)", alert.Rule.Metric, alert.Rule.Operator, alert.Rule.Threshold, alert.Value),
+		Value:     alert.Value,
+		Threshold: alert.Rule.Threshold,
+		Status:    status,
+		Timestamp: now,
+	})
+}
+
 // sendEmailNotification 发送邮件通知
 func (m *Monitor) sendEmailNotification(alert *AlertStatus, status string) {
-	// 邮件发送逻辑
-	// 这里只是一个示例，实际实现需要使用SMTP客户端
 	emailConfig := m.config.Alerting.Notification.Email
-	logging.DefaultLogger.Info("Sending email notification: %s - %s\n", alert.Rule.Name, status)
-	logging.DefaultLogger.Info("To: %v\n", emailConfig.To)
-	logging.DefaultLogger.Info("Subject: [%s] %s - %s\n", alert.Rule.Severity, alert.Rule.Name, status)
-	logging.DefaultLogger.Info("Message: Metric %s is %s threshold %.2f (current value: %.2f)\n",
+	if emailConfig.SMTPHost == "" {
+		logging.DefaultLogger.Warn("SMTP not configured, skipping email notification")
+		return
+	}
+
+	subject := fmt.Sprintf("[%s] %s - %s", alert.Rule.Severity, alert.Rule.Name, status)
+	body := fmt.Sprintf("Metric %s is %s threshold %.2f (current value: %.2f)\n",
 		alert.Rule.Metric, alert.Rule.Operator, alert.Rule.Threshold, alert.Value)
+
+	addr := fmt.Sprintf("%s:%d", emailConfig.SMTPHost, emailConfig.SMTPPort)
+	auth := smtp.PlainAuth("", emailConfig.Username, emailConfig.Password, emailConfig.SMTPHost)
+
+	for _, to := range emailConfig.To {
+		msg := []byte(fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
+			emailConfig.From, to, subject, body))
+		err := smtp.SendMail(addr, auth, emailConfig.From, []string{to}, msg)
+		if err != nil {
+			logging.DefaultLogger.Warn("Failed to send email to %s: %v", to, err)
+		}
+	}
 }
 
 // sendWebhookNotification 发送Webhook通知
 func (m *Monitor) sendWebhookNotification(alert *AlertStatus, status string) {
-	// Webhook发送逻辑
-	// 这里只是一个示例，实际实现需要使用HTTP客户端
 	webhookConfig := m.config.Alerting.Notification.Webhook
-	logging.DefaultLogger.Info("Sending webhook notification: %s - %s\n", alert.Rule.Name, status)
-	logging.DefaultLogger.Info("URL: %s\n", webhookConfig.URL)
-	logging.DefaultLogger.Info("Payload: {\"rule\": \"%s\", \"status\": \"%s\", \"severity\": \"%s\", \"value\": %.2f, \"threshold\": %.2f}\n",
-		alert.Rule.Name, status, alert.Rule.Severity, alert.Value, alert.Rule.Threshold)
+	if webhookConfig.URL == "" {
+		return
+	}
+
+	payload := map[string]interface{}{
+		"rule":      alert.Rule.Name,
+		"status":    status,
+		"severity":  alert.Rule.Severity,
+		"value":     alert.Value,
+		"threshold": alert.Rule.Threshold,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		logging.DefaultLogger.Warn("Failed to marshal webhook payload: %v", err)
+		return
+	}
+
+	resp, err := http.Post(webhookConfig.URL, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		logging.DefaultLogger.Warn("Failed to send webhook: %v", err)
+		return
+	}
+	defer resp.Body.Close()
 }
 
 // SetRedisClient 设置Redis客户端
 func (m *Monitor) SetRedisClient(client *redis.Client) {
 	m.redisClient = client
+	m.alertRepo = repository.NewAlertRepository(client)
 }
 
 // SaveMetricsToRedis 保存监控指标到Redis
@@ -408,9 +497,27 @@ func (m *Monitor) GetMetricsFromRedis(startTime, endTime int64) ([]map[string]in
 		return nil, err
 	}
 
-	// 从Redis中获取每个键对应的数据
+	// 从Redis中获取每个键对应的数据，按时间范围过滤
 	metrics := make([]map[string]interface{}, 0, len(keys))
 	for _, key := range keys {
+		// 跳过聚合键
+		if strings.Contains(key, ":agg:") {
+			continue
+		}
+
+		// 从键中提取时间戳进行范围过滤
+		parts := strings.Split(key, ":")
+		if len(parts) < 3 {
+			continue
+		}
+		timestamp, err := strconv.ParseInt(parts[len(parts)-1], 10, 64)
+		if err != nil {
+			continue
+		}
+		if timestamp < startTime || timestamp > endTime {
+			continue
+		}
+
 		data, err := m.redisClient.Get(key)
 		if err != nil || data == "" {
 			continue
@@ -553,8 +660,10 @@ func (m *Monitor) CleanupExpiredMetrics() error {
 
 		// 如果数据过期，删除它
 		if timestamp < cutoffTime {
-			// 注意：这里假设有 Delete 方法，如果没有需要实现
-			// 使用 Keys + Del 模式清理
+			if err := m.redisClient.Del(key); err != nil {
+				logging.DefaultLogger.Warn("Failed to delete expired metrics key %s: %v", key, err)
+				continue
+			}
 			deletedCount++
 		}
 	}
@@ -722,6 +831,11 @@ func (m *Monitor) RecordRequest(method, path string, status int, duration time.D
 	// 更新实时统计数据
 	statsStore.mu.Lock()
 	statsStore.totalRequests++
+	now := time.Now()
+	if statsStore.firstRequestTime.IsZero() {
+		statsStore.firstRequestTime = now
+	}
+	statsStore.lastRequestTime = now
 	statsStore.mu.Unlock()
 }
 
@@ -799,6 +913,9 @@ var statsStore = struct {
 	memoryUsage       float64
 	diskUsage         float64
 	requestsPerSecond float64
+	// 时间跟踪
+	firstRequestTime time.Time
+	lastRequestTime  time.Time
 }{
 	totalRequests:   0,
 	crawlerRequests: 0,
@@ -837,7 +954,40 @@ func (m *Monitor) GetStats() map[string]interface{} {
 	netInfo, _ := getNetworkInfo()
 
 	// 计算请求每秒
-	requestsPerSecond := formatFloat(float64(statsStore.totalRequests) / 1000)
+	var requestsPerSecond float64
+	if !statsStore.firstRequestTime.IsZero() && statsStore.totalRequests > 0 {
+		elapsed := time.Since(statsStore.firstRequestTime).Seconds()
+		if elapsed > 0 {
+			requestsPerSecond = formatFloat(float64(statsStore.totalRequests) / elapsed)
+		}
+	}
+
+	// 安全获取内存指标
+	var memoryUsage, memoryTotal, memoryUsed, memoryFree float64
+	if memoryInfo != nil {
+		memoryUsage = memoryInfo.UsagePercent
+		memoryTotal = float64(memoryInfo.Total)
+		memoryUsed = float64(memoryInfo.Used)
+		memoryFree = float64(memoryInfo.Free)
+	}
+
+	// 安全获取磁盘指标
+	var diskUsage, diskTotal, diskUsed, diskFree float64
+	if diskInfo != nil {
+		diskUsage = diskInfo.UsagePercent
+		diskTotal = float64(diskInfo.Total)
+		diskUsed = float64(diskInfo.Used)
+		diskFree = float64(diskInfo.Free)
+	}
+
+	// 安全获取网络指标
+	var networkSent, networkRecv, networkPacketsSent, networkPacketsRecv uint64
+	if netInfo != nil {
+		networkSent = netInfo.BytesSent
+		networkRecv = netInfo.BytesRecv
+		networkPacketsSent = netInfo.PacketsSent
+		networkPacketsRecv = netInfo.PacketsRecv
+	}
 
 	return map[string]interface{}{
 		"totalRequests":   float64(statsStore.totalRequests),
@@ -849,19 +999,19 @@ func (m *Monitor) GetStats() map[string]interface{} {
 		"activeBrowsers":  float64(statsStore.activeBrowsers),
 		// 添加系统指标
 		"cpuUsage":           cpuUsage,
-		"memoryUsage":        memoryInfo.UsagePercent,
-		"memoryTotal":        memoryInfo.Total,
-		"memoryUsed":         memoryInfo.Used,
-		"memoryFree":         memoryInfo.Free,
-		"diskUsage":          diskInfo.UsagePercent,
-		"diskTotal":          diskInfo.Total,
-		"diskUsed":           diskInfo.Used,
-		"diskFree":           diskInfo.Free,
+		"memoryUsage":        memoryUsage,
+		"memoryTotal":        memoryTotal,
+		"memoryUsed":         memoryUsed,
+		"memoryFree":         memoryFree,
+		"diskUsage":          diskUsage,
+		"diskTotal":          diskTotal,
+		"diskUsed":           diskUsed,
+		"diskFree":           diskFree,
 		"requestsPerSecond":  requestsPerSecond,
-		"networkSent":        netInfo.BytesSent,
-		"networkRecv":        netInfo.BytesRecv,
-		"networkPacketsSent": netInfo.PacketsSent,
-		"networkPacketsRecv": netInfo.PacketsRecv,
+		"networkSent":        networkSent,
+		"networkRecv":        networkRecv,
+		"networkPacketsSent": networkPacketsSent,
+		"networkPacketsRecv": networkPacketsRecv,
 	}
 }
 

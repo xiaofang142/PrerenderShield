@@ -7,7 +7,19 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"prerender-shield/internal/config"
+	"prerender-shield/internal/geoip"
 )
+
+// stubGeoProvider 测试用 GeoIP Provider：固定返回指定国家码
+type stubGeoProvider struct {
+	country string
+}
+
+func (s *stubGeoProvider) Lookup(ip string) (*geoip.CountryResult, error) {
+	return &geoip.CountryResult{CountryCode: s.country, CountryName: s.country, IP: ip}, nil
+}
+
+func (s *stubGeoProvider) Name() string { return "stub" }
 
 // ============ 测试检测器创建 ============
 
@@ -15,6 +27,7 @@ import (
 func TestGeoIPDetector_Name(t *testing.T) {
 	cfg := &config.GeoIPConfig{Enabled: false}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 	assert.NotNil(t, detector)
 	assert.Equal(t, "geoip", detector.Name())
 }
@@ -32,6 +45,7 @@ func TestGeoIPDetector_NilConfig(t *testing.T) {
 func TestGeoIPDetector_Detect_GeoIPDisabled(t *testing.T) {
 	cfg := &config.GeoIPConfig{Enabled: false}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	threats, err := detector.Detect(req)
@@ -60,6 +74,7 @@ func TestGeoIPDetector_Detect_BlockedCountry(t *testing.T) {
 		BlockList: []string{"US", "RU", "CN"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	// 模拟模式：本地 IP 被视为 CN
@@ -81,6 +96,7 @@ func TestGeoIPDetector_Detect_BlockedCountry_NonLocalIP(t *testing.T) {
 		BlockList: []string{"US"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	// 模拟模式：非本地 IP 被视为 US
@@ -100,6 +116,7 @@ func TestGeoIPDetector_Detect_NotInBlockList(t *testing.T) {
 		BlockList: []string{"RU", "CN"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	// 模拟模式：本地 IP 被视为 CN，但 CN 在阻止列表中
@@ -119,6 +136,7 @@ func TestGeoIPDetector_Detect_MultipleBlockedCountries(t *testing.T) {
 		BlockList: []string{"US", "RU", "CN", "KP", "IR"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	// 测试本地 IP（模拟为 CN）
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -139,6 +157,7 @@ func TestGeoIPDetector_Detect_AllowedCountry(t *testing.T) {
 		AllowList: []string{"CN", "US", "JP"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	// 模拟模式：本地 IP 被视为 CN
@@ -156,6 +175,7 @@ func TestGeoIPDetector_Detect_NotInAllowList(t *testing.T) {
 		AllowList: []string{"CN", "JP"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	// 模拟模式：非本地 IP 被视为 US
@@ -176,6 +196,7 @@ func TestGeoIPDetector_Detect_EmptyAllowList(t *testing.T) {
 		AllowList: []string{},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "8.8.8.8:12345"
@@ -196,6 +217,7 @@ func TestGeoIPDetector_Detect_BlockListTakesPrecedence(t *testing.T) {
 		AllowList: []string{"CN", "US"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	// 模拟模式：本地 IP 被视为 CN
@@ -216,6 +238,7 @@ func TestGeoIPDetector_Detect_BothListsNormal(t *testing.T) {
 		AllowList: []string{"CN", "US", "JP"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	// 测试允许的国家
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -235,6 +258,7 @@ func TestGeoIPDetector_Detect_XForwardedFor(t *testing.T) {
 		BlockList: []string{"US"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-Forwarded-For", "8.8.8.8, 10.0.0.1, 192.168.1.1")
@@ -252,6 +276,7 @@ func TestGeoIPDetector_Detect_XRealIP(t *testing.T) {
 		BlockList: []string{"US"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-Real-IP", "8.8.8.8")
@@ -269,6 +294,7 @@ func TestGeoIPDetector_Detect_XForwardedFor_MultipleIPs(t *testing.T) {
 		BlockList: []string{"US"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-Forwarded-For", "8.8.8.8,10.0.0.1,192.168.1.1")
@@ -285,6 +311,7 @@ func TestGeoIPDetector_Detect_RemoteAddr(t *testing.T) {
 		BlockList: []string{"CN"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
@@ -301,6 +328,7 @@ func TestGeoIPDetector_Detect_RemoteAddr_WithPort(t *testing.T) {
 		AllowList: []string{"CN"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "127.0.0.1:8080"
@@ -317,6 +345,7 @@ func TestGeoIPDetector_Detect_RemoteAddr_IPv6(t *testing.T) {
 		AllowList: []string{"CN", "US"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "[::1]:12345"
@@ -335,6 +364,7 @@ func TestGeoIPDetector_Detect_EmptyIP(t *testing.T) {
 		BlockList: []string{"US"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = ""
@@ -421,6 +451,7 @@ func TestGeoIPDetector_ThreatDetails_Block(t *testing.T) {
 		BlockList: []string{"CN"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
@@ -446,6 +477,7 @@ func TestGeoIPDetector_ThreatDetails_Allow(t *testing.T) {
 		AllowList: []string{"US"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
@@ -470,6 +502,7 @@ func TestGeoIPDetector_Detect_EmptyBlockList(t *testing.T) {
 		BlockList: []string{},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "8.8.8.8:12345"
@@ -486,6 +519,7 @@ func TestGeoIPDetector_Detect_NilBlockList(t *testing.T) {
 		BlockList: nil,
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "8.8.8.8:12345"
@@ -502,6 +536,7 @@ func TestGeoIPDetector_Detect_NilAllowList(t *testing.T) {
 		AllowList: nil,
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "8.8.8.8:12345"
@@ -521,6 +556,7 @@ func TestGeoIPDetector_ConcurrentAccess(t *testing.T) {
 		AllowList: []string{"CN", "JP"},
 	}
 	detector := NewGeoIPDetector(cfg)
+	detector.apiProvider = &stubGeoProvider{country: "US"}
 
 	done := make(chan bool)
 	errors := make(chan error, 20)

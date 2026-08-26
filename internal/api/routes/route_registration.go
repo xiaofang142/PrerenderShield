@@ -66,23 +66,39 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 			protectedGroup.POST("/system/restore", controllers.SystemController.RestoreConfig)
 			protectedGroup.GET("/system/backups", controllers.SystemController.ListBackups)
 
-		// 修改密码
-		protectedGroup.POST("/auth/change-password", controllers.AuthController.ChangePassword)
+			// 修改密码
+			protectedGroup.POST("/auth/change-password", controllers.AuthController.ChangePassword)
 
+			// 2FA API (独立前缀避免 Gin 路由冲突)
+			protectedGroup.GET("/2fa/status", controllers.AuthController.Get2FAStatus)
+			protectedGroup.POST("/2fa/enable", controllers.AuthController.Enable2FA)
+			protectedGroup.POST("/2fa/confirm", controllers.AuthController.Confirm2FA)
+			protectedGroup.POST("/2fa/disable", controllers.AuthController.Disable2FA)
 
-
-		// 2FA API (独立前缀避免 Gin 路由冲突)
-		protectedGroup.GET("/2fa/status", controllers.AuthController.Get2FAStatus)
-		protectedGroup.POST("/2fa/enable", controllers.AuthController.Enable2FA)
-		protectedGroup.POST("/2fa/confirm", controllers.AuthController.Confirm2FA)
-		protectedGroup.POST("/2fa/disable", controllers.AuthController.Disable2FA)
-
-		// 概览 API
+			// 概览 API
 			protectedGroup.GET("/overview", controllers.OverviewController.GetOverview)
 
 			// 监控 API
 			protectedGroup.GET("/monitoring/stats", controllers.MonitoringController.GetStats)
 			protectedGroup.GET("/monitoring/alerts/history", controllers.MonitoringController.GetAlertHistory)
+
+			// 告警规则 CRUD API
+			protectedGroup.GET("/monitoring/alert-rules", controllers.MonitoringController.GetAlertRules)
+			protectedGroup.POST("/monitoring/alert-rules", controllers.MonitoringController.SaveAlertRule)
+			protectedGroup.DELETE("/monitoring/alert-rules/:id", controllers.MonitoringController.DeleteAlertRule)
+
+			// 告警规则别名路由（兼容前端 /monitoring/alerts/rules）
+			protectedGroup.GET("/monitoring/alerts/rules", controllers.MonitoringController.GetAlertRules)
+			protectedGroup.POST("/monitoring/alerts/rules", controllers.MonitoringController.SaveAlertRule)
+
+			// 通知渠道 API
+			protectedGroup.GET("/monitoring/alerts/channels", controllers.MonitoringController.GetNotificationChannels)
+			protectedGroup.POST("/monitoring/alerts/channels", controllers.MonitoringController.SaveNotificationChannels)
+
+			// 防火墙规则 API
+			protectedGroup.GET("/firewall/rules", controllers.MonitoringController.GetFirewallRules)
+			protectedGroup.POST("/firewall/rules", controllers.MonitoringController.SaveFirewallRules)
+			protectedGroup.DELETE("/firewall/rules/:id", controllers.MonitoringController.DeleteFirewallRule)
 
 			// 访问日志 API
 			protectedGroup.GET("/logs", controllers.FirewallController.GetAccessLogs)
@@ -90,10 +106,23 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 			protectedGroup.GET("/firewall/attacks", controllers.FirewallController.GetAttackLogs)
 			protectedGroup.POST("/firewall/whitelist", controllers.FirewallController.AddToWhitelist)
 			protectedGroup.POST("/firewall/blacklist", controllers.FirewallController.AddToBlacklist)
+			protectedGroup.GET("/firewall/blacklist", controllers.FirewallController.GetBlacklist)
+			protectedGroup.GET("/firewall/whitelist", controllers.FirewallController.GetWhitelist)
 
 			// 爬虫日志 API
 			protectedGroup.GET("/crawler/logs", controllers.CrawlerController.GetCrawlerLogs)
 			protectedGroup.GET("/crawler/stats", controllers.CrawlerController.GetCrawlerStats)
+
+			// SEO API
+			seoGroup := protectedGroup.Group("/seo")
+			{
+				seoGroup.GET("/config", controllers.SEOController.GetSEOConfig)
+				seoGroup.PUT("/config", controllers.SEOController.UpdateSEOConfig)
+				seoGroup.GET("/sitemap", controllers.SEOController.GetSitemap)
+				seoGroup.POST("/sitemap/generate", controllers.SEOController.GenerateSitemap)
+				seoGroup.GET("/robots", controllers.SEOController.GetRobotsTxt)
+				seoGroup.POST("/robots/generate", controllers.SEOController.GenerateRobotsTxt)
+			}
 
 			// 预热 API
 			protectedGroup.GET("/preheat/sites", controllers.PreheatController.GetPreheatSites)
@@ -141,6 +170,10 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 
 				// 删除站点
 				sitesGroup.DELETE("/:id", controllers.SitesController.DeleteSite)
+
+				// 启动/停止站点服务器
+				sitesGroup.POST("/:id/start", controllers.SitesController.StartSite)
+				sitesGroup.POST("/:id/stop", controllers.SitesController.StopSite)
 
 				// 静态资源管理 API
 				// 获取站点的静态资源文件列表

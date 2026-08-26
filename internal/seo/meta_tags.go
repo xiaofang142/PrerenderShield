@@ -12,10 +12,11 @@ import (
 
 // MetaTagsOptimizer SEO Meta 标签优化器
 type MetaTagsOptimizer struct {
-	config   *MetaTagsConfig
-	logger   *zap.Logger
-	keywords []string
-	mu       sync.RWMutex
+	config       *MetaTagsConfig
+	logger       *zap.Logger
+	keywords     []string
+	mu           sync.RWMutex
+	canonicalURL string
 }
 
 // MetaTagsConfig Meta 标签配置
@@ -31,6 +32,7 @@ type MetaTagsConfig struct {
 	EnableTwitterCard    bool     `json:"enable_twitter_card"`    // 启用 Twitter Card
 	TwitterCardType      string   `json:"twitter_card_type"`      // Twitter Card 类型
 	RequiredMetaTags     []string `json:"required_meta_tags"`     // 必需的 Meta 标签
+	DefaultAuthor        string   `json:"default_author"`         // 默认作者
 }
 
 // DefaultMetaTagsConfig 返回默认配置
@@ -419,8 +421,10 @@ func (o *MetaTagsOptimizer) generateMetaTags(result *MetaTagsResult, keywords []
 		result.MetaTags["keywords"] = strings.Join(keywords, ", ")
 	}
 
-	// Author (如果有)
-	result.MetaTags["author"] = "Site Author"
+	// Author (从配置读取，未配置时省略)
+	if o.config.DefaultAuthor != "" {
+		result.MetaTags["author"] = o.config.DefaultAuthor
+	}
 
 	// Robots
 	result.MetaTags["robots"] = "index, follow"
@@ -556,7 +560,7 @@ func (o *MetaTagsOptimizer) BuildOptimizedHTML(html string, result *MetaTagsResu
 func (o *MetaTagsOptimizer) SetCanonicalURL(url string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	// 用于后续生成
+	o.canonicalURL = url
 }
 
 // GetConfig 获取配置

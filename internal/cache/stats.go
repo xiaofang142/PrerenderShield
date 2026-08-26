@@ -21,15 +21,15 @@ type Stats struct {
 
 // StatsCollector 统计收集器
 type StatsCollector struct {
-	hits       int64
-	misses     int64
-	evictions  int64
-	size       int
-	maxSize    int
-	getTimes   []time.Duration
-	setTimes   []time.Duration
-	mu         sync.RWMutex
-	startTime  time.Time
+	hits      int64
+	misses    int64
+	evictions int64
+	size      int
+	maxSize   int
+	getTimes  []time.Duration
+	setTimes  []time.Duration
+	mu        sync.RWMutex
+	startTime time.Time
 }
 
 // NewStatsCollector 创建统计收集器
@@ -74,7 +74,7 @@ func (sc *StatsCollector) SetSize(size int) {
 func (sc *StatsCollector) RecordGetTime(d time.Duration) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
-	
+
 	if len(sc.getTimes) >= 1000 {
 		// 保留最近1000条记录
 		sc.getTimes = sc.getTimes[1:]
@@ -86,7 +86,7 @@ func (sc *StatsCollector) RecordGetTime(d time.Duration) {
 func (sc *StatsCollector) RecordSetTime(d time.Duration) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
-	
+
 	if len(sc.setTimes) >= 1000 {
 		sc.setTimes = sc.setTimes[1:]
 	}

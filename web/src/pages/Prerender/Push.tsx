@@ -1,14 +1,19 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, Row, Col, Statistic, Button, Table, Select, message } from 'antd'
 import { ReloadOutlined, UploadOutlined, BarChartOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import BaseChart from '../../components/charts/BaseChart'
-import { sitesApi, pushApi } from '../../services/api'
+import { pushApi } from '../../services/api'
+import { useSites } from '../../hooks/useSites'
 
 const { Option } = Select
 
 const Push: React.FC = () => {
-  const [sites, setSites] = useState<any[]>([])
-  const [selectedSiteId, setSelectedSiteId] = useState<string>('')
+  const { t } = useTranslation()
+  const { sites, selectedSiteId, setSelectedSiteId } = useSites({
+    autoSelectFirst: true,
+    onFetchError: (msg) => message.error(t('push.fetchSitesFailed') + ': ' + msg),
+  })
   const [trendData, setTrendData] = useState<Record<string, number>>({})
   const [stats, setStats] = useState({
     total: 0,
@@ -21,16 +26,18 @@ const Push: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [total, setTotal] = useState(0)
+  // 竞态防护：站点快速切换时，旧请求的响应不再写入 state
+  const requestVersionRef = useRef(0)
 
   // 日志表格列配置
   const columns = [
     {
-      title: '站点名称',
+      title: t('push.columns.siteName'),
       dataIndex: 'siteName',
       key: 'siteName',
     },
     {
-      title: '推送URL',
+      title: t('push.columns.url'),
       dataIndex: 'url',
       key: 'url',
       ellipsis: true,
@@ -41,38 +48,38 @@ const Push: React.FC = () => {
       )
     },
     {
-      title: '路由',
+      title: t('push.columns.route'),
       dataIndex: 'route',
       key: 'route',
       ellipsis: true,
     },
     {
-      title: '搜索引擎',
+      title: t('push.columns.searchEngine'),
       dataIndex: 'searchEngine',
       key: 'searchEngine',
       render: (engine: string) => {
         const engineMap: { [key: string]: string } = {
-          'baidu': '百度',
-          'bing': '必应',
+          'baidu': t('push.engines.baidu'),
+          'bing': t('push.engines.bing'),
         }
         return engineMap[engine] || engine
       }
     },
     {
-      title: '状态',
+      title: t('push.columns.status'),
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => {
         const statusMap: { [key: string]: { text: string; color: string } } = {
-          'success': { text: '成功', color: '#52c41a' },
-          'failed': { text: '失败', color: '#f5222d' },
+          'success': { text: t('push.statusText.success'), color: '#52c41a' },
+          'failed': { text: t('push.statusText.failed'), color: '#f5222d' },
         }
-        const config = statusMap[status] || { text: '未知', color: '#8c8c8c' }
+        const config = statusMap[status] || { text: t('push.statusText.unknown'), color: '#8c8c8c' }
         return <span style={{ color: config.color }}>{config.text}</span>
       }
     },
     {
-      title: '推送时间',
+      title: t('push.columns.pushTime'),
       dataIndex: 'pushTime',
       key: 'pushTime',
       render: (time: string) => {
@@ -82,7 +89,7 @@ const Push: React.FC = () => {
       }
     },
     {
-      title: '消息',
+      title: t('push.columns.message'),
       dataIndex: 'message',
       key: 'message',
       ellipsis: true,
@@ -91,25 +98,6 @@ const Push: React.FC = () => {
       )
     },
   ]
-
-  // 获取站点列表
-  const fetchSites = async () => {
-    try {
-      setLoading(true)
-      const res = await sitesApi.getSites()
-      if (res.code === 200) {
-        setSites(res.data)
-        if (res.data.length > 0 && !selectedSiteId) {
-          setSelectedSiteId(res.data[0].id)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch sites:', error)
-      message.error('获取站点列表失败')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // 获取推送统计数据
   const fetchStats = async () => {
@@ -131,7 +119,7 @@ const Push: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch stats:', error)
-      message.error('获取推送统计数据失败')
+      message.error(t('push.fetchStatsFailed'))
     } finally {
       setLoading(false)
     }
@@ -139,9 +127,11 @@ const Push: React.FC = () => {
 
   // 获取推送日志
   const fetchLogs = async (page: number = 1, size: number = 20) => {
+    const version = ++requestVersionRef.current
     try {
       setLogLoading(true)
       const res = await pushApi.getLogs(selectedSiteId, page, size)
+      if (version !== requestVersionRef.current) return
       if (res.code === 200) {
         setLogList(res.data.list || [])
         setTotal(res.data.total || 0)
@@ -150,7 +140,7 @@ const Push: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch logs:', error)
-      message.error('获取推送日志失败')
+      message.error(t('push.fetchLogsFailed'))
     } finally {
       setLogLoading(false)
     }
@@ -158,7 +148,7 @@ const Push: React.FC = () => {
 
   // 初始化数据
   useEffect(() => {
-    fetchSites()
+    // 站点列表由 useSites 自动加载
   }, [])
 
   // 当选中站点变化时，重新获取统计数据和日志列表
@@ -173,7 +163,7 @@ const Push: React.FC = () => {
   const handleRefreshStats = () => {
     fetchStats()
     fetchLogs(currentPage, pageSize)
-    message.success('统计数据已刷新')
+    message.success(t('push.refreshed'))
   }
 
   // 处理分页变化
@@ -185,13 +175,13 @@ const Push: React.FC = () => {
 
   return (
     <div>
-      <h1 className="page-title">推送管理</h1>
-      
+      <h1 className="page-title">{t('push.title')}</h1>
+
       {/* 站点选择栏 */}
       <Card className="card" style={{ marginBottom: 16 }}>
         <Row align="middle" gutter={16}>
           <Col span={8}>
-            <label style={{ marginRight: 8, fontWeight: 'bold' }}>选择站点：</label>
+            <label style={{ marginRight: 8, fontWeight: 'bold' }}>{t('push.selectSite')}</label>
             <Select
               value={selectedSiteId}
               onChange={(value) => {
@@ -199,7 +189,7 @@ const Push: React.FC = () => {
               }}
               style={{ width: 200 }}
               loading={loading}
-              placeholder="请选择站点"
+              placeholder={t('push.sitePlaceholder')}
             >
               {sites.map((site: any) => (
                 <Option key={site.id} value={site.id}>
@@ -210,18 +200,18 @@ const Push: React.FC = () => {
           </Col>
           <Col span={8}>
             <Button type="primary" icon={<ReloadOutlined />} onClick={handleRefreshStats} loading={loading}>
-              刷新数据
+              {t('push.refresh')}
             </Button>
           </Col>
         </Row>
       </Card>
-      
+
       {/* 统计数据卡片 */}
       <Card className="card" style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>
           <Col span={8}>
             <Statistic
-              title="推送总数"
+              title={t('push.totalPushes')}
               value={stats.total}
               prefix={<UploadOutlined />}
               valueStyle={{ color: '#1890ff' }}
@@ -229,7 +219,7 @@ const Push: React.FC = () => {
           </Col>
           <Col span={8}>
             <Statistic
-              title="成功数"
+              title={t('push.successCount')}
               value={stats.success}
               prefix={<BarChartOutlined />}
               valueStyle={{ color: '#52c41a' }}
@@ -237,7 +227,7 @@ const Push: React.FC = () => {
           </Col>
           <Col span={8}>
             <Statistic
-              title="失败数"
+              title={t('push.failedCount')}
               value={stats.failed}
               prefix={<BarChartOutlined />}
               valueStyle={{ color: '#f5222d' }}
@@ -245,16 +235,16 @@ const Push: React.FC = () => {
           </Col>
         </Row>
       </Card>
-      
+
       {/* 推送趋势图 */}
       <Card className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginBottom: 16 }}>30天推送趋势</h3>
+        <h3 style={{ marginBottom: 16 }}>{t('push.trendTitle')}</h3>
         <BaseChart option={{
           tooltip: { trigger: 'axis' },
           xAxis: { type: 'category', data: Object.keys(trendData) },
-          yAxis: { type: 'value', name: '推送数' },
+          yAxis: { type: 'value', name: t('push.pushCount') },
           series: [{
-            name: '推送数', type: 'line',
+            name: t('push.pushCount'), type: 'line',
             data: Object.values(trendData),
             smooth: true,
             itemStyle: { color: '#1890ff' },
@@ -262,9 +252,9 @@ const Push: React.FC = () => {
           }]
         }} style={{ height: 300 }} />
       </Card>
-      
+
       {/* 推送日志列表 */}
-      <Card className="card" title="推送日志">
+      <Card className="card" title={t('push.logsTitle')}>
         <Table
           columns={columns}
           dataSource={logList}
@@ -277,7 +267,7 @@ const Push: React.FC = () => {
             onChange: handlePageChange,
             showSizeChanger: true,
             pageSizeOptions: ['20', '50', '100'],
-            showTotal: (total) => `共 ${total} 条记录`,
+            showTotal: (total) => t('push.totalRecords', { total }),
           }}
         />
       </Card>

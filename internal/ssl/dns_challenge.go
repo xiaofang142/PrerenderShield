@@ -73,10 +73,9 @@ func NewDNSProvider(name string, credentials map[string]string) (challenge.Provi
 	return provider, nil
 }
 
-// lookupEnv 查找环境变量，os.LookupEnv is available in Go 1.x
+// lookupEnv 查找环境变量，区分"key不存在"和"key存在但值为空"
 func lookupEnv(key string) (string, bool) {
-	val := os.Getenv(key)
-	return val, val != ""
+	return os.LookupEnv(key)
 }
 
 // SetDNSProvider 为 ACME 客户端设置 DNS 提供者

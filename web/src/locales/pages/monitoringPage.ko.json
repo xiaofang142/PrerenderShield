@@ -1,0 +1,25 @@
+{
+  "monitoringPage": {
+    "title": "모니터링 경고",
+    "fetchFailed": "모니터링 데이터 조회 실패",
+    "cpuUsage": "CPU 사용률",
+    "memoryUsage": "메모리 사용률",
+    "diskUsage": "디스크 사용률",
+    "metricsOverview": "시스템 지표 개요",
+    "requestsPerSecond": "요청/초",
+    "memoryDetail": "메모리 상세",
+    "totalMemory": "전체 메모리",
+    "usedMemory": "사용된 메모리",
+    "freeMemory": "가용 메모리",
+    "usageRate": "사용률",
+    "diskDetail": "디스크 상세",
+    "totalCapacity": "전체 용량",
+    "usedCapacity": "사용된 용량",
+    "freeCapacity": "가용 용량",
+    "networkTraffic": "네트워크 트래픽",
+    "sentBytes": "전송 바이트",
+    "recvBytes": "수신 바이트",
+    "sentPackets": "전송 패킷 수",
+    "recvPackets": "수신 패킷 수"
+  }
+}

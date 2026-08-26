@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"prerender-shield/internal/cache"
-	"prerender-shield/internal/crawler"
 	"prerender-shield/internal/proxy"
 	"prerender-shield/internal/redis"
 )
@@ -54,9 +53,6 @@ func TestEndToEndFlow(t *testing.T) {
 	// 创建缓存管理器
 	cacheManager := cache.NewManager(redisClient)
 
-	// 创建爬虫检测器
-	crawlerDetector := crawler.NewDetector(redisClient)
-
 	// 创建域名解析器
 	resolver := &mockDomainResolver{
 		resolveMap: make(map[string]string),
@@ -100,9 +96,6 @@ func TestEndToEndFlow(t *testing.T) {
 
 	// 测试2: 爬虫请求流程
 	t.Run("CrawlerRequest", func(t *testing.T) {
-		// 添加爬虫User-Agent
-		crawlerDetector.AddCrawlerUserAgent("Googlebot")
-
 		// 创建测试请求
 		req, err := http.NewRequest("GET", "/", nil)
 		assert.NoError(t, err)

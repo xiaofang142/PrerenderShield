@@ -1,0 +1,90 @@
+{
+  "ssl": {
+    "title": "SSL Certificate Management",
+    "stats": {
+      "total": "Total Certificates",
+      "valid": "Valid Certificates",
+      "expiringSoon": "Expiring Soon",
+      "expired": "Expired"
+    },
+    "actions": {
+      "requestCert": "Request Certificate",
+      "requestWildcard": "Request Wildcard Certificate",
+      "refresh": "Refresh"
+    },
+    "expiring": {
+      "title": "Expiring Certificates",
+      "renewNow": "Renew Now"
+    },
+    "list": {
+      "title": "Certificate List"
+    },
+    "columns": {
+      "domain": "Domain",
+      "issuer": "Issuer",
+      "expires": "Expires At",
+      "status": "Status"
+    },
+    "status": {
+      "unknown": "Unknown",
+      "expired": "Expired",
+      "valid": "Valid",
+      "expiresInDays": "Expires in {{days}} days"
+    },
+    "buttons": {
+      "detail": "Details",
+      "renew": "Renew"
+    },
+    "tooltips": {
+      "viewDetail": "View Details",
+      "renew": "Renew Certificate",
+      "delete": "Delete Certificate"
+    },
+    "deleteConfirm": {
+      "title": "Are you sure you want to delete this certificate?"
+    },
+    "table": {
+      "totalText": "Total {{total}} certificates",
+      "empty": "No certificates yet"
+    },
+    "modal": {
+      "requestTitle": "Request SSL Certificate",
+      "wildcardTitle": "Request Wildcard SSL Certificate",
+      "detailTitle": "Certificate Details"
+    },
+    "form": {
+      "domains": "Domain List",
+      "domainsRequired": "Please enter a domain",
+      "domainsHelp": "One domain per line, e.g.: example.com",
+      "baseDomain": "Base Domain",
+      "baseDomainRequired": "Please enter the base domain",
+      "baseDomainHelp": "e.g.: example.com",
+      "subdomains": "Subdomain List",
+      "subdomainsHelp": "One subdomain per line. Leave empty to request only the wildcard certificate"
+    },
+    "detail": {
+      "basicInfo": "Basic Info",
+      "domainLabel": "Domain: ",
+      "issuerLabel": "Issuer: ",
+      "serialNumber": "Serial Number: ",
+      "validity": "Validity Period",
+      "expiresLabel": "Expires At: ",
+      "statusLabel": "Status: ",
+      "sanDomains": "SAN Domains",
+      "fingerprint": "Fingerprint"
+    },
+    "messages": {
+      "fetchListFailed": "Failed to fetch certificate list",
+      "needDomain": "Please enter at least one domain",
+      "requestSuccess": "Certificate requested successfully",
+      "requestFailed": "Failed to request certificate",
+      "wildcardSuccess": "Wildcard certificate requested successfully",
+      "wildcardFailed": "Failed to request wildcard certificate",
+      "renewSuccess": "Certificate renewed successfully",
+      "renewFailed": "Failed to renew certificate",
+      "deleteSuccess": "Certificate deleted successfully",
+      "deleteFailed": "Failed to delete certificate",
+      "detailFailed": "Failed to get certificate details"
+    }
+  }
+}

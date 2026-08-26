@@ -1,0 +1,24 @@
+{
+  "dashboard": {
+    "title": "控制台首页",
+    "fetchFailed": "获取数据失败",
+    "newAlert": "收到新的安全告警，请查看告警中心",
+    "statTotalRequests": "总请求量",
+    "statBlocked": "拦截攻击",
+    "statCrawler": "爬虫请求",
+    "statActiveSites": "活跃站点",
+    "trafficTrend": "流量趋势 (24小时)",
+    "accessStats": "访问统计",
+    "systemStatus": "系统状态",
+    "wafFirewall": "WAF 防火墙",
+    "prerenderEngine": "预渲染引擎",
+    "enabled": "开启",
+    "disabled": "关闭",
+    "noData": "暂无数据",
+    "series": {
+      "total": "总请求",
+      "crawler": "爬虫请求",
+      "blocked": "拦截请求"
+    }
+  }
+}

@@ -117,12 +117,12 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             {
               key: '/firewall/rules',
               icon: <SecurityScanOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/firewall/rules" style={{ color: '#333333' }}>WAF 规则管理</Link>
+              label: <Link to="/firewall/rules" style={{ color: '#333333' }}>{t('menu.wafRules')}</Link>
             },
             {
               key: '/prerender',
               icon: <CodeOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/prerender" style={{ color: '#333333' }}>渲染预热</Link>
+              label: <Link to="/prerender" style={{ color: '#333333' }}>{t('menu.prerender')}</Link>
             },
             {
               key: '/prerender/preheat',
@@ -143,7 +143,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             {
               key: '/monitoring/alerts',
               icon: <BarChartOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/monitoring/alerts" style={{ color: '#333333' }}>告警配置</Link>
+              label: <Link to="/monitoring/alerts" style={{ color: '#333333' }}>{t('menu.alertConfig')}</Link>
             },
             {
               key: '/crawler',
@@ -153,7 +153,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             {
               key: '/logs',
               icon: <FileTextOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/logs" style={{ color: '#333333' }}>日志管理</Link>
+              label: <Link to="/logs" style={{ color: '#333333' }}>{t('menu.logs')}</Link>
             },
             {
               key: '/system',
@@ -164,12 +164,12 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             {
               key: '/ssl',
               icon: <SafetyCertificateOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/ssl" style={{ color: '#333333' }}>SSL 证书</Link>
+              label: <Link to="/ssl" style={{ color: '#333333' }}>{t('menu.ssl')}</Link>
             },
             {
               key: '/settings',
               icon: <ToolOutlined style={{ color: '#2f855a' }} />,
-              label: <Link to="/settings" style={{ color: '#333333' }}>系统设置</Link>
+              label: <Link to="/settings" style={{ color: '#333333' }}>{t('menu.systemSettings')}</Link>
             },
           ]}
         />

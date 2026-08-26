@@ -24,10 +24,15 @@
     "overview": "Overview",
     "sites": "Sites",
     "firewall": "WAFLog",
-    "logs": "Logs",
+    "logs": "Access Logs",
     "crawler": "Crawler Logs",
     "monitor": "Monitor",
-    "settings": "Settings"
+    "settings": "Settings",
+    "wafRules": "WAF Rules",
+    "prerender": "Prerender",
+    "alertConfig": "Alert Config",
+    "ssl": "SSL Certificates",
+    "systemSettings": "System Settings"
   },
   "system": {
     "visitOfficial": "Visit Official Website"
@@ -87,7 +92,7 @@
     "firstRun": {
       "title": "Initial Setup",
       "desc1": "This is the first time you are accessing the system. The username and password you set now will be used for future logins.",
-      "desc2": "Note: The initial username and password cannot be changed, please keep them safe!"
+      "desc2": "Note: The username and password you set now become the admin credentials. Keep them safe!"
     },
     "forceChangeTitle": "Security: Please Change Default Password",
     "forceChangeDesc": "You are still using the default password. For security, please change it now.",
@@ -97,6 +102,97 @@
     "confirmChangeBtn": "Confirm Change",
     "passwordChanged": "Password changed successfully",
     "passwordChangeFailed": "Failed to change password",
-    "passwordMismatch": "Passwords do not match"
+    "passwordMismatch": "Passwords do not match",
+    "desc2": "Note: The username and password you set now become the admin credentials (the password can be changed later in Settings). Keep them safe!"
+  },
+  "push": {
+    "title": "Push Management",
+    "selectSite": "Select Site: ",
+    "sitePlaceholder": "Please select a site",
+    "refresh": "Refresh",
+    "refreshed": "Statistics refreshed",
+    "totalPushes": "Total Pushes",
+    "successCount": "Successful",
+    "failedCount": "Failed",
+    "trendTitle": "30-Day Push Trend",
+    "pushCount": "Pushes",
+    "logsTitle": "Push Logs",
+    "columns": {
+      "siteName": "Site Name",
+      "url": "Push URL",
+      "route": "Route",
+      "searchEngine": "Search Engine",
+      "status": "Status",
+      "pushTime": "Push Time",
+      "message": "Message"
+    },
+    "engines": {
+      "baidu": "Baidu",
+      "bing": "Bing"
+    },
+    "statusText": {
+      "success": "Success",
+      "failed": "Failed",
+      "unknown": "Unknown"
+    },
+    "fetchSitesFailed": "Failed to fetch sites",
+    "fetchStatsFailed": "Failed to fetch push statistics",
+    "fetchLogsFailed": "Failed to fetch push logs",
+    "totalRecords": "Total {{total}} records"
+  },
+  "crawlerPage": {
+    "title": "Crawler Access",
+    "site": "Site: ",
+    "allSites": "All Sites",
+    "granularity": "Granularity: ",
+    "granularityDay": "Day",
+    "granularityWeek": "Week",
+    "granularityMonth": "Month",
+    "totalRequests": "Total Requests",
+    "cacheHitRate": "Cache Hit Rate",
+    "avgRenderTime": "Avg Render Time",
+    "activeUAs": "Active Crawler UAs",
+    "tabTrend": "Access Trend",
+    "tabLogs": "Access Logs",
+    "chartLegend": {
+      "requests": "Crawler Requests",
+      "cacheHits": "Cache Hits",
+      "cacheMisses": "Cache Misses"
+    },
+    "columns": {
+      "time": "Time",
+      "site": "Site",
+      "ip": "IP Address",
+      "route": "Route",
+      "ua": "User-Agent",
+      "status": "Status",
+      "hitCache": "Cache Hit",
+      "renderTime": "Render Time"
+    },
+    "yes": "Yes",
+    "no": "No",
+    "countUnit": "items",
+    "kindUnit": "types",
+    "totalRecords": "Total {{total}} records"
+  },
+  "multiTab": {
+    "overview": "Overview",
+    "sites": "Sites",
+    "firewallRules": "WAF Rules",
+    "prerender": "Prerender",
+    "preheat": "Preheat",
+    "push": "Push",
+    "monitoring": "Monitoring",
+    "alertConfig": "Alert Config",
+    "crawler": "Crawler Logs",
+    "logs": "Logs",
+    "system": "System Config",
+    "ssl": "SSL Certificates",
+    "settings": "Settings",
+    "dashboard": "Dashboard",
+    "refreshPage": "Refresh Page",
+    "closeOthers": "Close Others",
+    "closeAll": "Close All",
+    "page": "Page"
   }
 }

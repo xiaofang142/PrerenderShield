@@ -1,0 +1,22 @@
+{
+  "system": {
+    "title": "システム設定",
+    "subtitle": "システムのグローバル設定パラメータを管理",
+    "saveConfig": "設定を保存",
+    "logPolicyTitle": "ログ保持ポリシー",
+    "accessLogCard": "アクセスログ (Access Logs)",
+    "crawlerLogCard": "クローラーログ (Crawler Logs)",
+    "retentionDays": "保持日数",
+    "accessRetentionHelp": "この日数を超えたアクセスログは自動的に削除されます",
+    "crawlerRetentionHelp": "この日数を超えたクローラーログは自動的に削除されます",
+    "maxSize": "最大使用容量",
+    "maxSizeHelp": "ログの合計サイズがこの値を超えると、最も古いログが自動的に削除されます",
+    "dayUnit": "日",
+    "messages": {
+      "fetchFailed": "システム設定の取得に失敗しました",
+      "updateSuccess": "システム設定を更新しました",
+      "updateFailed": "更新に失敗しました",
+      "updateRequestFailed": "システム設定の更新に失敗しました"
+    }
+  }
+}

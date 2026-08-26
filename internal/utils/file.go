@@ -13,66 +13,12 @@ import (
 func ExtractArchive(archivePath, extractPath string) error {
 	// 检查文件类型
 	if strings.HasSuffix(strings.ToLower(archivePath), ".zip") {
-		return extractZIP(archivePath, extractPath)
+		return ExtractZIP(archivePath, extractPath)
 	}
 	if strings.HasSuffix(strings.ToLower(archivePath), ".rar") {
 		return extractRAR(archivePath, extractPath)
 	}
 	return fmt.Errorf("unsupported archive format")
-}
-
-// extractZIP 解压ZIP文件
-func extractZIP(archivePath, extractPath string) error {
-	// 打开ZIP文件
-	reader, err := zip.OpenReader(archivePath)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-
-	// 遍历ZIP文件中的所有文件
-	for _, file := range reader.File {
-		// 构建目标文件路径
-		targetPath := filepath.Join(extractPath, file.Name)
-
-		// 检查文件类型
-		if file.FileInfo().IsDir() {
-			// 创建目录
-			os.MkdirAll(targetPath, os.ModePerm)
-			continue
-		}
-
-		// 确保父目录存在
-		if err := os.MkdirAll(filepath.Dir(targetPath), os.ModePerm); err != nil {
-			return err
-		}
-
-		// 打开ZIP中的文件
-		inFile, err := file.Open()
-		if err != nil {
-			return err
-		}
-
-		// 创建目标文件
-		outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
-		if err != nil {
-			inFile.Close()
-			return err
-		}
-
-		// 复制文件内容
-		if _, err := io.Copy(outFile, inFile); err != nil {
-			inFile.Close()
-			outFile.Close()
-			return err
-		}
-
-		// 关闭文件
-		inFile.Close()
-		outFile.Close()
-	}
-
-	return nil
 }
 
 // extractRAR 解压RAR文件
@@ -100,4 +46,59 @@ func DeleteDir(dirPath string) error {
 // ListDir 列出目录内容
 func ListDir(dirPath string) ([]os.DirEntry, error) {
 	return os.ReadDir(dirPath)
+}
+
+// ExtractZIP 解压ZIP文件（带 zip-slip 路径穿越防护）
+func ExtractZIP(filePath, destDir string) error {
+	reader, err := zip.OpenReader(filePath)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+
+	for _, file := range reader.File {
+		destFilePath := filepath.Join(destDir, file.Name)
+
+		// 防止 zip-slip：目标路径必须仍在解压目录内
+		if !strings.HasPrefix(destFilePath, filepath.Clean(destDir)+string(os.PathSeparator)) && destFilePath != filepath.Clean(destDir) {
+			return fmt.Errorf("illegal file path in zip: %s", file.Name)
+		}
+
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(destFilePath, file.Mode()); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(destFilePath), 0755); err != nil {
+			return err
+		}
+
+		destFile, err := os.OpenFile(destFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+		if err != nil {
+			return err
+		}
+
+		zipFile, err := file.Open()
+		if err != nil {
+			destFile.Close()
+			return err
+		}
+
+		if _, err := io.Copy(destFile, zipFile); err != nil {
+			zipFile.Close()
+			destFile.Close()
+			return err
+		}
+
+		zipFile.Close()
+		destFile.Close()
+	}
+
+	return nil
 }

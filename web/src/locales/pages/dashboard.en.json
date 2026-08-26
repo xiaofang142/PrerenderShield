@@ -1,0 +1,24 @@
+{
+  "dashboard": {
+    "title": "Dashboard",
+    "fetchFailed": "Failed to fetch data",
+    "newAlert": "New security alert received, please check the Alert Center",
+    "statTotalRequests": "Total Requests",
+    "statBlocked": "Blocked Attacks",
+    "statCrawler": "Crawler Requests",
+    "statActiveSites": "Active Sites",
+    "trafficTrend": "Traffic Trend (24h)",
+    "accessStats": "Access Stats",
+    "systemStatus": "System Status",
+    "wafFirewall": "WAF Firewall",
+    "prerenderEngine": "Prerender Engine",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "noData": "No Data",
+    "series": {
+      "total": "Total Requests",
+      "crawler": "Crawler Requests",
+      "blocked": "Blocked Requests"
+    }
+  }
+}

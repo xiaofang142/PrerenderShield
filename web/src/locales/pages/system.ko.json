@@ -1,0 +1,22 @@
+{
+  "system": {
+    "title": "시스템 설정",
+    "subtitle": "시스템의 전역 설정 파라미터 관리",
+    "saveConfig": "설정 저장",
+    "logPolicyTitle": "로그 보존 정책",
+    "accessLogCard": "액세스 로그 (Access Logs)",
+    "crawlerLogCard": "크롤러 로그 (Crawler Logs)",
+    "retentionDays": "보존 일수",
+    "accessRetentionHelp": "해당 일수를 초과한 액세스 로그는 자동으로 삭제됩니다",
+    "crawlerRetentionHelp": "해당 일수를 초과한 크롤러 로그는 자동으로 삭제됩니다",
+    "maxSize": "최대 사용 공간",
+    "maxSizeHelp": "로그 총 크기가 이 값을 초과하면 가장 오래된 로그가 자동으로 삭제됩니다",
+    "dayUnit": "일",
+    "messages": {
+      "fetchFailed": "시스템 설정 조회 실패",
+      "updateSuccess": "시스템 설정이 업데이트되었습니다",
+      "updateFailed": "업데이트 실패",
+      "updateRequestFailed": "시스템 설정 업데이트 실패"
+    }
+  }
+}

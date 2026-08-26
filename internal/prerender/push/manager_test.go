@@ -518,7 +518,6 @@ func TestPushManager_SearchEngines(t *testing.T) {
 	}
 }
 
-
 // TestBuildFullURL_DomainWithSlash 测试域名带尾部斜杠
 func TestBuildFullURL_DomainWithSlash(t *testing.T) {
 	url := buildFullURL("example.com/", 8080, "/page")
@@ -760,7 +759,6 @@ func TestBuildFullURL_SpecialCharacters(t *testing.T) {
 		assert.Equal(t, tc.expected, url)
 	}
 }
-
 
 // TestSearchEngines 测试支持的搜索引擎
 func TestSearchEngines(t *testing.T) {
@@ -1514,17 +1512,18 @@ func TestPushManager_ExecutePush_WrapAround(t *testing.T) {
 
 // MockRedisClient 用于测试的 mock Redis 客户端
 type MockRedisClient struct {
-	getURLsFunc                         func(siteID string) ([]string, error)
-	setPushTaskFunc                     func(siteID string, task map[string]interface{}) error
-	getPushOffsetFunc                   func(siteID string) (int64, error)
-	setPushOffsetFunc                   func(siteID string, offset int64) error
-	setLastPushDateFunc                 func(siteID string, date string) error
-	incrDailyPushCountWithCountFunc     func(siteID string, count int) error
-	incrPushStatsFunc                   func(siteID string, stat string) error
-	getPushLogsFunc                     func(siteID string, limit, offset int) ([]interface{}, error)
-	getPushStatsWithURLCountsFunc       func(siteID string) (map[string]interface{}, error)
-	getLast15DaysPushCountFunc          func(siteID string) (map[string]int64, error)
-	addPushLogStructFunc                func(siteID string, log interface{}) error
+	getURLsFunc                     func(siteID string) ([]string, error)
+	setPushTaskFunc                 func(siteID string, task map[string]interface{}) error
+	getPushOffsetFunc               func(siteID string) (int64, error)
+	setPushOffsetFunc               func(siteID string, offset int64) error
+	setLastPushDateFunc             func(siteID string, date string) error
+	incrDailyPushCountWithCountFunc func(siteID string, count int) error
+	incrPushStatsFunc               func(siteID string, stat string) error
+	getPushLogsFunc                 func(siteID string, limit, offset int) ([]interface{}, error)
+	getPushLogCountFunc             func(siteID string) (int64, error)
+	getPushStatsWithURLCountsFunc   func(siteID string) (map[string]interface{}, error)
+	getLast15DaysPushCountFunc      func(siteID string) (map[string]int64, error)
+	addPushLogStructFunc            func(siteID string, log interface{}) error
 }
 
 func (m *MockRedisClient) GetURLs(siteID string) ([]string, error) {
@@ -1581,6 +1580,13 @@ func (m *MockRedisClient) GetPushLogs(siteID string, limit, offset int) ([]inter
 		return m.getPushLogsFunc(siteID, limit, offset)
 	}
 	return []interface{}{}, nil
+}
+
+func (m *MockRedisClient) GetPushLogCount(siteID string) (int64, error) {
+	if m.getPushLogCountFunc != nil {
+		return m.getPushLogCountFunc(siteID)
+	}
+	return 0, nil
 }
 
 func (m *MockRedisClient) GetPushStatsWithURLCounts(siteID string) (map[string]interface{}, error) {

@@ -47,6 +47,7 @@ type RedisClientInterface interface {
 	HashSet(key, field string, value interface{}) error
 	HashSetAll(key string, values map[string]interface{}) error
 	HashGet(key, field string) (string, error)
+	HashIncrBy(key, field string, incr int64) (int64, error)
 	HashGetAll(key string) (map[string]string, error)
 	Expire(key string, expiration time.Duration) error
 	TTL(key string) (time.Duration, error)
@@ -111,13 +112,8 @@ func (m *manager) Get(siteID, key string) ([]byte, error) {
 	}
 
 	metaKey := fmt.Sprintf("%s:meta", cacheKey)
-	if hc, err := m.redisClient.HashGet(metaKey, "hit_count"); err == nil && hc != "" {
-		var count int64
-		fmt.Sscanf(hc, "%d", &count)
-		m.redisClient.HashSet(metaKey, "hit_count", count+1)
-	} else {
-		m.redisClient.HashSet(metaKey, "hit_count", 1)
-	}
+	// 原子自增命中计数：此前 HashGet+HashSet 读改写在并发下会丢失计数
+	m.redisClient.HashIncrBy(metaKey, "hit_count", 1)
 	m.redisClient.HashSet(metaKey, "last_hit_at", time.Now().Unix())
 
 	return []byte(value), nil

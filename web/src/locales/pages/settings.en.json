@@ -1,0 +1,68 @@
+{
+  "settings": {
+    "title": "System Settings",
+    "tabs": {
+      "config": "System Config",
+      "status": "System Status",
+      "backup": "Backup & Restore",
+      "about": "About"
+    },
+    "config": {
+      "accessLogDivider": "Access Log Configuration",
+      "accessLogRetention": "Log Retention Days",
+      "accessLogRetentionHelp": "Number of days access logs are kept before automatic cleanup",
+      "dayUnit": "days",
+      "accessLogMaxSize": "Log File Size Limit",
+      "accessLogMaxSizeHelp": "Maximum size of a single log file (MB)",
+      "crawlerLogDivider": "Crawler Log Configuration",
+      "crawlerLogRetention": "Crawler Log Retention Days",
+      "crawlerLogRetentionHelp": "Number of days crawler logs are kept before automatic cleanup",
+      "crawlerLogMaxSize": "Crawler Log Size Limit",
+      "crawlerLogMaxSizeHelp": "Maximum size of a single crawler log file (MB)",
+      "saveConfig": "Save Configuration"
+    },
+    "status": {
+      "healthTitle": "System Health Status",
+      "serviceStatus": "Service Status",
+      "running": "Running",
+      "redisStatus": "Redis Status",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "sslStatus": "SSL Status",
+      "active": "Active",
+      "memoryUsage": "Memory Usage",
+      "sysMemory": "System Memory",
+      "goroutines": "Goroutine Count",
+      "gcCycles": "GC Cycles",
+      "versionTitle": "Version Info",
+      "currentVersion": "Current Version",
+      "serviceName": "Service Name",
+      "officialUrl": "Official Website"
+    },
+    "backup": {
+      "configTitle": "Configuration Backup",
+      "createBackup": "Create Backup",
+      "backupTime": "Backup Time",
+      "backupKey": "Backup Key",
+      "restoreConfirm": "Are you sure you want to restore this backup? The current configuration will be overwritten.",
+      "restore": "Restore",
+      "empty": "No backups yet"
+    },
+    "about": {
+      "description": "Enterprise-grade web application middleware with OWASP Top 10 security protection and intelligent render pre-warming",
+      "version": "Version",
+      "license": "License",
+      "techStack": "Tech Stack",
+      "docs": "Documentation"
+    },
+    "messages": {
+      "backupSuccess": "Backup created successfully",
+      "backupFailed": "Backup failed",
+      "restoreSuccess": "Configuration restored successfully",
+      "restoreFailed": "Restore failed",
+      "fetchConfigFailed": "Failed to fetch configuration",
+      "saveSuccess": "Configuration saved successfully",
+      "saveFailed": "Save failed"
+    }
+  }
+}

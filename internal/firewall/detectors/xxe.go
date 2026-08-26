@@ -1,6 +1,9 @@
 package detectors
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"sync"
@@ -77,10 +80,29 @@ func (d *XXEDetector) Detect(req *http.Request) ([]types.Threat, error) {
 
 	threats := checkHTTPInputs(req, compiledRules, "xxe")
 
-	// 如果是 XML 请求，额外检查 Body
+	// 如果是 XML 请求，额外检查 Body 中的 XXE 特征
 	if isXML && req.Body != nil {
-		// 注意：这里不读取 Body（会消耗掉），而是在 engine 层面已 ParseForm
-		// XXE 检测主要依赖规则匹配输入参数中的 XML 特征
+		// 读取 Body 内容进行 XXE 检测
+		bodyBytes, err := io.ReadAll(io.LimitReader(req.Body, 1<<20)) // 限制 1MB 防止 OOM
+		if err != nil {
+			logging.DefaultLogger.Warn("Failed to read request body for XXE detection: %v", err)
+		} else {
+			// 恢复 Body 供后续中间件使用
+			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			bodyStr := string(bodyBytes)
+			for _, cr := range compiledRules {
+				if cr.regex.MatchString(bodyStr) {
+					threats = append(threats, types.Threat{
+						Type:     "xxe",
+						SubType:  cr.rule.Name,
+						Severity: cr.rule.Severity,
+						Message:  fmt.Sprintf("XXE threat detected in XML body: %s", cr.rule.Name),
+						RuleID:   cr.rule.ID,
+						RuleName: cr.rule.Name,
+					})
+				}
+			}
+		}
 	}
 
 	return threats, nil

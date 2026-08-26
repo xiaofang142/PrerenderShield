@@ -1,0 +1,68 @@
+{
+  "settings": {
+    "title": "システム設定",
+    "tabs": {
+      "config": "システム設定",
+      "status": "システムステータス",
+      "backup": "バックアップと復元",
+      "about": "について"
+    },
+    "config": {
+      "accessLogDivider": "アクセスログ設定",
+      "accessLogRetention": "ログ保持日数",
+      "accessLogRetentionHelp": "アクセスログの保持日数。超過すると自動的にクリアされます",
+      "dayUnit": "日",
+      "accessLogMaxSize": "ログファイルサイズ制限",
+      "accessLogMaxSizeHelp": "単一ログファイルの最大サイズ(MB)",
+      "crawlerLogDivider": "クローラーログ設定",
+      "crawlerLogRetention": "クローラーログ保持日数",
+      "crawlerLogRetentionHelp": "クローラーログの保持日数。超過すると自動的にクリアされます",
+      "crawlerLogMaxSize": "クローラーログサイズ制限",
+      "crawlerLogMaxSizeHelp": "単一クローラーログファイルの最大サイズ(MB)",
+      "saveConfig": "設定を保存"
+    },
+    "status": {
+      "healthTitle": "システムヘルスステータス",
+      "serviceStatus": "サービスステータス",
+      "running": "実行中",
+      "redisStatus": "Redis ステータス",
+      "connected": "接続済み",
+      "disconnected": "未接続",
+      "sslStatus": "SSL ステータス",
+      "active": "アクティブ",
+      "memoryUsage": "メモリ使用量",
+      "sysMemory": "システムメモリ",
+      "goroutines": "Goroutine 数",
+      "gcCycles": "GC 回数",
+      "versionTitle": "バージョン情報",
+      "currentVersion": "現在のバージョン",
+      "serviceName": "サービス名",
+      "officialUrl": "公式サイト"
+    },
+    "backup": {
+      "configTitle": "設定バックアップ",
+      "createBackup": "バックアップを作成",
+      "backupTime": "バックアップ時刻",
+      "backupKey": "バックアップキー",
+      "restoreConfirm": "このバックアップを復元してもよろしいですか？現在の設定は上書きされます。",
+      "restore": "復元",
+      "empty": "バックアップはありません"
+    },
+    "about": {
+      "description": "OWASP Top 10 セキュリティ保護とインテリジェントなレンダリングプリウォーム機能を統合したエンタープライズ向け Web アプリケーションミドルウェア",
+      "version": "バージョン",
+      "license": "ライセンス",
+      "techStack": "技術スタック",
+      "docs": "公式ドキュメント"
+    },
+    "messages": {
+      "backupSuccess": "バックアップの作成に成功しました",
+      "backupFailed": "バックアップに失敗しました",
+      "restoreSuccess": "設定の復元に成功しました",
+      "restoreFailed": "復元に失敗しました",
+      "fetchConfigFailed": "設定の取得に失敗しました",
+      "saveSuccess": "設定の保存に成功しました",
+      "saveFailed": "保存に失敗しました"
+    }
+  }
+}

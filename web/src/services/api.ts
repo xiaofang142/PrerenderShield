@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios'
+import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios'
 
 // 定义 API 响应类型
 export interface ApiResponse<T = any> {
@@ -13,6 +13,37 @@ const api: AxiosInstance = axios.create({
   baseURL: '/api/v1',
   timeout: 10000,
 })
+
+// ─── 请求去重：相同 method+url+params 的进行中请求共享同一 Promise ───
+const pendingRequests = new Map<string, Promise<ApiResponse>>()
+
+function buildRequestKey(config: InternalAxiosRequestConfig): string {
+  return `${config.method?.toUpperCase()}:${config.url}:${JSON.stringify(config.params ?? {})}:${JSON.stringify(config.data ?? {})}`
+}
+
+// ─── 自动重试：仅对幂等 GET 且网络/5xx 错误重试 ───
+const RETRY_COUNT = 2
+const RETRY_DELAY = 800
+
+function shouldRetry(error: AxiosError): boolean {
+  const config = error.config as (InternalAxiosRequestConfig & { _retryCount?: number }) | undefined
+  if (!config || config.method?.toLowerCase() !== 'get') return false
+  if ((config._retryCount ?? 0) >= RETRY_COUNT) return false
+  // 网络错误（无响应）或 5xx 服务端错误才重试
+  return !error.response || error.response.status >= 500
+}
+
+// ─── 错误消息提取：统一从各层错误结构中取出可读文案 ───
+export function extractErrorMessage(error: unknown): string {
+  const axiosError = error as AxiosError<{ message?: string; error?: string }>
+  if (axiosError?.response) {
+    const data = axiosError.response.data
+    return data?.message || data?.error || `请求失败 (${axiosError.response.status})`
+  }
+  if (axiosError?.code === 'ECONNABORTED') return '请求超时，请稍后重试'
+  if (axiosError?.request) return '网络连接失败，请检查网络'
+  return error instanceof Error ? error.message : '未知错误'
+}
 
 // 请求拦截器
 api.interceptors.request.use(
@@ -55,9 +86,27 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
+    // 请求完成，从去重表中移除
+    if (response.config) {
+      pendingRequests.delete(buildRequestKey(response.config))
+    }
     return response.data
   },
-  (error) => {
+  async (error: AxiosError) => {
+    const config = error.config as (InternalAxiosRequestConfig & { _retryCount?: number }) | undefined
+
+    // 从去重表中移除失败的请求
+    if (config) {
+      pendingRequests.delete(buildRequestKey(config))
+    }
+
+    // 自动重试：幂等 GET + 网络/5xx 错误
+    if (config && shouldRetry(error)) {
+      config._retryCount = (config._retryCount ?? 0) + 1
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY * config._retryCount!))
+      return api.request(config)
+    }
+
     // 处理 401 未授权错误
     if (error.response && error.response.status === 401) {
       // 清除本地存储的 token
@@ -70,9 +119,48 @@ api.interceptors.response.use(
       }
     }
 
+    // 处理 402 站点授权超限：后端已返回友好文案与价格信息，
+    // 此处统一弹出升级引导（避免各调用点只显示原始 status 文案）
+    if (error.response && error.response.status === 402) {
+      const data = error.response.data as { message?: string; data?: { message?: string } } | undefined
+      const upgradeMsg =
+        data?.data?.message ||
+        data?.message ||
+        '免费版支持 1 个站点，添加更多站点需要购买站点授权（$99/站点/年）'
+
+      // 动态导入 antd，避免 api 模块与 UI 库的循环依赖
+      import('antd').then(({ Modal }) => {
+        Modal.confirm({
+          title: '站点授权升级',
+          content: `${upgradeMsg}。如需购买，请访问定价页或通过"联系"渠道开通。`,
+          okText: '查看定价',
+          cancelText: '稍后再说',
+          onOk: () => window.open('https://prerender.websitetool.cn/pricing', '_blank'),
+        })
+      }).catch(() => {
+        console.warn('站点授权超限: ' + upgradeMsg)
+      })
+    }
+
     return Promise.reject(error)
   }
 )
+
+// ─── 幂等 GET 去重：相同 url+params 的进行中请求共享同一 Promise ───
+// 直接重写实例的 get 方法，使所有调用点（api.get / 各 Api 对象）自动获得去重能力
+const originalGet = api.get.bind(api)
+api.get = function <T = any>(url: string, config?: any): Promise<ApiResponse<T>> {
+  const key = `GET:${url}:${JSON.stringify(config?.params ?? {})}:${JSON.stringify({})}`
+  const pending = pendingRequests.get(key)
+  if (pending) {
+    return pending as Promise<ApiResponse<T>>
+  }
+  const promise = originalGet<T>(url, config)
+  pendingRequests.set(key, promise as Promise<ApiResponse>)
+  // 完成后移除；catch 防止链上 rejection 触发 unhandledrejection
+  promise.finally(() => { pendingRequests.delete(key) }).catch(() => {})
+  return promise
+} as typeof api.get
 
 // 重新定义 axios 方法的类型
 declare module 'axios' {
@@ -108,6 +196,9 @@ export const firewallApi = {
   addToBlacklist: (siteId: string, ip: string) => api.post(`/firewall/blacklist`, { site_id: siteId, ip }),
   getStatus: (siteId: string) => api.get(`/sites/${siteId}/waf`),
   getRules: (siteId: string) => api.get(`/sites/${siteId}/waf`), // 规则包含在配置中
+  getFirewallRules: (siteId: string) => api.get(`/firewall/rules`, { params: { site_id: siteId } }),
+  saveFirewallRules: (siteId: string, rules: any[]) => api.post(`/firewall/rules`, { site_id: siteId, rules }),
+  deleteFirewallRule: (siteId: string, ruleId: string) => api.delete(`/firewall/rules/${ruleId}`, { params: { site_id: siteId } }),
 }
 
 // 渲染预热 API
@@ -130,6 +221,12 @@ export const monitoringApi = {
   getStats: () => api.get('/monitoring/stats'),
   getLogs: (params?: { site_id?: string; page?: number; limit?: number }) => api.get('/logs', { params }),
   getAlertHistory: (limit?: number) => api.get('/monitoring/alerts/history', { params: { limit: limit || 50 } }),
+  getAlertRules: () => api.get('/monitoring/alert-rules'),
+  saveAlertRule: (rule: any) => api.post('/monitoring/alert-rules', rule),
+  saveAlertRules: (rules: any[]) => api.post('/monitoring/alert-rules', { rules }),
+  deleteAlertRule: (ruleId: string) => api.delete(`/monitoring/alert-rules/${ruleId}`),
+  getNotificationChannels: () => api.get('/monitoring/alerts/channels'),
+  saveNotificationChannels: (channels: any[]) => api.post('/monitoring/alerts/channels', { channels }),
 }
 
 // 站点管理 API

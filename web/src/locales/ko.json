@@ -24,10 +24,15 @@
     "overview": "개요",
     "sites": "사이트 관리",
     "firewall": "WAF 로그",
-    "logs": "로그",
+    "logs": "로그 관리",
     "crawler": "크롤러 로그",
     "monitor": "시스템 모니터",
-    "settings": "시스템 설정"
+    "settings": "시스템 설정",
+    "wafRules": "WAF 규칙 관리",
+    "prerender": "렌더링 예열",
+    "alertConfig": "알림 설정",
+    "ssl": "SSL 인증서",
+    "systemSettings": "시스템 설정"
   },
   "system": {
     "visitOfficial": "공식 사이트"
@@ -88,6 +93,106 @@
       "title": "초기 설정",
       "desc1": "처음 시스템에 접속했습니다. 설정한 사용자 이름과 비밀번호는 향후 로그인에 사용됩니다.",
       "desc2": "주의: 초기 설정한 사용자 이름과 비밀번호는 변경할 수 없습니다. 안전하게 보관하세요!"
-    }
+    },
+    "forceChangeTitle": "비밀번호 변경 확인",
+    "forceChangeDesc": "첫 로그인이므로 기본 비밀번호를 변경해 주세요",
+    "currentPassword": "현재 비밀번호",
+    "newPassword": "새 비밀번호",
+    "confirmPassword": "새 비밀번호 확인",
+    "confirmChangeBtn": "변경 후 로그인",
+    "passwordChanged": "비밀번호가 변경되었습니다. 다시 로그인해 주세요",
+    "passwordChangeFailed": "비밀번호 변경에 실패했습니다",
+    "passwordMismatch": "비밀번호가 일치하지 않습니다",
+    "desc2": "주의: 지금 설정한 사용자 이름과 비밀번호가 관리자 자격 증명이 됩니다(비밀번호는 설정에서 나중에 변경 가능). 안전하게 보관하세요!"
+  },
+  "push": {
+    "title": "푸시 관리",
+    "selectSite": "사이트 선택：",
+    "sitePlaceholder": "사이트를 선택하세요",
+    "refresh": "새로고침",
+    "refreshed": "통계가 새로고침되었습니다",
+    "totalPushes": "총 푸시 수",
+    "successCount": "성공",
+    "failedCount": "실패",
+    "trendTitle": "30일 푸시 추이",
+    "pushCount": "푸시 수",
+    "logsTitle": "푸시 로그",
+    "columns": {
+      "siteName": "사이트 이름",
+      "url": "푸시 URL",
+      "route": "경로",
+      "searchEngine": "검색 엔진",
+      "status": "상태",
+      "pushTime": "푸시 시간",
+      "message": "메시지"
+    },
+    "engines": {
+      "baidu": "Baidu",
+      "bing": "Bing"
+    },
+    "statusText": {
+      "success": "성공",
+      "failed": "실패",
+      "unknown": "알 수 없음"
+    },
+    "fetchSitesFailed": "사이트 목록을 가져오지 못했습니다",
+    "fetchStatsFailed": "푸시 통계를 가져오지 못했습니다",
+    "fetchLogsFailed": "푸시 로그를 가져오지 못했습니다",
+    "totalRecords": "총 {{total}}건"
+  },
+  "crawlerPage": {
+    "title": "크롤러 접속",
+    "site": "사이트：",
+    "allSites": "모든 사이트",
+    "granularity": "시간 단위：",
+    "granularityDay": "일",
+    "granularityWeek": "주",
+    "granularityMonth": "월",
+    "totalRequests": "총 요청 수",
+    "cacheHitRate": "캐시 히트율",
+    "avgRenderTime": "평균 렌더링 시간",
+    "activeUAs": "활성 크롤러 UA 수",
+    "tabTrend": "접속 추이",
+    "tabLogs": "접속 기록",
+    "chartLegend": {
+      "requests": "크롤러 요청 수",
+      "cacheHits": "캐시 히트 수",
+      "cacheMisses": "캐시 미스 수"
+    },
+    "columns": {
+      "time": "시간",
+      "site": "사이트",
+      "ip": "IP 주소",
+      "route": "경로",
+      "ua": "User-Agent",
+      "status": "상태",
+      "hitCache": "캐시 히트",
+      "renderTime": "렌더링 시간"
+    },
+    "yes": "예",
+    "no": "아니요",
+    "countUnit": "건",
+    "kindUnit": "종류",
+    "totalRecords": "총 {{total}}건"
+  },
+  "multiTab": {
+    "overview": "개요",
+    "sites": "사이트 관리",
+    "firewallRules": "WAF 규칙 관리",
+    "prerender": "렌더링 예열",
+    "preheat": "예열 관리",
+    "push": "푸시 관리",
+    "monitoring": "모니터링 경고",
+    "alertConfig": "알림 설정",
+    "crawler": "크롤러 로그",
+    "logs": "로그 관리",
+    "system": "시스템 설정",
+    "ssl": "SSL 인증서",
+    "settings": "시스템 설정",
+    "dashboard": "Dashboard",
+    "refreshPage": "새로 고침",
+    "closeOthers": "다른 탭 닫기",
+    "closeAll": "모두 닫기",
+    "page": "페이지"
   }
 }

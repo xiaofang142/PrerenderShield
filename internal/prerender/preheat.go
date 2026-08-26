@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"prerender-shield/internal/redis"
 	"prerender-shield/internal/logging"
+	"prerender-shield/internal/redis"
 )
 
 // PreheatWorker 预热执行器

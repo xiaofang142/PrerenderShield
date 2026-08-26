@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
-import { Card, Table, Button, Modal, Form, Input, Select, Space, Tag, message, Row, Col, Tabs, Tooltip, Popconfirm, Drawer, InputNumber, Switch } from 'antd'
+import React, { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Card, Table, Button, Modal, Form, Input, Select, Space, Tag, message, Row, Col, Tooltip, Popconfirm, Switch } from 'antd'
 import { 
   PlusOutlined, 
   ReloadOutlined, 
@@ -8,23 +9,19 @@ import {
   CopyOutlined,
   SaveOutlined,
   PlayCircleOutlined,
-  SearchOutlined,
-  FilterOutlined,
   ExportOutlined
 } from '@ant-design/icons'
-import { firewallApi, sitesApi } from '../../services/api'
+import { firewallApi } from '../../services/api'
+import { useSites } from '../../hooks/useSites'
 
 const { Option } = Select
-const { TabPane } = Tabs
 const { TextArea } = Input
 
-// 规则模板
+// 规则模板（名称/描述/分类文案经 i18n 解析）
 const ruleTemplates = [
   {
     id: 'sql_injection',
-    name: 'SQL 注入防护',
-    description: '检测和阻止 SQL 注入攻击',
-    category: '注入防护',
+    category: 'injection',
     rules: [
       { field: 'query', operator: 'contains', value: "' OR ", action: 'block' },
       { field: 'query', operator: 'contains', value: "UNION SELECT", action: 'block' },
@@ -33,9 +30,7 @@ const ruleTemplates = [
   },
   {
     id: 'xss_protection',
-    name: 'XSS 防护',
-    description: '检测和阻止跨站脚本攻击',
-    category: '脚本防护',
+    category: 'script',
     rules: [
       { field: 'query', operator: 'contains', value: '<script', action: 'block' },
       { field: 'body', operator: 'contains', value: 'javascript:', action: 'block' },
@@ -44,9 +39,7 @@ const ruleTemplates = [
   },
   {
     id: 'path_traversal',
-    name: '路径遍历防护',
-    description: '检测和阻止路径遍历攻击',
-    category: '路径防护',
+    category: 'path',
     rules: [
       { field: 'path', operator: 'contains', value: '../', action: 'block' },
       { field: 'path', operator: 'contains', value: '..\\', action: 'block' },
@@ -55,18 +48,14 @@ const ruleTemplates = [
   },
   {
     id: 'rate_limit',
-    name: '频率限制',
-    description: '限制单个 IP 的请求频率',
-    category: '访问控制',
+    category: 'access',
     rules: [
       { field: 'ip', operator: 'count', value: '100', window: '60s', action: 'block' },
     ]
   },
   {
     id: 'geo_block',
-    name: '地理位置封锁',
-    description: '封锁特定国家/地区的访问',
-    category: '访问控制',
+    category: 'access',
     rules: [
       { field: 'country', operator: 'in', value: 'RU,CN,IR', action: 'block' },
     ]
@@ -85,59 +74,39 @@ interface Rule {
 }
 
 const FirewallRules: React.FC = () => {
-  const [sites, setSites] = useState<any[]>([])
-  const [selectedSite, setSelectedSite] = useState<string>('')
+  const { t } = useTranslation()
+  const { sites, selectedSiteId: selectedSite, setSelectedSiteId: setSelectedSite } = useSites({
+    autoSelectFirst: true,
+    onFetchError: (msg) => message.error(msg),
+  })
   const [rules, setRules] = useState<Rule[]>([])
   const [loading, setLoading] = useState(false)
   const [ruleModalVisible, setRuleModalVisible] = useState(false)
   const [templateModalVisible, setTemplateModalVisible] = useState(false)
   const [testModalVisible, setTestModalVisible] = useState(false)
   const [editingRule, setEditingRule] = useState<Rule | null>(null)
-  const [testRequest, setTestRequest] = useState('')
   const [testResult, setTestResult] = useState<any>(null)
+  // 竞态防护：站点快速切换时，旧请求的响应不再写入 state
+  const requestVersionRef = useRef(0)
   
   const [form] = Form.useForm()
   const [testForm] = Form.useForm()
 
-  // 获取站点列表
-  const fetchSites = async () => {
-    try {
-      const res = await sitesApi.getSites()
-      if (res.code === 200) {
-        setSites(res.data)
-        if (res.data.length > 0) {
-          setSelectedSite(res.data[0].id)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch sites:', error)
-      message.error('获取站点列表失败')
-    }
-  }
-
   // 获取规则列表
   const fetchRules = async () => {
     if (!selectedSite) return
-    
+
+    const version = ++requestVersionRef.current
     try {
       setLoading(true)
-      const res = await firewallApi.getWafConfig(selectedSite)
-      if (res.code === 200) {
-        // 从配置中提取规则
-        const config = res.data
-        const extractedRules: Rule[] = []
-        
-        // 这里假设规则存储在配置中
-        // 实际实现可能需要调整
-        if (config.rules) {
-          extractedRules.push(...config.rules)
-        }
-        
-        setRules(extractedRules)
+      const res = await firewallApi.getFirewallRules(selectedSite)
+      if (version !== requestVersionRef.current) return
+      if (res.code === 200 && res.data) {
+        setRules(res.data.rules || [])
       }
     } catch (error) {
       console.error('Failed to fetch rules:', error)
-      message.error('获取规则列表失败')
+      message.error(t('firewallRules.messages.fetchFail'))
     } finally {
       setLoading(false)
     }
@@ -145,7 +114,7 @@ const FirewallRules: React.FC = () => {
 
   // 初始化
   useEffect(() => {
-    fetchSites()
+    // 站点列表由 useSites 自动加载
   }, [])
 
   useEffect(() => {
@@ -154,67 +123,86 @@ const FirewallRules: React.FC = () => {
     }
   }, [selectedSite])
 
-  // 添加规则
-  const handleAddRule = async (values: any) => {
+  // 添加/编辑规则统一处理（原两份同构函数收敛）
+  const handleSaveRule = async (values: any) => {
+    const isEdit = Boolean(editingRule)
     try {
-      const newRule: Rule = {
-        id: `rule-${Date.now()}`,
-        name: values.name,
-        field: values.field,
-        operator: values.operator,
-        value: values.value,
-        action: values.action,
-        enabled: true,
-        priority: rules.length + 1,
+      // 编辑提交前校验目标规则仍在当前站点列表中（防切换站点后的静默无效写回）
+      if (isEdit && !rules.some(r => r.id === editingRule!.id)) {
+        message.warning(t('firewallRules.messages.ruleGone'))
+        setRuleModalVisible(false)
+        setEditingRule(null)
+        return
       }
-      
-      setRules([...rules, newRule])
-      setRuleModalVisible(false)
-      form.resetFields()
-      message.success('规则添加成功')
-    } catch (error) {
-      message.error('规则添加失败')
-    }
-  }
+      const updatedRules: Rule[] = isEdit
+        ? rules.map(r => (r.id === editingRule!.id ? { ...r, ...values } : r))
+        : [
+            ...rules,
+            {
+              id: `rule-${Date.now()}`,
+              name: values.name,
+              field: values.field,
+              operator: values.operator,
+              value: values.value,
+              action: values.action,
+              enabled: true,
+              priority: rules.length + 1,
+            },
+          ]
 
-  // 编辑规则
-  const handleEditRule = async (values: any) => {
-    if (!editingRule) return
-    
-    try {
-      const updatedRules = rules.map(r => 
-        r.id === editingRule.id 
-          ? { ...r, ...values }
-          : r
-      )
-      setRules(updatedRules)
-      setRuleModalVisible(false)
-      setEditingRule(null)
-      form.resetFields()
-      message.success('规则更新成功')
+      const res = await firewallApi.saveFirewallRules(selectedSite, updatedRules)
+      if (res.code === 200) {
+        setRules(updatedRules)
+        setRuleModalVisible(false)
+        setEditingRule(null)
+        form.resetFields()
+        message.success(t(isEdit ? 'firewallRules.messages.updateSuccess' : 'firewallRules.messages.addSuccess'))
+      } else {
+        message.error(res.message || t(isEdit ? 'firewallRules.messages.updateFail' : 'firewallRules.messages.addFail'))
+      }
     } catch (error) {
-      message.error('规则更新失败')
+      message.error(t(isEdit ? 'firewallRules.messages.updateFail' : 'firewallRules.messages.addFail'))
     }
   }
 
   // 删除规则
-  const handleDeleteRule = (ruleId: string) => {
-    setRules(rules.filter(r => r.id !== ruleId))
-    message.success('规则删除成功')
+  const handleDeleteRule = async (ruleId: string) => {
+    try {
+      const res = await firewallApi.deleteFirewallRule(selectedSite, ruleId)
+      if (res.code === 200) {
+        setRules(rules.filter(r => r.id !== ruleId))
+        message.success(t('firewallRules.messages.deleteSuccess'))
+      } else {
+        message.error(res.message || t('firewallRules.messages.deleteFail'))
+      }
+    } catch (error) {
+      message.error(t('firewallRules.messages.deleteFail'))
+    }
   }
 
   // 切换规则状态
-  const handleToggleRule = (ruleId: string, enabled: boolean) => {
-    setRules(rules.map(r => 
-      r.id === ruleId ? { ...r, enabled } : r
-    ))
+  const handleToggleRule = async (ruleId: string, enabled: boolean) => {
+    try {
+      const updatedRules = rules.map(r => 
+        r.id === ruleId ? { ...r, enabled } : r
+      )
+      const res = await firewallApi.saveFirewallRules(selectedSite, updatedRules)
+      if (res.code === 200) {
+        setRules(updatedRules)
+      } else {
+        message.error(t('firewallRules.messages.statusUpdateFail'))
+      }
+    } catch (error) {
+      message.error(t('firewallRules.messages.statusUpdateFail'))
+    }
   }
 
   // 应用模板
-  const handleApplyTemplate = (template: any) => {
+  const handleApplyTemplate = async (template: any) => {
+    const templateName = t(`firewallRules.templates.items.${template.id}.name`)
     const newRules = template.rules.map((r: any, index: number) => ({
       id: `rule-${Date.now()}-${index}`,
-      name: `${template.name} - ${r.field}`,
+      name: `${templateName} - ${r.field}`,
       field: r.field,
       operator: r.operator,
       value: r.value,
@@ -223,20 +211,35 @@ const FirewallRules: React.FC = () => {
       priority: rules.length + index + 1,
     }))
     
-    setRules([...rules, ...newRules])
-    setTemplateModalVisible(false)
-    message.success(`已应用模板: ${template.name}`)
+    try {
+      const updatedRules = [...rules, ...newRules]
+      const res = await firewallApi.saveFirewallRules(selectedSite, updatedRules)
+      if (res.code === 200) {
+        setRules(updatedRules)
+        setTemplateModalVisible(false)
+        message.success(t('firewallRules.messages.applyTemplateSuccess', { name: templateName }))
+      } else {
+        message.error(res.message || t('firewallRules.messages.applyTemplateFail'))
+      }
+    } catch (error) {
+      message.error(t('firewallRules.messages.applyTemplateFail'))
+    }
   }
 
   // 测试规则
   const handleTestRule = async (values: any) => {
     try {
       // 模拟测试结果
-      const result = {
+      const result: {
+        matched: boolean
+        rule: Rule | null
+        action: string
+        details: string
+      } = {
         matched: false,
         rule: null,
         action: 'allow',
-        details: '请求未匹配任何规则',
+        details: t('firewallRules.test.result.noMatch'),
       }
       
       // 检查是否匹配任何规则
@@ -272,24 +275,29 @@ const FirewallRules: React.FC = () => {
           result.matched = true
           result.rule = rule
           result.action = rule.action
-          result.details = `匹配规则: ${rule.name}`
+          result.details = t('firewallRules.test.result.detail', { name: rule.name })
           break
         }
       }
       
       setTestResult(result)
     } catch (error) {
-      message.error('测试失败')
+      message.error(t('firewallRules.messages.testFail'))
     }
   }
 
-  // 保存规则 — 规则通过站点WAF配置管理，此处为前端本地状态
+  // 保存规则
   const handleSaveRules = async () => {
     try {
       setLoading(true)
-      message.success('规则已更新（前端本地状态）')
+      const res = await firewallApi.saveFirewallRules(selectedSite, rules)
+      if (res.code === 200) {
+        message.success(t('firewallRules.messages.saveSuccess'))
+      } else {
+        message.error(res.message || t('firewallRules.messages.saveFail'))
+      }
     } catch {
-      message.error('规则保存失败')
+      message.error(t('firewallRules.messages.saveFail'))
     } finally {
       setLoading(false)
     }
@@ -305,38 +313,38 @@ const FirewallRules: React.FC = () => {
     a.download = `waf-rules-${selectedSite}-${new Date().toISOString().split('T')[0]}.json`
     a.click()
     URL.revokeObjectURL(url)
-    message.success('规则导出成功')
+    message.success(t('firewallRules.messages.exportSuccess'))
   }
 
   // 表格列配置
   const columns = [
     {
-      title: '规则名称',
+      title: t('firewallRules.columns.name'),
       dataIndex: 'name',
       key: 'name',
       render: (text: string) => <span style={{ fontWeight: 500 }}>{text}</span>,
     },
     {
-      title: '匹配字段',
+      title: t('firewallRules.columns.field'),
       dataIndex: 'field',
       key: 'field',
       render: (text: string) => <Tag>{text}</Tag>,
     },
     {
-      title: '操作符',
+      title: t('firewallRules.columns.operator'),
       dataIndex: 'operator',
       key: 'operator',
       render: (text: string) => <Tag color="blue">{text}</Tag>,
     },
     {
-      title: '匹配值',
+      title: t('firewallRules.columns.value'),
       dataIndex: 'value',
       key: 'value',
       ellipsis: true,
       render: (text: string) => <code>{text}</code>,
     },
     {
-      title: '动作',
+      title: t('firewallRules.columns.action'),
       dataIndex: 'action',
       key: 'action',
       render: (text: string) => {
@@ -349,7 +357,7 @@ const FirewallRules: React.FC = () => {
       },
     },
     {
-      title: '状态',
+      title: t('firewallRules.columns.status'),
       dataIndex: 'enabled',
       key: 'enabled',
       render: (enabled: boolean, record: Rule) => (
@@ -361,11 +369,11 @@ const FirewallRules: React.FC = () => {
       ),
     },
     {
-      title: '操作',
+      title: t('firewallRules.columns.actions'),
       key: 'action',
       render: (_: any, record: Rule) => (
         <Space size="small">
-          <Tooltip title="编辑">
+          <Tooltip title={t('common.edit')}>
             <Button 
               type="link" 
               size="small" 
@@ -378,12 +386,12 @@ const FirewallRules: React.FC = () => {
             />
           </Tooltip>
           <Popconfirm
-            title="确定要删除这个规则吗？"
+            title={t('firewallRules.deleteConfirm')}
             onConfirm={() => handleDeleteRule(record.id)}
-            okText="确定"
-            cancelText="取消"
+            okText={t('common.ok')}
+            cancelText={t('common.cancel')}
           >
-            <Tooltip title="删除">
+            <Tooltip title={t('common.delete')}>
               <Button type="link" size="small" danger icon={<DeleteOutlined />} />
             </Tooltip>
           </Popconfirm>
@@ -394,7 +402,7 @@ const FirewallRules: React.FC = () => {
 
   return (
     <div>
-      <h1 className="page-title">WAF 规则管理</h1>
+      <h1 className="page-title">{t('firewallRules.title')}</h1>
       
       {/* 操作栏 */}
       <Card className="card" style={{ marginBottom: 16 }}>
@@ -406,7 +414,7 @@ const FirewallRules: React.FC = () => {
                 onChange={setSelectedSite}
                 style={{ width: 200 }}
                 loading={sites.length === 0}
-                placeholder="请选择站点"
+                placeholder={t('firewallRules.selectSite')}
               >
                 {sites.map((site) => (
                   <Option key={site.id} value={site.id}>
@@ -423,19 +431,19 @@ const FirewallRules: React.FC = () => {
                   setRuleModalVisible(true)
                 }}
               >
-                添加规则
+                {t('firewallRules.toolbar.addRule')}
               </Button>
               <Button 
                 icon={<CopyOutlined />}
                 onClick={() => setTemplateModalVisible(true)}
               >
-                使用模板
+                {t('firewallRules.toolbar.useTemplate')}
               </Button>
               <Button 
                 icon={<PlayCircleOutlined />}
                 onClick={() => setTestModalVisible(true)}
               >
-                测试规则
+                {t('firewallRules.toolbar.testRule')}
               </Button>
             </Space>
           </Col>
@@ -445,7 +453,7 @@ const FirewallRules: React.FC = () => {
                 icon={<ExportOutlined />}
                 onClick={handleExportRules}
               >
-                导出规则
+                {t('firewallRules.toolbar.exportRules')}
               </Button>
               <Button 
                 type="primary" 
@@ -453,14 +461,14 @@ const FirewallRules: React.FC = () => {
                 onClick={handleSaveRules}
                 loading={loading}
               >
-                保存规则
+                {t('firewallRules.toolbar.saveRules')}
               </Button>
               <Button 
                 icon={<ReloadOutlined />}
                 onClick={fetchRules}
                 loading={loading}
               >
-                刷新
+                {t('firewallRules.toolbar.refresh')}
               </Button>
             </Space>
           </Col>
@@ -473,7 +481,7 @@ const FirewallRules: React.FC = () => {
           <Card className="card">
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1890ff' }}>{rules.length}</div>
-              <div style={{ color: '#666' }}>总规则数</div>
+              <div style={{ color: '#666' }}>{t('firewallRules.stats.total')}</div>
             </div>
           </Card>
         </Col>
@@ -483,7 +491,7 @@ const FirewallRules: React.FC = () => {
               <div style={{ fontSize: 24, fontWeight: 'bold', color: '#52c41a' }}>
                 {rules.filter(r => r.enabled).length}
               </div>
-              <div style={{ color: '#666' }}>启用规则</div>
+              <div style={{ color: '#666' }}>{t('firewallRules.stats.enabled')}</div>
             </div>
           </Card>
         </Col>
@@ -493,7 +501,7 @@ const FirewallRules: React.FC = () => {
               <div style={{ fontSize: 24, fontWeight: 'bold', color: '#ff4d4f' }}>
                 {rules.filter(r => r.action === 'block').length}
               </div>
-              <div style={{ color: '#666' }}>拦截规则</div>
+              <div style={{ color: '#666' }}>{t('firewallRules.stats.blocked')}</div>
             </div>
           </Card>
         </Col>
@@ -503,14 +511,14 @@ const FirewallRules: React.FC = () => {
               <div style={{ fontSize: 24, fontWeight: 'bold', color: '#faad14' }}>
                 {rules.filter(r => !r.enabled).length}
               </div>
-              <div style={{ color: '#666' }}>禁用规则</div>
+              <div style={{ color: '#666' }}>{t('firewallRules.stats.disabled')}</div>
             </div>
           </Card>
         </Col>
       </Row>
 
       {/* 规则列表 */}
-      <Card className="card" title="规则列表">
+      <Card className="card" title={t('firewallRules.list.title')}>
         <Table
           columns={columns}
           dataSource={rules}
@@ -519,14 +527,14 @@ const FirewallRules: React.FC = () => {
           pagination={{
             showSizeChanger: true,
             showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条规则`,
+            showTotal: (total) => t('firewallRules.list.total', { total }),
           }}
         />
       </Card>
 
       {/* 添加/编辑规则弹窗 */}
       <Modal
-        title={editingRule ? '编辑规则' : '添加规则'}
+        title={editingRule ? t('firewallRules.form.editTitle') : t('firewallRules.form.addTitle')}
         open={ruleModalVisible}
         onCancel={() => {
           setRuleModalVisible(false)
@@ -539,60 +547,60 @@ const FirewallRules: React.FC = () => {
         <Form
           form={form}
           layout="vertical"
-          onFinish={editingRule ? handleEditRule : handleAddRule}
+          onFinish={handleSaveRule}
         >
           <Form.Item
             name="name"
-            label="规则名称"
-            rules={[{ required: true, message: '请输入规则名称' }]}
+            label={t('firewallRules.form.ruleName')}
+            rules={[{ required: true, message: t('firewallRules.form.ruleNameRequired') }]}
           >
-            <Input placeholder="例如：SQL 注入防护" />
+            <Input placeholder={t('firewallRules.form.namePlaceholder')} />
           </Form.Item>
           
           <Row gutter={16}>
             <Col span={8}>
               <Form.Item
                 name="field"
-                label="匹配字段"
-                rules={[{ required: true, message: '请选择匹配字段' }]}
+                label={t('firewallRules.columns.field')}
+                rules={[{ required: true, message: t('firewallRules.form.fieldRequired') }]}
               >
-                <Select placeholder="选择字段">
-                  <Option value="query">查询参数</Option>
-                  <Option value="path">URL 路径</Option>
-                  <Option value="header">请求头</Option>
-                  <Option value="body">请求体</Option>
-                  <Option value="ip">IP 地址</Option>
-                  <Option value="user_agent">User-Agent</Option>
-                  <Option value="country">国家/地区</Option>
+                <Select placeholder={t('firewallRules.form.selectField')}>
+                  <Option value="query">{t('firewallRules.form.fieldOptions.query')}</Option>
+                  <Option value="path">{t('firewallRules.form.fieldOptions.path')}</Option>
+                  <Option value="header">{t('firewallRules.form.fieldOptions.header')}</Option>
+                  <Option value="body">{t('firewallRules.form.fieldOptions.body')}</Option>
+                  <Option value="ip">{t('firewallRules.form.fieldOptions.ip')}</Option>
+                  <Option value="user_agent">{t('firewallRules.form.fieldOptions.user_agent')}</Option>
+                  <Option value="country">{t('firewallRules.form.fieldOptions.country')}</Option>
                 </Select>
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item
                 name="operator"
-                label="操作符"
-                rules={[{ required: true, message: '请选择操作符' }]}
+                label={t('firewallRules.columns.operator')}
+                rules={[{ required: true, message: t('firewallRules.form.operatorRequired') }]}
               >
-                <Select placeholder="选择操作符">
-                  <Option value="contains">包含</Option>
-                  <Option value="equals">等于</Option>
-                  <Option value="matches">正则匹配</Option>
-                  <Option value="gt">大于</Option>
-                  <Option value="lt">小于</Option>
-                  <Option value="in">在列表中</Option>
+                <Select placeholder={t('firewallRules.form.selectOperator')}>
+                  <Option value="contains">{t('firewallRules.form.operatorOptions.contains')}</Option>
+                  <Option value="equals">{t('firewallRules.form.operatorOptions.equals')}</Option>
+                  <Option value="matches">{t('firewallRules.form.operatorOptions.matches')}</Option>
+                  <Option value="gt">{t('firewallRules.form.operatorOptions.gt')}</Option>
+                  <Option value="lt">{t('firewallRules.form.operatorOptions.lt')}</Option>
+                  <Option value="in">{t('firewallRules.form.operatorOptions.in')}</Option>
                 </Select>
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item
                 name="action"
-                label="动作"
-                rules={[{ required: true, message: '请选择动作' }]}
+                label={t('firewallRules.columns.action')}
+                rules={[{ required: true, message: t('firewallRules.form.actionRequired') }]}
               >
-                <Select placeholder="选择动作">
-                  <Option value="block">拦截</Option>
-                  <Option value="allow">放行</Option>
-                  <Option value="log">记录</Option>
+                <Select placeholder={t('firewallRules.form.selectAction')}>
+                  <Option value="block">{t('firewallRules.form.actionOptions.block')}</Option>
+                  <Option value="allow">{t('firewallRules.form.actionOptions.allow')}</Option>
+                  <Option value="log">{t('firewallRules.form.actionOptions.log')}</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -600,24 +608,24 @@ const FirewallRules: React.FC = () => {
           
           <Form.Item
             name="value"
-            label="匹配值"
-            rules={[{ required: true, message: '请输入匹配值' }]}
-            help="多个值用逗号分隔"
+            label={t('firewallRules.columns.value')}
+            rules={[{ required: true, message: t('firewallRules.form.valueRequired') }]}
+            help={t('firewallRules.form.valueHelp')}
           >
-            <TextArea rows={3} placeholder="例如：' OR 1=1, UNION SELECT" />
+            <TextArea rows={3} placeholder={t('firewallRules.form.valuePlaceholder')} />
           </Form.Item>
           
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
-                {editingRule ? '更新规则' : '添加规则'}
+                {editingRule ? t('firewallRules.form.updateRule') : t('firewallRules.toolbar.addRule')}
               </Button>
               <Button onClick={() => {
                 setRuleModalVisible(false)
                 setEditingRule(null)
                 form.resetFields()
               }}>
-                取消
+                {t('common.cancel')}
               </Button>
             </Space>
           </Form.Item>
@@ -626,14 +634,14 @@ const FirewallRules: React.FC = () => {
 
       {/* 规则模板弹窗 */}
       <Modal
-        title="规则模板"
+        title={t('firewallRules.templates.title')}
         open={templateModalVisible}
         onCancel={() => setTemplateModalVisible(false)}
         footer={null}
         width={700}
       >
         <div style={{ marginBottom: 16, color: '#666' }}>
-          选择一个模板快速添加常用规则
+          {t('firewallRules.templates.description')}
         </div>
         <Row gutter={[16, 16]}>
           {ruleTemplates.map((template) => (
@@ -643,13 +651,15 @@ const FirewallRules: React.FC = () => {
                 onClick={() => handleApplyTemplate(template)}
                 style={{ cursor: 'pointer' }}
               >
-                <div style={{ fontWeight: 'bold', marginBottom: 8 }}>{template.name}</div>
+                <div style={{ fontWeight: 'bold', marginBottom: 8 }}>
+                  {t(`firewallRules.templates.items.${template.id}.name`)}
+                </div>
                 <div style={{ color: '#666', fontSize: 12, marginBottom: 8 }}>
-                  {template.description}
+                  {t(`firewallRules.templates.items.${template.id}.description`)}
                 </div>
                 <div>
-                  <Tag color="blue">{template.category}</Tag>
-                  <Tag>{template.rules.length} 条规则</Tag>
+                  <Tag color="blue">{t(`firewallRules.templates.categories.${template.category}`)}</Tag>
+                  <Tag>{t('firewallRules.templates.ruleCount', { count: template.rules.length })}</Tag>
                 </div>
               </Card>
             </Col>
@@ -659,7 +669,7 @@ const FirewallRules: React.FC = () => {
 
       {/* 测试规则弹窗 */}
       <Modal
-        title="测试规则"
+        title={t('firewallRules.toolbar.testRule')}
         open={testModalVisible}
         onCancel={() => {
           setTestModalVisible(false)
@@ -676,41 +686,41 @@ const FirewallRules: React.FC = () => {
         >
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="query" label="查询参数">
-                <Input placeholder="例如：id=1' OR 1=1" />
+              <Form.Item name="query" label={t('firewallRules.test.query')}>
+                <Input placeholder={t('firewallRules.test.phQuery')} />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="path" label="URL 路径">
-                <Input placeholder="例如：/api/users" />
+              <Form.Item name="path" label={t('firewallRules.test.path')}>
+                <Input placeholder={t('firewallRules.test.phPath')} />
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="ip" label="IP 地址">
-                <Input placeholder="例如：192.168.1.1" />
+              <Form.Item name="ip" label={t('firewallRules.test.ip')}>
+                <Input placeholder={t('firewallRules.test.phIp')} />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="user_agent" label="User-Agent">
-                <Input placeholder="例如：Mozilla/5.0..." />
+              <Form.Item name="user_agent" label={t('firewallRules.test.userAgent')}>
+                <Input placeholder={t('firewallRules.test.phUserAgent')} />
               </Form.Item>
             </Col>
           </Row>
-          <Form.Item name="body" label="请求体">
-            <TextArea rows={3} placeholder="请求体内容" />
+          <Form.Item name="body" label={t('firewallRules.test.body')}>
+            <TextArea rows={3} placeholder={t('firewallRules.test.phBody')} />
           </Form.Item>
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
-                测试
+                {t('common.ok')}
               </Button>
               <Button onClick={() => {
                 setTestResult(null)
                 testForm.resetFields()
               }}>
-                重置
+                {t('common.reset')}
               </Button>
             </Space>
           </Form.Item>
@@ -718,7 +728,7 @@ const FirewallRules: React.FC = () => {
         
         {testResult && (
           <Card 
-            title="测试结果" 
+            title={t('firewallRules.test.result.title')} 
             style={{ marginTop: 16 }}
             className={testResult.matched ? 'card-warning' : 'card-success'}
           >
@@ -726,9 +736,9 @@ const FirewallRules: React.FC = () => {
               <Col span={8}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 24, fontWeight: 'bold', color: testResult.matched ? '#ff4d4f' : '#52c41a' }}>
-                    {testResult.matched ? '已匹配' : '未匹配'}
+                    {testResult.matched ? t('firewallRules.test.result.matched') : t('firewallRules.test.result.unmatched')}
                   </div>
-                  <div style={{ color: '#666' }}>匹配状态</div>
+                  <div style={{ color: '#666' }}>{t('firewallRules.test.result.matchStatus')}</div>
                 </div>
               </Col>
               <Col span={8}>
@@ -736,7 +746,7 @@ const FirewallRules: React.FC = () => {
                   <div style={{ fontSize: 24, fontWeight: 'bold', color: testResult.action === 'block' ? '#ff4d4f' : '#52c41a' }}>
                     {testResult.action}
                   </div>
-                  <div style={{ color: '#666' }}>执行动作</div>
+                  <div style={{ color: '#666' }}>{t('firewallRules.test.result.execAction')}</div>
                 </div>
               </Col>
               <Col span={8}>
@@ -744,7 +754,7 @@ const FirewallRules: React.FC = () => {
                   <div style={{ fontSize: 14, color: '#666' }}>
                     {testResult.rule ? testResult.rule.name : '-'}
                   </div>
-                  <div style={{ color: '#666' }}>匹配规则</div>
+                  <div style={{ color: '#666' }}>{t('firewallRules.test.result.matchedRule')}</div>
                 </div>
               </Col>
             </Row>

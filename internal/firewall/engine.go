@@ -1,9 +1,11 @@
 package firewall
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,15 +16,45 @@ import (
 	"sync"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/go-redis/redis/v8"
 
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/constants"
 	"prerender-shield/internal/firewall/detectors"
 	"prerender-shield/internal/firewall/detectors/ai"
+	"prerender-shield/internal/firewall/detectors/ddos"
 	"prerender-shield/internal/firewall/types"
 	"prerender-shield/internal/logging"
 )
+
+// P0-5: 检测器错误严重度分类
+type DetectorErrorSeverity int
+
+const (
+	// ErrSeverityRecoverable 可恢复错误：单个检测器失败，整体仍可工作 (默认)
+	ErrSeverityRecoverable DetectorErrorSeverity = iota
+	// ErrSeverityDegraded 降级错误：核心检测器失败但有 fallback
+	ErrSeverityDegraded
+	// ErrSeverityFatal 致命错误：必须 fail-closed
+	ErrSeverityFatal
+)
+
+// DetectorError 包装了严重度信息的检测器错误 (P0-5)
+type DetectorError struct {
+	Detector string
+	Err      error
+	Severity DetectorErrorSeverity
+}
+
+func (e *DetectorError) Error() string {
+	return fmt.Sprintf("[%s] %v", e.Detector, e.Err)
+}
+
+func (e *DetectorError) Unwrap() error {
+	return e.Err
+}
 
 // FailStrategy 失败处理策略
 type FailStrategy int
@@ -34,6 +66,35 @@ const (
 	FailClosed
 )
 
+// goRedisAdapter wraps *go-redis.Client to satisfy detector interfaces
+type goRedisAdapter struct {
+	client *redis.Client
+}
+
+func (a *goRedisAdapter) Get(key string) (string, error) {
+	return a.client.Get(a.client.Context(), key).Result()
+}
+
+func (a *goRedisAdapter) Incr(key string) (int64, error) {
+	return a.client.Incr(a.client.Context(), key).Result()
+}
+
+func (a *goRedisAdapter) Expire(key string, expiration time.Duration) error {
+	return a.client.Expire(a.client.Context(), key, expiration).Err()
+}
+
+func (a *goRedisAdapter) Set(key string, value interface{}, expiration time.Duration) error {
+	return a.client.Set(a.client.Context(), key, value, expiration).Err()
+}
+
+func (a *goRedisAdapter) SetContains(key string, member interface{}) (bool, error) {
+	return a.client.SIsMember(a.client.Context(), key, member).Result()
+}
+
+func (a *goRedisAdapter) Members(key string) ([]string, error) {
+	return a.client.SMembers(a.client.Context(), key).Result()
+}
+
 // Engine 防火墙引擎
 type Engine struct {
 	SiteName       string // 站点名称
@@ -43,9 +104,10 @@ type Engine struct {
 	actionHandler  ActionHandler
 	ruleManager    *RuleManager
 	logger         Logger
-	redisClient    *redis.Client          // Redis 客户端，用于请求缓存
-	cacheTTL       time.Duration          // 请求缓存过期时间
-	failStrategy   FailStrategy           // 失败处理策略
+	redisClient    *redis.Client // Redis 客户端，用于请求缓存
+	cacheTTL       time.Duration // 请求缓存过期时间
+	failStrategy   FailStrategy  // 失败处理策略
+	cacheKeySecret []byte        // P0-6: HMAC 密钥，用于生成防碰撞缓存键
 }
 
 // OWASPDetector OWASP Top 10 检测器接口
@@ -254,9 +316,9 @@ func (rm *RuleManager) loadRulesFromFile() (map[string][]types.Rule, error) {
 			return nil, fmt.Errorf("failed to parse JSON rules: %w", err)
 		}
 	case ".yaml", ".yml":
-		// 如果需要使用 YAML，需要引入 gopkg.in/yaml.v3
-		// 这里暂时返回错误，表示不支持
-		return nil, fmt.Errorf("YAML rules not yet implemented")
+		if err := yaml.Unmarshal(data, &rules); err != nil {
+			return nil, fmt.Errorf("failed to parse YAML rules: %w", err)
+		}
 	default:
 		// 尝试 JSON 格式
 		if err := json.Unmarshal(data, &rules); err != nil {
@@ -339,18 +401,22 @@ type Logger interface {
 
 // Config 防火墙配置
 type Config struct {
-	RulesPath           string                      // 规则文件路径
-	ActionConfig        ActionConfig                // 动作配置
-	CacheTTL            int                         // 请求缓存过期时间（秒）
-	StaticDir           string                      // 静态文件目录
-	GeoIPConfig         *config.GeoIPConfig         // 地理位置访问控制配置
-	RateLimitConfig     *config.RateLimitConfig     // 频率限制配置
-	FileIntegrityConfig *config.FileIntegrityConfig // 网页防篡改配置
-	Blacklist           []string                    // 静态黑名单
-	Whitelist           []string                    // 静态白名单
-	RedisClient         *redis.Client               // Redis 客户端
-	AIConfig            *AIEngineConfig             // AI 检测器配置
-	FailStrategy        FailStrategy                // 失败处理策略
+	RulesPath           string                        // 规则文件路径
+	RemoteRulesURL      string                        // 远程规则源 URL（可选，留空则不拉取远程规则）
+	ActionConfig        ActionConfig                  // 动作配置
+	CacheTTL            int                           // 请求缓存过期时间（秒）
+	StaticDir           string                        // 静态文件目录
+	GeoIPConfig         *config.GeoIPConfig           // 地理位置访问控制配置
+	RateLimitConfig     *config.RateLimitConfig       // 频率限制配置
+	FileIntegrityConfig *config.FileIntegrityConfig   // 网页防篡改配置
+	CCProtectionConfig  *detectors.CCProtectionConfig // CC 防护配置
+	ThreatIntelConfig   *detectors.ThreatIntelConfig  // 威胁情报配置
+	Blacklist           []string                      // 静态黑名单
+	Whitelist           []string                      // 静态白名单
+	RedisClient         *redis.Client                 // Redis 客户端
+	AIConfig            *AIEngineConfig               // AI 检测器配置
+	DDoSConfig          *DDoSConfig                   // DDoS 防护配置
+	FailStrategy        FailStrategy                  // 失败处理策略
 }
 
 // AIEngineConfig AI 检测器引擎配置
@@ -361,6 +427,16 @@ type AIEngineConfig struct {
 	ConfidenceThreshold float32 // 置信度阈值
 	TimeoutMs           int     // 预测超时时间 (毫秒)
 	CacheSize           int     // 特征缓存大小
+}
+
+// DDoSConfig DDoS 防护配置
+type DDoSConfig struct {
+	Enabled            bool     // 是否启用 DDoS 检测
+	RateThreshold      int      // 每秒请求数阈值
+	BurstThreshold     int      // 突发请求数阈值
+	ChallengeThreshold int      // 触发挑战的请求数阈值
+	BlockDurationMin   int      // 封禁持续时间（分钟）
+	Whitelist          []string // 白名单 IP 列表
 }
 
 // ActionConfig 动作配置
@@ -446,14 +522,18 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 		config.RulesPath,
 		true, // 启用自动更新
 		constants.DefaultRuleUpdateInterval,
-		"",                 // 远程规则源，暂时为空
-		config.RedisClient, // Redis 客户端
+		config.RemoteRulesURL, // 远程规则源（从配置读取）
+		config.RedisClient,    // Redis 客户端
 	)
 
-	// 设置默认缓存 TTL 为 60 秒
-	cacheTTL := 60 * time.Second
+	// 设置默认缓存 TTL 为 5 秒 (P0-7: 缩短 WAF 决策缓存，避免紧急封禁被延迟)
+	cacheTTL := 5 * time.Second
 	if config.CacheTTL > 0 {
 		cacheTTL = time.Duration(config.CacheTTL) * time.Second
+		// P0-7: WAF 决策缓存应保持在 30s 以内，否则紧急封禁/解封会有感知延迟
+		if cacheTTL > 30*time.Second {
+			logging.DefaultLogger.Warn("Firewall cache TTL %v exceeds 30s, may delay emergency block/unblock", cacheTTL)
+		}
 	}
 
 	// 设置默认失败策略为 FailClosed（安全优先）
@@ -461,6 +541,10 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 	if failStrategy == 0 {
 		failStrategy = FailClosed
 	}
+
+	// P0-6: 为缓存键生成 HMAC 密钥 (基于 SiteName 派生)
+	// 同一站点共享一个密钥，确保不同站点的缓存键空间不重叠
+	cacheKeySecret := deriveCacheKeySecret(siteName)
 
 	// 创建引擎实例
 	e := &Engine{
@@ -471,6 +555,7 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 		redisClient:    config.RedisClient,
 		cacheTTL:       cacheTTL,
 		failStrategy:   failStrategy,
+		cacheKeySecret: cacheKeySecret,
 	}
 
 	// 初始化动作处理器
@@ -483,6 +568,10 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 	e.owaspDetectors["deserialization"] = detectors.NewDeserializationDetector(ruleManager)
 	e.owaspDetectors["sensitive-data"] = detectors.NewSensitiveDataDetector(ruleManager)
 	e.owaspDetectors["xxe"] = detectors.NewXXEDetector(ruleManager)
+
+	// Register OWASP Top 10 detector
+	owaspDetector := detectors.NewOWASPTop10Detector(ruleManager)
+	e.owaspDetectors["owasp_top10"] = owaspDetector
 
 	// 初始化 User-Agent 检测器
 	e.owaspDetectors["user-agent"] = detectors.NewUserAgentDetector()
@@ -505,9 +594,47 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 
 	// 初始化黑名单检测器
 	if config.RedisClient != nil {
-		e.coreDetectors = append(e.coreDetectors, detectors.NewBlacklistDetector(config.RedisClient, siteName, config.Blacklist, config.Whitelist))
+		e.coreDetectors = append(e.coreDetectors, detectors.NewBlacklistDetector(&goRedisAdapter{client: config.RedisClient}, siteName, config.Blacklist, config.Whitelist))
 	} else {
 		e.coreDetectors = append(e.coreDetectors, detectors.NewBlacklistDetector(nil, siteName, config.Blacklist, config.Whitelist))
+	}
+
+	// 初始化 CC 防护检测器
+	if config.CCProtectionConfig != nil && config.CCProtectionConfig.Enabled {
+		adapter := &goRedisAdapter{client: config.RedisClient}
+		ccDetector := detectors.NewCCProtectionDetector(detectors.CCProtectionConfig{
+			Enabled: config.CCProtectionConfig.Enabled,
+			Rules:   config.CCProtectionConfig.Rules,
+		}, adapter)
+		e.coreDetectors = append(e.coreDetectors, ccDetector)
+	}
+
+	// 初始化威胁情报检测器
+	if config.ThreatIntelConfig != nil && config.ThreatIntelConfig.Enabled {
+		adapter := &goRedisAdapter{client: config.RedisClient}
+		tiDetector := detectors.NewThreatIntelDetector(config.ThreatIntelConfig, adapter)
+		e.coreDetectors = append(e.coreDetectors, tiDetector)
+	}
+
+	// 初始化 DDoS 检测器
+	if config.DDoSConfig != nil && config.DDoSConfig.Enabled {
+		ddosConfig := &ddos.Config{
+			Enabled:            config.DDoSConfig.Enabled,
+			RateThreshold:      config.DDoSConfig.RateThreshold,
+			BurstThreshold:     config.DDoSConfig.BurstThreshold,
+			ChallengeThreshold: config.DDoSConfig.ChallengeThreshold,
+			Whitelist:          config.DDoSConfig.Whitelist,
+			EnableRedis:        config.RedisClient != nil,
+		}
+		if config.DDoSConfig.BlockDurationMin > 0 {
+			ddosConfig.BlockDuration = time.Duration(config.DDoSConfig.BlockDurationMin) * time.Minute
+		}
+		ddosDetector, err := ddos.NewDetector(ddosConfig, config.RedisClient)
+		if err != nil {
+			logging.DefaultLogger.Info("DDoS detector initialization failed: %v\n", err)
+		} else {
+			e.coreDetectors = append(e.coreDetectors, ddosDetector)
+		}
 	}
 
 	// 初始化 AI 威胁检测器（如果启用）
@@ -581,7 +708,12 @@ func (e *Engine) CheckRequest(req *http.Request) (*CheckResult, error) {
 			defer wg.Done()
 			threats, err := det.Detect(req)
 			if err != nil {
-				errChan <- fmt.Errorf("detector %s error: %w", detectorName, err)
+				// P0-5: 包装为 DetectorError，默认 Recoverable
+				errChan <- &DetectorError{
+					Detector: detectorName,
+					Err:      err,
+					Severity: ErrSeverityRecoverable,
+				}
 				return
 			}
 			threatsChan <- threats
@@ -595,7 +727,12 @@ func (e *Engine) CheckRequest(req *http.Request) (*CheckResult, error) {
 			defer wg.Done()
 			threats, err := det.Detect(req)
 			if err != nil {
-				errChan <- fmt.Errorf("core detector %s error: %w", det.Name(), err)
+				// P0-5: 包装为 DetectorError
+				errChan <- &DetectorError{
+					Detector: det.Name(),
+					Err:      err,
+					Severity: ErrSeverityRecoverable,
+				}
 				return
 			}
 			threatsChan <- threats
@@ -621,47 +758,81 @@ func (e *Engine) CheckRequest(req *http.Request) (*CheckResult, error) {
 		result.Threats = append(result.Threats, threats...)
 	}
 
-	// 收集错误，关键检测器错误会影响结果
-	var criticalErrors []error
+	// P0-5: 收集错误并按严重度分类
+	var (
+		fatalCount       int
+		degradedCount    int
+		recoverableCount int
+	)
 	for err := range errChan {
-		if e.logger != nil {
-			e.logger.Error("Detector error: %s", err.Error())
+		var detErr *DetectorError
+		if errors.As(err, &detErr) {
+			switch detErr.Severity {
+			case ErrSeverityFatal:
+				fatalCount++
+			case ErrSeverityDegraded:
+				degradedCount++
+			default:
+				recoverableCount++
+			}
+		} else {
+			recoverableCount++
 		}
-		criticalErrors = append(criticalErrors, err)
+		if e.logger != nil {
+			e.logger.Error("Detector error: %v", err)
+		}
 	}
 
-	// 如果有严重错误，根据失败策略处理
-	if len(criticalErrors) > 0 && e.failStrategy == FailClosed {
-		// FailClosed 策略：检测器失败时拒绝请求
+	// P0-5: 根据错误严重度决定是否触发 fail-closed
+	// 致命错误：必须 fail-closed
+	// 降级错误：FailClosed 时阻断，FailOpen 时记录但允许
+	// 可恢复错误：仅记录，不阻断
+	if fatalCount > 0 || (e.failStrategy == FailClosed && (degradedCount > 0 || recoverableCount > 0)) {
 		result.Allow = false
 		result.Threats = append(result.Threats, types.Threat{
 			Type:     "detector_error",
 			SubType:  "Security Detector Failure",
 			Severity: "critical",
-			Message:  fmt.Sprintf("Security detector failed (%d errors), request blocked by fail-closed policy", len(criticalErrors)),
+			Message: fmt.Sprintf("Security detector failed (fatal=%d, degraded=%d, recoverable=%d), request blocked by fail-closed policy",
+				fatalCount, degradedCount, recoverableCount),
 			RuleID:   "system-failclosed",
 			RuleName: "Fail-Closed Policy",
 		})
+	} else if degradedCount > 0 {
+		// FailOpen 策略下，降级错误只告警
+		logging.DefaultLogger.Warn("Firewall degraded: degraded=%d, recoverable=%d", degradedCount, recoverableCount)
 	}
 
-	// 评估威胁严重度：只要有一个 high/critical 威胁就阻断
+	// 评估威胁严重度：只对明确的高危/严重威胁阻断
+	// P0-5 fix: 空 Severity 不再视为高危，而是记录为配置错误
 	hasHighThreat := false
 	hasThreat := false
 	for _, t := range result.Threats {
+		// 跳过 detector_error 自身 (已在上方处理)
+		if t.Type == "detector_error" {
+			continue
+		}
 		hasThreat = true
-		if t.Severity == "high" || t.Severity == "critical" || t.Severity == "" {
-			// 空 Severity 也视为高危（fail secure）
+		if t.Severity == "" {
+			// P0-5: 配置错误：detector 返回了空 Severity，记录告警但不阻断
+			logging.DefaultLogger.Warn("Detector returned threat with empty severity: type=%s, rule=%s", t.Type, t.RuleID)
+			continue
+		}
+		if t.Severity == "high" || t.Severity == "critical" {
 			hasHighThreat = true
 		}
 	}
 
 	if hasHighThreat {
 		result.Allow = false
-	} else if hasThreat {
-		// 低危威胁：记录日志但不阻断
+	} else if hasThreat && result.Allow {
+		// 低危威胁：记录日志但不阻断（不得覆盖 fail-closed 已作出的阻断决策）
 		result.Allow = true
 		if e.logger != nil {
 			for _, t := range result.Threats {
+				if t.Type == "detector_error" {
+					continue
+				}
 				e.logger.Info("Low-severity threat logged: %s - %s", t.Type, t.Message)
 			}
 		}
@@ -728,7 +899,7 @@ func (e *Engine) UpdateRules() error {
 }
 
 // generateRequestCacheKey 生成请求缓存键
-// 使用 URL 规范化 + Header 指纹 + 请求体哈希的组合方式
+// P0-6: 使用 HMAC-SHA256 替代字符串拼接，避免拼接碰撞和注入风险
 func (e *Engine) generateRequestCacheKey(req *http.Request) string {
 	// URL 规范化
 	normalizedURL := normalizeURL(req.URL)
@@ -739,9 +910,33 @@ func (e *Engine) generateRequestCacheKey(req *http.Request) string {
 	// 计算请求体哈希（如果有）
 	bodyHash := e.calculateBodyHash(req)
 
-	// 组合缓存键
-	key := fmt.Sprintf("%s|%s|%s|%s", req.Method, normalizedURL, clientIP, bodyHash)
-	return key
+	// 构造待签名内容 (使用 NUL 分隔符避免拼接碰撞)
+	payload := strings.Join([]string{
+		req.Method,
+		normalizedURL,
+		clientIP,
+		bodyHash,
+	}, "\x00")
+
+	// HMAC-SHA256 生成固定长度 64 字符的十六进制 key
+	mac := hmac.New(sha256.New, e.cacheKeySecret)
+	mac.Write([]byte(payload))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// deriveCacheKeySecret 为每个站点派生独立的 HMAC 密钥
+// P0-6: 用进程级 secret + siteName 派生，避免不同站点的缓存键空间重叠
+func deriveCacheKeySecret(siteName string) []byte {
+	// 优先使用全局密钥 (从环境变量或配置注入)
+	if s := os.Getenv("FIREWALL_CACHE_KEY_SECRET"); s != "" {
+		return []byte(s)
+	}
+	// 回退: 用 siteName + 默认盐派生 (同进程内一致)
+	h := sha256.New()
+	h.Write([]byte("prerender-shield-firewall-cache-secret-v1"))
+	h.Write([]byte("\x00"))
+	h.Write([]byte(siteName))
+	return h.Sum(nil)
 }
 
 // normalizeURL 规范化 URL，防止绕过

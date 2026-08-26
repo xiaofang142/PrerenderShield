@@ -48,8 +48,15 @@ func TestAPI_ComprehensiveV2(t *testing.T) {
 	jwtManager := auth.NewJWTManager(jwtCfg, redisClient)
 	userMgr := auth.NewUserManager("", redisClient)
 
-	if userMgr.IsFirstRun() {
-		userMgr.CreateUser("admin", "Test123456!")
+	// 彻底清除共享 Redis 中可能残留的 admin 用户（真实键为 user:<uuid> 与 username:admin），
+	// 避免依赖 IsFirstRun 的不确定结果
+	if oldID, err := redisClient.GetUserByUsername("admin"); err == nil && oldID != "" {
+		redisClient.Del(fmt.Sprintf("user:%s", oldID))
+	}
+	redisClient.Del("username:admin")
+
+	if _, err := userMgr.CreateUser("admin", "Test123456!"); err != nil {
+		t.Fatalf("failed to create test user: %v", err)
 	}
 	token, err := jwtManager.GenerateToken("uid-1", "admin")
 	require.NoError(t, err)

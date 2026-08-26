@@ -16,6 +16,8 @@ import (
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/monitoring"
+
+	"prerender-shield/internal/utils"
 )
 
 // Mock implementations for interfaces
@@ -40,6 +42,15 @@ func (m *MockConfigManager) UpdateConfig(cfg *config.Config) {
 
 func (m *MockConfigManager) SaveConfig() error {
 	return m.saveError
+}
+
+func (m *MockConfigManager) Mutate(mutate func(c *config.Config) (*config.Config, error)) error {
+	newCfg, err := mutate(m.config)
+	if err != nil {
+		return err
+	}
+	m.config = newCfg
+	return nil
 }
 
 // MockSiteServerMgr implements SiteServerManagerInterface
@@ -489,12 +500,12 @@ func TestSitesController_GetSiteConfig_MissingType(t *testing.T) {
 }
 
 func TestIsPortAvailable_PortInRange(t *testing.T) {
-	// 测试端口范围检查 (1-65535 是有效范围)
-	// isPortAvailable 检查端口是否在保留端口列表中
-	// 端口 0 通常是可用的（虽然不推荐使用）
-	assert.True(t, isPortAvailable(0), "Port 0 should be available")
+	// 端口 0 非法（net.Listen 会将其解释为随机端口），应判定不可用
+	assert.False(t, utils.IsPortAvailable(0), "Port 0 should not be available")
+	assert.False(t, utils.IsPortAvailable(-1), "Negative port should not be available")
+	assert.False(t, utils.IsPortAvailable(65536), "Port out of range should not be available")
 	// 测试一个高位端口应该是可用的
-	assert.True(t, isPortAvailable(50000), "Port 50000 should be available")
+	assert.True(t, utils.IsPortAvailable(50000), "Port 50000 should be available")
 }
 
 func TestSitesController_GetSites_WithConfigManager(t *testing.T) {
@@ -627,7 +638,7 @@ func TestSitesController_UpdateSite_InvalidDomain(t *testing.T) {
 
 	site := map[string]interface{}{
 		"name":    "Updated Site",
-		"domains": []string{"example.com"},
+		"domains": []string{"http://example.com"}, // 含协议前缀，格式非法
 		"port":    8080,
 		"mode":    "static",
 	}
@@ -696,7 +707,7 @@ func TestSitesController_AddSite_InvalidDomain(t *testing.T) {
 
 	site := map[string]interface{}{
 		"name":    "Invalid Site",
-		"domains": []string{"example.com"}, // 只允许 127.0.0.1 或 localhost
+		"domains": []string{"http://example.com"}, // 含协议前缀，格式非法
 		"port":    9000,
 		"mode":    "static",
 	}
@@ -708,6 +719,30 @@ func TestSitesController_AddSite_InvalidDomain(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// TestSitesController_AddSite_RealDomainAccepted 真实域名应通过校验
+// （原实现错误地只允许 127.0.0.1/localhost）。使用保留端口 80 触发端口错误，
+// 以此证明请求已通过域名校验进入下一阶段。
+func TestSitesController_AddSite_RealDomainAccepted(t *testing.T) {
+	_, router, _ := setupSitesController()
+
+	site := map[string]interface{}{
+		"name":    "Real Domain Site",
+		"domains": []string{"www.example.com"},
+		"port":    80, // 保留端口：域名校验通过后才会报端口错误
+		"mode":    "static",
+	}
+	body, _ := json.Marshal(site)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/sites", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "Port")
+	assert.NotContains(t, w.Body.String(), "domain")
 }
 
 func TestSitesController_AddSite_InvalidPort(t *testing.T) {
@@ -837,22 +872,22 @@ func TestSitesController_BatchDeleteStaticFiles_MissingPaths(t *testing.T) {
 
 func TestIsPortAvailable(t *testing.T) {
 	// 测试保留端口
-	assert.False(t, isPortAvailable(80), "Port 80 should not be available")
-	assert.False(t, isPortAvailable(443), "Port 443 should not be available")
-	assert.False(t, isPortAvailable(22), "Port 22 should not be available")
+	assert.False(t, utils.IsPortAvailable(80), "Port 80 should not be available")
+	assert.False(t, utils.IsPortAvailable(443), "Port 443 should not be available")
+	assert.False(t, utils.IsPortAvailable(22), "Port 22 should not be available")
 
 	// 测试可用端口（找一个真正可用的）
 	// 注意：这个测试可能会失败，因为端口可能已被占用
-	// assert.True(t, isPortAvailable(9999), "Port 9999 should be available")
+	// assert.True(t, utils.IsPortAvailable(9999), "Port 9999 should be available")
 }
 
-func TestExtractZIP(t *testing.T) {
+func TestUtilsExtractZIP(t *testing.T) {
 	// 创建测试目录
 	tmpDir := t.TempDir()
 	extractDir := tmpDir + "/extracted"
 
 	// 测试不存在的文件
-	err := ExtractZIP("/nonexistent.zip", extractDir)
+	err := utils.ExtractZIP("/nonexistent.zip", extractDir)
 	assert.Error(t, err)
 }
 
@@ -1560,10 +1595,10 @@ func TestSitesController_UpdateSiteFirewallConfig_Success(t *testing.T) {
 			"block_message":  "Access denied",
 		},
 		"ratelimit_config": map[string]interface{}{
-			"enabled":   true,
-			"requests":  100,
-			"window":    60,
-			"ban_time":  300,
+			"enabled":  true,
+			"requests": 100,
+			"window":   60,
+			"ban_time": 300,
 		},
 	}
 	body, _ := json.Marshal(updateReq)
@@ -1578,4 +1613,75 @@ func TestSitesController_UpdateSiteFirewallConfig_Success(t *testing.T) {
 	// Verify Redis was called with firewall config
 	_, hasWafConfig := mockRedisClient.storedStats["test-site-1_waf"]
 	assert.True(t, hasWafConfig)
+}
+
+// TestValidateDomains_Format 域名格式校验表驱动测试
+func TestValidateDomains_Format(t *testing.T) {
+	valid := [][]string{
+		{"localhost"},
+		{"127.0.0.1"},
+		{"www.example.com"},
+		{"8.8.8.8"},
+		{"sub.domain.example.cn", "example.com"},
+		{"MySite.Example.COM"}, // 大小写不敏感，仅做格式校验
+	}
+	for _, domains := range valid {
+		assert.NoError(t, validateDomains(domains), "should accept: %v", domains)
+	}
+
+	invalid := [][]string{
+		{},
+		nil,
+		{""},
+		{"  "},
+		{"http://example.com"},
+		{"example.com/path"},
+		{"bad domain"},
+		{"example.com?q=1"},
+		{"ok", ""},
+	}
+	for _, domains := range invalid {
+		assert.Error(t, validateDomains(domains), "should reject: %v", domains)
+	}
+}
+
+// TestSitesController_UpdateSite_RealDomainAccepted 真实域名应通过校验，
+// 随后在 configManager 为 nil 处返回 500（证明已越过域名校验）
+func TestSitesController_UpdateSite_RealDomainAccepted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{
+			{
+				ID:      "test-site-1",
+				Name:    "Test Site 1",
+				Domains: []string{"127.0.0.1"},
+				Port:    8080,
+				Mode:    "static",
+			},
+		},
+	}
+
+	controller := NewSitesController(
+		nil, nil, nil, nil, nil, nil, nil, cfg,
+	)
+
+	router := gin.New()
+	router.PUT("/sites/:id", controller.UpdateSite)
+
+	site := map[string]interface{}{
+		"name":    "Updated Site",
+		"domains": []string{"production.example.com"},
+		"port":    8080,
+		"mode":    "static",
+	}
+	body, _ := json.Marshal(site)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/sites/test-site-1", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.NotContains(t, w.Body.String(), "domain format")
 }

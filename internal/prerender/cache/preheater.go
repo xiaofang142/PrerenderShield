@@ -189,14 +189,24 @@ func (p *Preheater) preheatWorker() {
 
 // flushBatch 批量处理预热任务
 func (p *Preheater) flushBatch(batch []*PreheatTask) {
-	// 这里可以实现具体的预热逻辑
-	// 例如：预先加载关联数据、提前渲染等
 	for _, task := range batch {
 		p.logger.Debug("预热任务",
 			zap.String("key", task.Key),
 			zap.Int("priority", task.Priority),
 			zap.String("source", task.Source),
 		)
+
+		// 实际预热：从缓存层获取数据以确保 L1 缓存命中
+		if _, err := p.cache.Get(task.Key); err != nil {
+			p.logger.Debug("预热缓存未命中",
+				zap.String("key", task.Key),
+				zap.Error(err),
+			)
+		} else {
+			p.logger.Debug("预热缓存命中",
+				zap.String("key", task.Key),
+			)
+		}
 	}
 }
 

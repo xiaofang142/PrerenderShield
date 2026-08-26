@@ -1,0 +1,25 @@
+{
+  "monitoringPage": {
+    "title": "监控警告",
+    "fetchFailed": "获取监控数据失败",
+    "cpuUsage": "CPU使用率",
+    "memoryUsage": "内存使用率",
+    "diskUsage": "磁盘使用率",
+    "metricsOverview": "系统指标概览",
+    "requestsPerSecond": "请求/秒",
+    "memoryDetail": "内存详情",
+    "totalMemory": "总内存",
+    "usedMemory": "已用内存",
+    "freeMemory": "可用内存",
+    "usageRate": "使用率",
+    "diskDetail": "磁盘详情",
+    "totalCapacity": "总容量",
+    "usedCapacity": "已用容量",
+    "freeCapacity": "可用容量",
+    "networkTraffic": "网络流量",
+    "sentBytes": "发送字节",
+    "recvBytes": "接收字节",
+    "sentPackets": "发送包数",
+    "recvPackets": "接收包数"
+  }
+}

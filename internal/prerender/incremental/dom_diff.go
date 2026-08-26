@@ -8,6 +8,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 // DOMNode DOM 节点
@@ -287,8 +290,8 @@ func (e *DOMDiffEngine) countNodes(node *DOMNode) int {
 	return count
 }
 
-// ParseHTML 解析 HTML 为 DOM 树（简化实现）
-func (e *DOMDiffEngine) ParseHTML(html string) (*DOMTree, error) {
+// ParseHTML 解析 HTML 为 DOM 树（使用 golang.org/x/net/html）
+func (e *DOMDiffEngine) ParseHTML(htmlStr string) (*DOMTree, error) {
 	tree := &DOMTree{
 		Root: &DOMNode{
 			Tag:        "root",
@@ -298,14 +301,68 @@ func (e *DOMDiffEngine) ParseHTML(html string) (*DOMTree, error) {
 		NodeIndex: make(map[string]*DOMNode),
 	}
 
-	// 简化解析：实际应该使用 HTML 解析器
-	// 这里仅做演示
-	node := e.createNode("div", html)
-	tree.Root.Children = append(tree.Root.Children, node)
-	node.Parent = tree.Root
+	// 使用标准库 HTML 解析器
+	doc, err := html.Parse(strings.NewReader(htmlStr))
+	if err != nil {
+		// 解析失败时回退到简单模式
+		node := e.createNode("div", htmlStr)
+		tree.Root.Children = append(tree.Root.Children, node)
+		node.Parent = tree.Root
+		return tree, nil
+	}
+
+	// 递归转换 net/html 节点为内部 DOMNode
+	e.convertNode(doc, tree.Root, tree)
 
 	return tree, nil
 }
+
+// convertNode 递归转换 HTML 节点
+func (e *DOMDiffEngine) convertNode(n *html.Node, parent *DOMNode, tree *DOMTree) {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		var node *DOMNode
+		switch c.Type {
+		case html.ElementNode:
+			node = &DOMNode{
+				ID:         generateID(),
+				Tag:        c.Data,
+				Attributes: make(map[string]string),
+				Children:   make([]*DOMNode, 0),
+				Parent:     parent,
+			}
+			for _, attr := range c.Attr {
+				node.Attributes[attr.Key] = attr.Val
+			}
+		case html.TextNode:
+			text := strings.TrimSpace(c.Data)
+			if text == "" {
+				continue
+			}
+			node = &DOMNode{
+				ID:         generateID(),
+				Tag:        "#text",
+				Text:       text,
+				Attributes: make(map[string]string),
+				Children:   make([]*DOMNode, 0),
+				Parent:     parent,
+			}
+		default:
+			continue
+		}
+
+		node.Hash = e.computeHash(node)
+		parent.Children = append(parent.Children, node)
+		tree.NodeIndex[node.ID] = node
+
+		// 递归处理子节点
+		if c.FirstChild != nil {
+			e.convertNode(c, node, tree)
+		}
+	}
+}
+
+// ensure atom import is used
+var _ = atom.Body
 
 // createNode 创建节点
 func (e *DOMDiffEngine) createNode(tag, content string) *DOMNode {

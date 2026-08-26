@@ -3,13 +3,14 @@ import { Card, Table, Button, Modal, Form, Input, Switch, Select, Row, Col, Stat
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, UploadOutlined, 
   UnorderedListOutlined, CloudUploadOutlined, FolderOpenOutlined, 
-  FolderOutlined, FileOutlined, FolderOutlined as NewFolderOutlined, FileAddOutlined, UpOutlined, 
+  FolderOutlined, FileOutlined, UpOutlined, 
   DownloadOutlined, UnorderedListOutlined as ExtractOutlined, ReloadOutlined,
   SecurityScanOutlined, SearchOutlined
 } from '@ant-design/icons'
 import { sitesApi } from '../../services/api'
 import type { UploadProps } from 'antd'
 import { COUNTRIES } from '../../constants/countries'
+import { mapSiteResponse, buildEditFormValues } from './siteMapper'
 import { useTranslation } from 'react-i18next'
 
 const { Option } = Select
@@ -35,10 +36,6 @@ const Sites: React.FC = () => {
   const [currentSite, setCurrentSite] = useState<any>(null)
   const [currentPath, setCurrentPath] = useState<string>('/')
   const [fileList, setFileList] = useState<any[]>([])
-  const [showNewFolderModal, setShowNewFolderModal] = useState(false)
-  const [newFolderName, setNewFolderName] = useState<string>('')
-  const [showNewFileModal, setShowNewFileModal] = useState(false)
-  const [newFileName, setNewFileName] = useState<string>('')
   
   // 预渲染配置模态框状态
   const [prerenderConfigModalVisible, setPrerenderConfigModalVisible] = useState(false)
@@ -107,9 +104,9 @@ const Sites: React.FC = () => {
       width: 120,
       render: (mode: string) => {
         const modeMap: { [key: string]: string } = {
-          'proxy': '代理已有应用',
-          'static': '静态资源站',
-          'redirect': '重定向'
+          'proxy': t('sites.mode.proxy'),
+          'static': t('sites.mode.static'),
+          'redirect': t('sites.mode.redirect')
         };
         return modeMap[mode] || mode;
       },
@@ -217,7 +214,7 @@ const Sites: React.FC = () => {
             onClick={() => handleDelete(record)}
             style={{ whiteSpace: 'nowrap' }}
           >
-            删除
+            {t('common.delete')}
           </Button>
         </div>
       ),
@@ -233,85 +230,26 @@ const Sites: React.FC = () => {
   const fetchSites = async () => {
     try {
       setLoading(true)
-      console.log('=== Starting to fetch sites ===');
-      
+
       // 使用配置好的sitesApi，自动携带Authorization头
       const response = await sitesApi.getSites();
-      
-      console.log('sitesApi.getSites() response:', response);
-      
-      if (response && response.code === 200 && Array.isArray(response.data)) {
-        console.log('Found valid sites data!');
-        console.log('Sites count:', response.data.length);
-        
-        // 直接使用原始数据，映射完整的渲染预热配置
-        const mappedSites = response.data.map((site: any) => ({
-          id: site.id || site.ID,
-          name: site.name || site.Name || '未知站点',
-          domain: site.domains?.[0] || site.domain || '127.0.0.1',
-          domains: site.domains || [],
-          port: site.port || 80,
-          mode: site.mode || 'proxy',
-          firewallEnabled: Boolean(site.firewall?.enabled),
-          prerenderEnabled: Boolean(site.prerender?.enabled),
-          
-          // 映射完整的配置对象，确保编辑时表单能回填数据
-          proxy: site.proxy || {},
-          redirect: site.redirect || {},
-          firewall: site.firewall || {},
-          file_integrity: site.file_integrity || {},
-          routing: site.routing || {},
-          
-          // 映射完整的渲染预热配置对象
-          prerender: {
-            enabled: site.prerender?.enabled || false,
-            poolSize: site.prerender?.pool_size || site.prerender?.poolSize || 5,
-            minPoolSize: site.prerender?.min_pool_size || site.prerender?.minPoolSize || 2,
-            maxPoolSize: site.prerender?.max_pool_size || site.prerender?.maxPoolSize || 20,
-            timeout: site.prerender?.timeout || 30,
-            cacheTTL: site.prerender?.cache_ttl || site.prerender?.cacheTTL || 3600,
-            idleTimeout: site.prerender?.idle_timeout || site.prerender?.idleTimeout || 300,
-            dynamicScaling: site.prerender?.dynamic_scaling !== false && site.prerender?.dynamicScaling !== false,
-            scalingFactor: site.prerender?.scaling_factor || site.prerender?.scalingFactor || 0.5,
-            scalingInterval: site.prerender?.scaling_interval || site.prerender?.scalingInterval || 60,
-            useDefaultHeaders: site.prerender?.use_default_headers || site.prerender?.useDefaultHeaders || false,
-            crawlerHeaders: site.prerender?.crawler_headers || site.prerender?.crawlerHeaders || [],
-            preheat: {
-              enabled: site.prerender?.preheat?.enabled || false,
-              sitemapURL: site.prerender?.preheat?.sitemap_url || site.prerender?.preheat?.sitemapURL || '',
-              schedule: site.prerender?.preheat?.schedule || '0 0 * * *',
-              concurrency: site.prerender?.preheat?.concurrency || 5,
-              defaultPriority: site.prerender?.preheat?.default_priority || site.prerender?.preheat?.defaultPriority || 0,
-              maxDepth: site.prerender?.preheat?.max_depth || site.prerender?.preheat?.maxDepth || 3
-            },
-            push: {
-              enabled: site.prerender?.push?.enabled || false,
-              baiduAPI: site.prerender?.push?.baidu_api || site.prerender?.push?.baiduAPI || 'http://data.zz.baidu.com/urls',
-              baiduToken: site.prerender?.push?.baidu_token || site.prerender?.push?.baiduToken || '',
-              bingAPI: site.prerender?.push?.bing_api || site.prerender?.push?.bingAPI || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
-              bingToken: site.prerender?.push?.bing_token || site.prerender?.push?.bingToken || '',
-              baiduDailyLimit: site.prerender?.push?.baidu_daily_limit || site.prerender?.push?.baiduDailyLimit || 1000,
-              bingDailyLimit: site.prerender?.push?.bing_daily_limit || site.prerender?.push?.bingDailyLimit || 1000,
-              pushDomain: site.prerender?.push?.push_domain || site.prerender?.push?.pushDomain || '',
-              schedule: site.prerender?.push?.schedule || '0 1 * * *'
-            }
-          }
-        }));
 
-        
-        console.log('Mapped sites:', mappedSites);
+      if (response && response.code === 200 && Array.isArray(response.data)) {
+        // 直接使用原始数据，映射完整的渲染预热配置（纯函数已抽离至 siteMapper.ts）
+        const mappedSites = response.data.map((site: any) => mapSiteResponse(site));
+
         setSites(mappedSites);
-        messageApi.success('获取站点列表成功');
+        messageApi.success(t('sites.messages.fetchSuccess'));
       } else {
         // 请求失败
         console.error('Failed to return valid sites data');
-        messageApi.error('获取站点列表失败');
+        messageApi.error(t('sites.messages.fetchFailed'));
       }
       
     } catch (error: any) {
       console.error('Unexpected error in fetchSites:', error);
       console.error('Error response:', error.response?.data);
-      messageApi.error('获取站点列表失败: ' + (error.message || '未知错误'));
+      messageApi.error(t('sites.messages.fetchError', { error: error.message || t('sites.messages.unknownError') }));
     } finally {
       setLoading(false);
     }
@@ -321,13 +259,11 @@ const Sites: React.FC = () => {
 
   // 初始化数据
   useEffect(() => {
-    console.log('useEffect triggered, calling fetchSites...');
     fetchSites()
   }, [])
 
-  // 手动触发获取站点列表（用于调试）
+  // 手动刷新站点列表
   const handleManualFetch = () => {
-    console.log('Manual fetch button clicked');
     fetchSites();
   }
 
@@ -335,77 +271,8 @@ const Sites: React.FC = () => {
   const showModal = (site: any = null) => {
     setEditingSite(site)
     if (site) {
-      // 创建一个新对象，将端口转换为string类型，解决Input组件type="number"期望string类型的问题
-      // 同时将后端返回的下划线命名转换为前端表单期望的驼峰命名
-      const siteWithStringPort = {
-        ...site,
-        port: String(site.port),
-        // 转换firewall配置
-        firewall: {
-          ...site.firewall,
-          action: {
-            ...site.firewall?.action,
-            defaultAction: site.firewall?.action?.default_action || 'block',
-            blockMessage: site.firewall?.action?.block_message || 'Request blocked by firewall'
-          },
-          geoip: {
-            ...site.firewall?.geoip,
-            allowList: site.firewall?.geoip?.allow_list || [],
-            blockList: site.firewall?.geoip?.block_list || []
-          },
-          rate_limit: site.firewall?.rate_limit ? {
-            ...site.firewall.rate_limit,
-            requests: site.firewall.rate_limit.requests || 100,
-            window: site.firewall.rate_limit.window || 60,
-            ban_time: site.firewall.rate_limit.ban_time || 3600
-          } : {
-            enabled: false,
-            requests: 100,
-            window: 60,
-            ban_time: 3600
-          }
-        },
-        // 转换file_integrity配置
-        file_integrity: site.file_integrity ? {
-          ...site.file_integrity,
-          check_interval: site.file_integrity.check_interval || 300,
-          hash_algorithm: site.file_integrity.hash_algorithm || 'sha256'
-        } : {
-          enabled: false,
-          check_interval: 300,
-          hash_algorithm: 'sha256'
-        },
-        // 转换prerender配置
-        prerender: {
-          ...site.prerender,
-          poolSize: site.prerender?.pool_size || 5,
-          minPoolSize: site.prerender?.min_pool_size || 2,
-          maxPoolSize: site.prerender?.max_pool_size || 20,
-          cacheTTL: site.prerender?.cache_ttl || 3600,
-          idleTimeout: site.prerender?.idle_timeout || 300,
-          dynamicScaling: site.prerender?.dynamic_scaling !== false,
-          scalingFactor: site.prerender?.scaling_factor || 0.5,
-          scalingInterval: site.prerender?.scaling_interval || 60,
-          useDefaultHeaders: site.prerender?.use_default_headers || false,
-          crawlerHeaders: site.prerender?.crawler_headers || [],
-          preheat: {
-            ...site.prerender?.preheat,
-            sitemapURL: site.prerender?.preheat?.sitemap_url || '',
-            defaultPriority: site.prerender?.preheat?.default_priority || 0,
-            maxDepth: site.prerender?.preheat?.max_depth || 3
-          },
-          push: {
-            ...site.prerender?.push,
-            baiduAPI: site.prerender?.push?.baidu_api || 'http://data.zz.baidu.com/urls',
-            baiduToken: site.prerender?.push?.baidu_token || '',
-            baiduDailyLimit: site.prerender?.push?.baidu_daily_limit || 1000,
-            bingAPI: site.prerender?.push?.bing_api || 'https://ssl.bing.com/webmaster/api.svc/json/SubmitUrl',
-            bingToken: site.prerender?.push?.bing_token || '',
-            bingDailyLimit: site.prerender?.push?.bing_daily_limit || 1000,
-            pushDomain: site.prerender?.push?.push_domain || ''
-          }
-        }
-      };
+      // 端口转字符串 + 下划线转驼峰（纯函数已抽离至 siteMapper.ts）
+      const siteWithStringPort = buildEditFormValues(site);
       form.setFieldsValue(siteWithStringPort)
     } else {
       form.resetFields()
@@ -515,14 +382,14 @@ const Sites: React.FC = () => {
       // 更新站点
       const res = await sitesApi.updateSite(record.id, apiSiteData)
       if (res.code === 200) {
-        messageApi.success('更新站点成功')
+        messageApi.success(t('sites.messages.updateSuccess'))
         fetchSites() // 刷新站点列表
       } else {
-        messageApi.error('更新站点失败')
+        messageApi.error(t('sites.messages.updateFailed'))
       }
     } catch (error) {
       console.error('Switch change error:', error)
-      messageApi.error('更新失败')
+      messageApi.error(t('sites.messages.updateFailed'))
     }
   }
 
@@ -536,12 +403,9 @@ const Sites: React.FC = () => {
     // 确保site、site.domain和site.port存在
     if (!site || typeof site.domain === 'undefined' || site.domain === '') {
       console.error('Invalid site domain, cannot open preview')
-      messageApi.error('站点域名无效，无法打开预览')
+      messageApi.error(t('sites.errors.invalidDomain'))
       return
     }
-    
-    // 调试：打印site对象，查看domain和port属性
-    console.log('View site:', site);
     
     // 打开新窗口预览站点，80端口不拼接，其他端口需要拼接
     const port = site.port || 80;
@@ -557,15 +421,15 @@ const Sites: React.FC = () => {
     // 确保site和site.id存在
     if (!site || typeof site !== 'object') {
       console.error('Invalid site provided, cannot open static resources')
-      messageApi.error('站点信息无效，无法打开静态资源管理')
+      messageApi.error(t('sites.errors.invalidSiteStatic'))
       return
     }
     
     // 确保站点ID存在且不为空
     const siteId = site.id || site.ID || '';
     if (!siteId.trim()) {
-      console.error('Site ID is empty, cannot open static resources')
-      messageApi.error('站点ID不存在，无法打开静态资源管理')
+        console.error('Site ID is empty, cannot open static resources')
+        messageApi.error(t('sites.errors.missingSiteId'))
       return
     }
     
@@ -590,7 +454,6 @@ const Sites: React.FC = () => {
     // 特殊处理默认站点，其ID为"default"
     if (finalSiteId === 'default') {
       // 直接使用默认站点ID，无需查找
-      console.log('Using default site ID:', finalSiteId);
     } else {
       // 如果finalSiteId看起来是站点名称而不是ID，尝试从sites数组中查找对应的ID
       // UUID格式的ID不需要查找
@@ -599,7 +462,6 @@ const Sites: React.FC = () => {
         const site = sites.find(s => s.name === finalSiteId || s.Name === finalSiteId)
         if (site && site.id) {
           finalSiteId = site.id
-          console.log('Corrected site ID from name to ID:', finalSiteId)
         } else {
           console.error('Failed to find site ID for name:', finalSiteId)
           return
@@ -614,7 +476,7 @@ const Sites: React.FC = () => {
         setFileList(response.data)
         setSelectedRowKeys([])
       } else {
-        messageApi.error('获取文件列表失败')
+        messageApi.error(t('sites.messages.loadFilesFailed'))
       }
     } catch (error) {
       console.error('Failed to load file list:', error)
@@ -638,52 +500,9 @@ const Sites: React.FC = () => {
     loadFileList(newPath)
   }
 
-  // 新建目录
-  const handleNewFolder = () => {
-    setShowNewFolderModal(true)
-    setNewFolderName('')
-  }
-
-  // 确认新建目录 — 通过站点静态资源API管理
-  const confirmNewFolder = () => {
-    if (!newFolderName.trim()) {
-      messageApi.warning('请输入目录名称')
-      return
-    }
-    messageApi.info('目录创建功能通过静态资源上传实现')
-    setShowNewFolderModal(false)
-  }
-
-  // 新建文件
-  const handleNewFile = () => {
-    setShowNewFileModal(true)
-    setNewFileName('')
-  }
-
-  // 确认新建文件 — 通过站点静态资源上传API管理
-  const confirmNewFile = () => {
-    if (!newFileName.trim()) {
-      messageApi.warning('请输入文件名称')
-      return
-    }
-    messageApi.info('文件创建功能通过静态资源上传实现')
-    setShowNewFileModal(false)
-  }
-      type: 'file',
-      size: 0,
-      path: `${currentPath === '/' ? '' : currentPath}/${newFileName}`
-    }
-    
-    setFileList(prev => [...prev, newFile])
-    setShowNewFileModal(false)
-    messageApi.success('文件创建成功')
-  }
-
-
-
   // 下载文件
   const handleDownload = (file: any) => {
-    message.info(`正在下载 ${file.name}`)
+    message.info(t('sites.messages.downloading', { name: file.name }))
     // 创建临时下载链接
     const downloadLink = document.createElement('a');
     downloadLink.href = `/api/v1/sites/${currentSite?.id}/static${file.path}`;
@@ -699,26 +518,26 @@ const Sites: React.FC = () => {
     // 确保currentSite和currentSite.id存在
     if (!currentSite || typeof currentSite.id === 'undefined' || currentSite.id === '') {
       console.error('Current site is not set, cannot extract file')
-      messageApi.error('站点信息无效，无法解压文件')
+      messageApi.error(t('sites.errors.invalidSiteExtract'))
       return
     }
     
     try {
-      messageApi.info(`正在解压 ${file.name}...`)
+      messageApi.info(t('sites.messages.extracting', { name: file.name }))
       
       // 发送解压请求到后端
       const response = await sitesApi.extractFile(currentSite.id, file.name, currentPath)
       
       if (response.code === 200) {
-        messageApi.success(`${file.name} 解压成功`)
+        messageApi.success(t('sites.messages.extractSuccess', { name: file.name }))
         // 重新加载文件列表
         loadFileList(currentPath)
       } else {
-        messageApi.error(`${file.name} 解压失败: ${response.message || '未知错误'}`)
+        messageApi.error(t('sites.messages.extractFailedReason', { name: file.name, reason: response.message || t('sites.messages.unknownError') }))
       }
     } catch (error) {
       console.error('解压失败:', error)
-      messageApi.error(`${file.name} 解压失败`)
+      messageApi.error(t('sites.messages.extractFailed', { name: file.name }))
     }
   }
 
@@ -729,11 +548,11 @@ const Sites: React.FC = () => {
     if (!currentSite || selectedRowKeys.length === 0) return;
     
     Modal.confirm({
-      title: '批量删除确认',
-      content: `确定要删除选中的 ${selectedRowKeys.length} 个文件/目录吗？`,
-      okText: '确定',
+      title: t('sites.confirm.batchDeleteTitle'),
+      content: t('sites.confirm.batchDeleteContent', { count: selectedRowKeys.length }),
+      okText: t('common.ok'),
       okType: 'danger',
-      cancelText: '取消',
+      cancelText: t('common.cancel'),
       onOk: async () => {
         try {
           // 构建路径列表
@@ -744,12 +563,12 @@ const Sites: React.FC = () => {
           });
 
           await sitesApi.batchDeleteStaticResources(currentSite.id, pathsToDelete);
-          messageApi.success('批量删除成功');
+          messageApi.success(t('sites.messages.batchDeleteSuccess'));
           setSelectedRowKeys([]); // 清空选择
           loadFileList(currentPath); // 刷新列表
         } catch (error: any) {
           console.error('Batch delete failed:', error);
-          messageApi.error('批量删除失败: ' + (error.message || '未知错误'));
+          messageApi.error(t('sites.messages.batchDeleteFailed', { reason: error.message || t('sites.messages.unknownError') }));
         }
       },
     });
@@ -759,16 +578,16 @@ const Sites: React.FC = () => {
   const handleDeleteAll = async () => {
     if (!currentSite) return;
     if (fileList.length === 0) {
-        messageApi.info('当前目录为空');
+        messageApi.info(t('sites.messages.dirEmpty'));
         return;
     }
 
     Modal.confirm({
-      title: '清空目录确认',
-      content: '确定要删除当前目录下的所有文件和子目录吗？此操作不可恢复！',
-      okText: '确定删除全部',
+      title: t('sites.confirm.deleteAllTitle'),
+      content: t('sites.confirm.deleteAllContent'),
+      okText: t('sites.confirm.deleteAllOk'),
       okType: 'danger',
-      cancelText: '取消',
+      cancelText: t('common.cancel'),
       onOk: async () => {
          try {
              const pathsToDelete = fileList.map(file => {
@@ -776,12 +595,12 @@ const Sites: React.FC = () => {
              });
              
              await sitesApi.batchDeleteStaticResources(currentSite.id, pathsToDelete);
-             messageApi.success('清空目录成功');
+             messageApi.success(t('sites.messages.clearSuccess'));
              setSelectedRowKeys([]);
              loadFileList(currentPath);
          } catch (error: any) {
              console.error('Delete all failed:', error);
-             messageApi.error('清空目录失败: ' + (error.message || '未知错误'));
+             messageApi.error(t('sites.messages.clearFailed', { reason: error.message || t('sites.messages.unknownError') }));
          }
       }
     });
@@ -791,20 +610,23 @@ const Sites: React.FC = () => {
   const handleFileDelete = (file: any) => {
     if (!currentSite) return;
     Modal.confirm({
-      title: '删除确认',
-      content: `确定要删除 ${file.type === 'dir' ? '目录' : '文件'} "${file.name}" 吗？`,
-      okText: '确定',
+      title: t('sites.confirm.fileDeleteTitle'),
+      content: t('sites.confirm.fileDeleteContent', {
+        type: t(file.type === 'dir' ? 'sites.fileType.directory' : 'sites.fileType.file'),
+        name: file.name
+      }),
+      okText: t('common.ok'),
       okType: 'danger',
-      cancelText: '取消',
+      cancelText: t('common.cancel'),
       onOk: async () => {
         try {
           const fullPath = (currentPath === '/' ? '' : currentPath) + '/' + file.name;
           await sitesApi.deleteStaticResources(currentSite.id, fullPath);
-          messageApi.success(`${file.name} 删除成功`);
+          messageApi.success(t('sites.messages.deleteFileSuccess', { name: file.name }));
           loadFileList(currentPath);
         } catch (error: any) {
           console.error('Delete file failed:', error);
-          messageApi.error('删除失败: ' + (error.message || '未知错误'));
+          messageApi.error(t('sites.messages.deleteFileFailed', { reason: error.message || t('sites.messages.unknownError') }));
         }
       }
     });
@@ -817,7 +639,7 @@ const Sites: React.FC = () => {
     // 调整rar/zip上传大小限制为不超过100m
     const isLt100M = file.size / 1024 / 1024 < 100
     if (!isLt100M) {
-      messageApi.error('文件大小不能超过100MB')
+      messageApi.error(t('sites.errors.fileTooLarge'))
       return Upload.LIST_IGNORE
     }
     
@@ -831,7 +653,7 @@ const Sites: React.FC = () => {
     // 确保站点和站点ID存在
     if (!currentSite || typeof currentSite.id === 'undefined' || currentSite.id === '') {
       console.error('Site is not set, cannot upload file')
-      messageApi.error('站点信息无效，无法上传文件')
+      messageApi.error(t('sites.errors.invalidSiteUpload'))
       if (onError) onError(new Error('站点信息无效'))
       return
     }
@@ -845,7 +667,7 @@ const Sites: React.FC = () => {
     })
     .then((response) => {
       if (response.code === 200) {
-        messageApi.success(`${typeof file === 'string' ? file : (file as any).name} 上传成功`)
+        messageApi.success(t('sites.messages.uploadSuccess', { name: typeof file === 'string' ? file : (file as any).name }))
         // 重新加载文件列表
         loadFileList(currentPath)
         if (onSuccess) onSuccess({ status: 'ok', message: '上传成功' })
@@ -854,7 +676,7 @@ const Sites: React.FC = () => {
       }
     })
     .catch((error) => {
-      messageApi.error(`${typeof file === 'string' ? file : (file as any).name} 上传失败: ${error.message}`)
+      messageApi.error(t('sites.messages.uploadFailed', { name: typeof file === 'string' ? file : (file as any).name, reason: error.message }))
       if (onError) onError(error)
     })
   }
@@ -862,11 +684,11 @@ const Sites: React.FC = () => {
   // 处理删除站点
   const handleDelete = (site: any) => {
     Modal.confirm({
-      title: '确认删除',
-      content: `确定要删除站点 "${site.name || site.Name || ''}" 吗？此操作不可恢复。`,
-      okText: '确认删除',
+      title: t('sites.confirm.deleteSiteTitle'),
+      content: t('sites.confirm.deleteSiteContent', { name: site.name || site.Name || '' }),
+      okText: t('sites.confirm.deleteSiteOk'),
       okType: 'danger',
-      cancelText: '取消',
+      cancelText: t('common.cancel'),
       onOk: async () => {
         try {
           if (!site || typeof site !== 'object') {
@@ -880,14 +702,14 @@ const Sites: React.FC = () => {
           
           const res = await sitesApi.deleteSite(siteId)
           if (res.code === 200) {
-            messageApi.success('删除站点成功')
+            messageApi.success(t('sites.messages.deleteSiteSuccess'))
             fetchSites()
           } else {
-            messageApi.error('删除站点失败：' + res.message)
+            messageApi.error(t('sites.messages.deleteSiteFailed', { reason: res.message }))
           }
         } catch (error) {
           console.error('Failed to delete site:', error)
-          messageApi.error('删除站点失败：' + (error as any).message)
+          messageApi.error(t('sites.messages.deleteSiteFailed', { reason: (error as any).message }))
         }
       },
     })
@@ -901,7 +723,6 @@ const Sites: React.FC = () => {
     try {
       // 从Redis获取已保存的预渲染配置
       const configResponse = await sitesApi.getSiteConfig(site.id, 'prerender');
-      console.log('Redis prerender config:', configResponse);
       
       let redisConfig: any = {};
       if (configResponse.code === 200 && configResponse.data) {
@@ -937,9 +758,7 @@ const Sites: React.FC = () => {
         crawlerHeaders: site.prerender?.crawlerHeaders || getDefaultCrawlerHeaders()
       };
       
-      console.log('Merged prerender config:', mergedConfig);
       prerenderConfigForm.setFieldsValue(mergedConfig);
-      
     } catch (error) {
       console.error('Failed to load prerender config from Redis:', error);
       // 如果获取Redis配置失败，使用站点默认配置
@@ -1047,8 +866,7 @@ const Sites: React.FC = () => {
     try {
       // 从Redis获取已保存的推送配置
       const configResponse = await sitesApi.getSiteConfig(site.id, 'push');
-      console.log('Redis push config:', configResponse);
-      
+
       let redisConfig: any = {};
       if (configResponse.code === 200 && configResponse.data) {
         redisConfig = configResponse.data;
@@ -1067,7 +885,6 @@ const Sites: React.FC = () => {
         schedule: redisConfig.schedule || site.prerender?.push?.schedule || '0 1 * * *'
       };
       
-      console.log('Merged push config:', mergedConfig);
       pushConfigForm.setFieldsValue(mergedConfig);
       
     } catch (error) {
@@ -1172,8 +989,8 @@ const Sites: React.FC = () => {
       
       // 显示加载状态
       Modal.confirm({
-        title: '正在保存站点信息',
-        content: '请稍候...',
+        title: t('sites.saving.site'),
+        content: t('sites.pleaseWait'),
         okButtonProps: { disabled: true },
         cancelButtonProps: { disabled: true },
         closable: false,
@@ -1186,9 +1003,7 @@ const Sites: React.FC = () => {
         res = await sitesApi.updateSite(editingSite.id, siteData)
       } else {
         // 添加站点
-        console.log('Adding site with data:', siteData);
         res = await sitesApi.addSite(siteData)
-        console.log('Add site response:', res);
       }
 
       // 关闭加载状态
@@ -1196,13 +1011,15 @@ const Sites: React.FC = () => {
 
       // 直接使用res，因为API响应拦截器已经返回了response.data
       if (res.code === 200) {
-        messageApi.success(editingSite ? '更新站点成功' : '添加站点成功')
+        messageApi.success(editingSite ? t('sites.messages.updateSuccess') : t('sites.messages.addSuccess'))
         setVisible(false)
         // 立即刷新站点列表
-        console.log('Refreshing sites list...');
         fetchSites()
       } else {
-        messageApi.error(editingSite ? '更新站点失败：' + (res.message || '未知错误') : '添加站点失败：' + (res.message || '未知错误'))
+        const reason = res.message || t('sites.messages.unknownError')
+        messageApi.error(editingSite
+          ? t('sites.messages.updateFailed') + ': ' + reason
+          : t('sites.messages.addFailed') + ': ' + reason)
       }
     } catch (error: any) {
       // 关闭加载状态
@@ -1210,10 +1027,10 @@ const Sites: React.FC = () => {
       
       // 处理表单验证错误
       if (error.errorFields) {
-        messageApi.error('表单验证失败，请检查输入');
+        messageApi.error(t('sites.messages.formInvalid'));
       } else {
         // 处理网络错误或其他错误
-        messageApi.error('表单提交失败：' + (error.message || '未知错误'));
+        messageApi.error(t('sites.messages.submitFailed', { reason: error.message || t('sites.messages.unknownError') }));
       }
       console.error('Form submission error:', error)
     }
@@ -1255,8 +1072,8 @@ const Sites: React.FC = () => {
       
       // 显示加载状态
       Modal.confirm({
-        title: '正在保存预渲染配置',
-        content: '请稍候...',
+        title: t('sites.saving.prerender'),
+        content: t('sites.pleaseWait'),
         okButtonProps: { disabled: true },
         cancelButtonProps: { disabled: true },
         closable: false,
@@ -1271,11 +1088,11 @@ const Sites: React.FC = () => {
       Modal.destroyAll();
       
       if (res.code === 200) {
-        messageApi.success('更新预渲染配置成功');
+        messageApi.success(t('sites.messages.prerenderSaved'));
         setPrerenderConfigModalVisible(false);
         fetchSites(); // 刷新站点列表
       } else {
-        messageApi.error(res.message || '更新预渲染配置失败');
+        messageApi.error(res.message || t('sites.messages.prerenderSaveFailed'));
       }
     } catch (error: any) {
       // 关闭加载状态
@@ -1283,10 +1100,10 @@ const Sites: React.FC = () => {
       
       // 处理表单验证错误
       if (error.errorFields) {
-        messageApi.error('表单验证失败，请检查输入');
+        messageApi.error(t('sites.formValidationFailed'));
       } else {
         // 处理网络错误或其他错误
-        messageApi.error('表单提交失败：' + (error.message || '未知错误'));
+        messageApi.error(t('sites.messages.submitFailed', { reason: error.message || t('sites.messages.unknownError') }));
       }
       console.error('Prerender config submission error:', error);
     }
@@ -1312,8 +1129,8 @@ const Sites: React.FC = () => {
       
       // 显示加载状态
       Modal.confirm({
-        title: '正在保存推送配置',
-        content: '请稍候...',
+        title: t('sites.saving.push'),
+        content: t('sites.pleaseWait'),
         okButtonProps: { disabled: true },
         cancelButtonProps: { disabled: true },
         closable: false,
@@ -1328,11 +1145,11 @@ const Sites: React.FC = () => {
       Modal.destroyAll();
       
       if (res.code === 200) {
-        messageApi.success('更新推送配置成功');
+        messageApi.success(t('sites.messages.pushSaved'));
         setPushConfigModalVisible(false);
         fetchSites(); // 刷新站点列表
       } else {
-        messageApi.error(res.message || '更新推送配置失败');
+        messageApi.error(res.message || t('sites.messages.pushSaveFailed'));
       }
     } catch (error: any) {
       // 关闭加载状态
@@ -1340,10 +1157,10 @@ const Sites: React.FC = () => {
       
       // 处理表单验证错误
       if (error.errorFields) {
-        messageApi.error('表单验证失败，请检查输入');
+        messageApi.error(t('sites.formValidationFailed'));
       } else {
         // 处理网络错误或其他错误
-        messageApi.error('表单提交失败：' + (error.message || '未知错误'));
+        messageApi.error(t('sites.messages.submitFailed', { reason: error.message || t('sites.messages.unknownError') }));
       }
       console.error('Push config submission error:', error);
     }
@@ -1401,7 +1218,6 @@ const Sites: React.FC = () => {
         }
       };
       
-      console.log('WAF config initial values:', wafConfig);
       wafConfigForm.setFieldsValue(wafConfig);
       
     } catch (error) {
@@ -1443,7 +1259,6 @@ const Sites: React.FC = () => {
   const handleWafConfigSubmit = async () => {
     try {
       const values = await wafConfigForm.validateFields();
-      console.log('WAF form values:', values);
       
           // 构造WAF配置数据
           const configData = {
@@ -1470,8 +1285,8 @@ const Sites: React.FC = () => {
           
           // 显示加载状态
       Modal.confirm({
-        title: '正在保存WAF配置',
-        content: '请稍候...',
+        title: t('sites.saving.waf'),
+        content: t('sites.pleaseWait'),
         okButtonProps: { disabled: true },
         cancelButtonProps: { disabled: true },
         closable: false,
@@ -1486,11 +1301,11 @@ const Sites: React.FC = () => {
       Modal.destroyAll();
       
       if (res.code === 200) {
-        messageApi.success('更新WAF配置成功');
+        messageApi.success(t('sites.messages.wafSaved'));
         setWafConfigModalVisible(false);
         fetchSites(); // 刷新站点列表
       } else {
-        messageApi.error(res.message || '更新WAF配置失败');
+        messageApi.error(res.message || t('sites.messages.wafSaveFailed'));
       }
     } catch (error: any) {
       // 关闭加载状态
@@ -1498,10 +1313,10 @@ const Sites: React.FC = () => {
       
       // 处理表单验证错误
       if (error.errorFields) {
-        messageApi.error('表单验证失败，请检查输入');
+        messageApi.error(t('sites.formValidationFailed'));
       } else {
         // 处理网络错误或其他错误
-        messageApi.error('表单提交失败：' + (error.message || '未知错误'));
+        messageApi.error(t('sites.messages.submitFailed', { reason: error.message || t('sites.messages.unknownError') }));
       }
       console.error('WAF config submission error:', error);
     }
@@ -1569,28 +1384,28 @@ const Sites: React.FC = () => {
     <>
       {contextHolder}
       <div>
-      <h1 className="page-title">站点管理</h1>
+      <h1 className="page-title">{t('sites.title')}</h1>
 
       {/* 站点概览卡片 */}
       <Card className="card">
         <Row gutter={[16, 16]}>
           <Col span={8}>
             <Statistic
-              title="总站点数"
+              title={t('sites.totalSites')}
               value={sites.length}
               valueStyle={{ color: '#1890ff' }}
             />
           </Col>
           <Col span={8}>
             <Statistic
-              title="启用渲染预热的站点"
+              title={t('sites.prerenderEnabledSites')}
               value={sites.filter(site => site.prerender && site.prerender.enabled).length}
               valueStyle={{ color: '#52c41a' }}
             />
           </Col>
           <Col span={8}>
             <Statistic
-              title="启用防火墙的站点"
+              title={t('sites.firewallEnabledSites')}
               value={sites.filter(site => site.firewall && site.firewall.enabled).length}
               valueStyle={{ color: '#faad14' }}
             />
@@ -1599,13 +1414,13 @@ const Sites: React.FC = () => {
       </Card>
 
       {/* 站点列表 */}
-      <Card className="card" title="站点列表" extra={
+      <Card className="card" title={t('sites.listTitle')} extra={
         <Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-            添加站点
+            {t('sites.addSite')}
           </Button>
           <Button icon={<ReloadOutlined />} onClick={handleManualFetch}>
-            重新加载
+            {t('sites.reload')}
           </Button>
         </Space>
       }>
@@ -1614,6 +1429,25 @@ const Sites: React.FC = () => {
           dataSource={sites}
           rowKey="name"
           loading={loading}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={t('sites.empty.description')}
+                style={{ padding: '24px 0' }}
+              >
+                <div style={{ maxWidth: 480, margin: '0 auto', textAlign: 'left', fontSize: 13, color: '#666' }}>
+                  <p style={{ marginBottom: 8 }}><b>{t('sites.empty.stepsTitle')}</b></p>
+                  <p>{t('sites.empty.step1')}</p>
+                  <p>{t('sites.empty.step2')}</p>
+                  <p>{t('sites.empty.step3')}</p>
+                </div>
+                <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{ marginTop: 16 }}>
+                  {t('sites.empty.addFirst')}
+                </Button>
+              </Empty>
+            ),
+          }}
           pagination={{ pageSize: 10 }}
           scroll={{ x: 1200 }}
           style={{ tableLayout: 'fixed' }}
@@ -1622,13 +1456,13 @@ const Sites: React.FC = () => {
 
       {/* 添加/编辑站点弹窗 */}
       <Modal
-        title={editingSite ? '编辑站点' : '添加站点'}
+        title={editingSite ? t('sites.modal.editSite') : t('sites.addSite')}
         open={visible}
         onOk={handleSubmit}
         onCancel={() => setVisible(false)}
         width={800}
-        okText="保存"
-        cancelText="取消"
+        okText={t('common.save')}
+        cancelText={t('common.cancel')}
       >
         <Form
           form={form}
@@ -1661,20 +1495,20 @@ const Sites: React.FC = () => {
             }
           }}
         >
-          <Form.Item name="name" label="站点名称" rules={[{ required: true, message: '请输入站点名称' }]}>
-            <Input placeholder="请输入站点名称" />
+          <Form.Item name="name" label={t('sites.columns.name')} rules={[{ required: true, message: t('sites.form.nameRequired') }]}>
+            <Input placeholder={t('sites.form.nameRequired')} />
           </Form.Item>
-          <Form.Item name="domain" label="域名" rules={[{ required: true, message: '请输入域名' }]}>
-            <Input placeholder="请输入域名，例如: example.com" />
+          <Form.Item name="domain" label={t('sites.columns.domain')} rules={[{ required: true, message: t('sites.form.domainRequired') }]}>
+            <Input placeholder={t('sites.form.domainPlaceholder')} />
           </Form.Item>
-          <Form.Item name="port" label="端口" rules={[{ required: true, message: '请输入端口' }]}>
-            <Input type="number" placeholder="请输入端口，例如: 80" />
+          <Form.Item name="port" label={t('sites.columns.port')} rules={[{ required: true, message: t('sites.form.portRequired') }]}>
+            <Input type="number" placeholder={t('sites.form.portPlaceholder')} />
           </Form.Item>
-          <Form.Item name="mode" label="站点模式" rules={[{ required: true, message: '请选择站点模式' }]}>
+          <Form.Item name="mode" label={t('sites.columns.mode')} rules={[{ required: true, message: t('sites.form.modeRequired') }]}>
             <Select>
-              <Option value="proxy">代理已有应用</Option>
-              <Option value="static">静态资源站</Option>
-              <Option value="redirect">重定向</Option>
+              <Option value="proxy">{t('sites.mode.proxy')}</Option>
+              <Option value="static">{t('sites.mode.static')}</Option>
+              <Option value="redirect">{t('sites.mode.redirect')}</Option>
             </Select>
           </Form.Item>
 
@@ -1687,8 +1521,8 @@ const Sites: React.FC = () => {
               return mode === 'proxy' ? (
                 <Form.Item
                   name={['proxy', 'targetURL']}
-                  label="目标URL"
-                  rules={[{ required: true, message: '请输入目标URL' }]}
+                  label={t('sites.form.targetURL')}
+                  rules={[{ required: true, message: t('sites.form.targetURLRequired') }]}
                 >
                   <Input placeholder="http://localhost:3000" />
                 </Form.Item>
@@ -1696,18 +1530,18 @@ const Sites: React.FC = () => {
                  <>
                   <Form.Item
                     name={['redirect', 'code']}
-                    label="状态码"
+                    label={t('sites.form.statusCode')}
                     initialValue={302}
                   >
                     <Select>
-                      <Option value={301}>301 (永久重定向)</Option>
-                      <Option value={302}>302 (临时重定向)</Option>
+                      <Option value={301}>{`301 (${t('sites.form.redirectPermanent')})`}</Option>
+                      <Option value={302}>{`302 (${t('sites.form.redirectTemporary')})`}</Option>
                     </Select>
                   </Form.Item>
                   <Form.Item
                     name={['redirect', 'url']}
-                    label="目标URL"
-                    rules={[{ required: true, message: '请输入目标URL' }]}
+                    label={t('sites.form.targetURL')}
+                    rules={[{ required: true, message: t('sites.form.targetURLRequired') }]}
                   >
                     <Input placeholder="https://example.com" />
                   </Form.Item>
@@ -1723,43 +1557,43 @@ const Sites: React.FC = () => {
 
       {/* 渲染预热配置弹窗 */}
       <Modal
-        title="渲染预热配置"
+        title={t('sites.modal.prerenderConfig')}
         open={prerenderConfigModalVisible}
         onOk={handlePrerenderConfigSubmit}
         onCancel={() => setPrerenderConfigModalVisible(false)}
         width={800}
       >
         <Form form={prerenderConfigForm} layout="vertical">
-          <Form.Item name="enabled" label="启用预渲染" valuePropName="checked">
+          <Form.Item name="enabled" label={t('sites.form.enablePrerender')} valuePropName="checked">
             <Switch />
           </Form.Item>
           
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="poolSize" label="初始池大小">
+              <Form.Item name="poolSize" label={t('sites.form.initialPoolSize')}>
                 <Input type="number" />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="maxPoolSize" label="最大池大小">
+              <Form.Item name="maxPoolSize" label={t('sites.form.maxPoolSize')}>
                 <Input type="number" />
               </Form.Item>
             </Col>
           </Row>
           
-          <Divider orientation="left">预热设置</Divider>
-          <Form.Item name={['preheat', 'enabled']} label="启用预热" valuePropName="checked">
+          <Divider orientation="left">{t('sites.sections.preheat')}</Divider>
+          <Form.Item name={['preheat', 'enabled']} label={t('sites.form.enablePreheat')} valuePropName="checked">
             <Switch />
           </Form.Item>
           
-          <Divider orientation="left">爬虫设置</Divider>
-          <Form.Item name="crawlerHeaders" label="爬虫User-Agent列表" extra="支持输入自定义User-Agent，回车确认">
+          <Divider orientation="left">{t('sites.sections.crawler')}</Divider>
+          <Form.Item name="crawlerHeaders" label={t('sites.form.crawlerUserAgents')} extra={t('sites.form.crawlerUserAgentsExtra')}>
              <Select 
                mode="tags" 
                style={{ width: '100%' }} 
                tokenSeparators={[',', '\n']}
                options={getDefaultCrawlerHeaders().map(ua => ({ label: ua, value: ua }))}
-               placeholder="请选择或输入常见的爬虫协议头"
+               placeholder={t('sites.form.crawlerUserAgentsPlaceholder')}
              />
           </Form.Item>
         </Form>
@@ -1768,35 +1602,35 @@ const Sites: React.FC = () => {
 
       {/* 推送配置弹窗 */}
       <Modal
-        title="推送配置"
+        title={t('sites.pushConfig')}
         open={pushConfigModalVisible}
         onOk={handlePushConfigSubmit}
         onCancel={() => setPushConfigModalVisible(false)}
         width={600}
       >
         <Form form={pushConfigForm} layout="vertical">
-          <Form.Item name="enabled" label="启用推送" valuePropName="checked">
+          <Form.Item name="enabled" label={t('sites.form.enablePush')} valuePropName="checked">
             <Switch />
           </Form.Item>
-          <Divider orientation="left">百度推送</Divider>
-          <Form.Item name="baiduAPI" label="百度推送API">
+          <Divider orientation="left">{t('sites.sections.baiduPush')}</Divider>
+          <Form.Item name="baiduAPI" label={t('sites.form.baiduAPI')}>
             <Input />
           </Form.Item>
-          <Form.Item name="baiduToken" label="百度推送Token">
+          <Form.Item name="baiduToken" label={t('sites.form.baiduToken')}>
             <Input />
           </Form.Item>
-          <Form.Item name="baiduDailyLimit" label="百度每日限制提交数量" tooltip="百度站长平台每日配额">
+          <Form.Item name="baiduDailyLimit" label={t('sites.form.baiduDailyLimit')} tooltip={t('sites.form.baiduQuota')}>
             <Input type="number" />
           </Form.Item>
           
-          <Divider orientation="left">必应推送</Divider>
-          <Form.Item name="bingAPI" label="Bing推送API">
+          <Divider orientation="left">{t('sites.sections.bingPush')}</Divider>
+          <Form.Item name="bingAPI" label={t('sites.form.bingAPI')}>
             <Input />
           </Form.Item>
-          <Form.Item name="bingToken" label="Bing推送Token">
+          <Form.Item name="bingToken" label={t('sites.form.bingToken')}>
             <Input />
           </Form.Item>
-          <Form.Item name="bingDailyLimit" label="必应每日限制提交数量" tooltip="必应站长平台每日配额">
+          <Form.Item name="bingDailyLimit" label={t('sites.form.bingDailyLimit')} tooltip={t('sites.form.bingQuota')}>
             <Input type="number" />
           </Form.Item>
         </Form>
@@ -1804,39 +1638,39 @@ const Sites: React.FC = () => {
 
       {/* WAF配置弹窗 */}
       <Modal
-        title="WAF配置"
+        title={t('sites.wafConfig')}
         open={wafConfigModalVisible}
         onOk={handleWafConfigSubmit}
         onCancel={() => setWafConfigModalVisible(false)}
         width={800}
       >
         <Form form={wafConfigForm} layout="vertical">
-          <Divider orientation="left">防火墙基础设置</Divider>
-          <Form.Item name={['firewall', 'enabled']} label="启用防火墙" valuePropName="checked">
+          <Divider orientation="left">{t('sites.sections.firewallBasics')}</Divider>
+          <Form.Item name={['firewall', 'enabled']} label={t('sites.form.enableFirewall')} valuePropName="checked">
             <Switch />
           </Form.Item>
-          <Form.Item name={['firewall', 'rulesPath']} label="规则路径">
+          <Form.Item name={['firewall', 'rulesPath']} label={t('sites.form.rulesPath')}>
             <Input placeholder="./rules" />
           </Form.Item>
-          <Form.Item name={['firewall', 'action', 'defaultAction']} label="默认动作">
+          <Form.Item name={['firewall', 'action', 'defaultAction']} label={t('sites.form.defaultAction')}>
             <Select>
-              <Option value="allow">允许</Option>
-              <Option value="block">拦截</Option>
+              <Option value="allow">{t('sites.form.allow')}</Option>
+              <Option value="block">{t('sites.form.block')}</Option>
             </Select>
           </Form.Item>
-          <Form.Item name={['firewall', 'action', 'blockMessage']} label="拦截消息">
+          <Form.Item name={['firewall', 'action', 'blockMessage']} label={t('sites.form.blockMessage')}>
             <Input />
           </Form.Item>
 
-          <Divider orientation="left">地理位置访问控制</Divider>
-          <Form.Item name={['firewall', 'geoip', 'enabled']} label="启用GeoIP" valuePropName="checked">
+          <Divider orientation="left">{t('sites.sections.geoip')}</Divider>
+          <Form.Item name={['firewall', 'geoip', 'enabled']} label={t('sites.form.enableGeoIP')} valuePropName="checked">
             <Switch />
           </Form.Item>
-          <Form.Item name={['firewall', 'geoip', 'allowList']} label="允许国家列表">
+          <Form.Item name={['firewall', 'geoip', 'allowList']} label={t('sites.form.allowCountries')}>
              <div onClick={() => handleOpenCountrySelector('allowList')}>
                <Select 
                  mode="tags" 
-                 placeholder="点击选择国家" 
+                 placeholder={t('sites.form.clickToSelect')} 
                  style={{ width: '100%', cursor: 'pointer' }}
                  open={false}
                  tokenSeparators={[',']} 
@@ -1844,11 +1678,11 @@ const Sites: React.FC = () => {
                />
              </div>
           </Form.Item>
-          <Form.Item name={['firewall', 'geoip', 'blockList']} label="禁止国家列表">
+          <Form.Item name={['firewall', 'geoip', 'blockList']} label={t('sites.form.blockCountries')}>
              <div onClick={() => handleOpenCountrySelector('blockList')}>
                <Select 
                  mode="tags" 
-                 placeholder="点击选择国家" 
+                 placeholder={t('sites.form.clickToSelect')} 
                  style={{ width: '100%', cursor: 'pointer' }}
                  open={false}
                  tokenSeparators={[',']} 
@@ -1857,48 +1691,48 @@ const Sites: React.FC = () => {
              </div>
           </Form.Item>
 
-          <Divider orientation="left">频率限制</Divider>
-          <Form.Item name={['firewall', 'rateLimit', 'enabled']} label="启用频率限制" valuePropName="checked">
+          <Divider orientation="left">{t('sites.sections.rateLimit')}</Divider>
+          <Form.Item name={['firewall', 'rateLimit', 'enabled']} label={t('sites.form.enableRateLimit')} valuePropName="checked">
             <Switch />
           </Form.Item>
           <Row gutter={16}>
             <Col span={8}>
-              <Form.Item name={['firewall', 'rateLimit', 'requests']} label="请求数限制">
+              <Form.Item name={['firewall', 'rateLimit', 'requests']} label={t('sites.form.requestsLimit')}>
                 <Input type="number" />
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item name={['firewall', 'rateLimit', 'window']} label="时间窗口(秒)">
+              <Form.Item name={['firewall', 'rateLimit', 'window']} label={t('sites.form.timeWindowSec')}>
                 <Input type="number" />
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item name={['firewall', 'rateLimit', 'banTime']} label="封禁时间(秒)">
+              <Form.Item name={['firewall', 'rateLimit', 'banTime']} label={t('sites.form.banTimeSec')}>
                 <Input type="number" />
               </Form.Item>
             </Col>
           </Row>
 
-          <Divider orientation="left">IP黑白名单</Divider>
-          <Form.Item name={['firewall', 'whitelist']} label="白名单IP列表" extra="一行一个IP，支持CIDR格式 (例如: 192.168.1.0/24)">
-            <Select mode="tags" style={{ width: '100%' }} tokenSeparators={[',', '\n']} placeholder="请输入IP并回车" />
+          <Divider orientation="left">{t('sites.sections.ipLists')}</Divider>
+          <Form.Item name={['firewall', 'whitelist']} label={t('sites.form.whitelist')} extra={t('sites.form.ipFormatHintExample')}>
+            <Select mode="tags" style={{ width: '100%' }} tokenSeparators={[',', '\n']} placeholder={t('sites.form.ipInputPlaceholder')} />
           </Form.Item>
-          <Form.Item name={['firewall', 'blacklist']} label="黑名单IP列表" extra="一行一个IP，支持CIDR格式">
-            <Select mode="tags" style={{ width: '100%' }} tokenSeparators={[',', '\n']} placeholder="请输入IP并回车" />
+          <Form.Item name={['firewall', 'blacklist']} label={t('sites.form.blacklist')} extra={t('sites.form.ipFormatHint')}>
+            <Select mode="tags" style={{ width: '100%' }} tokenSeparators={[',', '\n']} placeholder={t('sites.form.ipInputPlaceholder')} />
           </Form.Item>
 
-          <Divider orientation="left">网页防篡改</Divider>
-          <Form.Item name={['fileIntegrity', 'enabled']} label="启用防篡改" valuePropName="checked">
+          <Divider orientation="left">{t('sites.sections.tamperProof')}</Divider>
+          <Form.Item name={['fileIntegrity', 'enabled']} label={t('sites.form.enableTamperProof')} valuePropName="checked">
             <Switch />
           </Form.Item>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name={['fileIntegrity', 'checkInterval']} label="检查间隔(秒)">
+              <Form.Item name={['fileIntegrity', 'checkInterval']} label={t('sites.form.checkIntervalSec')}>
                 <Input type="number" />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name={['fileIntegrity', 'hashAlgorithm']} label="哈希算法">
+              <Form.Item name={['fileIntegrity', 'hashAlgorithm']} label={t('sites.form.hashAlgorithm')}>
                 <Select>
                   <Option value="md5">MD5</Option>
                   <Option value="sha1">SHA1</Option>
@@ -1912,7 +1746,7 @@ const Sites: React.FC = () => {
 
       {/* 静态资源管理弹窗 */}
       <Modal
-        title={`静态资源管理 - ${currentSite?.name || ''}`}
+        title={t('sites.modal.staticResources', { name: currentSite?.name || '' })}
         open={staticResModalVisible}
         onCancel={() => setStaticResModalVisible(false)}
         width={900}
@@ -1920,23 +1754,21 @@ const Sites: React.FC = () => {
       >
         <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
           <Space>
-            <Button icon={<UpOutlined />} onClick={navigateUp} disabled={currentPath === '/'}>返回上级</Button>
-            <Typography.Text strong>当前路径: {currentPath}</Typography.Text>
+            <Button icon={<UpOutlined />} onClick={navigateUp} disabled={currentPath === '/'}>{t('sites.static.back')}</Button>
+            <Typography.Text strong>{t('sites.static.currentPath')} {currentPath}</Typography.Text>
           </Space>
           <Space>
-            <Button icon={<NewFolderOutlined />} onClick={handleNewFolder}>新建目录</Button>
-            <Button icon={<FileAddOutlined />} onClick={handleNewFile}>新建文件</Button>
             <Upload 
               customRequest={customRequest} 
               beforeUpload={beforeUpload} 
               showUploadList={false}
             >
-              <Button icon={<UploadOutlined />}>上传文件</Button>
+              <Button icon={<UploadOutlined />}>{t('sites.static.uploadFile')}</Button>
             </Upload>
             {selectedRowKeys.length > 0 && (
-                <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>批量删除</Button>
+                <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>{t('common.batchDelete')}</Button>
             )}
-            <Button danger onClick={handleDeleteAll} disabled={!fileList || fileList.length === 0}>一键删除全部</Button>
+            <Button danger onClick={handleDeleteAll} disabled={!fileList || fileList.length === 0}>{t('common.deleteAll')}</Button>
           </Space>
         </div>
         
@@ -1950,7 +1782,7 @@ const Sites: React.FC = () => {
           }}
           columns={[
             {
-              title: '名称',
+              title: t('sites.static.fileName'),
               dataIndex: 'name',
               key: 'name',
               render: (text, record) => (
@@ -1965,27 +1797,27 @@ const Sites: React.FC = () => {
               )
             },
             {
-              title: '大小',
+              title: t('sites.static.size'),
               dataIndex: 'size',
               key: 'size',
               width: 100,
               render: (size) => size ? `${(size / 1024).toFixed(2)} KB` : '-'
             },
             {
-              title: '操作',
+              title: t('common.actions'),
               key: 'action',
               width: 250,
               render: (_, record) => (
                 <Space>
                   {record.type === 'file' && (
                     <>
-                      <Button type="link" size="small" icon={<DownloadOutlined />} onClick={() => handleDownload(record)}>下载</Button>
+                      <Button type="link" size="small" icon={<DownloadOutlined />} onClick={() => handleDownload(record)}>{t('common.download')}</Button>
                       {record.name.endsWith('.zip') && (
-                        <Button type="link" size="small" icon={<ExtractOutlined />} onClick={() => handleExtract(record)}>解压</Button>
+                        <Button type="link" size="small" icon={<ExtractOutlined />} onClick={() => handleExtract(record)}>{t('common.extract')}</Button>
                       )}
                     </>
                   )}
-                  <Button type="link" danger size="small" onClick={() => handleFileDelete(record)}>删除</Button>
+                  <Button type="link" danger size="small" onClick={() => handleFileDelete(record)}>{t('common.delete')}</Button>
                 </Space>
               )
             }
@@ -1993,37 +1825,9 @@ const Sites: React.FC = () => {
         />
       </Modal>
 
-      {/* 新建目录弹窗 */}
-      <Modal
-        title="新建目录"
-        open={showNewFolderModal}
-        onOk={confirmNewFolder}
-        onCancel={() => setShowNewFolderModal(false)}
-      >
-        <Input 
-          placeholder="请输入目录名称" 
-          value={newFolderName} 
-          onChange={e => setNewFolderName(e.target.value)} 
-        />
-      </Modal>
-
-      {/* 新建文件弹窗 */}
-      <Modal
-        title="新建文件"
-        open={showNewFileModal}
-        onOk={confirmNewFile}
-        onCancel={() => setShowNewFileModal(false)}
-      >
-        <Input 
-          placeholder="请输入文件名称" 
-          value={newFileName} 
-          onChange={e => setNewFileName(e.target.value)} 
-        />
-      </Modal>
-
       {/* 国家选择器弹窗 */}
       <Modal
-        title={`选择国家 - ${countrySelectorTarget === 'allowList' ? '允许列表' : '禁止列表'}`}
+        title={t('sites.modal.selectCountry', { target: t(countrySelectorTarget === 'allowList' ? 'sites.country.allowList' : 'sites.country.blockList') })}
         open={countrySelectorVisible}
         onOk={handleCountrySelectorOk}
         onCancel={() => setCountrySelectorVisible(false)}
@@ -2033,7 +1837,7 @@ const Sites: React.FC = () => {
         <div style={{ marginBottom: 16 }}>
           <Input 
             prefix={<SearchOutlined />} 
-            placeholder="搜索国家 (代码、英文名或中文名)" 
+            placeholder={t('sites.country.searchPlaceholder')} 
             value={countrySearchKeyword}
             onChange={e => setCountrySearchKeyword(e.target.value)}
             allowClear
@@ -2046,7 +1850,7 @@ const Sites: React.FC = () => {
               onChange={handleToggleSelectAllCountries}
               disabled={filteredCountries.length === 0}
             >
-              全选当前列表 ({selectedCountries.length} 已选)
+              {t('sites.country.selectAllWithCount', { count: selectedCountries.length })}
             </Checkbox>
           </div>
         </div>
@@ -2068,7 +1872,7 @@ const Sites: React.FC = () => {
             </Row>
           </Checkbox.Group>
         ) : (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未找到匹配的国家" />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('sites.country.noMatch')} />
         )}
       </Modal>
 

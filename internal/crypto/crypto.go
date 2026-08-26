@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ const (
 
 // Encrypt 加密明文
 // 使用 AES-256-GCM, 输出格式: base64(nonce + ciphertext)
+// 当主密钥未初始化时，返回明文（直通模式，用于无需加密的场景）
 func Encrypt(plaintext []byte) (string, error) {
 	key := getMasterKey()
 	if key == nil {
@@ -50,6 +52,7 @@ func Encrypt(plaintext []byte) (string, error) {
 }
 
 // Decrypt 解密密文
+// 当主密钥未初始化时，返回原始字符串（直通模式，用于无需加密的场景）
 func Decrypt(encoded string) ([]byte, error) {
 	key := getMasterKey()
 	if key == nil {
@@ -86,6 +89,7 @@ func Decrypt(encoded string) ([]byte, error) {
 }
 
 // InitMasterKey 初始化主密钥
+// 使用 SHA-256 哈希将任意长度密钥扩展到 32 字节，确保密钥材料均匀分布
 func InitMasterKey(key string) error {
 	keyMu.Lock()
 	defer keyMu.Unlock()
@@ -94,9 +98,9 @@ func InitMasterKey(key string) error {
 		return errors.New("master key must be at least 16 characters")
 	}
 
-	k := make([]byte, keyLength)
-	copy(k, []byte(key))
-	masterKey = k
+	// 使用 SHA-256 哈希密钥材料，生成固定 32 字节密钥
+	hash := sha256.Sum256([]byte(key))
+	masterKey = hash[:]
 	return nil
 }
 

@@ -1,0 +1,27 @@
+{
+  "wafSettings": {
+    "backToSites": "사이트 목록으로 돌아가기",
+    "title": "WAF 방화벽 설정 - {{siteName}}",
+    "enableFirewall": "방화벽 활성화",
+    "rateLimitSection": "빈도 제한",
+    "requestCountLabel": "요청 수 제한",
+    "requestCountHelp": "주기당 허용되는 최대 요청 횟수",
+    "countUnit": "회",
+    "windowLabel": "시간 창",
+    "windowHelp": "집계 주기(분)",
+    "minutesUnit": "분",
+    "accessControlSection": "접근 제어",
+    "blockedCountries": "접근 금지 국가/지역",
+    "countryPlaceholder": "국가 코드 입력 (예: CN, US)",
+    "whitelistIps": "IP 화이트리스트",
+    "blacklistIps": "IP 블랙리스트",
+    "ipPlaceholder": "IP 주소 입력",
+    "blockPageSection": "차단 페이지",
+    "customBlockPage": "사용자 정의 차단 페이지 HTML",
+    "saveConfig": "설정 저장",
+    "saveSuccess": "WAF 설정이 저장되었습니다",
+    "saveFailedWithReason": "저장 실패: {{reason}}",
+    "saveFailed": "저장 실패",
+    "fetchConfigFailed": "WAF 설정 조회 실패"
+  }
+}

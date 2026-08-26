@@ -212,32 +212,29 @@ func (c *ChallengeManager) GenerateChallengePage(ip string) string {
 }
 
 // generateClientScript 生成客户端验证脚本
+// 注意：不将 secret 嵌入客户端，仅发送 token 和 timestamp，由服务端验证
 func (c *ChallengeManager) generateClientScript(token string, timestamp int64) string {
-	answer := c.calculateAnswer(token, timestamp)
-
 	return fmt.Sprintf(`<script>
 (function() {
     var token = "%s";
     var timestamp = %d;
 
-    // 计算挑战答案
-    var challenge = token + timestamp + "%s";
-
-    // 使用 SHA256 计算（简化版本，实际应该用 crypto-js）
+    // 客户端仅发送 token 和 timestamp，服务端负责验证
     fetch(window.location.href, {
-        method: 'GET',
+        method: 'POST',
         headers: {
+            'Content-Type': 'application/json',
             'X-Challenge-Token': token,
-            'X-Challenge-Timestamp': timestamp.toString(),
-            'X-Challenge-Answer': "%s"
-        }
+            'X-Challenge-Timestamp': timestamp.toString()
+        },
+        body: JSON.stringify({token: token, timestamp: timestamp})
     }).then(function(response) {
         if (response.ok) {
             window.location.reload();
         }
     });
 })();
-</script>`, token, timestamp, c.secret, answer)
+</script>`, token, timestamp)
 }
 
 // calculateAnswer 计算挑战答案
@@ -387,7 +384,39 @@ func HandleChallengeAPI(manager *ChallengeManager, w http.ResponseWriter, r *htt
 		return
 	}
 
-	// 这里可以添加额外的验证逻辑
+	// 验证挑战：检查 token 和 timestamp 的有效性
+	if req.Token == "" || req.Timestamp == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(ChallengeResponse{
+			Success: false,
+			Message: "Missing token or timestamp",
+		})
+		return
+	}
+
+	// 检查时间戳是否在允许范围内（5分钟内）
+	if time.Now().Unix()-req.Timestamp > 300 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(ChallengeResponse{
+			Success: false,
+			Message: "Challenge expired",
+		})
+		return
+	}
+
+	// 验证挑战 token 是否有效
+	if manager != nil {
+		valid := manager.VerifyChallenge(r, getClientIP(r))
+		if !valid {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(ChallengeResponse{
+				Success: false,
+				Message: "Challenge verification failed",
+			})
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ChallengeResponse{
 		Success: true,

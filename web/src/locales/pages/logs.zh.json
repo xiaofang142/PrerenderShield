@@ -1,0 +1,30 @@
+{
+  "logs": {
+    "title": "日志管理",
+    "autoRefresh": "自动刷新 (10s)",
+    "tabAccessLogs": "访问日志",
+    "tabStats": "统计分析",
+    "filterIp": "筛选 IP",
+    "filterMethod": "请求方法",
+    "filterStatus": "状态码",
+    "columns": {
+      "rank": "排名",
+      "time": "时间",
+      "ip": "IP",
+      "method": "方法",
+      "path": "路径",
+      "status": "状态码",
+      "duration": "耗时(ms)"
+    },
+    "totalRecords": "共 {{total}} 条记录",
+    "topIps": "热门 IP (Top 10)",
+    "topUrls": "热门 URL (Top 10)",
+    "ipAddress": "IP 地址",
+    "url": "URL",
+    "requestCount": "请求数",
+    "methodDistribution": "请求方法分布",
+    "statusDistribution": "状态码分布",
+    "percent": "占比",
+    "noData": "暂无数据"
+  }
+}

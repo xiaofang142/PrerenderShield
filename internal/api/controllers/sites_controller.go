@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -10,18 +11,42 @@ import (
 	"github.com/google/uuid"
 
 	"prerender-shield/internal/config"
+	"prerender-shield/internal/licensing"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/monitoring"
 	"prerender-shield/internal/redis"
 	sitehandler "prerender-shield/internal/site-handler"
 	siteserver "prerender-shield/internal/site-server"
+	"prerender-shield/internal/utils"
 )
 
+// validateDomains 校验站点域名格式：
+// 非空、无协议前缀、无路径/查询参数、不含空白字符。
+// 允许任意合法域名（localhost / IP / 真实域名），站点数量由 licensing 策略另行限制。
+func validateDomains(domains []string) error {
+	// 站点必须至少绑定一个域名：下游 saveSiteStatsToRedis 依赖 Domains[0]
+	if len(domains) == 0 {
+		return fmt.Errorf("at least one domain is required")
+	}
+	for _, domain := range domains {
+		d := strings.TrimSpace(strings.ToLower(domain))
+		if d == "" {
+			return fmt.Errorf("domain cannot be empty")
+		}
+		if strings.ContainsAny(d, " \t/\\?#") || strings.Contains(d, "://") {
+			return fmt.Errorf("invalid domain format: %s", domain)
+		}
+	}
+	return nil
+}
+
 // ConfigManagerInterface defines the interface for configuration management
+// (P0-3: 新增 Mutate 提供事务性修改语义)
 type ConfigManagerInterface interface {
 	GetConfig() *config.Config
 	UpdateConfig(cfg *config.Config)
 	SaveConfig() error
+	Mutate(mutate func(c *config.Config) (*config.Config, error)) error
 }
 
 // SiteServerManagerInterface defines the interface for site server management
@@ -61,14 +86,14 @@ type VisitLogManagerInterface interface {
 
 // SitesController 站点管理控制器
 type SitesController struct {
-	configManager   ConfigManagerInterface
-	siteServerMgr   SiteServerManagerInterface
-	siteHandler     SiteHandlerInterface
-	redisClient     RedisClientInterface
-	monitor         MonitorInterface
-	crawlerLogMgr   CrawlerLogManagerInterface
-	visitLogMgr     VisitLogManagerInterface
-	cfg             *config.Config
+	configManager ConfigManagerInterface
+	siteServerMgr SiteServerManagerInterface
+	siteHandler   SiteHandlerInterface
+	redisClient   RedisClientInterface
+	monitor       MonitorInterface
+	crawlerLogMgr CrawlerLogManagerInterface
+	visitLogMgr   VisitLogManagerInterface
+	cfg           *config.Config
 
 	// Concrete type references for use in wrapper methods
 	concreteSiteServerMgr *siteserver.Manager
@@ -93,6 +118,11 @@ func (w *configManagerWrapper) UpdateConfig(cfg *config.Config) {
 
 func (w *configManagerWrapper) SaveConfig() error {
 	return w.cm.SaveConfig()
+}
+
+// Mutate 委托给 config.ConfigManager.Mutate (P0-3)
+func (w *configManagerWrapper) Mutate(mutate func(c *config.Config) (*config.Config, error)) error {
+	return w.cm.Mutate(mutate)
 }
 
 // siteServerMgrWrapper wraps siteserver.Manager to implement SiteServerManagerInterface
@@ -181,14 +211,14 @@ func NewSitesController(
 	cfg *config.Config,
 ) *SitesController {
 	return &SitesController{
-		configManager:   configManager,
-		siteServerMgr:   siteServerMgr,
-		siteHandler:     siteHandler,
-		redisClient:     redisClient,
-		monitor:         monitor,
-		crawlerLogMgr:   crawlerLogMgr,
-		visitLogMgr:     visitLogMgr,
-		cfg:             cfg,
+		configManager: configManager,
+		siteServerMgr: siteServerMgr,
+		siteHandler:   siteHandler,
+		redisClient:   redisClient,
+		monitor:       monitor,
+		crawlerLogMgr: crawlerLogMgr,
+		visitLogMgr:   visitLogMgr,
+		cfg:           cfg,
 	}
 }
 
@@ -323,92 +353,37 @@ func (c *SitesController) GetSite(ctx *gin.Context) {
 	})
 }
 
-// GetSiteConfig 获取站点的Redis配置（包括预渲染和推送配置）
-func (c *SitesController) GetSiteConfig(ctx *gin.Context) {
-	id := ctx.Param("id")
-	configType := ctx.Query("type") // prerender 或 push
-
-	if c.redisClient == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "Redis client not available",
-		})
-		return
-	}
-
-	var configKey string
-	switch configType {
-	case "prerender":
-		configKey = id + "_prerender"
-	case "push":
-		configKey = id + "_push"
-	case "waf":
-		configKey = id + "_waf"
-	default:
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "Invalid config type. Use 'prerender' or 'push'",
-		})
-		return
-	}
-
-	config, err := c.redisClient.GetSiteStats(configKey)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "Failed to get site config from Redis",
-		})
-		return
-	}
-
-	if len(config) == 0 {
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "Site config not found in Redis",
-		})
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "success",
-		"data":    config,
-	})
-}
-
 // AddSite 添加站点
 func (c *SitesController) AddSite(ctx *gin.Context) {
 	var site config.SiteConfig
 	if err := ctx.ShouldBindJSON(&site); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
-				"code":    400,
-				"message": "Invalid request",
-			})
-			return
-		}
+			"code":    400,
+			"message": "Invalid request",
+		})
+		return
+	}
 
-		// 验证站点名称
-		if site.Name == "" {
-			ctx.JSON(http.StatusBadRequest, gin.H{
-				"code":    400,
-				"message": "Site name is required",
-			})
-			return
-		}
+	// 验证站点名称
+	if site.Name == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "Site name is required",
+		})
+		return
+	}
 
-		// 验证域名：只允许127.0.0.1或localhost
-		for _, domain := range site.Domains {
-		if domain != "127.0.0.1" && domain != "localhost" {
-			ctx.JSON(http.StatusBadRequest, gin.H{
-				"code":    400,
-				"message": "Only 127.0.0.1 or localhost are allowed as domains",
-			})
-			return
-		}
+	// 验证域名格式
+	if err := validateDomains(site.Domains); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": err.Error(),
+		})
+		return
 	}
 
 	// 验证端口是否可用
-	if !isPortAvailable(site.Port) {
+	if !utils.IsPortAvailable(site.Port) {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "Port is either reserved or already in use",
@@ -421,13 +396,30 @@ func (c *SitesController) AddSite(ctx *gin.Context) {
 
 	// 从配置管理器获取当前配置并更新
 	currentConfig := c.configManager.GetConfig()
-	currentConfig.Sites = append(currentConfig.Sites, site)
+	policy := licensing.NewPolicy(currentConfig.Commercial)
+	if !policy.AllowsAdditionalSite(len(currentConfig.Sites)) {
+		ctx.JSON(http.StatusPaymentRequired, gin.H{
+			"code":    402,
+			"message": policy.UpgradeMessage(len(currentConfig.Sites)),
+			"data": gin.H{
+				"current_sites":            len(currentConfig.Sites),
+				"max_sites":                policy.MaxSites,
+				"site_price_usd_per_year":  policy.SitePriceUSDPerYear,
+				"private_deploy_price_usd": policy.PrivateDeployPriceUSD,
+				"billing_model":            "one_site_free_all_features_then_99_usd_per_site_per_year",
+			},
+		})
+		return
+	}
 
-	// 保存配置到文件
-	if err := c.configManager.SaveConfig(); err != nil {
+	// P0-3: 使用事务性 Mutate，持久化失败时不会污染内存中的配置
+	if err := c.configManager.Mutate(func(c *config.Config) (*config.Config, error) {
+		c.Sites = append(c.Sites, site)
+		return c, nil
+	}); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
-			"message": "Failed to save site configuration",
+			"message": "Failed to save site configuration: " + err.Error(),
 		})
 		return
 	}
@@ -439,71 +431,7 @@ func (c *SitesController) AddSite(ctx *gin.Context) {
 	c.siteServerMgr.StartSiteServer(site, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 	// 保存站点配置到Redis
-	if c.redisClient != nil {
-		// 保存站点统计信息
-		stats := map[string]interface{}{
-			"name":   site.Name,
-			"domain": site.Domains[0],
-			"port":   site.Port,
-			"mode":   site.Mode,
-		}
-		if err := c.redisClient.SetSiteStats(site.ID, stats); err != nil {
-			logging.DefaultLogger.Warn("Failed to save site stats to Redis: %v", err)
-		}
-
-		// 保存预渲染配置（扁平化结构，不使用嵌套map）
-		preheatConfig := map[string]interface{}{
-			"enabled":             site.Prerender.Enabled,
-			"pool_size":           site.Prerender.PoolSize,
-			"min_pool_size":       site.Prerender.MinPoolSize,
-			"max_pool_size":       site.Prerender.MaxPoolSize,
-			"timeout":             site.Prerender.Timeout,
-			"cache_ttl":           site.Prerender.CacheTTL,
-			"idle_timeout":        site.Prerender.IdleTimeout,
-			"preheat_enabled":     site.Prerender.Preheat.Enabled,
-			"preheat_sitemap_url": site.Prerender.Preheat.SitemapURL,
-			"preheat_schedule":    site.Prerender.Preheat.Schedule,
-			"preheat_concurrency": site.Prerender.Preheat.Concurrency,
-			"preheat_max_depth":   site.Prerender.Preheat.MaxDepth,
-			"crawler_headers":     strings.Join(site.Prerender.CrawlerHeaders, "\n"),
-		}
-		if err := c.redisClient.SetSiteStats(site.ID+"_prerender", preheatConfig); err != nil {
-			logging.DefaultLogger.Warn("Failed to save prerender config to Redis: %v", err)
-		}
-
-		// 保存推送配置
-		pushConfig := map[string]interface{}{
-			"enabled":           site.Prerender.Push.Enabled,
-			"baidu_api":         site.Prerender.Push.BaiduAPI,
-			"baidu_token":       site.Prerender.Push.BaiduToken,
-			"bing_api":          site.Prerender.Push.BingAPI,
-			"bing_token":        site.Prerender.Push.BingToken,
-			"baidu_daily_limit": site.Prerender.Push.BaiduDailyLimit,
-			"bing_daily_limit":  site.Prerender.Push.BingDailyLimit,
-			"push_domain":       site.Prerender.Push.PushDomain,
-		}
-		if err := c.redisClient.SetSiteStats(site.ID+"_push", pushConfig); err != nil {
-			logging.DefaultLogger.Warn("Failed to save push config to Redis: %v", err)
-		}
-
-		// 保存WAF配置
-		wafConfig := map[string]interface{}{
-			"firewall_enabled":   site.Firewall.Enabled,
-			"default_action":     site.Firewall.ActionConfig.DefaultAction,
-			"block_message":      site.Firewall.ActionConfig.BlockMessage,
-			"geoip_enabled":      site.Firewall.GeoIPConfig.Enabled,
-			"geoip_block_list":   strings.Join(site.Firewall.GeoIPConfig.BlockList, ","),
-			"ratelimit_enabled":  site.Firewall.RateLimitConfig.Enabled,
-			"ratelimit_requests": site.Firewall.RateLimitConfig.Requests,
-			"ratelimit_window":   site.Firewall.RateLimitConfig.Window,
-			"ratelimit_ban_time": site.Firewall.RateLimitConfig.BanTime,
-			"blacklist":          strings.Join(site.Firewall.Blacklist, ","),
-			"whitelist":          strings.Join(site.Firewall.Whitelist, ","),
-		}
-		if err := c.redisClient.SetSiteStats(site.ID+"_waf", wafConfig); err != nil {
-			logging.DefaultLogger.Warn("Failed to save WAF config to Redis: %v", err)
-		}
-	}
+	c.persistSiteConfigToRedis(&site)
 
 	// 记录系统日志
 	logging.DefaultLogger.LogAdminAction(
@@ -541,15 +469,13 @@ func (c *SitesController) UpdateSite(ctx *gin.Context) {
 		return
 	}
 
-	// 验证域名：只允许127.0.0.1或localhost
-	for _, domain := range siteUpdates.Domains {
-		if domain != "127.0.0.1" && domain != "localhost" {
-			ctx.JSON(http.StatusBadRequest, gin.H{
-				"code":    400,
-				"message": "Only 127.0.0.1 or localhost are allowed as domains",
-			})
-			return
-		}
+	// 验证域名格式
+	if err := validateDomains(siteUpdates.Domains); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": err.Error(),
+		})
+		return
 	}
 
 	// 从配置管理器获取当前配置
@@ -573,7 +499,7 @@ func (c *SitesController) UpdateSite(ctx *gin.Context) {
 
 			// 检查端口是否可用（仅当端口改变时）
 			if s.Port != siteUpdates.Port {
-				if !isPortAvailable(siteUpdates.Port) {
+				if !utils.IsPortAvailable(siteUpdates.Port) {
 					ctx.JSON(http.StatusBadRequest, gin.H{
 						"code":    400,
 						"message": "Port is either reserved or already in use",
@@ -630,73 +556,7 @@ func (c *SitesController) UpdateSite(ctx *gin.Context) {
 	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 	// 保存站点配置到Redis
-	if c.redisClient != nil {
-		// 保存站点统计信息
-		stats := map[string]interface{}{
-			"name":   updatedSite.Name,
-			"domain": updatedSite.Domains[0],
-			"port":   updatedSite.Port,
-			"mode":   updatedSite.Mode,
-		}
-		if err := c.redisClient.SetSiteStats(updatedSite.ID, stats); err != nil {
-			logging.DefaultLogger.Warn("Failed to save site stats to Redis: %v", err)
-		}
-
-		// 保存预渲染配置（扁平化结构，不使用嵌套map）
-		preheatConfig := map[string]interface{}{
-			"enabled":             updatedSite.Prerender.Enabled,
-			"pool_size":           updatedSite.Prerender.PoolSize,
-			"min_pool_size":       updatedSite.Prerender.MinPoolSize,
-			"max_pool_size":       updatedSite.Prerender.MaxPoolSize,
-			"timeout":             updatedSite.Prerender.Timeout,
-			"cache_ttl":           updatedSite.Prerender.CacheTTL,
-			"idle_timeout":        updatedSite.Prerender.IdleTimeout,
-			"preheat_enabled":     updatedSite.Prerender.Preheat.Enabled,
-			"preheat_sitemap_url": updatedSite.Prerender.Preheat.SitemapURL,
-			"preheat_schedule":    updatedSite.Prerender.Preheat.Schedule,
-			"preheat_concurrency": updatedSite.Prerender.Preheat.Concurrency,
-			"preheat_max_depth":   updatedSite.Prerender.Preheat.MaxDepth,
-			"crawler_headers":     strings.Join(updatedSite.Prerender.CrawlerHeaders, "\n"),
-		}
-		if err := c.redisClient.SetSiteStats(updatedSite.ID+"_prerender", preheatConfig); err != nil {
-			logging.DefaultLogger.Error("Failed to save prerender config to Redis: %v", err)
-		} else {
-			logging.DefaultLogger.Info("Pre-render config saved to Redis successfully")
-		}
-
-		// 保存推送配置
-		pushConfig := map[string]interface{}{
-			"enabled":           updatedSite.Prerender.Push.Enabled,
-			"baidu_api":         updatedSite.Prerender.Push.BaiduAPI,
-			"baidu_token":       updatedSite.Prerender.Push.BaiduToken,
-			"bing_api":          updatedSite.Prerender.Push.BingAPI,
-			"bing_token":        updatedSite.Prerender.Push.BingToken,
-			"baidu_daily_limit": updatedSite.Prerender.Push.BaiduDailyLimit,
-			"bing_daily_limit":  updatedSite.Prerender.Push.BingDailyLimit,
-			"push_domain":       updatedSite.Prerender.Push.PushDomain,
-		}
-		if err := c.redisClient.SetSiteStats(updatedSite.ID+"_push", pushConfig); err != nil {
-			logging.DefaultLogger.Warn("Failed to save push config to Redis: %v", err)
-		}
-
-		// 保存WAF配置
-		wafConfig := map[string]interface{}{
-			"firewall_enabled":   updatedSite.Firewall.Enabled,
-			"default_action":     updatedSite.Firewall.ActionConfig.DefaultAction,
-			"block_message":      updatedSite.Firewall.ActionConfig.BlockMessage,
-			"geoip_enabled":      updatedSite.Firewall.GeoIPConfig.Enabled,
-			"geoip_block_list":   strings.Join(updatedSite.Firewall.GeoIPConfig.BlockList, ","),
-			"ratelimit_enabled":  updatedSite.Firewall.RateLimitConfig.Enabled,
-			"ratelimit_requests": updatedSite.Firewall.RateLimitConfig.Requests,
-			"ratelimit_window":   updatedSite.Firewall.RateLimitConfig.Window,
-			"ratelimit_ban_time": updatedSite.Firewall.RateLimitConfig.BanTime,
-			"blacklist":          strings.Join(updatedSite.Firewall.Blacklist, ","),
-			"whitelist":          strings.Join(updatedSite.Firewall.Whitelist, ","),
-		}
-		if err := c.redisClient.SetSiteStats(updatedSite.ID+"_waf", wafConfig); err != nil {
-			logging.DefaultLogger.Warn("Failed to save WAF config to Redis: %v", err)
-		}
-	}
+	c.persistSiteConfigToRedis(updatedSite)
 
 	// 记录系统日志
 	logging.DefaultLogger.LogAdminAction(
@@ -720,257 +580,6 @@ func (c *SitesController) UpdateSite(ctx *gin.Context) {
 		"code":    200,
 		"message": "Site updated successfully",
 		"data":    updatedSite,
-	})
-}
-
-// UpdateSitePrerenderConfig 独立更新渲染预热配置
-func (c *SitesController) UpdateSitePrerenderConfig(ctx *gin.Context) {
-	id := ctx.Param("id")
-	var prerenderUpdates config.PrerenderConfig
-	if err := ctx.ShouldBindJSON(&prerenderUpdates); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "Invalid request",
-		})
-		return
-	}
-
-	// 从配置管理器获取当前配置
-	if c.configManager == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "Configuration manager not available",
-		})
-		return
-	}
-	currentConfig := c.configManager.GetConfig()
-
-	// 查找并更新指定站点
-	var updatedSite *config.SiteConfig
-	var oldSite *config.SiteConfig
-
-	for i, s := range currentConfig.Sites {
-		if s.ID == id {
-			oldSite = &s
-
-			// 仅更新预渲染相关配置，保留推送配置(Push)
-			// 注意：前端传来的 prerenderUpdates 中 Push 可能为空或默认值，所以我们需要手动保留原有的 Push 配置
-			originalPush := currentConfig.Sites[i].Prerender.Push
-			currentConfig.Sites[i].Prerender = prerenderUpdates
-			currentConfig.Sites[i].Prerender.Push = originalPush
-
-			updatedSite = &currentConfig.Sites[i]
-			break
-		}
-	}
-
-	if updatedSite == nil {
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "Site not found",
-		})
-		return
-	}
-
-	// 保存配置到文件
-	if err := c.configManager.SaveConfig(); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "Failed to save site configuration",
-		})
-		return
-	}
-
-	// 重启站点服务器
-	if _, exists := c.siteServerMgr.GetSiteServer(oldSite.ID); exists {
-		c.siteServerMgr.StopSiteServer(oldSite.ID)
-	}
-	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
-	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
-
-	// 保存预渲染配置到Redis
-	if c.redisClient != nil {
-		preheatConfig := map[string]interface{}{
-			"enabled":             updatedSite.Prerender.Enabled,
-			"pool_size":           updatedSite.Prerender.PoolSize,
-			"min_pool_size":       updatedSite.Prerender.MinPoolSize,
-			"max_pool_size":       updatedSite.Prerender.MaxPoolSize,
-			"timeout":             updatedSite.Prerender.Timeout,
-			"cache_ttl":           updatedSite.Prerender.CacheTTL,
-			"idle_timeout":        updatedSite.Prerender.IdleTimeout,
-			"preheat_enabled":     updatedSite.Prerender.Preheat.Enabled,
-			"preheat_sitemap_url": updatedSite.Prerender.Preheat.SitemapURL,
-			"preheat_schedule":    updatedSite.Prerender.Preheat.Schedule,
-			"preheat_concurrency": updatedSite.Prerender.Preheat.Concurrency,
-			"preheat_max_depth":   updatedSite.Prerender.Preheat.MaxDepth,
-			"crawler_headers":     strings.Join(updatedSite.Prerender.CrawlerHeaders, "\n"),
-		}
-		if err := c.redisClient.SetSiteStats(updatedSite.ID+"_prerender", preheatConfig); err != nil {
-			logging.DefaultLogger.Error("Failed to save prerender config to Redis: %v", err)
-		}
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "Prerender configuration updated successfully",
-		"data":    updatedSite.Prerender,
-	})
-}
-
-// UpdateSitePushConfig 独立更新推送配置
-func (c *SitesController) UpdateSitePushConfig(ctx *gin.Context) {
-	id := ctx.Param("id")
-	var pushUpdates config.PushConfig
-	if err := ctx.ShouldBindJSON(&pushUpdates); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "Invalid request",
-		})
-		return
-	}
-
-	if c.configManager == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "Configuration manager not available",
-		})
-		return
-	}
-	currentConfig := c.configManager.GetConfig()
-	var updatedSite *config.SiteConfig
-	var oldSite *config.SiteConfig
-
-	for i, s := range currentConfig.Sites {
-		if s.ID == id {
-			oldSite = &s
-			currentConfig.Sites[i].Prerender.Push = pushUpdates
-			updatedSite = &currentConfig.Sites[i]
-			break
-		}
-	}
-
-	if updatedSite == nil {
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "Site not found",
-		})
-		return
-	}
-
-	if err := c.configManager.SaveConfig(); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "Failed to save site configuration",
-		})
-		return
-	}
-
-	if _, exists := c.siteServerMgr.GetSiteServer(oldSite.ID); exists {
-		c.siteServerMgr.StopSiteServer(oldSite.ID)
-	}
-	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
-	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
-
-	if c.redisClient != nil {
-		pushConfig := map[string]interface{}{
-			"enabled":           updatedSite.Prerender.Push.Enabled,
-			"baidu_api":         updatedSite.Prerender.Push.BaiduAPI,
-			"baidu_token":       updatedSite.Prerender.Push.BaiduToken,
-			"bing_api":          updatedSite.Prerender.Push.BingAPI,
-			"bing_token":        updatedSite.Prerender.Push.BingToken,
-			"baidu_daily_limit": updatedSite.Prerender.Push.BaiduDailyLimit,
-			"bing_daily_limit":  updatedSite.Prerender.Push.BingDailyLimit,
-			"push_domain":       updatedSite.Prerender.Push.PushDomain,
-		}
-		if err := c.redisClient.SetSiteStats(updatedSite.ID+"_push", pushConfig); err != nil {
-			logging.DefaultLogger.Warn("Failed to save push config to Redis: %v", err)
-		}
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "Push configuration updated successfully",
-		"data":    updatedSite.Prerender.Push,
-	})
-}
-
-// UpdateSiteFirewallConfig 独立更新防火墙配置
-func (c *SitesController) UpdateSiteFirewallConfig(ctx *gin.Context) {
-	id := ctx.Param("id")
-	var firewallUpdates config.FirewallConfig
-	if err := ctx.ShouldBindJSON(&firewallUpdates); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "Invalid request",
-		})
-		return
-	}
-
-	if c.configManager == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "Configuration manager not available",
-		})
-		return
-	}
-	currentConfig := c.configManager.GetConfig()
-	var updatedSite *config.SiteConfig
-	var oldSite *config.SiteConfig
-
-	for i, s := range currentConfig.Sites {
-		if s.ID == id {
-			oldSite = &s
-			currentConfig.Sites[i].Firewall = firewallUpdates
-			updatedSite = &currentConfig.Sites[i]
-			break
-		}
-	}
-
-	if updatedSite == nil {
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "Site not found",
-		})
-		return
-	}
-
-	if err := c.configManager.SaveConfig(); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "Failed to save site configuration",
-		})
-		return
-	}
-
-	if _, exists := c.siteServerMgr.GetSiteServer(oldSite.ID); exists {
-		c.siteServerMgr.StopSiteServer(oldSite.ID)
-	}
-	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
-	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
-
-	if c.redisClient != nil {
-		wafConfig := map[string]interface{}{
-			"firewall_enabled":   updatedSite.Firewall.Enabled,
-			"default_action":     updatedSite.Firewall.ActionConfig.DefaultAction,
-			"block_message":      updatedSite.Firewall.ActionConfig.BlockMessage,
-			"geoip_enabled":      updatedSite.Firewall.GeoIPConfig.Enabled,
-			"geoip_block_list":   strings.Join(updatedSite.Firewall.GeoIPConfig.BlockList, ","),
-			"ratelimit_enabled":  updatedSite.Firewall.RateLimitConfig.Enabled,
-			"ratelimit_requests": updatedSite.Firewall.RateLimitConfig.Requests,
-			"ratelimit_window":   updatedSite.Firewall.RateLimitConfig.Window,
-			"ratelimit_ban_time": updatedSite.Firewall.RateLimitConfig.BanTime,
-			"blacklist":          strings.Join(updatedSite.Firewall.Blacklist, ","),
-			"whitelist":          strings.Join(updatedSite.Firewall.Whitelist, ","),
-		}
-		if err := c.redisClient.SetSiteStats(updatedSite.ID+"_waf", wafConfig); err != nil {
-			logging.DefaultLogger.Warn("Failed to save WAF config to Redis: %v", err)
-		}
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "Firewall configuration updated successfully",
-		"data":    updatedSite.Firewall,
 	})
 }
 
@@ -1058,10 +667,83 @@ func (c *SitesController) DeleteSite(ctx *gin.Context) {
 	})
 }
 
+// StartSite 启动指定站点的服务器
+func (c *SitesController) StartSite(ctx *gin.Context) {
+	id := ctx.Param("id")
+
+	currentConfig := c.configManager.GetConfig()
+	for _, site := range currentConfig.Sites {
+		if site.ID == id {
+			// 检查站点服务器是否已在运行
+			if _, running := c.siteServerMgr.GetSiteServer(site.ID); running {
+				ctx.JSON(http.StatusOK, gin.H{
+					"code":    200,
+					"message": "Site server is already running",
+				})
+				return
+			}
+
+			// 创建站点处理器并启动服务器
+			siteHandler := c.siteHandler.CreateSiteHandler(site, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
+			c.siteServerMgr.StartSiteServer(site, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
+
+			logging.DefaultLogger.LogAdminAction(
+				"admin", ctx.ClientIP(), "site_start", "site",
+				map[string]interface{}{"site_id": site.ID, "site_name": site.Name},
+				"success", "Site started successfully",
+			)
+
+			ctx.JSON(http.StatusOK, gin.H{
+				"code":    200,
+				"message": "Site started successfully",
+			})
+			return
+		}
+	}
+
+	ctx.JSON(http.StatusNotFound, gin.H{
+		"code":    404,
+		"message": "Site not found",
+	})
+}
+
+// StopSite 停止指定站点的服务器
+func (c *SitesController) StopSite(ctx *gin.Context) {
+	id := ctx.Param("id")
+
+	currentConfig := c.configManager.GetConfig()
+	for _, site := range currentConfig.Sites {
+		if site.ID == id {
+			if err := c.siteServerMgr.StopSiteServer(site.ID); err != nil {
+				ctx.JSON(http.StatusInternalServerError, gin.H{
+					"code":    500,
+					"message": "Failed to stop site server: " + err.Error(),
+				})
+				return
+			}
+
+			logging.DefaultLogger.LogAdminAction(
+				"admin", ctx.ClientIP(), "site_stop", "site",
+				map[string]interface{}{"site_id": site.ID, "site_name": site.Name},
+				"success", "Site stopped successfully",
+			)
+
+			ctx.JSON(http.StatusOK, gin.H{
+				"code":    200,
+				"message": "Site stopped successfully",
+			})
+			return
+		}
+	}
+
+	ctx.JSON(http.StatusNotFound, gin.H{
+		"code":    404,
+		"message": "Site not found",
+	})
+}
+
 // GetStaticFiles 获取站点的静态资源文件列表
 // UploadStaticFile 上传静态资源文件
 // ExtractFile 解压文件
-// 检查端口是否可用
-// ExtractZIP 解压ZIP文件，导出供测试使用
 // DeleteStaticFile 删除静态资源文件
 // BatchDeleteStaticFiles 批量删除静态资源文件

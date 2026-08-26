@@ -139,6 +139,10 @@ jobs:
         working-directory: web
         run: npx tsc --noEmit
 
+      - name: Run unit tests (vitest, incl. i18n locale integrity)
+        working-directory: web
+        run: npm run test -- --run
+
       - name: Run ESLint
         working-directory: web
         run: npm run lint || true

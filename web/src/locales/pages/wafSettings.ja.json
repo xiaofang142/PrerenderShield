@@ -1,0 +1,27 @@
+{
+  "wafSettings": {
+    "backToSites": "サイト一覧に戻る",
+    "title": "WAF ファイアウォール設定 - {{siteName}}",
+    "enableFirewall": "ファイアウォールを有効化",
+    "rateLimitSection": "レート制限",
+    "requestCountLabel": "リクエスト数制限",
+    "requestCountHelp": "期間内に許可される最大リクエスト数",
+    "countUnit": "回",
+    "windowLabel": "時間ウィンドウ",
+    "windowHelp": "集計期間（分）",
+    "minutesUnit": "分",
+    "accessControlSection": "アクセス制御",
+    "blockedCountries": "アクセス禁止の国・地域",
+    "countryPlaceholder": "国コードを入力（例: CN, US）",
+    "whitelistIps": "IP ホワイトリスト",
+    "blacklistIps": "IP ブラックリスト",
+    "ipPlaceholder": "IPアドレスを入力",
+    "blockPageSection": "ブロックページ",
+    "customBlockPage": "カスタムブロックページHTML",
+    "saveConfig": "設定を保存",
+    "saveSuccess": "WAF設定を保存しました",
+    "saveFailedWithReason": "保存に失敗しました: {{reason}}",
+    "saveFailed": "保存に失敗しました",
+    "fetchConfigFailed": "WAF設定の取得に失敗しました"
+  }
+}

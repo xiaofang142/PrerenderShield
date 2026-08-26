@@ -1,11 +1,10 @@
 import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom'
-import { ConfigProvider } from 'antd'
+import { Suspense, lazy } from 'react'
+import { ConfigProvider, Spin } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
-import arEG from 'antd/locale/ar_EG'
-import frFR from 'antd/locale/fr_FR'
-import ruRU from 'antd/locale/ru_RU'
-import esES from 'antd/locale/es_ES'
+import jaJP from 'antd/locale/ja_JP'
+import koKR from 'antd/locale/ko_KR'
 import { useTranslation } from 'react-i18next'
 
 // Import Auth Context
@@ -17,27 +16,34 @@ import ErrorBoundary from './components/common/ErrorBoundary'
 // Import Private Route
 import PrivateRoute from './components/PrivateRoute/PrivateRoute'
 
-// Import pages
-import Login from './pages/Login/Login'
-import Overview from './pages/Overview/Overview'
-import Firewall from './pages/Firewall/Firewall'
-import FirewallRules from './pages/Firewall/FirewallRules'
-import Prerender from './pages/Prerender/Prerender'
-import Preheat from './pages/Prerender/Preheat'
-import Push from './pages/Prerender/Push'
-import Monitoring from './pages/Monitoring/Monitoring'
-import AlertConfig from './pages/Monitoring/AlertConfig'
-import Logs from './pages/Logs/Logs'
-import Sites from './pages/Sites/Sites'
-import Crawler from './pages/Crawler/Crawler'
-import SystemConfig from './pages/System/SystemConfig'
-import WAFSettings from './pages/WAFSettings'
-import Dashboard from './pages/Dashboard'
-import SSLPage from './pages/SSL'
-import SettingsPage from './pages/Settings'
+// 路由级代码分割：页面组件按需加载，减小主 bundle 体积
+const Login = lazy(() => import('./pages/Login/Login'))
+const Overview = lazy(() => import('./pages/Overview/Overview'))
+const Firewall = lazy(() => import('./pages/Firewall/Firewall'))
+const FirewallRules = lazy(() => import('./pages/Firewall/FirewallRules'))
+const Prerender = lazy(() => import('./pages/Prerender/Prerender'))
+const Preheat = lazy(() => import('./pages/Prerender/Preheat'))
+const Push = lazy(() => import('./pages/Prerender/Push'))
+const Monitoring = lazy(() => import('./pages/Monitoring/Monitoring'))
+const AlertConfig = lazy(() => import('./pages/Monitoring/AlertConfig'))
+const Logs = lazy(() => import('./pages/Logs/Logs'))
+const Sites = lazy(() => import('./pages/Sites/Sites'))
+const Crawler = lazy(() => import('./pages/Crawler/Crawler'))
+const SystemConfig = lazy(() => import('./pages/System/SystemConfig'))
+const WAFSettings = lazy(() => import('./pages/WAFSettings'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const SSLPage = lazy(() => import('./pages/SSL'))
+const SettingsPage = lazy(() => import('./pages/Settings'))
 
 // Import layout
 import MainLayout from './components/layouts/MainLayout'
+
+// 懒加载页面时的全屏 loading 占位
+const PageLoading = () => (
+  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+    <Spin size="large" />
+  </div>
+)
 
 function App() {
   const { i18n } = useTranslation()
@@ -50,14 +56,10 @@ function App() {
         return zhCN
       case 'en':
         return enUS
-      case 'ar':
-        return arEG
-      case 'fr':
-        return frFR
-      case 'ru':
-        return ruRU
-      case 'es':
-        return esES
+      case 'ja':
+        return jaJP
+      case 'ko':
+        return koKR
       default:
         return zhCN
     }
@@ -103,9 +105,10 @@ function App() {
       <ErrorBoundary>
         <AuthProvider>
           <Router>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route element={<PrivateRoute><MainLayout><Outlet /></MainLayout></PrivateRoute>}>
+            <Suspense fallback={<PageLoading />}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route element={<PrivateRoute><MainLayout><Outlet /></MainLayout></PrivateRoute>}>
                 <Route path="/" element={<Overview />} />
                 <Route path="/sites" element={<Sites />} />
                 <Route path="/sites/:id/waf" element={<WAFSettings />} />
@@ -123,7 +126,8 @@ function App() {
                 <Route path="/ssl" element={<SSLPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Route>
-            </Routes>
+              </Routes>
+            </Suspense>
           </Router>
         </AuthProvider>
       </ErrorBoundary>

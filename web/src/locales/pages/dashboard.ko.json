@@ -1,0 +1,24 @@
+{
+  "dashboard": {
+    "title": "대시보드",
+    "fetchFailed": "데이터 조회 실패",
+    "newAlert": "새로운 보안 경보를 수신했습니다. 경보 센터를 확인해 주세요",
+    "statTotalRequests": "총 요청 수",
+    "statBlocked": "차단 공격",
+    "statCrawler": "크롤러 요청",
+    "statActiveSites": "활성 사이트",
+    "trafficTrend": "트래픽 추이 (24시간)",
+    "accessStats": "접속 통계",
+    "systemStatus": "시스템 상태",
+    "wafFirewall": "WAF 방화벽",
+    "prerenderEngine": "프리렌더링 엔진",
+    "enabled": "켜짐",
+    "disabled": "꺼짐",
+    "noData": "데이터 없음",
+    "series": {
+      "total": "총 요청",
+      "crawler": "크롤러 요청",
+      "blocked": "차단 요청"
+    }
+  }
+}

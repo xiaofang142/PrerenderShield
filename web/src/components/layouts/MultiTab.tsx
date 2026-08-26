@@ -1,25 +1,27 @@
 import React, { useState, useEffect } from 'react'
-import { Tabs, Dropdown, Button, message } from 'antd'
-import { CloseOutlined, HomeOutlined, ReloadOutlined } from '@ant-design/icons'
+import { Tabs, Dropdown } from 'antd'
+import { HomeOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 
-// 路由到标签名的映射
-const routeTitleMap: Record<string, string> = {
-  '/': '概览',
-  '/sites': '站点管理',
-  '/firewall': '防火墙',
-  '/firewall/rules': 'WAF 规则管理',
-  '/prerender': '渲染预热',
-  '/prerender/preheat': '预热管理',
-  '/prerender/push': '推送管理',
-  '/monitoring': '监控警告',
-  '/monitoring/alerts': '告警配置',
-  '/crawler': '爬虫日志',
-  '/logs': '日志管理',
-  '/system': '系统配置',
-  '/ssl': 'SSL 证书',
-  '/settings': '系统设置',
-  '/dashboard': 'Dashboard',
+// 路由到标签名 i18n key 的映射
+// 注：/firewall 复用 menu.firewall（与侧边栏一致），其余走 multiTab 命名空间
+const routeTitleKeyMap: Record<string, [string, string]> = {
+  '/': ['multiTab', 'overview'],
+  '/sites': ['multiTab', 'sites'],
+  '/firewall': ['menu', 'firewall'],
+  '/firewall/rules': ['multiTab', 'firewallRules'],
+  '/prerender': ['multiTab', 'prerender'],
+  '/prerender/preheat': ['multiTab', 'preheat'],
+  '/prerender/push': ['multiTab', 'push'],
+  '/monitoring': ['multiTab', 'monitoring'],
+  '/monitoring/alerts': ['multiTab', 'alertConfig'],
+  '/crawler': ['multiTab', 'crawler'],
+  '/logs': ['multiTab', 'logs'],
+  '/system': ['multiTab', 'system'],
+  '/ssl': ['multiTab', 'ssl'],
+  '/settings': ['multiTab', 'settings'],
+  '/dashboard': ['multiTab', 'dashboard'],
 }
 
 interface TabItem {
@@ -35,8 +37,9 @@ interface MultiTabProps {
 const MultiTab: React.FC<MultiTabProps> = ({ children }) => {
   const location = useLocation()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [tabs, setTabs] = useState<TabItem[]>([
-    { key: '/', label: '概览', closable: false }
+    { key: '/', label: t('multiTab.overview'), closable: false }
   ])
   const [activeKey, setActiveKey] = useState('/')
 
@@ -49,7 +52,8 @@ const MultiTab: React.FC<MultiTabProps> = ({ children }) => {
     
     if (!existingTab) {
       // 添加新标签
-      const title = routeTitleMap[path] || path.split('/').pop() || '页面'
+      const entry = routeTitleKeyMap[path]
+      const title = entry ? t(`${entry[0]}.${entry[1]}`) : path.split('/').pop() || t('multiTab.page')
       setTabs(prev => [...prev, {
         key: path,
         label: title,
@@ -103,22 +107,22 @@ const MultiTab: React.FC<MultiTabProps> = ({ children }) => {
   }
 
   // 右键菜单
-  const getContextMenuItems = (tabKey: string) => {
+  const getContextMenuItems = () => {
     return [
       {
         key: 'refresh',
-        label: '刷新页面',
+        label: t('multiTab.refreshPage'),
         icon: <ReloadOutlined />,
         onClick: handleRefreshTab,
       },
       {
         key: 'closeOthers',
-        label: '关闭其他',
+        label: t('multiTab.closeOthers'),
         onClick: handleCloseOtherTabs,
       },
       {
         key: 'closeAll',
-        label: '关闭所有',
+        label: t('multiTab.closeAll'),
         onClick: handleCloseAllTabs,
       },
     ]
@@ -128,7 +132,7 @@ const MultiTab: React.FC<MultiTabProps> = ({ children }) => {
   const renderTabLabel = (tab: TabItem) => {
     return (
       <Dropdown
-        menu={{ items: getContextMenuItems(tab.key) }}
+        menu={{ items: getContextMenuItems() }}
         trigger={['contextMenu']}
       >
         <span style={{ padding: '0 8px' }}>

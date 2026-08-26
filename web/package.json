@@ -13,9 +13,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@ant-design/charts": "^2.0.3",
     "@ant-design/icons": "^6.1.0",
-    "@reduxjs/toolkit": "^1.9.5",
     "antd": "^5.8.0",
     "axios": "^1.5.0",
     "dayjs": "^1.11.9",
@@ -27,8 +25,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-i18next": "^16.5.1",
-    "react-router-dom": "^6.14.0",
-    "zustand": "^5.0.14"
+    "react-router-dom": "^6.14.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.1",

@@ -1,0 +1,27 @@
+{
+  "wafSettings": {
+    "backToSites": "返回站点列表",
+    "title": "WAF 防火墙配置 - {{siteName}}",
+    "enableFirewall": "启用防火墙",
+    "rateLimitSection": "频率限制",
+    "requestCountLabel": "限制请求数",
+    "requestCountHelp": "周期内允许的最大请求次数",
+    "countUnit": "次",
+    "windowLabel": "时间窗口",
+    "windowHelp": "统计周期（分钟）",
+    "minutesUnit": "分钟",
+    "accessControlSection": "访问控制",
+    "blockedCountries": "禁止访问的国家/地区",
+    "countryPlaceholder": "输入国家代码，如 CN, US",
+    "whitelistIps": "IP 白名单",
+    "blacklistIps": "IP 黑名单",
+    "ipPlaceholder": "输入IP地址",
+    "blockPageSection": "拦截页面",
+    "customBlockPage": "自定义拦截页面HTML",
+    "saveConfig": "保存配置",
+    "saveSuccess": "WAF配置保存成功",
+    "saveFailedWithReason": "保存失败: {{reason}}",
+    "saveFailed": "保存失败",
+    "fetchConfigFailed": "获取WAF配置失败"
+  }
+}

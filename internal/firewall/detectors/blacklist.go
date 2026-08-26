@@ -1,19 +1,16 @@
 package detectors
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 
 	"prerender-shield/internal/firewall/types"
 	"prerender-shield/internal/logging"
-
-	"github.com/go-redis/redis/v8"
 )
 
 // RedisBlacklistClient defines the interface for Redis blacklist operations
 type RedisBlacklistClient interface {
-	SIsMember(ctx context.Context, key string, member interface{}) *redis.BoolCmd
+	SetContains(key string, member interface{}) (bool, error)
 }
 
 // BlacklistDetector 黑白名单检测器
@@ -65,7 +62,7 @@ func (d *BlacklistDetector) Detect(req *http.Request) ([]types.Threat, error) {
 	// 3. 检查动态黑名单 (Redis)
 	if d.redisClient != nil {
 		key := fmt.Sprintf("firewall:%s:blacklist", d.siteID)
-		isMember, err := d.redisClient.SIsMember(context.Background(), key, ip).Result()
+		isMember, err := d.redisClient.SetContains(key, ip)
 		if err != nil {
 			// Redis错误，记录但不中断（默认放行或阻止？WAF通常fail open）
 			return nil, err

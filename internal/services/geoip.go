@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"sync"
 	"time"
 
 	"prerender-shield/internal/logging"
+
+	"github.com/oschwald/geoip2-golang"
 )
 
 // GeoLocation 地理位置信息
@@ -29,17 +32,29 @@ type GeoIPResolver interface {
 type GeoIPService struct {
 	client         *http.Client
 	mu             sync.RWMutex
-	serverLocation *GeoLocation // 本机地理位置（用于内网IP回退）
-	cache          sync.Map     // 内存缓存 map[string]*GeoLocation (IP -> Location)
+	serverLocation *GeoLocation   // 本机地理位置（用于内网IP回退）
+	cache          sync.Map       // 内存缓存 map[string]*GeoLocation (IP -> Location)
+	localDB        *geoip2.Reader // MaxMind 本地数据库（可选）
 }
 
 // NewGeoIPService 创建新的GeoIP服务
+// dbPath 为可选的 MaxMind GeoLite2/GeoIP2 数据库路径，若提供则优先使用本地数据库
 func NewGeoIPService(dbPath string) *GeoIPService {
-	// dbPath参数被忽略，因为不再使用本地数据库
 	service := &GeoIPService{
 		client: &http.Client{
 			Timeout: 5 * time.Second, // 缩短超时时间
 		},
+	}
+
+	// 尝试加载本地 MaxMind 数据库
+	if dbPath != "" {
+		db, err := geoip2.Open(dbPath)
+		if err != nil {
+			logging.DefaultLogger.Warn("Failed to open MaxMind DB at %s: %v, falling back to HTTP API", dbPath, err)
+		} else {
+			service.localDB = db
+			logging.DefaultLogger.Info("MaxMind GeoIP database loaded: %s", dbPath)
+		}
 	}
 
 	// 异步初始化本机地理位置信息
@@ -124,7 +139,9 @@ func (s *GeoIPService) fetchServerLocation() (*GeoLocation, error) {
 
 // Close 关闭GeoIP服务（清理资源）
 func (s *GeoIPService) Close() error {
-	// 不再需要关闭数据库连接
+	if s.localDB != nil {
+		return s.localDB.Close()
+	}
 	return nil
 }
 
@@ -149,7 +166,15 @@ func (s *GeoIPService) LookupCountryISO(ip string) (string, error) {
 		}
 	}
 
-	// 3. 调用API
+	// 3. 尝试本地 MaxMind 数据库
+	if s.localDB != nil {
+		if loc, err := s.queryLocalDB(ip); err == nil && loc != nil {
+			s.cache.Store(ip, loc)
+			return loc.CountryCode, nil
+		}
+	}
+
+	// 4. 调用远程 API
 	location, err := s.queryAPIWithFallback(ip)
 
 	// 1. 检查是否为内网IP或获取位置失败的IP
@@ -167,6 +192,31 @@ func (s *GeoIPService) LookupCountryISO(ip string) (string, error) {
 	// 写入缓存
 	s.cache.Store(ip, location)
 	return location.CountryCode, nil
+}
+
+// queryLocalDB 查询本地 MaxMind 数据库
+func (s *GeoIPService) queryLocalDB(ip string) (*GeoLocation, error) {
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return nil, fmt.Errorf("invalid IP: %s", ip)
+	}
+
+	record, err := s.localDB.City(parsedIP)
+	if err != nil {
+		return nil, fmt.Errorf("local DB lookup failed: %w", err)
+	}
+
+	if record.Country.IsoCode == "" {
+		return nil, fmt.Errorf("no country data for IP: %s", ip)
+	}
+
+	return &GeoLocation{
+		Country:     record.Country.Names["en"],
+		CountryCode: record.Country.IsoCode,
+		City:        record.City.Names["en"],
+		Latitude:    record.Location.Latitude,
+		Longitude:   record.Location.Longitude,
+	}, nil
 }
 
 // GetLocation 解析IP地理位置（带重试机制，用于日志处理）
@@ -193,7 +243,15 @@ func (s *GeoIPService) GetLocation(ip string) (*GeoLocation, error) {
 		}
 	}
 
-	// 3. 调用API (作为回退)
+	// 3. 尝试本地 MaxMind 数据库
+	if s.localDB != nil {
+		if loc, err := s.queryLocalDB(ip); err == nil && loc != nil {
+			s.cache.Store(ip, loc)
+			return loc, nil
+		}
+	}
+
+	// 4. 调用远程 API (作为回退)
 	location, err := s.queryAPIWithFallback(ip)
 
 	// 如果API查询失败，或者返回空，也回退到本机位置
@@ -361,10 +419,37 @@ func (s *GeoIPService) queryGeoJS(ip string) (*GeoLocation, error) {
 	}, nil
 }
 
-// isPrivateIP 简单判断是否为内网IP
-func isPrivateIP(ip string) bool {
-	return ip == "127.0.0.1" || ip == "::1" || ip == "localhost" ||
-		(len(ip) >= 3 && ip[:3] == "10.") ||
-		(len(ip) >= 7 && ip[:7] == "192.168") ||
-		(len(ip) >= 4 && ip[:4] == "172.")
+func isPrivateIP(ipStr string) bool {
+	if ipStr == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+	privateRanges := []string{
+		// IPv4 私用地址
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",     // 回环地址
+		"169.254.0.0/16",  // 链路本地地址
+		"100.64.0.0/10",   // CGNAT 共享地址
+		"192.0.0.0/24",    // IETF 协议分配
+		"198.18.0.0/15",   // 基准测试地址
+		"198.51.100.0/24", // 文档地址 (TEST-NET-2)
+		"203.0.113.0/24",  // 文档地址 (TEST-NET-3)
+		// IPv6 私用/本地地址
+		"::1/128",       // 回环地址
+		"fc00::/7",      // 唯一本地地址 (ULA)
+		"fe80::/10",     // 链路本地地址
+		"2001:db8::/32", // 文档地址
+	}
+	for _, cidr := range privateRanges {
+		_, ipNet, _ := net.ParseCIDR(cidr)
+		if ipNet != nil && ipNet.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }

@@ -1,0 +1,41 @@
+{
+  "prerender": {
+    "title": "渲染预热",
+    "selectSite": "选择站点：",
+    "refreshStatus": "刷新状态",
+    "statusTitle": "渲染预热状态",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "browserPoolSize": "浏览器池大小",
+    "renderTimeout": "渲染超时(秒)",
+    "cacheTTL": "缓存TTL(秒)",
+    "manualOps": "手动操作",
+    "manualRender": "手动渲染",
+    "cachePreheat": "缓存预热",
+    "preheatConfig": "缓存预热配置",
+    "preheatStatus": "预热状态",
+    "preheatSchedule": "预热计划",
+    "renderHistory": "渲染历史",
+    "columns": {
+      "site": "站点",
+      "status": "状态",
+      "duration": "耗时(ms)",
+      "time": "时间"
+    },
+    "startRender": "开始渲染",
+    "urlLabel": "URL地址：",
+    "urlPlaceholder": "请输入要渲染的URL",
+    "renderNote": "注意：渲染可能需要一段时间，请耐心等待",
+    "preheatConfirm": "确定要触发缓存预热吗？",
+    "startPreheat": "开始预热",
+    "preheatNote": "注意：预热可能需要较长时间，取决于站点规模",
+    "fetchStatusFailed": "获取渲染预热状态失败",
+    "selectSiteWarning": "请选择站点",
+    "inputUrlWarning": "请输入要渲染的URL",
+    "renderSubmitted": "渲染任务已提交",
+    "renderSubmitFailed": "渲染提交失败",
+    "renderFailed": "渲染失败",
+    "preheatTriggered": "缓存预热已触发",
+    "preheatTriggerFailed": "缓存预热触发失败"
+  }
+}

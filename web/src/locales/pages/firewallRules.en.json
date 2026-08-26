@@ -1,0 +1,145 @@
+{
+  "firewallRules": {
+    "title": "WAF Rules Management",
+    "selectSite": "Select a site",
+    "toolbar": {
+      "addRule": "Add Rule",
+      "useTemplate": "Use Template",
+      "testRule": "Test Rules",
+      "exportRules": "Export Rules",
+      "saveRules": "Save Rules",
+      "refresh": "Refresh"
+    },
+    "stats": {
+      "total": "Total Rules",
+      "enabled": "Enabled Rules",
+      "blocked": "Block Rules",
+      "disabled": "Disabled Rules"
+    },
+    "list": {
+      "title": "Rule List",
+      "total": "Total {{total}} rules"
+    },
+    "columns": {
+      "name": "Rule Name",
+      "field": "Match Field",
+      "operator": "Operator",
+      "value": "Match Value",
+      "action": "Action",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "deleteConfirm": "Are you sure you want to delete this rule?",
+    "form": {
+      "addTitle": "Add Rule",
+      "editTitle": "Edit Rule",
+      "ruleName": "Rule Name",
+      "ruleNameRequired": "Please enter the rule name",
+      "namePlaceholder": "e.g. SQL Injection Protection",
+      "fieldRequired": "Please select a match field",
+      "selectField": "Select field",
+      "fieldOptions": {
+        "query": "Query String",
+        "path": "URL Path",
+        "header": "Request Header",
+        "body": "Request Body",
+        "ip": "IP Address",
+        "user_agent": "User-Agent",
+        "country": "Country/Region"
+      },
+      "operatorRequired": "Please select an operator",
+      "selectOperator": "Select operator",
+      "operatorOptions": {
+        "contains": "Contains",
+        "equals": "Equals",
+        "matches": "Regex Match",
+        "gt": "Greater Than",
+        "lt": "Less Than",
+        "in": "In List"
+      },
+      "actionRequired": "Please select an action",
+      "selectAction": "Select action",
+      "actionOptions": {
+        "block": "Block",
+        "allow": "Allow",
+        "log": "Log"
+      },
+      "valueRequired": "Please enter a match value",
+      "valueHelp": "Separate multiple values with commas",
+      "valuePlaceholder": "e.g. ' OR 1=1, UNION SELECT",
+      "updateRule": "Update Rule"
+    },
+    "templates": {
+      "title": "Rule Templates",
+      "description": "Choose a template to quickly add common rules",
+      "ruleCount": "{{count}} rules",
+      "categories": {
+        "injection": "Injection Protection",
+        "script": "Script Protection",
+        "path": "Path Protection",
+        "access": "Access Control"
+      },
+      "items": {
+        "sql_injection": {
+          "name": "SQL Injection Protection",
+          "description": "Detect and block SQL injection attacks"
+        },
+        "xss_protection": {
+          "name": "XSS Protection",
+          "description": "Detect and block cross-site scripting attacks"
+        },
+        "path_traversal": {
+          "name": "Path Traversal Protection",
+          "description": "Detect and block path traversal attacks"
+        },
+        "rate_limit": {
+          "name": "Rate Limiting",
+          "description": "Limit request frequency of a single IP"
+        },
+        "geo_block": {
+          "name": "Geo Blocking",
+          "description": "Block access from specific countries/regions"
+        }
+      }
+    },
+    "test": {
+      "query": "Query String",
+      "path": "URL Path",
+      "ip": "IP Address",
+      "userAgent": "User-Agent",
+      "body": "Request Body",
+      "phQuery": "e.g. id=1' OR 1=1",
+      "phPath": "e.g. /api/users",
+      "phIp": "e.g. 192.168.1.1",
+      "phUserAgent": "e.g. Mozilla/5.0...",
+      "phBody": "Request body content",
+      "result": {
+        "title": "Test Result",
+        "matched": "Matched",
+        "unmatched": "Not Matched",
+        "matchStatus": "Match Status",
+        "execAction": "Executed Action",
+        "matchedRule": "Matched Rule",
+        "noMatch": "No rule matched the request",
+        "detail": "Matched rule: {{name}}"
+      }
+    },
+    "messages": {
+      "fetchFail": "Failed to fetch rule list",
+      "ruleGone": "The rule no longer exists, please refresh and try again",
+      "addSuccess": "Rule added successfully",
+      "updateSuccess": "Rule updated successfully",
+      "addFail": "Failed to add rule",
+      "updateFail": "Failed to update rule",
+      "deleteSuccess": "Rule deleted successfully",
+      "deleteFail": "Failed to delete rule",
+      "statusUpdateFail": "Failed to update status",
+      "applyTemplateSuccess": "Template applied: {{name}}",
+      "applyTemplateFail": "Failed to apply template",
+      "saveSuccess": "Rules saved",
+      "saveFail": "Failed to save rules",
+      "exportSuccess": "Rules exported successfully",
+      "testFail": "Test failed"
+    }
+  }
+}

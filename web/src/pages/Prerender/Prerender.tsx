@@ -1,14 +1,19 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, Row, Col, Statistic, Button, Modal, Input, message, Table, Select } from 'antd'
 import { CodeOutlined, PlayCircleOutlined, FireOutlined, ReloadOutlined } from '@ant-design/icons'
-import { prerenderApi, sitesApi } from '../../services/api'
+import { prerenderApi } from '../../services/api'
+import { useSites } from '../../hooks/useSites'
+import { useTranslation } from 'react-i18next'
 
 const { Search } = Input
 const { Option } = Select
 
 const Prerender: React.FC = () => {
-  const [sites, setSites] = useState<any[]>([])
-  const [selectedSite, setSelectedSite] = useState<string>('')
+  const { t } = useTranslation()
+  const { sites, selectedSiteId: selectedSite, setSelectedSiteId: setSelectedSite } = useSites({
+    autoSelectFirst: true,
+    onFetchError: (msg) => message.error(msg),
+  })
   const [status, setStatus] = useState({
     enabled: false,
     poolSize: 5,
@@ -27,6 +32,8 @@ const Prerender: React.FC = () => {
   const [renderLoading, setRenderLoading] = useState(false)
   const [preheatLoading, setPreheatLoading] = useState(false)
   const [renderHistory, setRenderHistory] = useState<any[]>([])
+  // 竞态防护：站点快速切换时，旧请求的响应不再写入 state
+  const requestVersionRef = useRef(0)
 
   // 表格列配置
   const columns = [
@@ -37,12 +44,12 @@ const Prerender: React.FC = () => {
       ellipsis: true,
     },
     {
-      title: '站点',
+      title: t('prerender.columns.site'),
       dataIndex: 'site',
       key: 'site',
     },
     {
-      title: '状态',
+      title: t('prerender.columns.status'),
       dataIndex: 'status',
       key: 'status',
       render: (text: string) => {
@@ -51,40 +58,26 @@ const Prerender: React.FC = () => {
       },
     },
     {
-      title: '耗时(ms)',
+      title: t('prerender.columns.duration'),
       dataIndex: 'duration',
       key: 'duration',
     },
     {
-      title: '时间',
+      title: t('prerender.columns.time'),
       dataIndex: 'time',
       key: 'time',
     },
   ]
 
-  // 获取站点列表
-  const fetchSites = async () => {
-    try {
-      const res = await sitesApi.getSites()
-      if (res.code === 200) {
-        setSites(res.data)
-        if (res.data.length > 0) {
-          setSelectedSite(res.data[0].id)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch sites:', error)
-      message.error('获取站点列表失败')
-    }
-  }
-
   // 获取渲染预热状态
   const fetchStatus = async () => {
     if (!selectedSite) return
-    
+
+    const version = ++requestVersionRef.current
     try {
       setLoading(true)
       const res = await prerenderApi.getStatus(selectedSite)
+      if (version !== requestVersionRef.current) return
       if (res.code === 200) {
         // 处理单站点数据结构
         const statusData = typeof res.data === 'object' && res.data.enabled !== undefined ? res.data : res.data[selectedSite]
@@ -92,7 +85,7 @@ const Prerender: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch prerender status:', error)
-      message.error('获取渲染预热状态失败')
+      message.error(t('prerender.fetchStatusFailed'))
     } finally {
       setLoading(false)
     }
@@ -100,7 +93,7 @@ const Prerender: React.FC = () => {
 
   // 初始化数据
   useEffect(() => {
-    fetchSites()
+    // 站点列表由 useSites 自动加载
   }, [])
 
   // 当选择的站点变化时，重新获取状态
@@ -113,12 +106,12 @@ const Prerender: React.FC = () => {
   // 手动触发渲染
   const handleRender = async () => {
     if (!selectedSite) {
-      message.warning('请选择站点')
+      message.warning(t('prerender.selectSiteWarning'))
       return
     }
     
     if (!renderUrl) {
-      message.warning('请输入要渲染的URL')
+      message.warning(t('prerender.inputUrlWarning'))
       return
     }
 
@@ -129,7 +122,7 @@ const Prerender: React.FC = () => {
       const duration = Date.now() - startTime
       
       if (res.code === 200) {
-        message.success('渲染任务已提交')
+        message.success(t('prerender.renderSubmitted'))
         setRenderHistory(prev => [
           {
             site: selectedSite,
@@ -143,11 +136,11 @@ const Prerender: React.FC = () => {
         setRenderModalVisible(false)
         setRenderUrl('')
       } else {
-        message.error('渲染提交失败')
+        message.error(t('prerender.renderSubmitFailed'))
       }
     } catch (error) {
       console.error('Failed to render:', error)
-      message.error('渲染失败')
+      message.error(t('prerender.renderFailed'))
     } finally {
       setRenderLoading(false)
     }
@@ -156,7 +149,7 @@ const Prerender: React.FC = () => {
   // 触发缓存预热
   const handlePreheat = async () => {
     if (!selectedSite) {
-      message.warning('请选择站点')
+      message.warning(t('prerender.selectSiteWarning'))
       return
     }
 
@@ -164,14 +157,14 @@ const Prerender: React.FC = () => {
       setPreheatLoading(true)
       const res = await prerenderApi.triggerPreheat(selectedSite)
       if (res.code === 200) {
-        message.success('缓存预热已触发')
+        message.success(t('prerender.preheatTriggered'))
         setPreheatModalVisible(false)
       } else {
-        message.error('缓存预热触发失败')
+        message.error(t('prerender.preheatTriggerFailed'))
       }
     } catch (error) {
       console.error('Failed to trigger preheat:', error)
-      message.error('缓存预热触发失败')
+      message.error(t('prerender.preheatTriggerFailed'))
     } finally {
       setPreheatLoading(false)
     }
@@ -179,13 +172,13 @@ const Prerender: React.FC = () => {
 
   return (
     <div>
-      <h1 className="page-title">渲染预热</h1>
+      <h1 className="page-title">{t('prerender.title')}</h1>
       
       {/* 站点选择器 */}
       <Card className="card" style={{ marginBottom: 16 }}>
         <Row align="middle">
           <Col span={8}>
-            <label style={{ marginRight: 8 }}>选择站点：</label>
+            <label style={{ marginRight: 8 }}>{t('prerender.selectSite')}</label>
             <Select
               value={selectedSite}
               onChange={setSelectedSite}
@@ -194,14 +187,14 @@ const Prerender: React.FC = () => {
             >
               {sites.map((site) => (
                 <Option key={site.id} value={site.id}>
-                  {site.name} ({site.domain})
+                  {site.name} ({site.domains?.[0] || site.id})
                 </Option>
               ))}
             </Select>
           </Col>
           <Col span={8}>
             <Button type="primary" icon={<ReloadOutlined />} onClick={fetchStatus} loading={loading}>
-              刷新状态
+              {t('prerender.refreshStatus')}
             </Button>
           </Col>
         </Row>
@@ -212,29 +205,29 @@ const Prerender: React.FC = () => {
         <Row gutter={[16, 16]}>
           <Col span={6}>
             <Statistic
-              title="渲染预热状态"
-              value={status.enabled ? '已启用' : '已禁用'}
+              title={t('prerender.statusTitle')}
+              value={status.enabled ? t('prerender.enabled') : t('prerender.disabled')}
               prefix={<CodeOutlined />}
               valueStyle={{ color: status.enabled ? '#52c41a' : '#faad14' }}
             />
           </Col>
           <Col span={6}>
             <Statistic
-              title="浏览器池大小"
+              title={t('prerender.browserPoolSize')}
               value={status.poolSize}
               valueStyle={{ color: '#1890ff' }}
             />
           </Col>
           <Col span={6}>
             <Statistic
-              title="渲染超时(秒)"
+              title={t('prerender.renderTimeout')}
               value={status.timeout}
               valueStyle={{ color: '#faad14' }}
             />
           </Col>
           <Col span={6}>
             <Statistic
-              title="缓存TTL(秒)"
+              title={t('prerender.cacheTTL')}
               value={status.cacheTTL}
               valueStyle={{ color: '#52c41a' }}
             />
@@ -245,7 +238,7 @@ const Prerender: React.FC = () => {
       {/* 操作按钮 */}
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col span={12}>
-          <Card className="card" title="手动操作">
+          <Card className="card" title={t('prerender.manualOps')}>
             <Row gutter={[16, 16]}>
               <Col span={12}>
                 <Button
@@ -254,7 +247,7 @@ const Prerender: React.FC = () => {
                   onClick={() => setRenderModalVisible(true)}
                   block
                 >
-                  手动渲染
+                  {t('prerender.manualRender')}
                 </Button>
               </Col>
               <Col span={12}>
@@ -264,25 +257,25 @@ const Prerender: React.FC = () => {
                   onClick={() => setPreheatModalVisible(true)}
                   block
                 >
-                  缓存预热
+                  {t('prerender.cachePreheat')}
                 </Button>
               </Col>
             </Row>
           </Card>
         </Col>
         <Col span={12}>
-          <Card className="card" title="缓存预热配置">
+          <Card className="card" title={t('prerender.preheatConfig')}>
             <Row gutter={[16, 16]}>
               <Col span={24}>
                 <Statistic
-                  title="预热状态"
-                  value={status.preheat.enabled ? '已启用' : '已禁用'}
+                  title={t('prerender.preheatStatus')}
+                  value={status.preheat.enabled ? t('prerender.enabled') : t('prerender.disabled')}
                   valueStyle={{ color: status.preheat.enabled ? '#52c41a' : '#faad14' }}
                 />
               </Col>
               <Col span={24}>
                 <Statistic
-                  title="预热计划"
+                  title={t('prerender.preheatSchedule')}
                   value={status.preheat.schedule}
                   valueStyle={{ color: '#1890ff' }}
                 />
@@ -293,7 +286,7 @@ const Prerender: React.FC = () => {
       </Row>
 
       {/* 渲染历史 */}
-      <Card className="card" title="渲染历史">
+      <Card className="card" title={t('prerender.renderHistory')}>
         <Table
           columns={columns}
           dataSource={renderHistory}
@@ -304,18 +297,18 @@ const Prerender: React.FC = () => {
 
       {/* 手动渲染模态框 */}
       <Modal
-        title="手动渲染"
+        title={t('prerender.manualRender')}
         open={renderModalVisible}
         onOk={handleRender}
         onCancel={() => setRenderModalVisible(false)}
         confirmLoading={renderLoading}
-        okText="开始渲染"
-        cancelText="取消"
+        okText={t('prerender.startRender')}
+        cancelText={t('common.cancel')}
       >
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', marginBottom: 8 }}>URL地址：</label>
+          <label style={{ display: 'block', marginBottom: 8 }}>{t('prerender.urlLabel')}</label>
           <Search
-            placeholder="请输入要渲染的URL"
+            placeholder={t('prerender.urlPlaceholder')}
             allowClear
             value={renderUrl}
             onChange={(e) => setRenderUrl(e.target.value)}
@@ -324,23 +317,23 @@ const Prerender: React.FC = () => {
           />
         </div>
         <p style={{ color: '#666', fontSize: 12 }}>
-          注意：渲染可能需要一段时间，请耐心等待
+          {t('prerender.renderNote')}
         </p>
       </Modal>
 
       {/* 缓存预热模态框 */}
       <Modal
-        title="缓存预热"
+        title={t('prerender.cachePreheat')}
         open={preheatModalVisible}
         onOk={handlePreheat}
         onCancel={() => setPreheatModalVisible(false)}
         confirmLoading={preheatLoading}
-        okText="开始预热"
-        cancelText="取消"
+        okText={t('prerender.startPreheat')}
+        cancelText={t('common.cancel')}
       >
-        <p>确定要触发缓存预热吗？</p>
+        <p>{t('prerender.preheatConfirm')}</p>
         <p style={{ color: '#666', fontSize: 12, marginTop: 16 }}>
-          注意：预热可能需要较长时间，取决于站点规模
+          {t('prerender.preheatNote')}
         </p>
       </Modal>
     </div>

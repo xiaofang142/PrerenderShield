@@ -16,6 +16,8 @@ type WafRepository interface {
 	GetAttackLogs(siteID string, page, limit int) ([]models.AccessLog, int64, error)
 	AddIPToWhitelist(siteID, ip string) error
 	AddIPToBlacklist(siteID, ip string) error
+	GetBlacklist(siteID string) ([]string, error)
+	GetWhitelist(siteID string) ([]string, error)
 }
 
 // FirewallController handles WAF configuration requests
@@ -219,6 +221,40 @@ func (c *FirewallController) GetAttackLogs(ctx *gin.Context) {
 			"limit": limit,
 		},
 	})
+}
+
+// GetBlacklist returns the blacklist IPs for a site
+func (c *FirewallController) GetBlacklist(ctx *gin.Context) {
+	siteID := ctx.Query("site_id")
+	if siteID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "site_id is required"})
+		return
+	}
+
+	ips, err := c.wafRepo.GetBlacklist(siteID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to fetch blacklist"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "data": ips})
+}
+
+// GetWhitelist returns the whitelist IPs for a site
+func (c *FirewallController) GetWhitelist(ctx *gin.Context) {
+	siteID := ctx.Query("site_id")
+	if siteID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "site_id is required"})
+		return
+	}
+
+	ips, err := c.wafRepo.GetWhitelist(siteID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to fetch whitelist"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "data": ips})
 }
 
 // AddToWhitelist adds an IP to the whitelist

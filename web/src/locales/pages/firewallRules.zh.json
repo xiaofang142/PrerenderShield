@@ -1,0 +1,145 @@
+{
+  "firewallRules": {
+    "title": "WAF 规则管理",
+    "selectSite": "请选择站点",
+    "toolbar": {
+      "addRule": "添加规则",
+      "useTemplate": "使用模板",
+      "testRule": "测试规则",
+      "exportRules": "导出规则",
+      "saveRules": "保存规则",
+      "refresh": "刷新"
+    },
+    "stats": {
+      "total": "总规则数",
+      "enabled": "启用规则",
+      "blocked": "拦截规则",
+      "disabled": "禁用规则"
+    },
+    "list": {
+      "title": "规则列表",
+      "total": "共 {{total}} 条规则"
+    },
+    "columns": {
+      "name": "规则名称",
+      "field": "匹配字段",
+      "operator": "操作符",
+      "value": "匹配值",
+      "action": "动作",
+      "status": "状态",
+      "actions": "操作"
+    },
+    "deleteConfirm": "确定要删除这个规则吗？",
+    "form": {
+      "addTitle": "添加规则",
+      "editTitle": "编辑规则",
+      "ruleName": "规则名称",
+      "ruleNameRequired": "请输入规则名称",
+      "namePlaceholder": "例如：SQL 注入防护",
+      "fieldRequired": "请选择匹配字段",
+      "selectField": "选择字段",
+      "fieldOptions": {
+        "query": "查询参数",
+        "path": "URL 路径",
+        "header": "请求头",
+        "body": "请求体",
+        "ip": "IP 地址",
+        "user_agent": "User-Agent",
+        "country": "国家/地区"
+      },
+      "operatorRequired": "请选择操作符",
+      "selectOperator": "选择操作符",
+      "operatorOptions": {
+        "contains": "包含",
+        "equals": "等于",
+        "matches": "正则匹配",
+        "gt": "大于",
+        "lt": "小于",
+        "in": "在列表中"
+      },
+      "actionRequired": "请选择动作",
+      "selectAction": "选择动作",
+      "actionOptions": {
+        "block": "拦截",
+        "allow": "放行",
+        "log": "记录"
+      },
+      "valueRequired": "请输入匹配值",
+      "valueHelp": "多个值用逗号分隔",
+      "valuePlaceholder": "例如：' OR 1=1, UNION SELECT",
+      "updateRule": "更新规则"
+    },
+    "templates": {
+      "title": "规则模板",
+      "description": "选择一个模板快速添加常用规则",
+      "ruleCount": "{{count}} 条规则",
+      "categories": {
+        "injection": "注入防护",
+        "script": "脚本防护",
+        "path": "路径防护",
+        "access": "访问控制"
+      },
+      "items": {
+        "sql_injection": {
+          "name": "SQL 注入防护",
+          "description": "检测和阻止 SQL 注入攻击"
+        },
+        "xss_protection": {
+          "name": "XSS 防护",
+          "description": "检测和阻止跨站脚本攻击"
+        },
+        "path_traversal": {
+          "name": "路径遍历防护",
+          "description": "检测和阻止路径遍历攻击"
+        },
+        "rate_limit": {
+          "name": "频率限制",
+          "description": "限制单个 IP 的请求频率"
+        },
+        "geo_block": {
+          "name": "地理位置封锁",
+          "description": "封锁特定国家/地区的访问"
+        }
+      }
+    },
+    "test": {
+      "query": "查询参数",
+      "path": "URL 路径",
+      "ip": "IP 地址",
+      "userAgent": "User-Agent",
+      "body": "请求体",
+      "phQuery": "例如：id=1' OR 1=1",
+      "phPath": "例如：/api/users",
+      "phIp": "例如：192.168.1.1",
+      "phUserAgent": "例如：Mozilla/5.0...",
+      "phBody": "请求体内容",
+      "result": {
+        "title": "测试结果",
+        "matched": "已匹配",
+        "unmatched": "未匹配",
+        "matchStatus": "匹配状态",
+        "execAction": "执行动作",
+        "matchedRule": "匹配规则",
+        "noMatch": "请求未匹配任何规则",
+        "detail": "匹配规则: {{name}}"
+      }
+    },
+    "messages": {
+      "fetchFail": "获取规则列表失败",
+      "ruleGone": "规则已不存在，请刷新后重试",
+      "addSuccess": "规则添加成功",
+      "updateSuccess": "规则更新成功",
+      "addFail": "规则添加失败",
+      "updateFail": "规则更新失败",
+      "deleteSuccess": "规则删除成功",
+      "deleteFail": "规则删除失败",
+      "statusUpdateFail": "更新状态失败",
+      "applyTemplateSuccess": "已应用模板: {{name}}",
+      "applyTemplateFail": "应用模板失败",
+      "saveSuccess": "规则已保存",
+      "saveFail": "规则保存失败",
+      "exportSuccess": "规则导出成功",
+      "testFail": "测试失败"
+    }
+  }
+}

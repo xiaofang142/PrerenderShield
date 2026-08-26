@@ -3,6 +3,7 @@ package streaming
 import (
 	"bytes"
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -60,12 +61,19 @@ func TestFirstScreenRenderer_inlineCriticalCSS(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	renderer := NewFirstScreenRenderer(DefaultFirstScreenConfig(), logger)
 
-	html := `<html><head><link rel="stylesheet" href="critical.css"></head><body></body></html>`
+	// 使用 httptest.Server 提供 CSS 内容
+	cssServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css")
+		w.Write([]byte("body { margin: 0; } /* Critical CSS */"))
+	}))
+	defer cssServer.Close()
+
+	html := `<html><head><link rel="stylesheet" href="` + cssServer.URL + `/critical.css"></head><body></body></html>`
 
 	result := renderer.inlineCriticalCSS(html)
 
 	assert.Contains(t, result, "Critical CSS")
-	assert.NotContains(t, result, `<link rel="stylesheet" href="critical.css">`)
+	assert.NotContains(t, result, `<link rel="stylesheet"`)
 }
 
 func TestFirstScreenRenderer_addPreloads(t *testing.T) {

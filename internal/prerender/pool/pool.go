@@ -3,6 +3,8 @@ package pool
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"sync"
 	"time"
 
@@ -33,6 +35,7 @@ type Config struct {
 	MaxUseCount         int           // 单个实例最大使用次数
 	HealthCheckInterval time.Duration // 健康检查间隔
 	Headless            bool          // 是否无头模式
+	ExecPath            string        // Chromium 可执行文件路径（为空则自动查找）
 }
 
 // DefaultConfig 默认配置
@@ -45,6 +48,44 @@ func DefaultConfig() Config {
 		HealthCheckInterval: 30 * time.Second,
 		Headless:            true,
 	}
+}
+
+// chromiumCandidates 常见 Chromium/Chrome 可执行文件候选（按优先级）
+var chromiumCandidates = []string{
+	"chromium",
+	"chromium-browser",
+	"google-chrome",
+	"google-chrome-stable",
+	"/usr/bin/chromium",
+	"/usr/bin/chromium-browser",
+	"/usr/bin/google-chrome",
+	"/usr/bin/google-chrome-stable",
+	"/snap/bin/chromium",
+	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+	"/Applications/Chromium.app/Contents/MacOS/Chromium",
+}
+
+// ResolveChromiumPath 解析可用的浏览器路径。
+// execPath 非空时校验该路径存在且可执行；为空时按常见候选自动查找。
+// 返回解析后的路径，找不到时返回错误。
+func ResolveChromiumPath(execPath string) (string, error) {
+	if execPath != "" {
+		info, err := os.Stat(execPath)
+		if err != nil {
+			return "", fmt.Errorf("configured chromium path not found: %s", execPath)
+		}
+		if info.IsDir() {
+			return "", fmt.Errorf("configured chromium path is a directory: %s", execPath)
+		}
+		return execPath, nil
+	}
+
+	for _, candidate := range chromiumCandidates {
+		if path, err := exec.LookPath(candidate); err == nil {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("no chromium/chrome binary found in PATH (tried: %v); install chromium or set CHROME_PATH/PRERENDER_CHROMIUM_PATH", chromiumCandidates)
 }
 
 // Pool Chromium 实例池
@@ -97,6 +138,16 @@ func NewPool(config Config, logger *zap.Logger) *Pool {
 
 // createInstance 创建新实例
 func (p *Pool) createInstance() *Instance {
+	// 全局进程数硬上限防护：孤儿进程累积或异常扩容时拒绝继续创建，
+	// 防止无头浏览器进程拖垮宿主机
+	if n := CountChromiumProcesses(); n >= p.HardProcessCap() {
+		p.logger.Error("chromium process cap reached, refusing to create instance",
+			zap.Int("current_processes", n),
+			zap.Int("cap", p.HardProcessCap()),
+			zap.String("hint", "restart the service to trigger orphan sweep, or raise PRERENDER_MAX_INSTANCES"))
+		return nil
+	}
+
 	allocCtx, allocCancel := chromedp.NewExecAllocator(p.ctx, p.allocatorOptions()...)
 	chromeCtx, chromeCancel := chromedp.NewContext(allocCtx)
 
@@ -125,11 +176,15 @@ func (p *Pool) allocatorOptions() []chromedp.ExecAllocatorOption {
 		chromedp.Flag("disable-gpu", true),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("disable-web-security", true),
 		chromedp.Flag("disable-features", "VizDisplayCompositor"),
 		chromedp.Flag("window-size", "1920,1080"),
 		chromedp.Flag("js-flags", "--max-old-space-size=512 --max-heap-size=512"),
 	)
+
+	// 显式指定浏览器路径（配置或环境变量）
+	if p.config.ExecPath != "" {
+		options = append(options, chromedp.ExecPath(p.config.ExecPath))
+	}
 
 	// 添加性能优化选项
 	options = append(options,
@@ -523,10 +578,11 @@ func (p *Pool) Close() error {
 	// 取消上下文
 	p.cancel()
 
-	// 关闭所有实例
+	// 同步关闭所有实例：cancel 链路负责终止浏览器进程树，
+	// 必须在本函数返回前完成，否则进程退出后子浏览器变孤儿
 	p.mu.Lock()
 	for _, instance := range p.instances {
-		go p.closeInstance(instance)
+		p.closeInstance(instance)
 	}
 	p.instances = nil
 	p.mu.Unlock()

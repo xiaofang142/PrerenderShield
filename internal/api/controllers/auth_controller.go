@@ -11,18 +11,18 @@ import (
 
 // AuthController 认证控制器
 type AuthController struct {
-	userManager  *auth.UserManager
-	jwtManager   *auth.JWTManager
-	auditLogger  *audit.Logger
+	userManager   *auth.UserManager
+	jwtManager    *auth.JWTManager
+	auditLogger   *audit.Logger
 	twoFactorAuth *auth.TwoFactorAuth
 }
 
 // NewAuthController 创建认证控制器实例
 func NewAuthController(userManager *auth.UserManager, jwtManager *auth.JWTManager, auditLogger *audit.Logger, twoFactorAuth *auth.TwoFactorAuth) *AuthController {
 	return &AuthController{
-		userManager:  userManager,
-		jwtManager:   jwtManager,
-		auditLogger:  auditLogger,
+		userManager:   userManager,
+		jwtManager:    jwtManager,
+		auditLogger:   auditLogger,
 		twoFactorAuth: twoFactorAuth,
 	}
 }
@@ -55,6 +55,8 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	clientIP := ctx.ClientIP()
 
 	if c.userManager.IsFirstRun() {
+		// P0-23: First run 仍然自动创建首个管理员
+		// (后续可由该管理员通过 Admin API 创建更多用户)
 		user, err = c.userManager.CreateUser(req.Username, req.Password)
 		if err != nil {
 			if c.auditLogger != nil {

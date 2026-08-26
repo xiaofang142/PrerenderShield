@@ -18,13 +18,19 @@
   </a>
 </p>
 
+## 📌 产品规划与商业模式
+
+面向国际化和中小项目场景的功能清单、模块边界、持续审计机制、收费方式和适用客户论证，请查看：
+
+- [Prerender Shield 国际化中小项目功能与商业模式论证](INTERNATIONAL_SMB_PRODUCT_BUSINESS_PLAN.md)
+
 ## 🚀 一键安装
 
 ```bash
 curl -fsSL https://prerender.websitetool.cn/install.sh | bash
 ```
 
-> 安装完成后访问 `http://服务器IP:9597` 进入管理控制台。默认账号: `admin` / `123456`
+> 安装完成后访问 `http://服务器IP:9597` 进入管理控制台。首次访问时使用登录页提交的账号密码创建管理员（无预置默认账号）。
 
 ---
 
@@ -62,7 +68,7 @@ curl -fsSL https://prerender.websitetool.cn/install.sh | bash
 - **开源自托管**：完全开源，支持私有化部署，数据完全自主可控
 
 ### 🏗️ **技术架构**
-- **后端**：Go 1.20+（高性能、高并发、内存安全）
+- **后端**：Go 1.25+（高性能、高并发、内存安全）
 - **前端**：React 18 + TypeScript + Ant Design（现代化管理界面）
 - **渲染引擎**：Headless Chromium + Puppeteer（标准浏览器渲染）
 - **缓存系统**：Redis（高性能内存数据库）
@@ -81,7 +87,7 @@ curl -fsSL https://prerender.websitetool.cn/install.sh | bash
 | **不安全反序列化** | 类型安全检查、序列化白名单 | 格式验证、类型检查 |
 | **敏感数据泄露** | 数据加密、安全头配置 | 数据掩码、头检测 |
 | **XML 外部实体** | XXE 攻击检测与拦截 | XML 解析限制 |
-| **组件安全漏洞** | 已知漏洞检测、依赖扫描 | CVE 匹配、版本检查 |
+| **组件安全漏洞** | 响应头安全策略、依赖组件加固 | 安全头配置、CSP 策略（CVE 依赖扫描规划中，尚未实现） |
 
 #### 高级安全特性
 - **实时威胁检测**：毫秒级响应，自动拦截恶意请求
@@ -148,7 +154,7 @@ Prerender Shield 在市场上具有独特的定位，填补了现有产品的功
 #### 市场定位矩阵
 | 产品类型 | 代表产品 | 安全防护 | 渲染预热 | 综合网关 | 成本模式 |
 |---------|---------|---------|---------|---------|---------|
-| **Prerender Shield** | 本项目 | ✅ 完整OWASP防护 | ✅ 智能渲染预热 | ✅ 多站点代理 | 开源免费 |
+| **Prerender Shield** | 本项目 | ✅ 完整OWASP防护 | ✅ 智能渲染预热 | ✅ 多站点代理 | 1 站点免费，$99/站/年（[定价](https://prerender.websitetool.cn/pricing)） |
 | **纯WAF产品** | 雷池、Cloudflare WAF | ✅ 企业级防护 | ❌ 不支持 | ❌ 仅安全检测 | 商业付费 |
 | **纯渲染产品** | Rendertron、Prerender.io | ❌ 无安全功能 | ✅ 专业渲染 | ❌ 仅渲染服务 | 开源/SAAS |
 | **综合网关** | Nginx、Envoy、Traefik | ⚠️ 基础防护 | ❌ 不支持 | ✅ 完整网关功能 | 开源免费 |
@@ -164,7 +170,7 @@ Prerender Shield 在市场上具有独特的定位，填补了现有产品的功
 #### 2. 成本效益显著
 | 对比方案 | 年化成本 | 部署复杂度 | 运维成本 |
 |---------|---------|-----------|---------|
-| **Prerender Shield** | 0元（开源免费） | 低（一键部署） | 低（单系统运维） |
+| **Prerender Shield** | 1 站点免费；多站点 $99/站/年 | 低（一键部署） | 低（单系统运维） |
 | **雷池WAF + Rendertron** | 2000元+ | 高（多系统集成） | 高（多系统运维） |
 | **Cloudflare + Prerender.io** | 5000元+ | 中（云服务配置） | 中（云服务管理） |
 
@@ -172,7 +178,7 @@ Prerender Shield 在市场上具有独特的定位，填补了现有产品的功
 - **智能路由算法**：避免无效渲染，节省 30%+ 计算资源
 - **资源优化设计**：Chromium 实例复用，降低内存消耗
 - **实时配置更新**：Redis 驱动的动态配置，支持热重载
-- **现代化技术栈**：Go + React Type +Script，易于二次开发
+- **现代化技术栈**：Go + React + TypeScript，易于二次开发
 
 #### 4. 本地化优势
 - **数据自主可控**：完全自托管，满足中国数据合规要求
@@ -195,15 +201,6 @@ Prerender Shield 在市场上具有独特的定位，填补了现有产品的功
 | **实时更新** | 社区更新 | ✅ 云端实时更新 | ✅ 定期更新 |
 | **审计日志** | ✅ 完整记录 | ✅ 企业版支持 | ✅ 支持 |
 | **DDoS 防护** | 基础限流 | ✅ 专业防护 | ✅ 专业防护 |
-
-## 🚀 一键安装
-
-```bash
-curl -fsSL https://prerender.websitetool.cn/install.sh | bash
-```
-
-> 自动检测环境，支持 Docker / 源码构建 / 预编译二进制 三种方式。
-> 安装完成后访问 http://localhost:9597 进入管理控制台（默认账号: admin / 123456）。
 
 ## 4. 安装与部署
 
@@ -288,39 +285,26 @@ chmod +x install.sh
 
 **install.sh 脚本功能说明**：
 - ✅ 检测操作系统和架构
-- ✅ 检查并安装Redis（如未安装）
-- ✅ 交互式配置Redis连接信息并保存到bin/config/config.yml
-- ✅ 检查并安装谷歌无头浏览器（如未安装，安装路径：bin/google）
+- ✅ 自动选择安装方式（Docker / 源码构建 / 预编译二进制）
+- ✅ 检查并安装 Redis（如未安装）
+- ✅ 检查并安装 Chromium 无头浏览器（渲染引擎核心依赖，可通过 `CHROME_PATH` 环境变量指定路径）
+- ✅ 生成默认配置并注册 systemd 服务（Linux）或后台启动（macOS）
 - ✅ 执行安装后的健康检查
-- ✅ 输出启动命令和访问信息
 
 #### 🎯 **用户启动流程**
 
 适合普通用户使用，启动已安装的应用：
 
 ```bash
-# 1. 确保已经完成安装
-# ./install.sh
+# 启动（Linux 下由 systemd 托管）
+sudo systemctl start prerender-shield
 
-# 2. 启动应用
-./bin/api start
-
-# 3. 重启应用
-./bin/api restart
-
-# 4. 停止应用
-./bin/api stop
+# 或使用启动脚本
+./start.sh
 ```
 
-**启动命令功能说明**：
-- ✅ 使用bin/api二进制文件直接启动服务
-- ✅ 支持start、restart、stop命令
-- ✅ 自动使用bin/config/config.yml配置文件
-- ✅ 数据目录：bin/data
-- ✅ 日志文件：bin/data/prerender-shield.log
-- ✅ 配置文件：bin/config/config.yml
-
-> 注意：也可以继续使用start.sh脚本启动服务，脚本会自动适配新的二进制文件位置
+> 注意：`api` 二进制本身不支持 start/restart/stop 子命令；停止服务请使用
+> `sudo systemctl stop prerender-shield`（Linux）或 `kill $(cat data/prerender-shield.pid)`（macOS）。
 
 ```bash
 # 兼容旧版本启动方式
@@ -338,7 +322,6 @@ chmod +x start.sh
 | **build.sh** | 开发者构建脚本 | 构建前端和后端，生成多平台二进制文件 | 开发环境 |
 | **install.sh** | 用户安装脚本 | 依赖安装和配置，从预编译包安装应用 | 生产环境 |
 | **start.sh** | 用户启动脚本 | 启动、停止、重启应用，执行健康检查 | 生产环境 |
-| **test_script.sh** | 测试脚本 | 验证脚本体系在不同平台上的兼容性 | 测试环境 |
 
 ### 🔍 **验证安装**
 
@@ -351,8 +334,7 @@ chmod +x start.sh
 
 2. **访问管理界面**
    - 打开浏览器访问：`http://你的服务器IP:9597`
-   - 使用默认账号登录：**admin** / **123456**
-   - 首次登录建议立即修改默认密码
+   - 首次访问时在登录页设置管理员账号密码（无预置默认账号）
 
 3. **测试API接口**
    ```bash
@@ -362,7 +344,7 @@ chmod +x start.sh
    
    # 版本信息接口
    curl http://localhost:9598/api/v1/version
-   # 预期返回：{"version":"v1.0.1","build":"..."}
+   # 预期返回：{"version":"3.0.0",...}
    ```
 
 ### 🚀 **服务管理**
@@ -482,6 +464,20 @@ monitoring:
   prometheus_address: ":9090"
 ```
 
+#### ⚠️ **Redis 持久化要求（生产必读）**
+
+Prerender Shield 将**用户账号、站点配置、告警记录、任务状态**等核心数据存储在 Redis 中。
+生产环境必须开启 Redis 持久化（AOF），否则 Redis 重启会导致管理员账号和站点配置丢失：
+
+```conf
+# redis.conf
+appendonly yes
+appendfsync everysec   # 每秒刷盘，兼顾性能与安全
+```
+
+验证方式：`redis-cli CONFIG GET appendonly` 应返回 `appendonly=yes`。
+Docker 部署请为 redis 服务挂载持久卷并追加 `--appendonly yes` 启动参数。
+
 ### 🔄 **动态配置更新**
 
 Prerender Shield 支持动态配置更新，无需重启服务即可生效：
@@ -535,9 +531,9 @@ npm install
 npm run dev
 
 # 4. 访问开发环境
-# 管理界面：http://localhost:5173
+# 管理界面：http://localhost:9597（或前端开发服务 http://localhost:5173）
 # API服务：http://localhost:9598
-# 默认账号：admin / 123456
+# 首次访问控制台时，使用登录页提交的账号密码创建管理员（无预置默认账号）
 ```
 
 ### 📚 **相关资源**
@@ -598,7 +594,7 @@ npm run dev
 - **GitHub Discussions**：[功能讨论](https://github.com/xiaofang142/PrerenderShield/discussions)
 - **Gitee Issues**：[问题反馈](https://gitee.com/xhpmayun/prerender-shield/issues)
 
-## 10. 增强功能与改进
+## 9. 增强功能与改进
 
 ### 🔧 **稳定性增强**
 - **健康检查机制**：新增全面的系统健康检查，包括Redis连接、内存使用、goroutine数量等
@@ -620,7 +616,7 @@ npm run dev
 - **更严格的配置验证**：防止配置错误导致的安全问题
 - **回退机制**：确保系统在配置错误时仍能提供基本服务
 
-## 9. 项目状态
+## 10. 项目状态
 
 ### 📊 **项目指标**
 
@@ -650,9 +646,9 @@ npm run dev
 | 文档 | 说明 |
 |------|------|
 | [架构清单](docs/architecture-inventory.md) | 完整模块架构、依赖关系、分层全景 |
-| [功能清单](docs/feature-inventory.md) | 64项功能实现状态、代码位置、覆盖 |
+| [功能清单](docs/feature-inventory.md) | 96项功能实现状态、代码位置、覆盖 |
 | [业务流](docs/business-flow.md) | 六大核心业务流程、配置流、权限模型 |
-| [数据流](docs/data-flow.md) | 请求管道、缓存策略、Redis-only存储 |
-| [环境变量](docs/ENV_VARS.md) | 11个环境变量完整文档 |
-| [改进分析](docs/IMPROVEMENT_ANALYSIS_2026.md) | 17项改进建议+实施路线图 |
+| [环境变量](docs/ENV_VARS.md) | 13个环境变量完整文档 |
+| [架构图](docs/ARCHITECTURE_DIAGRAMS.md) | 17张Mermaid架构图覆盖全部功能模块 |
+| [API 清单](docs/API.md) | 全部 REST 端点、认证方式与错误码约定 |
 | [CHANGELOG](CHANGELOG.md) | 版本历史与变更记录 |

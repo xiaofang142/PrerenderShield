@@ -1,0 +1,30 @@
+{
+  "preheat": {
+    "title": "レンダリング・プリヒート",
+    "selectSite": "サイト選択：",
+    "sitePlaceholder": "サイトを選択してください",
+    "refreshData": "データを更新",
+    "triggerPreheat": "サイトのプリヒートを実行",
+    "clearCache": "キャッシュをクリア",
+    "stats": {
+      "urlCount": "URL総数",
+      "cacheCount": "キャッシュ数",
+      "cacheSize": "キャッシュサイズ",
+      "browserPoolSize": "ブラウザプールサイズ"
+    },
+    "urlListTitle": "URLリスト",
+    "columns": {
+      "siteName": "サイト名",
+      "updatedAt": "更新日時"
+    },
+    "totalRecords": "全 {{total}} 件",
+    "fetchStatsFailed": "統計データの取得に失敗しました",
+    "fetchUrlsFailed": "URLリストの取得に失敗しました",
+    "refreshed": "データを更新しました",
+    "selectSiteFirst": "先にサイトを選択してください",
+    "preheatCreated": "プリヒートタスクを作成しました。後ほどご確認ください",
+    "triggerPreheatFailed": "プリヒートの実行に失敗しました",
+    "clearCacheSuccess": "キャッシュをクリアしました（{{count}} 件）",
+    "clearCacheFailed": "キャッシュのクリアに失敗しました"
+  }
+}

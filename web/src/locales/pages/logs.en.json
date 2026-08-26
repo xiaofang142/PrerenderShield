@@ -1,0 +1,30 @@
+{
+  "logs": {
+    "title": "Access Logs",
+    "autoRefresh": "Auto Refresh (10s)",
+    "tabAccessLogs": "Access Logs",
+    "tabStats": "Statistics",
+    "filterIp": "Filter IP",
+    "filterMethod": "Request Method",
+    "filterStatus": "Status Code",
+    "columns": {
+      "rank": "Rank",
+      "time": "Time",
+      "ip": "IP",
+      "method": "Method",
+      "path": "Path",
+      "status": "Status Code",
+      "duration": "Duration (ms)"
+    },
+    "totalRecords": "{{total}} records in total",
+    "topIps": "Top IPs (Top 10)",
+    "topUrls": "Top URLs (Top 10)",
+    "ipAddress": "IP Address",
+    "url": "URL",
+    "requestCount": "Requests",
+    "methodDistribution": "Request Method Distribution",
+    "statusDistribution": "Status Code Distribution",
+    "percent": "Percentage",
+    "noData": "No Data"
+  }
+}

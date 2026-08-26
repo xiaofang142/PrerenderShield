@@ -1,0 +1,30 @@
+{
+  "logs": {
+    "title": "로그 관리",
+    "autoRefresh": "자동 새로고침 (10초)",
+    "tabAccessLogs": "접속 로그",
+    "tabStats": "통계 분석",
+    "filterIp": "IP 필터",
+    "filterMethod": "요청 메서드",
+    "filterStatus": "상태 코드",
+    "columns": {
+      "rank": "순위",
+      "time": "시간",
+      "ip": "IP",
+      "method": "메서드",
+      "path": "경로",
+      "status": "상태 코드",
+      "duration": "소요 시간(ms)"
+    },
+    "totalRecords": "총 {{total}}개 기록",
+    "topIps": "인기 IP (Top 10)",
+    "topUrls": "인기 URL (Top 10)",
+    "ipAddress": "IP 주소",
+    "url": "URL",
+    "requestCount": "요청 수",
+    "methodDistribution": "요청 메서드 분포",
+    "statusDistribution": "상태 코드 분포",
+    "percent": "비율",
+    "noData": "데이터 없음"
+  }
+}

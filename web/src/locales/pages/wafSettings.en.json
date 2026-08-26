@@ -1,0 +1,27 @@
+{
+  "wafSettings": {
+    "backToSites": "Back to Sites",
+    "title": "WAF Firewall Configuration - {{siteName}}",
+    "enableFirewall": "Enable Firewall",
+    "rateLimitSection": "Rate Limiting",
+    "requestCountLabel": "Request Limit",
+    "requestCountHelp": "Maximum requests allowed per period",
+    "countUnit": "requests",
+    "windowLabel": "Time Window",
+    "windowHelp": "Statistics period (minutes)",
+    "minutesUnit": "min",
+    "accessControlSection": "Access Control",
+    "blockedCountries": "Blocked Countries/Regions",
+    "countryPlaceholder": "Enter country codes, e.g. CN, US",
+    "whitelistIps": "IP Whitelist",
+    "blacklistIps": "IP Blacklist",
+    "ipPlaceholder": "Enter IP addresses",
+    "blockPageSection": "Block Page",
+    "customBlockPage": "Custom Block Page HTML",
+    "saveConfig": "Save Configuration",
+    "saveSuccess": "WAF configuration saved",
+    "saveFailedWithReason": "Save failed: {{reason}}",
+    "saveFailed": "Save failed",
+    "fetchConfigFailed": "Failed to load WAF configuration"
+  }
+}

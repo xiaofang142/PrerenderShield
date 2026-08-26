@@ -1,0 +1,41 @@
+{
+  "prerender": {
+    "title": "レンダリング・プリヒート",
+    "selectSite": "サイト選択：",
+    "refreshStatus": "ステータスを更新",
+    "statusTitle": "レンダリング状態",
+    "enabled": "有効",
+    "disabled": "無効",
+    "browserPoolSize": "ブラウザプールサイズ",
+    "renderTimeout": "レンダリングタイムアウト(秒)",
+    "cacheTTL": "キャッシュTTL(秒)",
+    "manualOps": "手動操作",
+    "manualRender": "手動レンダリング",
+    "cachePreheat": "キャッシュプリヒート",
+    "preheatConfig": "キャッシュプリヒート設定",
+    "preheatStatus": "プリヒート状態",
+    "preheatSchedule": "プリヒートスケジュール",
+    "renderHistory": "レンダリング履歴",
+    "columns": {
+      "site": "サイト",
+      "status": "ステータス",
+      "duration": "所要時間(ms)",
+      "time": "時刻"
+    },
+    "startRender": "レンダリング開始",
+    "urlLabel": "URL：",
+    "urlPlaceholder": "レンダリングするURLを入力してください",
+    "renderNote": "注意：レンダリングには時間がかかる場合があります。しばらくお待ちください",
+    "preheatConfirm": "キャッシュプリヒートを実行しますか？",
+    "startPreheat": "プリヒート開始",
+    "preheatNote": "注意：サイトの規模によっては、プリヒートに時間がかかる場合があります",
+    "fetchStatusFailed": "レンダリング状態の取得に失敗しました",
+    "selectSiteWarning": "サイトを選択してください",
+    "inputUrlWarning": "レンダリングするURLを入力してください",
+    "renderSubmitted": "レンダリングタスクを送信しました",
+    "renderSubmitFailed": "レンダリングタスクの送信に失敗しました",
+    "renderFailed": "レンダリングに失敗しました",
+    "preheatTriggered": "キャッシュプリヒートをトリガーしました",
+    "preheatTriggerFailed": "キャッシュプリヒートのトリガーに失敗しました"
+  }
+}

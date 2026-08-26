@@ -1,191 +1,154 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Card, Row, Col, Statistic, message, Progress } from 'antd'
+import type { EChartsOption } from 'echarts'
 import { monitoringApi } from '../../services/api'
 import BaseChart from '../../components/charts/BaseChart'
+import { usePolling } from '@prerender/utils'
+import { formatBytes, formatPercent } from '@prerender/utils'
+import { pollingIntervals } from '@prerender/design-tokens'
+import { useTranslation } from 'react-i18next'
 
-// 格式化字节数
-const formatBytes = (bytes: number, decimals = 2): string => {
-  if (bytes === 0) return '0 Bytes'
-  const k = 1024
-  const dm = decimals < 0 ? 0 : decimals
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]
+interface SystemStats {
+  requestsPerSecond: number
+  cpuUsage: number
+  memoryUsage: number
+  memoryTotal: number
+  memoryUsed: number
+  memoryFree: number
+  diskUsage: number
+  diskTotal: number
+  diskUsed: number
+  diskFree: number
+  networkSent: number
+  networkRecv: number
+  networkPacketsSent: number
+  networkPacketsRecv: number
 }
 
+const initialStats: SystemStats = {
+  requestsPerSecond: 12.5,
+  cpuUsage: 25.3,
+  memoryUsage: 67.8,
+  memoryTotal: 0,
+  memoryUsed: 0,
+  memoryFree: 0,
+  diskUsage: 45.2,
+  diskTotal: 0,
+  diskUsed: 0,
+  diskFree: 0,
+  networkSent: 0,
+  networkRecv: 0,
+  networkPacketsSent: 0,
+  networkPacketsRecv: 0,
+}
+
+// gauge 图表配置工厂：三份重复配置收敛为一个函数（name 为已翻译的完整显示名）
+function buildGaugeOption(name: string, value: number): EChartsOption {
+  return {
+    tooltip: { trigger: 'item' as const },
+    series: [
+      {
+        name,
+        type: 'gauge' as const,
+        detail: { formatter: '{value}%' },
+        data: [{ value, name }],
+        axisLine: {
+          lineStyle: {
+            color: [
+              [0.3, '#67e0e3'],
+              [0.7, '#37a2da'],
+              [1, '#fd666d'],
+            ],
+          },
+        },
+      },
+    ],
+  }
+}
+
+const usageColor = (v: number) => (v > 80 ? '#f5222d' : '#52c41a')
+
 const Monitoring: React.FC = () => {
-  const [stats, setStats] = useState({
-    requestsPerSecond: 12.5,
-    cpuUsage: 25.3,
-    memoryUsage: 67.8,
-    memoryTotal: 0,
-    memoryUsed: 0,
-    memoryFree: 0,
-    diskUsage: 45.2,
-    diskTotal: 0,
-    diskUsed: 0,
-    diskFree: 0,
-    networkSent: 0,
-    networkRecv: 0,
-    networkPacketsSent: 0,
-    networkPacketsRecv: 0,
-  })
+  const { t } = useTranslation()
+  const [stats, setStats] = useState<SystemStats>(initialStats)
 
-  // 图表配置
-  const cpuChartOption: echarts.EChartsOption = {
-    tooltip: {
-      trigger: 'item' as const,
-    },
-    series: [
-      {
-        name: 'CPU使用率',
-        type: 'gauge' as const,
-        detail: { formatter: '{value}%' },
-        data: [{ value: stats.cpuUsage, name: 'CPU' }],
-        axisLine: {
-          lineStyle: {
-            color: [
-              [0.3, '#67e0e3'],
-              [0.7, '#37a2da'],
-              [1, '#fd666d'],
-            ],
-          },
-        },
-      },
-    ],
-  }
-
-  const memoryChartOption: echarts.EChartsOption = {
-    tooltip: {
-      trigger: 'item' as const,
-    },
-    series: [
-      {
-        name: '内存使用率',
-        type: 'gauge' as const,
-        detail: { formatter: '{value}%' },
-        data: [{ value: stats.memoryUsage, name: '内存' }],
-        axisLine: {
-          lineStyle: {
-            color: [
-              [0.3, '#67e0e3'],
-              [0.7, '#37a2da'],
-              [1, '#fd666d'],
-            ],
-          },
-        },
-      },
-    ],
-  }
-
-  const diskChartOption: echarts.EChartsOption = {
-    tooltip: {
-      trigger: 'item' as const,
-    },
-    series: [
-      {
-        name: '磁盘使用率',
-        type: 'gauge' as const,
-        detail: { formatter: '{value}%' },
-        data: [{ value: stats.diskUsage, name: '磁盘' }],
-        axisLine: {
-          lineStyle: {
-            color: [
-              [0.3, '#67e0e3'],
-              [0.7, '#37a2da'],
-              [1, '#fd666d'],
-            ],
-          },
-        },
-      },
-    ],
-  }
-
-  // 获取监控数据
-  useEffect(() => {
-    const fetchData = async () => {
+  // usePolling 统一管理轮询生命周期（卸载清理 + 页面不可见自动暂停）
+  usePolling(
+    async () => {
       try {
         const statsRes = await monitoringApi.getStats()
-        
         if (statsRes.code === 200) {
           setStats(statsRes.data)
         }
       } catch (error) {
         console.error('Failed to fetch monitoring data:', error)
-        message.error('获取监控数据失败')
+        message.error(t('monitoringPage.fetchFailed'))
       }
-    }
-
-    fetchData()
-    // 每10秒刷新一次数据
-    const interval = setInterval(fetchData, 10000)
-    return () => clearInterval(interval)
-  }, [])
+    },
+    { interval: pollingIntervals.realtime }
+  )
 
   return (
     <div>
-      <h1 className="page-title">监控警告</h1>
-      
+      <h1 className="page-title">{t('monitoringPage.title')}</h1>
+
       {/* 实时统计卡片 */}
       <Row gutter={[16, 16]}>
         <Col span={8}>
           <Card className="card">
-            <h3 style={{ marginBottom: 16 }}>CPU使用率</h3>
+            <h3 style={{ marginBottom: 16 }}>{t('monitoringPage.cpuUsage')}</h3>
             <div style={{ height: 200 }}>
-              <BaseChart option={cpuChartOption} />
+              <BaseChart option={buildGaugeOption(t('monitoringPage.cpuUsage'), stats.cpuUsage)} />
             </div>
           </Card>
         </Col>
         <Col span={8}>
           <Card className="card">
-            <h3 style={{ marginBottom: 16 }}>内存使用率</h3>
+            <h3 style={{ marginBottom: 16 }}>{t('monitoringPage.memoryUsage')}</h3>
             <div style={{ height: 200 }}>
-              <BaseChart option={memoryChartOption} />
+              <BaseChart option={buildGaugeOption(t('monitoringPage.memoryUsage'), stats.memoryUsage)} />
             </div>
           </Card>
         </Col>
         <Col span={8}>
           <Card className="card">
-            <h3 style={{ marginBottom: 16 }}>磁盘使用率</h3>
+            <h3 style={{ marginBottom: 16 }}>{t('monitoringPage.diskUsage')}</h3>
             <div style={{ height: 200 }}>
-              <BaseChart option={diskChartOption} />
+              <BaseChart option={buildGaugeOption(t('monitoringPage.diskUsage'), stats.diskUsage)} />
             </div>
           </Card>
         </Col>
       </Row>
 
       {/* 系统指标概览 */}
-      <Card className="card" title="系统指标概览">
+      <Card className="card" title={t('monitoringPage.metricsOverview')}>
         <Row gutter={[16, 16]}>
           <Col span={6}>
             <Statistic
-              title="请求/秒"
+              title={t('monitoringPage.requestsPerSecond')}
               value={stats.requestsPerSecond}
               valueStyle={{ color: '#1890ff' }}
             />
           </Col>
           <Col span={6}>
             <Statistic
-              title="CPU使用率"
-              value={stats.cpuUsage}
-              suffix="%"
-              valueStyle={{ color: stats.cpuUsage > 80 ? '#f5222d' : '#52c41a' }}
+              title={t('monitoringPage.cpuUsage')}
+              value={formatPercent(stats.cpuUsage)}
+              valueStyle={{ color: usageColor(stats.cpuUsage) }}
             />
           </Col>
           <Col span={6}>
             <Statistic
-              title="内存使用率"
-              value={stats.memoryUsage}
-              suffix="%"
-              valueStyle={{ color: stats.memoryUsage > 80 ? '#f5222d' : '#52c41a' }}
+              title={t('monitoringPage.memoryUsage')}
+              value={formatPercent(stats.memoryUsage)}
+              valueStyle={{ color: usageColor(stats.memoryUsage) }}
             />
           </Col>
           <Col span={6}>
             <Statistic
-              title="磁盘使用率"
-              value={stats.diskUsage}
-              suffix="%"
-              valueStyle={{ color: stats.diskUsage > 80 ? '#f5222d' : '#52c41a' }}
+              title={t('monitoringPage.diskUsage')}
+              value={formatPercent(stats.diskUsage)}
+              valueStyle={{ color: usageColor(stats.diskUsage) }}
             />
           </Col>
         </Row>
@@ -195,38 +158,38 @@ const Monitoring: React.FC = () => {
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         {/* 内存详情 */}
         <Col span={12}>
-          <Card className="card" title="内存详情">
+          <Card className="card" title={t('monitoringPage.memoryDetail')}>
             <div style={{ marginBottom: 16 }}>
               <Progress percent={stats.memoryUsage} strokeColor={{'0%': '#108ee9', '100%': '#87d068'}} />
             </div>
             <Row gutter={[16, 8]}>
               <Col span={12}>
                 <Statistic
-                  title="总内存"
+                  title={t('monitoringPage.totalMemory')}
                   value={formatBytes(stats.memoryTotal)}
                   valueStyle={{ color: '#1890ff' }}
                 />
               </Col>
               <Col span={12}>
                 <Statistic
-                  title="已用内存"
+                  title={t('monitoringPage.usedMemory')}
                   value={formatBytes(stats.memoryUsed)}
                   valueStyle={{ color: '#f5222d' }}
                 />
               </Col>
               <Col span={12}>
                 <Statistic
-                  title="可用内存"
+                  title={t('monitoringPage.freeMemory')}
                   value={formatBytes(stats.memoryFree)}
                   valueStyle={{ color: '#52c41a' }}
                 />
               </Col>
               <Col span={12}>
                 <Statistic
-                  title="使用率"
+                  title={t('monitoringPage.usageRate')}
                   value={stats.memoryUsage}
                   suffix="%"
-                  valueStyle={{ color: stats.memoryUsage > 80 ? '#f5222d' : '#52c41a' }}
+                  valueStyle={{ color: usageColor(stats.memoryUsage) }}
                 />
               </Col>
             </Row>
@@ -235,38 +198,38 @@ const Monitoring: React.FC = () => {
 
         {/* 磁盘详情 */}
         <Col span={12}>
-          <Card className="card" title="磁盘详情">
+          <Card className="card" title={t('monitoringPage.diskDetail')}>
             <div style={{ marginBottom: 16 }}>
               <Progress percent={stats.diskUsage} strokeColor={{'0%': '#108ee9', '100%': '#87d068'}} />
             </div>
             <Row gutter={[16, 8]}>
               <Col span={12}>
                 <Statistic
-                  title="总容量"
+                  title={t('monitoringPage.totalCapacity')}
                   value={formatBytes(stats.diskTotal)}
                   valueStyle={{ color: '#1890ff' }}
                 />
               </Col>
               <Col span={12}>
                 <Statistic
-                  title="已用容量"
+                  title={t('monitoringPage.usedCapacity')}
                   value={formatBytes(stats.diskUsed)}
                   valueStyle={{ color: '#f5222d' }}
                 />
               </Col>
               <Col span={12}>
                 <Statistic
-                  title="可用容量"
+                  title={t('monitoringPage.freeCapacity')}
                   value={formatBytes(stats.diskFree)}
                   valueStyle={{ color: '#52c41a' }}
                 />
               </Col>
               <Col span={12}>
                 <Statistic
-                  title="使用率"
+                  title={t('monitoringPage.usageRate')}
                   value={stats.diskUsage}
                   suffix="%"
-                  valueStyle={{ color: stats.diskUsage > 80 ? '#f5222d' : '#52c41a' }}
+                  valueStyle={{ color: usageColor(stats.diskUsage) }}
                 />
               </Col>
             </Row>
@@ -275,32 +238,32 @@ const Monitoring: React.FC = () => {
       </Row>
 
       {/* 网络详情 */}
-      <Card className="card" title="网络流量" style={{ marginTop: 16 }}>
+      <Card className="card" title={t('monitoringPage.networkTraffic')} style={{ marginTop: 16 }}>
         <Row gutter={[16, 16]}>
           <Col span={6}>
             <Statistic
-              title="发送字节"
+              title={t('monitoringPage.sentBytes')}
               value={formatBytes(stats.networkSent)}
               valueStyle={{ color: '#1890ff' }}
             />
           </Col>
           <Col span={6}>
             <Statistic
-              title="接收字节"
+              title={t('monitoringPage.recvBytes')}
               value={formatBytes(stats.networkRecv)}
               valueStyle={{ color: '#52c41a' }}
             />
           </Col>
           <Col span={6}>
             <Statistic
-              title="发送包数"
+              title={t('monitoringPage.sentPackets')}
               value={stats.networkPacketsSent}
               valueStyle={{ color: '#faad14' }}
             />
           </Col>
           <Col span={6}>
             <Statistic
-              title="接收包数"
+              title={t('monitoringPage.recvPackets')}
               value={stats.networkPacketsRecv}
               valueStyle={{ color: '#722ed1' }}
             />

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 //go:embed templates/*.html
@@ -198,9 +199,7 @@ func (d *Dashboard) handleHealth(c *gin.Context) {
 
 // handleMetrics Prometheus 格式指标
 func (d *Dashboard) handleMetrics(c *gin.Context) {
-	c.Header("Content-Type", "text/plain; version=0.0.4")
-	// 从 metricsSrc 获取 Prometheus 格式指标
-	c.String(http.StatusOK, "# Metrics endpoint")
+	promhttp.Handler().ServeHTTP(c.Writer, c.Request)
 }
 
 // Start 启动仪表板服务器（独立端口）

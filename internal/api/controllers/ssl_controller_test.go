@@ -21,12 +21,12 @@ import (
 
 // mockACMEClient implements acmeClientInterface for testing
 type mockACMEClient struct {
-	requestCertFunc        func(domains []string) (*certificate.Resource, error)
-	renewCertFunc          func(domain string) (*certificate.Resource, error)
-	getCertInfoFunc        func(domain string) (map[string]interface{}, error)
-	listCertsFunc          func() ([]map[string]interface{}, error)
-	deleteCertFunc         func(domain string) error
-	getExpiringCertsFunc   func(days int) ([]map[string]interface{}, error)
+	requestCertFunc         func(domains []string) (*certificate.Resource, error)
+	renewCertFunc           func(domain string) (*certificate.Resource, error)
+	getCertInfoFunc         func(domain string) (map[string]interface{}, error)
+	listCertsFunc           func() ([]map[string]interface{}, error)
+	deleteCertFunc          func(domain string) error
+	getExpiringCertsFunc    func(days int) ([]map[string]interface{}, error)
 	requestWildcardCertFunc func(baseDomain string, subdomains []string) (*certificate.Resource, error)
 }
 

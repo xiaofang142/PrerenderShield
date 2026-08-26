@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
-	appConfig "prerender-shield/internal/config"
-	"prerender-shield/internal/redis"
+	"os"
 	"runtime"
+	"time"
+
+	appConfig "prerender-shield/internal/config"
+	"prerender-shield/internal/prerender/pool"
+	"prerender-shield/internal/redis"
+	"prerender-shield/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	redisV8 "github.com/go-redis/redis/v8"
@@ -147,6 +151,18 @@ func (c *SystemController) Health(ctx *gin.Context) {
 		}
 	}
 
+	// 检查渲染引擎核心依赖：Chromium 可用性
+	chromiumStatus := "available"
+	if _, err := pool.ResolveChromiumPath(utils.FirstNonEmpty(
+		os.Getenv("PRERENDER_CHROMIUM_PATH"),
+		os.Getenv("CHROME_PATH"),
+	)); err != nil {
+		chromiumStatus = "not_found"
+		if status == "running" {
+			status = "degraded"
+		}
+	}
+
 	// 检查系统资源使用情况
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
@@ -161,6 +177,7 @@ func (c *SystemController) Health(ctx *gin.Context) {
 			"status":         status,
 			"service":        "prerender-shield",
 			"redis_status":   redisStatus,
+			"chromium":       chromiumStatus,
 			"ssl_status":     sslStatus,
 			"expiring_certs": expiringCerts,
 			"timestamp":      time.Now().Unix(),

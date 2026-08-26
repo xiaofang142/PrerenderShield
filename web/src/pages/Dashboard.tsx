@@ -1,8 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Card, Row, Col, Statistic, Spin, message } from 'antd';
 import { SafetyCertificateOutlined, GlobalOutlined, ThunderboltOutlined, BugOutlined } from '@ant-design/icons';
-import { Line } from '@ant-design/charts';
+import BaseChart from '../components/charts/BaseChart';
+import type { EChartsOption } from 'echarts';
 import { overviewApi } from '../services/api';
+import { usePolling } from '@prerender/utils';
+import { pollingIntervals } from '@prerender/design-tokens';
+import { useRealtime, type RealtimeMessage } from '../hooks/useRealtime';
+import { useTranslation } from 'react-i18next';
 
 interface DashboardStats {
   totalRequests: number;
@@ -28,31 +33,37 @@ interface DashboardStats {
 }
 
 const Dashboard: React.FC = () => {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
-  const fetchStats = async () => {
-    try {
-      const response = await overviewApi.getStats();
-      if (response.code === 200) {
-        setStats(response.data);
-      } else {
-        message.error(response.message || '获取数据失败');
+  // usePolling：卸载自动清理 + 页面不可见暂停
+  usePolling(
+    async () => {
+      try {
+        const response = await overviewApi.getStats();
+        if (response.code === 200) {
+          setStats(response.data);
+        } else {
+          message.error(response.message || t('dashboard.fetchFailed'));
+        }
+      } catch (error) {
+        console.error('Failed to fetch dashboard stats:', error);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Failed to fetch dashboard stats:', error);
-      // message.error('获取数据失败'); // Prevent spamming error on first load if auth fails
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    { interval: pollingIntervals.dashboard }
+  );
 
-  useEffect(() => {
-    fetchStats();
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchStats, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // WebSocket 实时推送：监控指标到达时立即刷新，告警弹出提示
+  useRealtime((msg: RealtimeMessage) => {
+    if (msg.type === 'monitor' && msg.data) {
+      setStats((prev) => ({ ...(prev ?? ({} as DashboardStats)), ...(msg.data as Partial<DashboardStats>) }));
+    } else if (msg.type === 'alert') {
+      message.warning(t('dashboard.newAlert'));
+    }
+  });
 
   if (loading && !stats) {
     return (
@@ -62,34 +73,33 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  // Transformation for Line chart (wide to long)
-  const chartData: any[] = [];
-  if (stats?.trafficData) {
-    stats.trafficData.forEach(item => {
-      chartData.push({ time: item.time, value: item.totalRequests, type: '总请求' });
-      chartData.push({ time: item.time, value: item.crawlerRequests, type: '爬虫请求' });
-      chartData.push({ time: item.time, value: item.blockedRequests, type: '拦截请求' });
-    });
-  }
-
-  const lineConfig = {
-    data: chartData,
-    xField: 'time',
-    yField: 'value',
-    seriesField: 'type',
-    smooth: true,
-    color: ['#1890ff', '#52c41a', '#cf1322'],
+  // 流量趋势折线图配置（echarts）
+  const trafficOption: EChartsOption = {
+    tooltip: { trigger: 'axis' },
+    legend: { data: [t('dashboard.series.total'), t('dashboard.series.crawler'), t('dashboard.series.blocked')] },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: (stats?.trafficData || []).map(item => item.time),
+    },
+    yAxis: { type: 'value' },
+    series: [
+      { name: t('dashboard.series.total'), type: 'line', smooth: true, itemStyle: { color: '#1890ff' }, data: (stats?.trafficData || []).map(item => item.totalRequests) },
+      { name: t('dashboard.series.crawler'), type: 'line', smooth: true, itemStyle: { color: '#52c41a' }, data: (stats?.trafficData || []).map(item => item.crawlerRequests) },
+      { name: t('dashboard.series.blocked'), type: 'line', smooth: true, itemStyle: { color: '#cf1322' }, data: (stats?.trafficData || []).map(item => item.blockedRequests) },
+    ],
   };
 
   return (
     <div style={{ padding: '24px' }}>
-      <h1 className="page-title">控制台首页</h1>
-      
+      <h1 className="page-title">{t('dashboard.title')}</h1>
+
       <Row gutter={16}>
         <Col span={6}>
           <Card hoverable>
             <Statistic
-              title="总请求量"
+              title={t('dashboard.statTotalRequests')}
               value={stats?.totalRequests || 0}
               prefix={<GlobalOutlined />}
               valueStyle={{ color: '#1890ff' }}
@@ -99,7 +109,7 @@ const Dashboard: React.FC = () => {
         <Col span={6}>
           <Card hoverable>
             <Statistic
-              title="拦截攻击"
+              title={t('dashboard.statBlocked')}
               value={stats?.blockedRequests || 0}
               prefix={<SafetyCertificateOutlined />}
               valueStyle={{ color: '#cf1322' }}
@@ -109,7 +119,7 @@ const Dashboard: React.FC = () => {
         <Col span={6}>
           <Card hoverable>
             <Statistic
-              title="爬虫请求"
+              title={t('dashboard.statCrawler')}
               value={stats?.crawlerRequests || 0}
               prefix={<BugOutlined />}
               valueStyle={{ color: '#52c41a' }}
@@ -119,7 +129,7 @@ const Dashboard: React.FC = () => {
         <Col span={6}>
           <Card hoverable>
             <Statistic
-              title="活跃站点"
+              title={t('dashboard.statActiveSites')}
               value={stats?.activeSites || 0}
               prefix={<ThunderboltOutlined />}
               valueStyle={{ color: '#faad14' }}
@@ -131,11 +141,11 @@ const Dashboard: React.FC = () => {
       <div style={{ marginTop: 24 }}>
         <Row gutter={24}>
           <Col span={24}>
-            <Card title="流量趋势 (24小时)">
-              {chartData.length > 0 ? (
-                <Line {...lineConfig} />
+            <Card title={t('dashboard.trafficTrend')}>
+              {stats?.trafficData && stats.trafficData.length > 0 ? (
+                <BaseChart option={trafficOption} height={300} />
               ) : (
-                <div style={{ textAlign: 'center', padding: '40px' }}>暂无数据</div>
+                <div style={{ textAlign: 'center', padding: '40px' }}>{t('dashboard.noData')}</div>
               )}
             </Card>
           </Col>
@@ -145,7 +155,7 @@ const Dashboard: React.FC = () => {
       <div style={{ marginTop: 24 }}>
         <Row gutter={16}>
           <Col span={8}>
-            <Card title="访问统计">
+            <Card title={t('dashboard.accessStats')}>
               <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center' }}>
                 <div>
                   <div style={{ color: '#8c8c8c' }}>PV</div>
@@ -163,19 +173,19 @@ const Dashboard: React.FC = () => {
             </Card>
           </Col>
           <Col span={16}>
-            <Card title="系统状态">
+            <Card title={t('dashboard.systemStatus')}>
               <Row gutter={16}>
                 <Col span={12}>
-                  <Statistic 
-                    title="WAF 防火墙" 
-                    value={stats?.firewallEnabled ? '开启' : '关闭'} 
+                  <Statistic
+                    title={t('dashboard.wafFirewall')}
+                    value={stats?.firewallEnabled ? t('dashboard.enabled') : t('dashboard.disabled')}
                     valueStyle={{ color: stats?.firewallEnabled ? '#52c41a' : '#bfbfbf' }}
                   />
                 </Col>
                 <Col span={12}>
-                  <Statistic 
-                    title="预渲染引擎" 
-                    value={stats?.prerenderEnabled ? '开启' : '关闭'} 
+                  <Statistic
+                    title={t('dashboard.prerenderEngine')}
+                    value={stats?.prerenderEnabled ? t('dashboard.enabled') : t('dashboard.disabled')}
                     valueStyle={{ color: stats?.prerenderEnabled ? '#52c41a' : '#bfbfbf' }}
                   />
                 </Col>

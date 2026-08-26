@@ -55,3 +55,8 @@ const (
 const (
 	DefaultHashAlgorithm = "sha256"
 )
+
+// RedisKeyAlertHistory 告警历史 ZSet 键（score=Unix 秒时间戳）
+// 写入方：monitoring.Monitor.saveAlertToRedis / controllers.SaveAlertRecord
+// 读取方：controllers.GetAlertHistory
+const RedisKeyAlertHistory = "alert:history"

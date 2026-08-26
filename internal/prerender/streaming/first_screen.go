@@ -3,7 +3,9 @@ package streaming
 import (
 	"context"
 	"fmt"
-	"html"
+	gohtml "html"
+	"io"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync"
@@ -287,7 +289,7 @@ func (r *FirstScreenRenderer) sendHead(head *htmlHead, writer FlushWriter) error
 
 	// 发送 title
 	if head.Title != "" {
-		if _, err := writer.Write([]byte("<title>" + html.EscapeString(head.Title) + "</title>")); err != nil {
+		if _, err := writer.Write([]byte("<title>" + gohtml.EscapeString(head.Title) + "</title>")); err != nil {
 			return fmt.Errorf("写入 title 标签失败：%w", err)
 		}
 	}
@@ -323,15 +325,48 @@ func (r *FirstScreenRenderer) inlineCriticalCSS(html string) string {
 		return html
 	}
 
-	// 提取第一个 CSS（假设是关键 CSS）
+	// 提取第一个 CSS（假设是关键 CSS）并内联
 	if len(matches) > 0 {
 		cssURL := matches[0][1]
-		// 这里应该获取并内联 CSS，简化处理只添加注释
-		inlineComment := fmt.Sprintf("<!-- Critical CSS should be inlined from: %s -->", cssURL)
-		html = strings.Replace(html, matches[0][0], inlineComment, 1)
+		// 尝试获取并内联 CSS 内容
+		cssContent := r.fetchCSSContent(cssURL)
+		if cssContent != "" {
+			inlineStyle := fmt.Sprintf("<style>%s</style>", cssContent)
+			html = strings.Replace(html, matches[0][0], inlineStyle, 1)
+		} else {
+			// 获取失败时保留原始 link 标签
+			r.logger.Debug("Failed to inline CSS, keeping link tag", zap.String("url", cssURL))
+		}
 	}
 
 	return html
+}
+
+// fetchCSSContent 获取 CSS 内容（支持相对和绝对 URL）
+func (r *FirstScreenRenderer) fetchCSSContent(cssURL string) string {
+	// 仅支持 http/https URL
+	if !strings.HasPrefix(cssURL, "http://") && !strings.HasPrefix(cssURL, "https://") {
+		return ""
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(cssURL)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	// 限制读取大小（最大 100KB）
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 100*1024))
+	if err != nil {
+		return ""
+	}
+
+	return string(body)
 }
 
 // addPreloads 添加预加载
@@ -492,12 +527,27 @@ func (r *FirstScreenRenderer) parseHead(headContent string, head *htmlHead) {
 	head.Scripts = scriptPattern.FindAllString(headContent, -1)
 }
 
-// parseBody 解析身体
+// parseBody 解析身体（按主要块分割）
 func (r *FirstScreenRenderer) parseBody(bodyContent string, body *htmlBody) {
-	// 简化：按主要块分割
-	// 先清理空白
+	// 按主要 HTML 块分割（顶层 div/section/article/main/aside 等）
 	content := strings.TrimSpace(bodyContent)
-	if content != "" {
+	if content == "" {
+		return
+	}
+
+	// 尝试按顶层块级元素分割
+	blockPattern := regexp.MustCompile(`(?s)(<(?:div|section|article|main|aside|header|footer)[^>]*>.*?</(?:div|section|article|main|aside|header|footer)>)`)
+	blocks := blockPattern.FindAllString(content, -1)
+
+	if len(blocks) > 0 {
+		for _, block := range blocks {
+			block = strings.TrimSpace(block)
+			if block != "" {
+				body.Content = append(body.Content, block)
+			}
+		}
+	} else {
+		// 回退：将整个 body 作为单个块
 		body.Content = append(body.Content, content)
 	}
 }

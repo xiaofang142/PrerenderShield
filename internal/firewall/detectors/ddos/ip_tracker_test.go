@@ -821,8 +821,19 @@ func TestIPTracker_GetStats_WithSuspiciousIP(t *testing.T) {
 		req.Header.Set("User-Agent", "sqlmap/1.0")
 		req.RemoteAddr = ip + ":12345"
 		tracker.RecordRequest(ip, req)
-		time.Sleep(5 * time.Millisecond) // 快速请求间隔
 	}
+
+	// 直接构造确定性的快速请求时间戳，避免依赖真实 Sleep 时序（调度抖动会导致 flaky）
+	record := tracker.ipRecords[ip]
+	record.mu.Lock()
+	base := time.Now()
+	times := make([]time.Time, 0, 5)
+	for i := 0; i < 5; i++ {
+		times = append(times, base.Add(time.Duration(i)*time.Millisecond))
+	}
+	record.RequestTimes = times
+	record.updateSuspiciousScore()
+	record.mu.Unlock()
 
 	stats := tracker.GetStats()
 	assert.NotNil(t, stats)

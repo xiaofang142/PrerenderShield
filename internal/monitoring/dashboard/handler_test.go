@@ -293,7 +293,7 @@ func TestDashboard_HandleMetrics(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "text/plain; version=0.0.4", w.Header().Get("Content-Type"))
+	assert.Contains(t, w.Header().Get("Content-Type"), "text/plain; version=0.0.4")
 }
 
 func TestDashboard_Start(t *testing.T) {

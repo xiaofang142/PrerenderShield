@@ -59,16 +59,17 @@ func NewUserManager(_ string, redisClient *redis.Client) *UserManager {
 }
 
 // CreateUser 创建用户
+// P0-23: 解除单管理员限制，允许多用户 (与 CHANGELOG v3.0.0 中声明的 RBAC 系统一致)
 func (m *UserManager) CreateUser(username, password string) (*User, error) {
 	if err := ValidatePasswordStrength(password); err != nil {
 		return nil, err
 	}
 
-	// 检查是否已经有用户存在（只允许创建一个用户）
+	// P0-23: 检查用户名是否已存在，而非限制总数
 	if m.redisClient != nil {
-		userIDs, err := m.redisClient.GetAllUsers()
-		if err == nil && len(userIDs) > 0 {
-			return nil, errors.New("system already initialized, only one user is allowed")
+		existingID, err := m.redisClient.GetUserByUsername(username)
+		if err == nil && existingID != "" {
+			return nil, ErrUserExists
 		}
 	}
 
@@ -94,6 +95,9 @@ func (m *UserManager) CreateUser(username, password string) (*User, error) {
 			"id":       user.ID,
 			"username": user.Username,
 			"password": user.Password,
+			// 首次创建的账号密码是用户自行设置的，非系统预置默认密码，
+			// 标记为已修改，避免登录时误弹「请修改默认密码」强制提示
+			"password_changed": "true",
 		}
 		if err := m.redisClient.SaveUser(user.ID, userMap); err != nil {
 			return nil, err

@@ -1,0 +1,28 @@
+{
+  "firewallPage": {
+    "title": "ファイアウォール遮断記録",
+    "subtitle": "ファイアウォールに遮断された悪意のあるリクエストの記録を表示",
+    "selectSite": "サイトを選択：",
+    "sitePlaceholder": "サイトを選択してください",
+    "selectSiteFirst": "先にサイトを選択してください",
+    "refreshList": "リストを更新",
+    "logListTitle": "攻撃記録一覧",
+    "fetchLogsFailed": "攻撃記録の取得に失敗しました",
+    "whitelistAdded": "IP {{ip}} をホワイトリストに追加しました",
+    "blacklistAdded": "IP {{ip}} をブラックリストに追加しました",
+    "operationFailed": "操作に失敗しました",
+    "unknown": "不明",
+    "addToWhitelist": "ホワイトリストに追加",
+    "addToBlacklist": "ブラックリストに追加",
+    "whitelist": "ホワイトリスト",
+    "blacklist": "ブラックリスト",
+    "totalRecords": "合計 {{total}} 件",
+    "columns": {
+      "ipAddress": "IPアドレス",
+      "location": "所在地",
+      "attackTime": "攻撃時間",
+      "blockReason": "遮断理由",
+      "actions": "操作"
+    }
+  }
+}

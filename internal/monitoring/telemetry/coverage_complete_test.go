@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/sdk/resource"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
@@ -149,12 +149,12 @@ func TestGetMeterInitialized(t *testing.T) {
 
 func TestNewMetricsGogenabled(t *testing.T) {
 	cfg := &MetricsConfig{
-		ServiceName:    fmt.Sprintf("test-gogc-%d", time.Now().UnixNano()),
-		Endpoint:       ":0",
-		EnableGoGC:     true,
-		EnableProcess:  true,
-		ReadTimeout:    5 * time.Second,
-		WriteTimeout:   5 * time.Second,
+		ServiceName:   fmt.Sprintf("test-gogc-%d", time.Now().UnixNano()),
+		Endpoint:      ":0",
+		EnableGoGC:    true,
+		EnableProcess: true,
+		ReadTimeout:   5 * time.Second,
+		WriteTimeout:  5 * time.Second,
 	}
 
 	res, err := newMetricsResource(cfg)

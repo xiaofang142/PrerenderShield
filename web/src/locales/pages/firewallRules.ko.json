@@ -1,0 +1,145 @@
+{
+  "firewallRules": {
+    "title": "WAF 규칙 관리",
+    "selectSite": "사이트를 선택하세요",
+    "toolbar": {
+      "addRule": "규칙 추가",
+      "useTemplate": "템플릿 사용",
+      "testRule": "규칙 테스트",
+      "exportRules": "규칙 내보내기",
+      "saveRules": "규칙 저장",
+      "refresh": "새로고침"
+    },
+    "stats": {
+      "total": "전체 규칙 수",
+      "enabled": "활성화된 규칙",
+      "blocked": "차단 규칙",
+      "disabled": "비활성화된 규칙"
+    },
+    "list": {
+      "title": "규칙 목록",
+      "total": "총 {{total}}개의 규칙"
+    },
+    "columns": {
+      "name": "규칙 이름",
+      "field": "매치 필드",
+      "operator": "연산자",
+      "value": "매치 값",
+      "action": "동작",
+      "status": "상태",
+      "actions": "작업"
+    },
+    "deleteConfirm": "이 규칙을 삭제하시겠습니까?",
+    "form": {
+      "addTitle": "규칙 추가",
+      "editTitle": "규칙 편집",
+      "ruleName": "규칙 이름",
+      "ruleNameRequired": "규칙 이름을 입력하세요",
+      "namePlaceholder": "예: SQL 인젝션 방어",
+      "fieldRequired": "매치 필드를 선택하세요",
+      "selectField": "필드 선택",
+      "fieldOptions": {
+        "query": "쿼리 파라미터",
+        "path": "URL 경로",
+        "header": "요청 헤더",
+        "body": "요청 본문",
+        "ip": "IP 주소",
+        "user_agent": "User-Agent",
+        "country": "국가/지역"
+      },
+      "operatorRequired": "연산자를 선택하세요",
+      "selectOperator": "연산자 선택",
+      "operatorOptions": {
+        "contains": "포함",
+        "equals": "같음",
+        "matches": "정규식 매치",
+        "gt": "보다 큼",
+        "lt": "보다 작음",
+        "in": "목록에 있음"
+      },
+      "actionRequired": "동작을 선택하세요",
+      "selectAction": "동작 선택",
+      "actionOptions": {
+        "block": "차단",
+        "allow": "허용",
+        "log": "기록"
+      },
+      "valueRequired": "매치 값을 입력하세요",
+      "valueHelp": "여러 값은 쉼표로 구분하세요",
+      "valuePlaceholder": "예: ' OR 1=1, UNION SELECT",
+      "updateRule": "규칙 업데이트"
+    },
+    "templates": {
+      "title": "규칙 템플릿",
+      "description": "템플릿을 선택하여 자주 사용하는 규칙을 빠르게 추가하세요",
+      "ruleCount": "{{count}}개의 규칙",
+      "categories": {
+        "injection": "인젝션 방어",
+        "script": "스크립트 방어",
+        "path": "경로 방어",
+        "access": "접근 제어"
+      },
+      "items": {
+        "sql_injection": {
+          "name": "SQL 인젝션 방어",
+          "description": "SQL 인젝션 공격을 탐지하고 차단합니다"
+        },
+        "xss_protection": {
+          "name": "XSS 방어",
+          "description": "크로스 사이트 스크립팅 공격을 탐지하고 차단합니다"
+        },
+        "path_traversal": {
+          "name": "경로 순회 방어",
+          "description": "경로 순회 공격을 탐지하고 차단합니다"
+        },
+        "rate_limit": {
+          "name": "요청 빈도 제한",
+          "description": "단일 IP의 요청 빈도를 제한합니다"
+        },
+        "geo_block": {
+          "name": "지역 차단",
+          "description": "특정 국가/지역의 접근을 차단합니다"
+        }
+      }
+    },
+    "test": {
+      "query": "쿼리 파라미터",
+      "path": "URL 경로",
+      "ip": "IP 주소",
+      "userAgent": "User-Agent",
+      "body": "요청 본문",
+      "phQuery": "예: id=1' OR 1=1",
+      "phPath": "예: /api/users",
+      "phIp": "예: 192.168.1.1",
+      "phUserAgent": "예: Mozilla/5.0...",
+      "phBody": "요청 본문 내용",
+      "result": {
+        "title": "테스트 결과",
+        "matched": "매치됨",
+        "unmatched": "매치 안 됨",
+        "matchStatus": "매치 상태",
+        "execAction": "실행 동작",
+        "matchedRule": "매치된 규칙",
+        "noMatch": "요청이 어떤 규칙에도 매치되지 않았습니다",
+        "detail": "매치된 규칙: {{name}}"
+      }
+    },
+    "messages": {
+      "fetchFail": "규칙 목록 조회에 실패했습니다",
+      "ruleGone": "규칙이 더 이상 존재하지 않습니다. 새로고침 후 다시 시도하세요",
+      "addSuccess": "규칙이 추가되었습니다",
+      "updateSuccess": "규칙이 업데이트되었습니다",
+      "addFail": "규칙 추가에 실패했습니다",
+      "updateFail": "규칙 업데이트에 실패했습니다",
+      "deleteSuccess": "규칙이 삭제되었습니다",
+      "deleteFail": "규칙 삭제에 실패했습니다",
+      "statusUpdateFail": "상태 업데이트에 실패했습니다",
+      "applyTemplateSuccess": "템플릿이 적용되었습니다: {{name}}",
+      "applyTemplateFail": "템플릿 적용에 실패했습니다",
+      "saveSuccess": "규칙이 저장되었습니다",
+      "saveFail": "규칙 저장에 실패했습니다",
+      "exportSuccess": "규칙이 내보내졌습니다",
+      "testFail": "테스트에 실패했습니다"
+    }
+  }
+}

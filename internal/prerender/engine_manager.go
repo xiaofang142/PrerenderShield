@@ -6,6 +6,8 @@ import (
 
 	"prerender-shield/internal/cache"
 	"prerender-shield/internal/redis"
+	"prerender-shield/internal/seo"
+	"prerender-shield/internal/prerender/pool"
 )
 
 // 确保 redis.Client 实现 RedisClient 接口
@@ -23,6 +25,7 @@ var _ RedisClient = (*redis.Client)(nil)
 //	mutex: 互斥锁，用于并发安全
 //	maxConcurrent: 最大并发渲染数
 //	timeout: 默认渲染超时时间
+//	seoConfigs: 站点SEO配置映射
 //
 // 方法:
 //
@@ -32,21 +35,25 @@ var _ RedisClient = (*redis.Client)(nil)
 //	Cleanup: 清理所有引擎实例
 //	SetMaxConcurrent: 设置最大并发渲染数
 //	SetTimeout: 设置默认渲染超时时间
+//	SetSEOConfig: 设置站点SEO配置
 //	IsCrawlerRequest: 检测请求是否来自爬虫
 //	Render: 渲染指定URL
 //
 // 示例:
 //
 //	manager := NewEngineManager(redisClient, cacheManager, 5)
+//	manager.SetSEOConfig("site1", seoConfig)
 //	engine, _ := manager.GetEngine("site1")
 //	result, _ := engine.Render("https://example.com")
 type EngineManager struct {
 	engines       map[string]Engine
+	sharedPool    *pool.Pool // 多站点共享浏览器池（懒创建，统一生命周期）
 	redisClient   RedisClient
 	cacheManager  cache.Manager
 	mutex         sync.RWMutex
 	maxConcurrent int
 	timeout       time.Duration
+	seoConfigs    map[string]*seo.LLMConfig
 }
 
 // NewEngineManager 创建渲染引擎管理器实例
@@ -71,7 +78,15 @@ func NewEngineManager(redisClient RedisClient, cacheManager cache.Manager, maxCo
 		cacheManager:  cacheManager,
 		maxConcurrent: maxConcurrent,
 		timeout:       30 * time.Second,
+		seoConfigs:    make(map[string]*seo.LLMConfig),
 	}
+}
+
+// SetSEOConfig 设置站点的SEO配置
+func (m *EngineManager) SetSEOConfig(siteID string, llmConfig *seo.LLMConfig) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.seoConfigs[siteID] = llmConfig
 }
 
 // GetEngine 获取或创建指定站点的渲染引擎
@@ -94,6 +109,7 @@ func NewEngineManager(redisClient RedisClient, cacheManager cache.Manager, maxCo
 func (m *EngineManager) GetEngine(siteID string) (Engine, bool) {
 	m.mutex.RLock()
 	engine, exists := m.engines[siteID]
+	llmConfig := m.seoConfigs[siteID]
 	m.mutex.RUnlock()
 
 	if exists {
@@ -109,7 +125,10 @@ func (m *EngineManager) GetEngine(siteID string) (Engine, bool) {
 		return engine, true
 	}
 
-	engine = NewEngine(m.redisClient, m.cacheManager, m.maxConcurrent)
+	if m.sharedPool == nil {
+		m.sharedPool = defaultBrowserPool()
+	}
+	engine = NewEngineWithSharedPool(m.redisClient, m.cacheManager, m.maxConcurrent, llmConfig, m.sharedPool)
 	m.engines[siteID] = engine
 
 	return engine, true
@@ -134,7 +153,17 @@ func (m *EngineManager) RemoveEngine(siteID string) {
 	}
 }
 
-// Cleanup 关闭并清理所有引擎实例
+// Close 关闭并清理所有引擎实例 (P0-1: 作为 Cleanup 的语义化别名)
+//
+// 示例:
+//
+//	manager.Close()
+func (m *EngineManager) Close() error {
+	m.Cleanup()
+	return nil
+}
+
+// Cleanup 关闭并清理所有引擎实例，最后关闭共享浏览器池
 //
 // 示例:
 //
@@ -146,6 +175,11 @@ func (m *EngineManager) Cleanup() {
 	for id, engine := range m.engines {
 		engine.Close()
 		delete(m.engines, id)
+	}
+	// 共享池由 Manager 统一关闭（各 Engine 的 Close 不会触碰它）
+	if m.sharedPool != nil {
+		m.sharedPool.Close()
+		m.sharedPool = nil
 	}
 }
 
@@ -195,40 +229,8 @@ func (m *EngineManager) SetTimeout(timeout time.Duration) {
 //
 //	isCrawler := manager.IsCrawlerRequest("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html")
 func (m *EngineManager) IsCrawlerRequest(userAgent string) bool {
-	// 简单的爬虫检测逻辑
-	crawlerKeywords := []string{
-		"googlebot",
-		"bingbot",
-		"baiduspider",
-		"yandexbot",
-		"sogou",
-		"yahoo! slurp",
-		"duckduckbot",
-		"facebookexternalhit",
-		"linkedinbot",
-		"twitterbot",
-		"pinterest",
-		"slackbot",
-		"telegrambot",
-		"whatsapp",
-		"embed",
-		"bot",
-		"spider",
-		"crawler",
-		"robot",
-		"curl",
-		"wget",
-		"fetch",
-	}
-
-	lowerUA := userAgent
-	for _, keyword := range crawlerKeywords {
-		if containsIgnoreCase(lowerUA, keyword) {
-			return true
-		}
-	}
-
-	return false
+	// 委托到共享实现，避免与 engine.IsCrawlerRequest 逻辑重复导致维护不一致
+	return isCrawlerUserAgent(userAgent)
 }
 
 // ListSites 列出所有已创建的引擎的站点ID

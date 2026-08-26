@@ -1,0 +1,25 @@
+{
+  "monitoringPage": {
+    "title": "Monitoring & Alerts",
+    "fetchFailed": "Failed to fetch monitoring data",
+    "cpuUsage": "CPU Usage",
+    "memoryUsage": "Memory Usage",
+    "diskUsage": "Disk Usage",
+    "metricsOverview": "System Metrics Overview",
+    "requestsPerSecond": "Requests/s",
+    "memoryDetail": "Memory Details",
+    "totalMemory": "Total Memory",
+    "usedMemory": "Used Memory",
+    "freeMemory": "Free Memory",
+    "usageRate": "Usage Rate",
+    "diskDetail": "Disk Details",
+    "totalCapacity": "Total Capacity",
+    "usedCapacity": "Used Capacity",
+    "freeCapacity": "Free Capacity",
+    "networkTraffic": "Network Traffic",
+    "sentBytes": "Sent Bytes",
+    "recvBytes": "Received Bytes",
+    "sentPackets": "Sent Packets",
+    "recvPackets": "Received Packets"
+  }
+}

@@ -12,6 +12,7 @@ import {
   WarningOutlined
 } from '@ant-design/icons'
 import { sslApi } from '../../services/api'
+import { useTranslation } from 'react-i18next'
 import dayjs from 'dayjs'
 
 interface Certificate {
@@ -24,7 +25,29 @@ interface Certificate {
   san: string[]
 }
 
+interface SSLCertificateFromAPI {
+  domain: string
+  subject: string
+  issuer: string
+  not_before: string
+  not_after: string
+  dns_names: string[]
+  expires_in: number
+  expired: boolean
+}
+
+const transformCertificate = (apiCert: SSLCertificateFromAPI): Certificate => ({
+  domain: apiCert.domain,
+  expires: apiCert.not_after,
+  issuer: apiCert.issuer,
+  status: apiCert.expired ? 'expired' : 'valid',
+  serialNumber: '',
+  fingerprint: '',
+  san: apiCert.dns_names || [],
+})
+
 const SSLPage: React.FC = () => {
+  const { t } = useTranslation()
   const [certificates, setCertificates] = useState<Certificate[]>([])
   const [loading, setLoading] = useState(false)
   const [requestModalVisible, setRequestModalVisible] = useState(false)
@@ -45,11 +68,12 @@ const SSLPage: React.FC = () => {
       setLoading(true)
       const res = await sslApi.listCertificates()
       if (res.code === 200) {
-        setCertificates(res.data.certificates || [])
+        const apiCerts = (res.data.certificates || []) as SSLCertificateFromAPI[]
+        setCertificates(apiCerts.map(transformCertificate))
       }
     } catch (error) {
       console.error('Failed to fetch certificates:', error)
-      message.error('获取证书列表失败')
+      message.error(t('ssl.messages.fetchListFailed'))
     } finally {
       setLoading(false)
     }
@@ -60,7 +84,8 @@ const SSLPage: React.FC = () => {
     try {
       const res = await sslApi.getExpiringCertificates(30)
       if (res.code === 200) {
-        setExpiringCertsList(res.data.certificates || [])
+        const apiCerts = (res.data.certificates || []) as SSLCertificateFromAPI[]
+        setExpiringCertsList(apiCerts.map(transformCertificate))
       }
     } catch (error) {
       console.error('Failed to fetch expiring certificates:', error)
@@ -80,22 +105,22 @@ const SSLPage: React.FC = () => {
       const domains = values.domains.split('\n').map((d: string) => d.trim()).filter((d: string) => d)
       
       if (domains.length === 0) {
-        message.warning('请输入至少一个域名')
+        message.warning(t('ssl.messages.needDomain'))
         return
       }
 
       const res = await sslApi.requestCertificate(domains)
       if (res.code === 200) {
-        message.success('证书申请成功')
+        message.success(t('ssl.messages.requestSuccess'))
         setRequestModalVisible(false)
         requestForm.resetFields()
         fetchCertificates()
       } else {
-        message.error(res.message || '证书申请失败')
+        message.error(res.message || t('ssl.messages.requestFailed'))
       }
     } catch (error) {
       console.error('Failed to request certificate:', error)
-      message.error('证书申请失败')
+      message.error(t('ssl.messages.requestFailed'))
     } finally {
       setRequestLoading(false)
     }
@@ -109,16 +134,16 @@ const SSLPage: React.FC = () => {
       
       const res = await sslApi.requestWildcardCertificate(values.baseDomain, subdomains)
       if (res.code === 200) {
-        message.success('通配符证书申请成功')
+        message.success(t('ssl.messages.wildcardSuccess'))
         setWildcardModalVisible(false)
         wildcardForm.resetFields()
         fetchCertificates()
       } else {
-        message.error(res.message || '通配符证书申请失败')
+        message.error(res.message || t('ssl.messages.wildcardFailed'))
       }
     } catch (error) {
       console.error('Failed to request wildcard certificate:', error)
-      message.error('通配符证书申请失败')
+      message.error(t('ssl.messages.wildcardFailed'))
     } finally {
       setWildcardLoading(false)
     }
@@ -129,14 +154,14 @@ const SSLPage: React.FC = () => {
     try {
       const res = await sslApi.renewCertificate(domain)
       if (res.code === 200) {
-        message.success('证书续签成功')
+        message.success(t('ssl.messages.renewSuccess'))
         fetchCertificates()
       } else {
-        message.error(res.message || '证书续签失败')
+        message.error(res.message || t('ssl.messages.renewFailed'))
       }
     } catch (error) {
       console.error('Failed to renew certificate:', error)
-      message.error('证书续签失败')
+      message.error(t('ssl.messages.renewFailed'))
     }
   }
 
@@ -145,14 +170,14 @@ const SSLPage: React.FC = () => {
     try {
       const res = await sslApi.deleteCertificate(domain)
       if (res.code === 200) {
-        message.success('证书删除成功')
+        message.success(t('ssl.messages.deleteSuccess'))
         fetchCertificates()
       } else {
-        message.error(res.message || '证书删除失败')
+        message.error(res.message || t('ssl.messages.deleteFailed'))
       }
     } catch (error) {
       console.error('Failed to delete certificate:', error)
-      message.error('证书删除失败')
+      message.error(t('ssl.messages.deleteFailed'))
     }
   }
 
@@ -161,33 +186,34 @@ const SSLPage: React.FC = () => {
     try {
       const res = await sslApi.getCertificate(domain)
       if (res.code === 200) {
-        setSelectedCert(res.data)
+        const apiCert = res.data as SSLCertificateFromAPI
+        setSelectedCert(transformCertificate(apiCert))
         setDetailModalVisible(true)
       }
     } catch (error) {
       console.error('Failed to get certificate detail:', error)
-      message.error('获取证书详情失败')
+      message.error(t('ssl.messages.detailFailed'))
     }
   }
 
   // 检查证书状态
   const getCertStatus = (expires: string) => {
-    if (!expires || expires === 'unknown') return { color: 'default', text: '未知' }
+    if (!expires || expires === 'unknown') return { color: 'default', text: t('ssl.status.unknown') }
     
     const expiryDate = dayjs(expires)
     const now = dayjs()
     const daysLeft = expiryDate.diff(now, 'day')
     
-    if (daysLeft < 0) return { color: 'error', text: '已过期' }
-    if (daysLeft < 7) return { color: 'error', text: `${daysLeft}天后过期` }
-    if (daysLeft < 30) return { color: 'warning', text: `${daysLeft}天后过期` }
-    return { color: 'success', text: '有效' }
+    if (daysLeft < 0) return { color: 'error', text: t('ssl.status.expired') }
+    if (daysLeft < 7) return { color: 'error', text: t('ssl.status.expiresInDays', { days: daysLeft }) }
+    if (daysLeft < 30) return { color: 'warning', text: t('ssl.status.expiresInDays', { days: daysLeft }) }
+    return { color: 'success', text: t('ssl.status.valid') }
   }
 
   // 表格列配置
   const columns = [
     {
-      title: '域名',
+      title: t('ssl.columns.domain'),
       dataIndex: 'domain',
       key: 'domain',
       render: (text: string) => (
@@ -198,17 +224,17 @@ const SSLPage: React.FC = () => {
       ),
     },
     {
-      title: '颁发者',
+      title: t('ssl.columns.issuer'),
       dataIndex: 'issuer',
       key: 'issuer',
       render: (text: string) => text || 'Let\'s Encrypt',
     },
     {
-      title: '过期时间',
+      title: t('ssl.columns.expires'),
       dataIndex: 'expires',
       key: 'expires',
       render: (text: string) => {
-        if (!text || text === 'unknown') return <Tag>未知</Tag>
+        if (!text || text === 'unknown') return <Tag>{t('ssl.status.unknown')}</Tag>
         const status = getCertStatus(text)
         return (
           <Tooltip title={dayjs(text).format('YYYY-MM-DD HH:mm:ss')}>
@@ -220,7 +246,7 @@ const SSLPage: React.FC = () => {
       },
     },
     {
-      title: '状态',
+      title: t('ssl.columns.status'),
       dataIndex: 'expires',
       key: 'status',
       render: (text: string) => {
@@ -229,43 +255,43 @@ const SSLPage: React.FC = () => {
       },
     },
     {
-      title: '操作',
+      title: t('common.actions'),
       key: 'action',
       render: (_: any, record: Certificate) => (
         <Space size="small">
-          <Tooltip title="查看详情">
+          <Tooltip title={t('ssl.tooltips.viewDetail')}>
             <Button 
               type="link" 
               size="small" 
               onClick={() => handleViewDetail(record.domain)}
             >
-              详情
+              {t('ssl.buttons.detail')}
             </Button>
           </Tooltip>
-          <Tooltip title="续签证书">
+          <Tooltip title={t('ssl.tooltips.renew')}>
             <Button 
               type="link" 
               size="small" 
               icon={<SyncOutlined />} 
               onClick={() => handleRenewCert(record.domain)}
             >
-              续签
+              {t('ssl.buttons.renew')}
             </Button>
           </Tooltip>
           <Popconfirm
-            title="确定要删除这个证书吗？"
+            title={t('ssl.deleteConfirm.title')}
             onConfirm={() => handleDeleteCert(record.domain)}
-            okText="确定"
-            cancelText="取消"
+            okText={t('common.ok')}
+            cancelText={t('common.cancel')}
           >
-            <Tooltip title="删除证书">
+            <Tooltip title={t('ssl.tooltips.delete')}>
               <Button 
                 type="link" 
                 size="small" 
                 danger 
                 icon={<DeleteOutlined />}
               >
-                删除
+                {t('common.delete')}
               </Button>
             </Tooltip>
           </Popconfirm>
@@ -291,14 +317,14 @@ const SSLPage: React.FC = () => {
 
   return (
     <div>
-      <h1 className="page-title">SSL 证书管理</h1>
+      <h1 className="page-title">{t('ssl.title')}</h1>
       
       {/* 统计卡片 */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col span={6}>
           <Card className="card">
             <Statistic
-              title="证书总数"
+              title={t('ssl.stats.total')}
               value={totalCerts}
               prefix={<SafetyCertificateOutlined style={{ color: '#1890ff' }} />}
               valueStyle={{ color: '#1890ff' }}
@@ -308,7 +334,7 @@ const SSLPage: React.FC = () => {
         <Col span={6}>
           <Card className="card">
             <Statistic
-              title="有效证书"
+              title={t('ssl.stats.valid')}
               value={validCerts}
               prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
               valueStyle={{ color: '#52c41a' }}
@@ -318,7 +344,7 @@ const SSLPage: React.FC = () => {
         <Col span={6}>
           <Card className="card">
             <Statistic
-              title="即将过期"
+              title={t('ssl.stats.expiringSoon')}
               value={expiringCount}
               prefix={<WarningOutlined style={{ color: '#faad14' }} />}
               valueStyle={{ color: '#faad14' }}
@@ -328,7 +354,7 @@ const SSLPage: React.FC = () => {
         <Col span={6}>
           <Card className="card">
             <Statistic
-              title="已过期"
+              title={t('ssl.stats.expired')}
               value={expiredCerts}
               prefix={<ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />}
               valueStyle={{ color: '#ff4d4f' }}
@@ -347,13 +373,13 @@ const SSLPage: React.FC = () => {
                 icon={<PlusOutlined />} 
                 onClick={() => setRequestModalVisible(true)}
               >
-                申请证书
+                {t('ssl.actions.requestCert')}
               </Button>
               <Button 
                 icon={<PlusOutlined />} 
                 onClick={() => setWildcardModalVisible(true)}
               >
-                申请通配符证书
+                {t('ssl.actions.requestWildcard')}
               </Button>
             </Space>
           </Col>
@@ -366,7 +392,7 @@ const SSLPage: React.FC = () => {
               }}
               loading={loading}
             >
-              刷新
+              {t('ssl.actions.refresh')}
             </Button>
           </Col>
         </Row>
@@ -380,15 +406,15 @@ const SSLPage: React.FC = () => {
           title={
             <Space>
               <WarningOutlined style={{ color: '#faad14' }} />
-              <span>即将过期的证书</span>
+              <span>{t('ssl.expiring.title')}</span>
             </Space>
           }
         >
           <Table
             columns={[
-              { title: '域名', dataIndex: 'domain', key: 'domain' },
+              { title: t('ssl.columns.domain'), dataIndex: 'domain', key: 'domain' },
               { 
-                title: '过期时间', 
+                title: t('ssl.columns.expires'), 
                 dataIndex: 'expires', 
                 key: 'expires',
                 render: (text: string) => (
@@ -398,7 +424,7 @@ const SSLPage: React.FC = () => {
                 )
               },
               {
-                title: '操作',
+                title: t('common.actions'),
                 key: 'action',
                 render: (_: any, record: Certificate) => (
                   <Button 
@@ -407,7 +433,7 @@ const SSLPage: React.FC = () => {
                     icon={<SyncOutlined />}
                     onClick={() => handleRenewCert(record.domain)}
                   >
-                    立即续签
+                    {t('ssl.expiring.renewNow')}
                   </Button>
                 )
               }
@@ -421,7 +447,7 @@ const SSLPage: React.FC = () => {
       )}
 
       {/* 证书列表 */}
-      <Card className="card" title="证书列表">
+      <Card className="card" title={t('ssl.list.title')}>
         <Table
           columns={columns}
           dataSource={certificates}
@@ -430,17 +456,17 @@ const SSLPage: React.FC = () => {
           pagination={{
             showSizeChanger: true,
             showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 个证书`,
+            showTotal: (total) => t('ssl.table.totalText', { total }),
           }}
           locale={{
-            emptyText: <Empty description="暂无证书" />
+            emptyText: <Empty description={t('ssl.table.empty')} />
           }}
         />
       </Card>
 
       {/* 申请证书弹窗 */}
       <Modal
-        title="申请 SSL 证书"
+        title={t('ssl.modal.requestTitle')}
         open={requestModalVisible}
         onCancel={() => {
           setRequestModalVisible(false)
@@ -456,9 +482,9 @@ const SSLPage: React.FC = () => {
         >
           <Form.Item
             name="domains"
-            label="域名列表"
-            rules={[{ required: true, message: '请输入域名' }]}
-            help="每行一个域名，例如：example.com"
+            label={t('ssl.form.domains')}
+            rules={[{ required: true, message: t('ssl.form.domainsRequired') }]}
+            help={t('ssl.form.domainsHelp')}
           >
             <Input.TextArea 
               rows={6} 
@@ -468,13 +494,13 @@ const SSLPage: React.FC = () => {
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit" loading={requestLoading}>
-                申请证书
+                {t('ssl.actions.requestCert')}
               </Button>
               <Button onClick={() => {
                 setRequestModalVisible(false)
                 requestForm.resetFields()
               }}>
-                取消
+                {t('common.cancel')}
               </Button>
             </Space>
           </Form.Item>
@@ -483,7 +509,7 @@ const SSLPage: React.FC = () => {
 
       {/* 申请通配符证书弹窗 */}
       <Modal
-        title="申请通配符 SSL 证书"
+        title={t('ssl.modal.wildcardTitle')}
         open={wildcardModalVisible}
         onCancel={() => {
           setWildcardModalVisible(false)
@@ -499,16 +525,16 @@ const SSLPage: React.FC = () => {
         >
           <Form.Item
             name="baseDomain"
-            label="基础域名"
-            rules={[{ required: true, message: '请输入基础域名' }]}
-            help="例如：example.com"
+            label={t('ssl.form.baseDomain')}
+            rules={[{ required: true, message: t('ssl.form.baseDomainRequired') }]}
+            help={t('ssl.form.baseDomainHelp')}
           >
             <Input placeholder="example.com" />
           </Form.Item>
           <Form.Item
             name="subdomains"
-            label="子域名列表"
-            help="每行一个子域名，留空则只申请通配符证书"
+            label={t('ssl.form.subdomains')}
+            help={t('ssl.form.subdomainsHelp')}
           >
             <Input.TextArea 
               rows={4} 
@@ -518,13 +544,13 @@ const SSLPage: React.FC = () => {
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit" loading={wildcardLoading}>
-                申请通配符证书
+                {t('ssl.actions.requestWildcard')}
               </Button>
               <Button onClick={() => {
                 setWildcardModalVisible(false)
                 wildcardForm.resetFields()
               }}>
-                取消
+                {t('common.cancel')}
               </Button>
             </Space>
           </Form.Item>
@@ -533,7 +559,7 @@ const SSLPage: React.FC = () => {
 
       {/* 证书详情弹窗 */}
       <Modal
-        title="证书详情"
+        title={t('ssl.modal.detailTitle')}
         open={detailModalVisible}
         onCancel={() => {
           setDetailModalVisible(false)
@@ -546,23 +572,23 @@ const SSLPage: React.FC = () => {
           <div>
             <Row gutter={[16, 16]}>
               <Col span={12}>
-                <Card size="small" title="基本信息">
-                  <p><strong>域名：</strong>{selectedCert.domain}</p>
-                  <p><strong>颁发者：</strong>{selectedCert.issuer || 'Let\'s Encrypt'}</p>
-                  <p><strong>序列号：</strong>{selectedCert.serialNumber || 'N/A'}</p>
+                <Card size="small" title={t('ssl.detail.basicInfo')}>
+                  <p><strong>{t('ssl.detail.domainLabel')}</strong>{selectedCert.domain}</p>
+                  <p><strong>{t('ssl.detail.issuerLabel')}</strong>{selectedCert.issuer || 'Let\'s Encrypt'}</p>
+                  <p><strong>{t('ssl.detail.serialNumber')}</strong>{selectedCert.serialNumber || 'N/A'}</p>
                 </Card>
               </Col>
               <Col span={12}>
-                <Card size="small" title="有效期">
-                  <p><strong>过期时间：</strong></p>
+                <Card size="small" title={t('ssl.detail.validity')}>
+                  <p><strong>{t('ssl.detail.expiresLabel')}</strong></p>
                   {selectedCert.expires && selectedCert.expires !== 'unknown' ? (
                     <Tag color={getCertStatus(selectedCert.expires).color}>
                       {dayjs(selectedCert.expires).format('YYYY-MM-DD HH:mm:ss')}
                     </Tag>
                   ) : (
-                    <Tag>未知</Tag>
+                    <Tag>{t('ssl.status.unknown')}</Tag>
                   )}
-                  <p style={{ marginTop: 8 }}><strong>状态：</strong></p>
+                  <p style={{ marginTop: 8 }}><strong>{t('ssl.detail.statusLabel')}</strong></p>
                   <Tag color={getCertStatus(selectedCert.expires).color}>
                     {getCertStatus(selectedCert.expires).text}
                   </Tag>
@@ -570,7 +596,7 @@ const SSLPage: React.FC = () => {
               </Col>
             </Row>
             {selectedCert.san && selectedCert.san.length > 0 && (
-              <Card size="small" title="SAN 域名" style={{ marginTop: 16 }}>
+              <Card size="small" title={t('ssl.detail.sanDomains')} style={{ marginTop: 16 }}>
                 <Space wrap>
                   {selectedCert.san.map((domain, index) => (
                     <Tag key={index}>{domain}</Tag>
@@ -579,7 +605,7 @@ const SSLPage: React.FC = () => {
               </Card>
             )}
             {selectedCert.fingerprint && (
-              <Card size="small" title="指纹" style={{ marginTop: 16 }}>
+              <Card size="small" title={t('ssl.detail.fingerprint')} style={{ marginTop: 16 }}>
                 <p style={{ wordBreak: 'break-all', fontSize: 12 }}>
                   {selectedCert.fingerprint}
                 </p>

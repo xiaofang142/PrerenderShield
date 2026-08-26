@@ -1,0 +1,30 @@
+{
+  "preheat": {
+    "title": "렌더링 프리히트",
+    "selectSite": "사이트 선택：",
+    "sitePlaceholder": "사이트를 선택하세요",
+    "refreshData": "데이터 새로고침",
+    "triggerPreheat": "사이트 프리히트 실행",
+    "clearCache": "캐시 삭제",
+    "stats": {
+      "urlCount": "전체 URL 수",
+      "cacheCount": "캐시 수",
+      "cacheSize": "캐시 크기",
+      "browserPoolSize": "브라우저 풀 크기"
+    },
+    "urlListTitle": "URL 목록",
+    "columns": {
+      "siteName": "사이트 이름",
+      "updatedAt": "업데이트 시간"
+    },
+    "totalRecords": "총 {{total}}건",
+    "fetchStatsFailed": "통계 데이터를 가져오지 못했습니다",
+    "fetchUrlsFailed": "URL 목록을 가져오지 못했습니다",
+    "refreshed": "데이터가 새로고침되었습니다",
+    "selectSiteFirst": "먼저 사이트를 선택하세요",
+    "preheatCreated": "프리히트 작업이 생성되었습니다. 잠시 후 확인해 주세요",
+    "triggerPreheatFailed": "프리히트 실행에 실패했습니다",
+    "clearCacheSuccess": "캐시가 삭제되었습니다. 총 {{count}}개 삭제됨",
+    "clearCacheFailed": "캐시 삭제에 실패했습니다"
+  }
+}

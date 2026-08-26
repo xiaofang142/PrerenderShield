@@ -64,21 +64,6 @@ type DirsConfig struct {
 }
 
 // SiteConfig 站点配置结构体
-// 定义单个站点的完整配置信息
-//
-// 字段:
-//   ID: 站点唯一ID，用于标识站点
-//   Name: 站点名称，用于显示
-//   Domains: 站点绑定的域名列表，支持多个域名
-//   Port: 站点监听的端口号
-//   Mode: 站点运行模式，可选值：proxy(代理模式), static(静态资源模式), redirect(重定向模式)
-//   Proxy: 代理配置，当Mode为proxy时使用
-//   Redirect: 重定向配置，当Mode为redirect时使用
-//   Firewall: 防火墙配置，站点级别的安全防护设置
-//   Prerender: 渲染预热配置，用于SEO优化
-//   Routing: 路由配置，用于自定义请求路由
-//   FileIntegrityConfig: 网页防篡改配置，用于保护静态资源完整性
-
 type SiteConfig struct {
 	// 站点基本信息
 	ID      string   `yaml:"id" json:"id"` // 站点唯一ID
@@ -100,6 +85,20 @@ type SiteConfig struct {
 	Routing RoutingConfig `yaml:"routing" json:"routing"`
 	// 网页防篡改配置
 	FileIntegrityConfig FileIntegrityConfig `yaml:"file_integrity" json:"file_integrity"`
+	// SSL 配置
+	SSL SiteSSLConfig `yaml:"ssl" json:"ssl"`
+}
+
+// SiteSSLConfig 站点 SSL 配置
+type SiteSSLConfig struct {
+	Enabled    bool   `yaml:"enabled" json:"enabled"`
+	HTTPPort   int    `yaml:"http_port" json:"http_port"`       // HTTP 端口（用于重定向和 ACME 验证）
+	CertFile   string `yaml:"cert_file" json:"cert_file"`       // 证书文件路径（手动导入）
+	KeyFile    string `yaml:"key_file" json:"key_file"`         // 密钥文件路径（手动导入）
+	AutoCert   bool   `yaml:"auto_cert" json:"auto_cert"`       // 自动申请证书
+	ForceHTTPS bool   `yaml:"force_https" json:"force_https"`   // 强制 HTTPS 重定向
+	HSTS       bool   `yaml:"hsts" json:"hsts"`                 // 启用 HSTS
+	HSTSMaxAge int    `yaml:"hsts_max_age" json:"hsts_max_age"` // HSTS max-age 秒数
 }
 
 // FileIntegrityConfig 网页防篡改配置结构体
@@ -164,8 +163,76 @@ type Config struct {
 	App AppConfig `yaml:"app"`
 	// SSL 配置
 	SSL SSLConfig `yaml:"ssl"`
+	// SEO 配置
+	SEO SEOConfig `yaml:"seo"`
+	// 商业授权配置
+	Commercial CommercialConfig `yaml:"commercial"`
 	// 站点列表
 	Sites []SiteConfig `yaml:"sites"`
+}
+
+// CommercialConfig 商业授权配置
+type CommercialConfig struct {
+	MaxSites              int    `yaml:"max_sites" json:"max_sites"`                               // 免费版默认 1 个站点，付费授权按站点数放开
+	Plan                  string `yaml:"plan" json:"plan"`                                         // free, per-site, private-source
+	SitePriceUSDPerYear   int    `yaml:"site_price_usd_per_year" json:"site_price_usd_per_year"`   // 超过免费站点后的单站点年费
+	PrivateDeployPriceUSD int    `yaml:"private_deploy_price_usd" json:"private_deploy_price_usd"` // 源码私有化部署软件费用
+}
+
+// SEOConfig SEO 全局配置
+type SEOConfig struct {
+	Sitemap SitemapSEOConfig `yaml:"sitemap" json:"sitemap"`
+	Robots  RobotsSEOConfig  `yaml:"robots" json:"robots"`
+	LLM     LLMSEOConfig     `yaml:"llm" json:"llm"`
+}
+
+// SitemapSEOConfig Sitemap 生成配置
+type SitemapSEOConfig struct {
+	Enabled         bool     `yaml:"enabled" json:"enabled"`
+	BaseURL         string   `yaml:"base_url" json:"base_url"`
+	OutputDir       string   `yaml:"output_dir" json:"output_dir"`
+	ChangeFreq      string   `yaml:"change_freq" json:"change_freq"`
+	DefaultPriority string   `yaml:"default_priority" json:"default_priority"`
+	IncludePatterns []string `yaml:"include_patterns" json:"include_patterns"`
+	ExcludePatterns []string `yaml:"exclude_patterns" json:"exclude_patterns"`
+}
+
+// RobotsSEOConfig robots.txt 生成配置
+type RobotsSEOConfig struct {
+	Enabled    bool            `yaml:"enabled" json:"enabled"`
+	OutputDir  string          `yaml:"output_dir" json:"output_dir"`
+	SitemapURL string          `yaml:"sitemap_url" json:"sitemap_url"`
+	Rules      []RobotsRuleSEO `yaml:"rules" json:"rules"`
+}
+
+// RobotsRuleSEO robots.txt 规则
+type RobotsRuleSEO struct {
+	UserAgent  string   `yaml:"user_agent" json:"user_agent"`
+	Allow      []string `yaml:"allow" json:"allow"`
+	Disallow   []string `yaml:"disallow" json:"disallow"`
+	CrawlDelay int      `yaml:"crawl_delay" json:"crawl_delay"`
+}
+
+// LLMSEOConfig LLM SEO 优化配置
+type LLMSEOConfig struct {
+	Enabled     bool          `yaml:"enabled" json:"enabled"`
+	Provider    string        `yaml:"provider" json:"provider"` // openai, zhipu, deepseek, ollama
+	APIKey      string        `yaml:"api_key" json:"api_key"`
+	APIURL      string        `yaml:"api_url" json:"api_url"`
+	Model       string        `yaml:"model" json:"model"`
+	MaxTokens   int           `yaml:"max_tokens" json:"max_tokens"`
+	Temperature float64       `yaml:"temperature" json:"temperature"`
+	Timeout     string        `yaml:"timeout" json:"timeout"`
+	MaxRetries  int           `yaml:"max_retries" json:"max_retries"`
+	Prompts     LLMSEOPrompts `yaml:"prompts" json:"prompts"`
+}
+
+// LLMSEOPrompts 自定义 LLM 提示词
+type LLMSEOPrompts struct {
+	TitleOptimization       string `yaml:"title_optimization" json:"title_optimization"`
+	DescriptionOptimization string `yaml:"description_optimization" json:"description_optimization"`
+	KeywordExtraction       string `yaml:"keyword_extraction" json:"keyword_extraction"`
+	StructuredData          string `yaml:"structured_data" json:"structured_data"`
 }
 
 // SSLConfig SSL 证书配置
@@ -205,20 +272,62 @@ type ServerConfig struct {
 
 // FirewallConfig 防火墙配置
 type FirewallConfig struct {
-	Enabled         bool            `yaml:"enabled" json:"enabled"`
-	RulesPath       string          `yaml:"rules_path" json:"rules_path"`
-	ActionConfig    ActionConfig    `yaml:"action" json:"action"`
-	GeoIPConfig     GeoIPConfig     `yaml:"geoip" json:"geoip"`
-	RateLimitConfig RateLimitConfig `yaml:"rate_limit" json:"rate_limit"`
-	Blacklist       []string        `yaml:"blacklist" json:"blacklist"`
-	Whitelist       []string        `yaml:"whitelist" json:"whitelist"`
+	Enabled         bool               `yaml:"enabled" json:"enabled"`
+	RulesPath       string             `yaml:"rules_path" json:"rules_path"`
+	ActionConfig    ActionConfig       `yaml:"action" json:"action"`
+	GeoIPConfig     GeoIPConfig        `yaml:"geoip" json:"geoip"`
+	RateLimitConfig RateLimitConfig    `yaml:"rate_limit" json:"rate_limit"`
+	CCProtection    CCProtectionConfig `yaml:"cc_protection" json:"cc_protection"`
+	ThreatIntel     ThreatIntelConfig  `yaml:"threat_intel" json:"threat_intel"`
+	Blacklist       []string           `yaml:"blacklist" json:"blacklist"`
+	Whitelist       []string           `yaml:"whitelist" json:"whitelist"`
+}
+
+// CCProtectionConfig CC 防护配置
+type CCProtectionConfig struct {
+	Enabled bool               `yaml:"enabled" json:"enabled"`
+	Rules   []CCProtectionRule `yaml:"rules" json:"rules"`
+}
+
+// CCProtectionRule CC 防护规则
+type CCProtectionRule struct {
+	Name       string   `yaml:"name" json:"name"`
+	Path       string   `yaml:"path" json:"path"`
+	Method     string   `yaml:"method" json:"method"`
+	Dimensions []string `yaml:"dimensions" json:"dimensions"`
+	Requests   int      `yaml:"requests" json:"requests"`
+	Window     int      `yaml:"window" json:"window"`
+	BanTime    int      `yaml:"ban_time" json:"ban_time"`
+	Enabled    bool     `yaml:"enabled" json:"enabled"`
+}
+
+// ThreatIntelConfig 威胁情报配置
+type ThreatIntelConfig struct {
+	Enabled     bool                `yaml:"enabled" json:"enabled"`
+	Sources     []ThreatIntelSource `yaml:"sources" json:"sources"`
+	GlobalKey   string              `yaml:"global_key" json:"global_key"`
+	MaxIPs      int                 `yaml:"max_ips" json:"max_ips"`
+	Concurrency int                 `yaml:"concurrency" json:"concurrency"`
+}
+
+// ThreatIntelSource 威胁情报源
+type ThreatIntelSource struct {
+	Name           string `yaml:"name" json:"name"`
+	URL            string `yaml:"url" json:"url"`
+	Format         string `yaml:"format" json:"format"`
+	UpdateInterval string `yaml:"update_interval" json:"update_interval"`
+	Enabled        bool   `yaml:"enabled" json:"enabled"`
+	IPField        string `yaml:"ip_field" json:"ip_field"`
 }
 
 // GeoIPConfig 地理位置访问控制配置
 type GeoIPConfig struct {
-	Enabled   bool     `yaml:"enabled" json:"enabled"`
-	AllowList []string `yaml:"allow_list" json:"allow_list"` // 允许的国家/地区代码列表
-	BlockList []string `yaml:"block_list" json:"block_list"` // 阻止的国家/地区代码列表
+	Enabled      bool     `yaml:"enabled" json:"enabled"`
+	AllowList    []string `yaml:"allow_list" json:"allow_list"`       // 允许的国家/地区代码列表
+	BlockList    []string `yaml:"block_list" json:"block_list"`       // 阻止的国家/地区代码列表
+	DatabasePath string   `yaml:"database_path" json:"database_path"` // GeoLite2-Country.mmdb 文件路径
+	APIProvider  string   `yaml:"api_provider" json:"api_provider"`   // API 提供商: ip-api, ipinfo, ipapi-co
+	APIKey       string   `yaml:"api_key" json:"api_key"`             // API 密钥（ipinfo 需要）
 }
 
 // RateLimitConfig 频率限制配置
@@ -273,6 +382,10 @@ type PushConfig struct {
 	BaiduDailyLimit int    `yaml:"baidu_daily_limit" json:"baidu_daily_limit"`
 	BingDailyLimit  int    `yaml:"bing_daily_limit" json:"bing_daily_limit"`
 	PushDomain      string `yaml:"push_domain" json:"push_domain"`
+	Schedule        string `yaml:"schedule" json:"schedule"` // cron 表达式，默认每天平上8点
+	// IndexNow 配置 (Bing/Yandex/Naver/Seznam)
+	IndexNowEnabled bool   `yaml:"indexnow_enabled" json:"indexnow_enabled"`
+	IndexNowKey     string `yaml:"indexnow_key" json:"indexnow_key"`
 }
 
 // RoutingConfig 路由配置
@@ -564,15 +677,27 @@ func defaultConfig() *Config {
 				BlockMessage:  "Request blocked by firewall",
 			},
 			GeoIPConfig: GeoIPConfig{
-				Enabled:   false,
-				AllowList: []string{},
-				BlockList: []string{},
+				Enabled:      false,
+				AllowList:    []string{},
+				BlockList:    []string{},
+				DatabasePath: "./rules/GeoLite2-Country.mmdb",
 			},
 			RateLimitConfig: RateLimitConfig{
 				Enabled:  false,
 				Requests: 100,
 				Window:   60,
 				BanTime:  3600,
+			},
+			CCProtection: CCProtectionConfig{
+				Enabled: false,
+				Rules:   []CCProtectionRule{},
+			},
+			ThreatIntel: ThreatIntelConfig{
+				Enabled:     false,
+				GlobalKey:   "threatintel:global:blacklist",
+				MaxIPs:      50000,
+				Concurrency: 3,
+				Sources:     []ThreatIntelSource{},
 			},
 		},
 		Prerender: PrerenderConfig{
@@ -669,6 +794,7 @@ func defaultConfig() *Config {
 				BaiduDailyLimit: 1000,
 				BingDailyLimit:  1000,
 				PushDomain:      "",
+				Schedule:        "0 0 8 * * *", // 默认每天平上8点推送
 			},
 		},
 		Routing: RoutingConfig{
@@ -710,8 +836,42 @@ func defaultConfig() *Config {
 			PrometheusAddress: ":9090",
 		},
 		App: AppConfig{
-			Version:     "1.0.1",
+			Version:     "3.0.0",
 			OfficialURL: "https://prerender.websitetool.cn",
+		},
+		SEO: SEOConfig{
+			Sitemap: SitemapSEOConfig{
+				Enabled:         false,
+				ChangeFreq:      "daily",
+				DefaultPriority: "0.5",
+				IncludePatterns: []string{"*.html", "*.htm"},
+				ExcludePatterns: []string{"admin/*", "api/*", "login*"},
+			},
+			Robots: RobotsSEOConfig{
+				Enabled:   false,
+				OutputDir: ".",
+				Rules: []RobotsRuleSEO{
+					{
+						UserAgent: "*",
+						Allow:     []string{"/"},
+						Disallow:  []string{"/admin/", "/api/", "/login"},
+					},
+				},
+			},
+			LLM: LLMSEOConfig{
+				Enabled:     false,
+				Provider:    "openai",
+				Model:       "gpt-4o-mini",
+				MaxTokens:   500,
+				Temperature: 0.3,
+				MaxRetries:  2,
+			},
+		},
+		Commercial: CommercialConfig{
+			MaxSites:              1,
+			Plan:                  "free",
+			SitePriceUSDPerYear:   99,
+			PrivateDeployPriceUSD: 9999,
 		},
 		Sites: []SiteConfig{defaultSite},
 	}

@@ -1,0 +1,24 @@
+{
+  "dashboard": {
+    "title": "ダッシュボード",
+    "fetchFailed": "データの取得に失敗しました",
+    "newAlert": "新しいセキュリティアラートを受信しました。アラートセンターをご確認ください",
+    "statTotalRequests": "総リクエスト数",
+    "statBlocked": "ブロック攻撃",
+    "statCrawler": "クローラーリクエスト",
+    "statActiveSites": "アクティブサイト",
+    "trafficTrend": "トラフィック推移 (24時間)",
+    "accessStats": "アクセス統計",
+    "systemStatus": "システム状態",
+    "wafFirewall": "WAF ファイアウォール",
+    "prerenderEngine": "プリレンダリングエンジン",
+    "enabled": "有効",
+    "disabled": "無効",
+    "noData": "データなし",
+    "series": {
+      "total": "総リクエスト",
+      "crawler": "クローラーリクエスト",
+      "blocked": "ブロックリクエスト"
+    }
+  }
+}

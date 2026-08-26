@@ -18,8 +18,8 @@ func TestApplication_New(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
-  console_port: 0
+  api_port: 15998
+  console_port: 15997
 cache:
   redis_url: redis://localhost:6379/0
 `
@@ -51,7 +51,7 @@ func TestApplication_NewInvalidRedisURL(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
+  api_port: 15998
 cache:
   redis_url: invalid://url
 `
@@ -70,7 +70,7 @@ func TestApplication_GetConfig(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
+  api_port: 15998
 cache:
   redis_url: redis://localhost:6379/0
 `
@@ -92,7 +92,7 @@ func TestApplication_GetRedis(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
+  api_port: 15998
 cache:
   redis_url: redis://localhost:6379/0
 `
@@ -113,7 +113,7 @@ func TestApplication_AddServer(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
+  api_port: 15998
 cache:
   redis_url: redis://localhost:6379/0
 `
@@ -138,7 +138,7 @@ func TestApplication_AddCleanup(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
+  api_port: 15998
 cache:
   redis_url: redis://localhost:6379/0
 `
@@ -169,7 +169,7 @@ func TestApplication_GetStartTime(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
+  api_port: 15998
 cache:
   redis_url: redis://localhost:6379/0
 `
@@ -191,7 +191,7 @@ func TestApplication_GetUptime(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
+  api_port: 15998
 cache:
   redis_url: redis://localhost:6379/0
 `
@@ -213,7 +213,7 @@ func TestApplication_Run(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
+  api_port: 15998
 cache:
   redis_url: redis://localhost:6379/0
 `
@@ -243,7 +243,7 @@ func TestApplication_Shutdown(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
+  api_port: 15998
 cache:
   redis_url: redis://localhost:6379/0
 `
@@ -274,7 +274,7 @@ func TestNewAppRunner(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
+  api_port: 15998
 cache:
   redis_url: redis://localhost:6379/0
 `
@@ -296,7 +296,7 @@ func TestAppRunner_Initialize(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
+  api_port: 15998
 cache:
   redis_url: redis://localhost:6379/0
 sites: []
@@ -322,8 +322,8 @@ func TestAppRunner_Start(t *testing.T) {
 	configContent := `
 server:
   address: 127.0.0.1
-  api_port: 0
-  console_port: 0
+  api_port: 15998
+  console_port: 15997
 cache:
   redis_url: redis://localhost:6379/0
 sites: []

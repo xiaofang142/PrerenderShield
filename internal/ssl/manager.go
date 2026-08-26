@@ -13,8 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"golang.org/x/crypto/acme"
-
+	"prerender-shield/internal/logging"
 	"prerender-shield/internal/redis"
 )
 
@@ -28,15 +27,23 @@ type Manager interface {
 	ListCertificates() (map[string]map[string]interface{}, error)
 	DeleteCertificate(domain string) error
 	CheckExpiration() ([]string, error)
+	SetACMEClient(client *ACMEClient)
 }
 
 // manager SSL证书管理器实现
+// P0-12: 删除未使用的 acmeClient (golang.org/x/crypto/acme) 字段
+// 统一使用 acmeClientWrapper (lego/v4)
 type manager struct {
-	redisClient *redis.Client
-	acmeClient  *acme.Client
-	certDir     string
-	email       string
-	production  bool
+	redisClient       *redis.Client
+	acmeClientWrapper *ACMEClient
+	certDir           string
+	email             string
+	production        bool
+}
+
+// SetACMEClient 设置 ACME 客户端（用于真实证书申请）
+func (m *manager) SetACMEClient(client *ACMEClient) {
+	m.acmeClientWrapper = client
 }
 
 // NewManager 创建新的SSL证书管理器
@@ -46,19 +53,8 @@ func NewManager(redisClient *redis.Client, certDir, email string, production boo
 		return nil, fmt.Errorf("failed to create cert directory: %w", err)
 	}
 
-	// 创建ACME客户端
-	directoryURL := "https://acme-staging-v02.api.letsencrypt.org/directory"
-	if production {
-		directoryURL = "https://acme-v02.api.letsencrypt.org/directory"
-	}
-
-	client := &acme.Client{
-		DirectoryURL: directoryURL,
-	}
-
 	return &manager{
 		redisClient: redisClient,
-		acmeClient:  client,
 		certDir:     certDir,
 		email:       email,
 		production:  production,
@@ -93,17 +89,19 @@ func (m *manager) RequestCertificate(domain string) error {
 	// 尝试使用ACME申请证书
 	certPEM, err := m.requestCertificateWithACME(domain, domainKey, csr)
 	if err != nil {
-		// 如果ACME申请失败，创建自签名证书用于测试
+		// ACME 申请失败时不再回退到自签名证书，直接返回错误
 		m.redisClient.Set(fmt.Sprintf("ssl:acme:error:%s", domain), err.Error(), 24*time.Hour)
-		selfSignedCert, err := m.createSelfSignedCertificate(domain, domainKey)
-		if err != nil {
-			return fmt.Errorf("failed to create self-signed certificate: %w", err)
-		}
-		certPEM = selfSignedCert
+		return fmt.Errorf("failed to obtain certificate via ACME for domain %s: %w", domain, err)
 	}
 
 	if err := saveCertificate(certPath, certPEM); err != nil {
 		return fmt.Errorf("failed to save certificate: %w", err)
+	}
+
+	// 从实际证书解析过期时间，避免硬编码
+	expiresAt := time.Now().Add(90 * 24 * time.Hour) // 默认值作为回退
+	if parsedExpiry, parseErr := extractCertExpiry(certPEM); parseErr == nil {
+		expiresAt = parsedExpiry
 	}
 
 	// 存储证书信息到Redis
@@ -112,7 +110,7 @@ func (m *manager) RequestCertificate(domain string) error {
 		"cert_path":  certPath,
 		"key_path":   keyPath,
 		"created_at": time.Now().Unix(),
-		"expires_at": time.Now().Add(90 * 24 * time.Hour).Unix(),
+		"expires_at": expiresAt.Unix(),
 		"status":     "active",
 	}
 
@@ -138,62 +136,22 @@ func (m *manager) RenewCertificate(domain string) error {
 	// 重新申请证书
 	err := m.RequestCertificate(domain)
 	if err == nil {
+		// 从证书文件读取实际过期时间
+		certPath := filepath.Join(m.certDir, fmt.Sprintf("%s.crt", domain))
+		certData, readErr := os.ReadFile(certPath)
+		expiresAt := time.Now().Add(90 * 24 * time.Hour) // 默认回退
+		if readErr == nil {
+			if parsedExpiry, parseErr := extractCertExpiry(certData); parseErr == nil {
+				expiresAt = parsedExpiry
+			}
+		}
 		// 更新证书信息
 		certInfo["updated_at"] = time.Now().Unix()
-		certInfo["expires_at"] = time.Now().Add(90 * 24 * time.Hour).Unix()
+		certInfo["expires_at"] = expiresAt.Unix()
 		m.redisClient.SaveJSON(fmt.Sprintf("ssl:cert:%s", domain), certInfo, 0)
 	}
 
 	return err
-}
-
-// StartAutoRenewal 启动证书自动续签任务
-func (m *manager) StartAutoRenewal(interval time.Duration) {
-	if interval <= 0 {
-		interval = 24 * time.Hour
-	}
-
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-
-		for {
-			<-ticker.C
-			m.checkAndRenewCertificates()
-		}
-	}()
-}
-
-// checkAndRenewCertificates 检查并续签即将过期的证书
-func (m *manager) checkAndRenewCertificates() {
-	// 获取所有证书
-	certDomains, err := m.redisClient.SetMembers("ssl:certs")
-	if err != nil {
-		return
-	}
-
-	for _, domain := range certDomains {
-		certInfo := make(map[string]interface{})
-		if err := m.redisClient.GetJSON(fmt.Sprintf("ssl:cert:%s", domain), &certInfo); err != nil {
-			continue
-		}
-
-		// 检查证书是否即将过期（剩余30天以内）
-		expiresAt, ok := certInfo["expires_at"].(float64)
-		if !ok {
-			continue
-		}
-
-		expiryTime := time.Unix(int64(expiresAt), 0)
-		if time.Until(expiryTime) <= 30*24*time.Hour {
-			// 续签证书
-			if err := m.RenewCertificate(domain); err != nil {
-				m.redisClient.Set(fmt.Sprintf("ssl:renewal:error:%s", domain), err.Error(), 24*time.Hour)
-			} else {
-				m.redisClient.Set(fmt.Sprintf("ssl:renewal:success:%s", domain), time.Now().Format(time.RFC3339), 24*time.Hour)
-			}
-		}
-	}
 }
 
 // ImportCertificate 导入SSL证书
@@ -348,11 +306,15 @@ func (m *manager) DeleteCertificate(domain string) error {
 
 	// 删除证书文件
 	if certPath, ok := certInfo["cert_path"].(string); ok {
-		os.Remove(certPath)
+		if err := os.Remove(certPath); err != nil && !os.IsNotExist(err) {
+			logging.DefaultLogger.Warn("Failed to delete certificate file %s: %v", certPath, err)
+		}
 	}
 
 	if keyPath, ok := certInfo["key_path"].(string); ok {
-		os.Remove(keyPath)
+		if err := os.Remove(keyPath); err != nil && !os.IsNotExist(err) {
+			logging.DefaultLogger.Warn("Failed to delete key file %s: %v", keyPath, err)
+		}
 	}
 
 	// 从Redis中删除证书信息
@@ -447,11 +409,16 @@ func saveCertificate(path string, certData []byte) error {
 	return nil
 }
 
-// createSelfSignedCertificate 创建自签名证书
+// createSelfSignedCertificate 创建自签名证书（仅用于开发和测试）
 func (m *manager) createSelfSignedCertificate(domain string, privateKey *rsa.PrivateKey) ([]byte, error) {
+	// 使用随机序列号，避免固定值
+	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate serial number: %w", err)
+	}
 	// 创建证书模板
 	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
+		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			CommonName: domain,
 		},
@@ -479,34 +446,27 @@ func (m *manager) createSelfSignedCertificate(domain string, privateKey *rsa.Pri
 }
 
 // requestCertificateWithACME 使用ACME协议申请证书
+// 优先使用注入的 ACMEClient（lego/v4），否则返回错误
 func (m *manager) requestCertificateWithACME(domain string, privateKey *rsa.PrivateKey, csr *x509.CertificateRequest) ([]byte, error) {
-	// 注意：这是一个简化的实现，实际ACME流程需要更复杂的处理
-	// 包括账户注册、挑战验证、订单创建等步骤
-
-	// 这里我们将使用自签名证书作为示例
-	// 完整的ACME实现需要：
-	// 1. 注册ACME账户
-	// 2. 创建订单
-	// 3. 处理HTTP-01或DNS-01挑战
-	// 4. 验证挑战
-	// 5. 下载证书
-
-	// 存储ACME挑战信息到Redis，供HTTP服务器使用
-	challengeKey := fmt.Sprintf("acme:challenge:%s", domain)
-	challengeValue := "test-challenge-value"
-	m.redisClient.Set(challengeKey, challengeValue, 1*time.Hour)
-
-	// 返回自签名证书作为示例
-	return m.createSelfSignedCertificate(domain, privateKey)
+	if m.acmeClientWrapper == nil {
+		return nil, fmt.Errorf("ACME client not configured")
+	}
+	cert, err := m.acmeClientWrapper.RequestCertificate([]string{domain})
+	if err != nil {
+		return nil, err
+	}
+	return cert.Certificate, nil
 }
 
-// GetACMEChallenge 获取ACME挑战值
-func (m *manager) GetACMEChallenge(token string) (string, error) {
-	// 从Redis获取挑战值
-	challengeKey := fmt.Sprintf("acme:challenge:%s", token)
-	challengeValue, err := m.redisClient.Get(challengeKey)
-	if err != nil || challengeValue == "" {
-		return "", fmt.Errorf("challenge not found")
+// extractCertExpiry 从 PEM 编码的证书中解析过期时间
+func extractCertExpiry(certPEM []byte) (time.Time, error) {
+	block, _ := pem.Decode(certPEM)
+	if block == nil {
+		return time.Time{}, fmt.Errorf("failed to decode PEM block")
 	}
-	return challengeValue, nil
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse certificate: %w", err)
+	}
+	return cert.NotAfter, nil
 }

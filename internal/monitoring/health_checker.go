@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/shirou/gopsutil/v4/disk"
+	"github.com/shirou/gopsutil/v4/mem"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/ssl"
 )
@@ -17,17 +20,20 @@ type HealthChecker interface {
 	Check() map[string]interface{}
 	IsHealthy() bool
 	RegisterCheck(name string, check func() (bool, string))
+	SetACMEClient(client *ssl.ACMEClient)
+	SetSiteServerChecker(checker func() (int, int, string))
 	ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 // healthChecker 健康检查器实现
 type healthChecker struct {
-	redisClient     *redis.Client
-	checks          map[string]func() (bool, string)
-	lastCheckTime   time.Time
-	lastCheckResult map[string]interface{}
-	mutex           sync.RWMutex
-	acmeClient      *ssl.ACMEClient
+	redisClient       *redis.Client
+	checks            map[string]func() (bool, string)
+	lastCheckTime     time.Time
+	lastCheckResult   map[string]interface{}
+	mutex             sync.RWMutex
+	acmeClient        *ssl.ACMEClient
+	siteServerChecker func() (int, int, string) // (total, running, detail)
 }
 
 // NewHealthChecker 创建新的健康检查器
@@ -42,6 +48,7 @@ func NewHealthChecker(redisClient *redis.Client) HealthChecker {
 	checker.RegisterCheck("redis", checker.checkRedis)
 	checker.RegisterCheck("system", checker.checkSystem)
 	checker.RegisterCheck("memory", checker.checkMemory)
+	checker.RegisterCheck("disk", checker.checkDisk)
 
 	return checker
 }
@@ -50,6 +57,13 @@ func NewHealthChecker(redisClient *redis.Client) HealthChecker {
 func (h *healthChecker) SetACMEClient(client *ssl.ACMEClient) {
 	h.acmeClient = client
 	h.RegisterCheck("ssl", h.checkSSL)
+}
+
+// SetSiteServerChecker 设置站点服务器状态检查回调
+// checker 回调返回 (总站点数, 运行中站点数, 详情信息)
+func (h *healthChecker) SetSiteServerChecker(checker func() (int, int, string)) {
+	h.siteServerChecker = checker
+	h.RegisterCheck("site_servers", h.checkSiteServers)
 }
 
 // Check 执行健康检查
@@ -70,7 +84,6 @@ func (h *healthChecker) Check() map[string]interface{} {
 
 	results["healthy"] = healthy
 	results["timestamp"] = time.Now().Unix()
-	results["uptime"] = time.Since(h.lastCheckTime).Seconds()
 
 	// 添加系统资源信息
 	var m runtime.MemStats
@@ -83,7 +96,9 @@ func (h *healthChecker) Check() map[string]interface{} {
 	}
 	results["goroutines"] = runtime.NumGoroutine()
 
+	// lastCheckTime 的读取与写入统一在锁内，避免并发 Check 数据竞争
 	h.mutex.Lock()
+	results["uptime"] = time.Since(h.lastCheckTime).Seconds()
 	h.lastCheckResult = results
 	h.lastCheckTime = time.Now()
 	h.mutex.Unlock()
@@ -108,6 +123,22 @@ func (h *healthChecker) checkSSL() (bool, string) {
 	}
 
 	return true, "SSL certificates are healthy"
+}
+
+// checkSiteServers 检查站点服务器状态
+func (h *healthChecker) checkSiteServers() (bool, string) {
+	if h.siteServerChecker == nil {
+		return true, "Site server checker not configured"
+	}
+
+	total, running, detail := h.siteServerChecker()
+	if total == 0 {
+		return true, "No sites configured"
+	}
+	if running < total {
+		return false, fmt.Sprintf("%d/%d site servers running. %s", running, total, detail)
+	}
+	return true, fmt.Sprintf("All %d site servers running. %s", total, detail)
 }
 
 // checkMemory 检查内存使用情况
@@ -153,19 +184,65 @@ func (h *healthChecker) checkRedis() (bool, string) {
 
 // checkSystem 检查系统健康状态
 func (h *healthChecker) checkSystem() (bool, string) {
-	// 检查系统状态
-	// 这里可以添加更详细的系统检查，如CPU、内存、磁盘等
+	// 使用真实系统内存占用率（此前误用 Go 堆 Sys/1GB 当百分比，
+	// 导致堆内存 >920MB 即误报不健康）
+	if vm, err := mem.VirtualMemory(); err == nil {
+		if vm.UsedPercent > 90 {
+			return false, fmt.Sprintf("Memory usage high: %.1f%%", vm.UsedPercent)
+		}
+	}
+
+	numGoroutines := runtime.NumGoroutine()
+
+	issues := []string{}
+	if numGoroutines > 10000 {
+		issues = append(issues, fmt.Sprintf("Too many goroutines: %d", numGoroutines))
+	}
+
+	if len(issues) > 0 {
+		return false, strings.Join(issues, "; ")
+	}
 	return true, "System is healthy"
+}
+
+// checkDisk 检查磁盘空间
+func (h *healthChecker) checkDisk() (bool, string) {
+	// 使用 gopsutil 检查磁盘使用率
+	usage, err := disk.Usage("/")
+	if err != nil {
+		// gopsutil 不可用时回退到系统调用
+		return true, "Disk check skipped (gopsutil unavailable)"
+	}
+
+	usagePercent := usage.UsedPercent
+	issues := []string{}
+
+	if usagePercent > 95 {
+		issues = append(issues, fmt.Sprintf("Disk usage critical: %.1f%%", usagePercent))
+	} else if usagePercent > 85 {
+		issues = append(issues, fmt.Sprintf("Disk usage warning: %.1f%%", usagePercent))
+	}
+
+	// 检查可用空间是否低于阈值 (1GB)
+	freeBytes := usage.Free
+	if freeBytes < 1<<30 { // 1GB
+		issues = append(issues, fmt.Sprintf("Low free disk space: %.1f MB", float64(freeBytes)/(1<<20)))
+	}
+
+	if len(issues) > 0 {
+		return false, strings.Join(issues, "; ")
+	}
+	return true, fmt.Sprintf("Disk usage: %.1f%%, free: %.1f GB", usagePercent, float64(freeBytes)/(1<<30))
 }
 
 // healthResponse 健康检查响应结构
 type healthResponse struct {
-	Status    string                   `json:"status"`
-	Checks    map[string]checkResult   `json:"checks"`
-	Timestamp int64                    `json:"timestamp"`
-	Uptime    float64                  `json:"uptime"`
-	Memory    map[string]interface{}   `json:"memory,omitempty"`
-	Goroutines int                     `json:"goroutines,omitempty"`
+	Status     string                 `json:"status"`
+	Checks     map[string]checkResult `json:"checks"`
+	Timestamp  int64                  `json:"timestamp"`
+	Uptime     float64                `json:"uptime"`
+	Memory     map[string]interface{} `json:"memory,omitempty"`
+	Goroutines int                    `json:"goroutines,omitempty"`
 }
 
 type checkResult struct {

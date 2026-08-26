@@ -319,11 +319,11 @@ func (b *Blacklist) GetRemainingTime(ip string) time.Duration {
 	return 0
 }
 
-// BlacklistMiddleware 创建黑名单中间件
+// BlacklistMiddleware 创建黑名单中间件（已废弃：DDoS 检测器内部已处理黑名单逻辑）
+// 保留此方法仅为向后兼容，建议使用 WafMiddleware 中的黑名单检查
 func (b *Blacklist) BlacklistMiddleware(blockedHandler func(ip, reason string) interface{}) func(interface{}) (interface{}, error) {
 	return func(ctx interface{}) (interface{}, error) {
-		// 这里需要根据实际上下文类型获取 IP
-		// 由于通用性，这里只提供框架
+		// DDoS 黑名单已在检测器内部处理，此中间件仅为兼容保留
 		return ctx, nil
 	}
 }

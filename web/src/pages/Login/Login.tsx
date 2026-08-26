@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, Form, Input, Button, Typography, Modal, message, Alert, Dropdown } from 'antd'
 import { LoginOutlined, LockOutlined, InfoCircleOutlined, GlobalOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
@@ -50,6 +50,16 @@ const Login: React.FC = () => {
     setModalVisible(true)
   }
 
+  // 导航定时器登记：组件卸载时统一清理，避免卸载后触发 navigate
+  const navTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+  useEffect(() => () => {
+    navTimersRef.current.forEach(clearTimeout)
+  }, [])
+
+  const scheduleNavigateHome = () => {
+    navTimersRef.current.push(setTimeout(() => { navigate('/') }, 1500))
+  }
+
   // 检查是否是首次运行
   useEffect(() => {
     const checkFirstRun = async () => {
@@ -82,9 +92,7 @@ const Login: React.FC = () => {
         } else {
           authLogin(response.data.token, response.data.username)
           showModal('success', t('login.successTitle'), t('login.successContent'))
-          setTimeout(() => {
-            navigate('/')
-          }, 1500)
+          scheduleNavigateHome()
         }
       } else {
         showModal('error', t('login.failedTitle'), response.message || t('login.failedDefault'))
@@ -118,9 +126,7 @@ const Login: React.FC = () => {
         setForceChangeVisible(false)
         authLogin(pendingToken, pendingUsername)
         showModal('success', t('login.successTitle'), t('login.successContent'))
-        setTimeout(() => {
-          navigate('/')
-        }, 1500)
+        scheduleNavigateHome()
       } else {
         message.error(res.message || t('login.passwordChangeFailed') || '密码修改失败')
       }
@@ -194,8 +200,7 @@ const Login: React.FC = () => {
           name="login"
           initialValues={{ remember: true }}
           onFinish={handleLogin}
-          onFinishFailed={(errorInfo) => {
-            console.log('Form validation failed:', errorInfo);
+          onFinishFailed={() => {
             message.error(t('login.inputUsername'));
           }}
         >

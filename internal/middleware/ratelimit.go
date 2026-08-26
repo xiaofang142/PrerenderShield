@@ -1,22 +1,27 @@
 package middleware
 
 import (
+	"context"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"prerender-shield/internal/redis"
+	"github.com/go-redis/redis/v8"
+
+	"prerender-shield/internal/logging"
+	pkgredis "prerender-shield/internal/redis"
 )
 
 // RedisRateLimiter 基于 Redis 的分布式速率限制器
 type RedisRateLimiter struct {
-	redisClient *redis.Client
+	redisClient *pkgredis.Client
 	limit       int64
 	window      time.Duration
 	banTime     time.Duration
 }
 
 // NewRedisRateLimiter 创建基于 Redis 的速率限制器
-func NewRedisRateLimiter(redisClient *redis.Client, limit int64, window, banTime time.Duration) *RedisRateLimiter {
+func NewRedisRateLimiter(redisClient *pkgredis.Client, limit int64, window, banTime time.Duration) *RedisRateLimiter {
 	return &RedisRateLimiter{
 		redisClient: redisClient,
 		limit:       limit,
@@ -25,14 +30,26 @@ func NewRedisRateLimiter(redisClient *redis.Client, limit int64, window, banTime
 	}
 }
 
+// rateLimitLuaScript 原子性 INCR + EXPIRE，避免竞态条件
+var rateLimitLuaScript = redis.NewScript(`
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return current
+`)
+
 // Middleware 速率限制中间件（分布式）
 func (r *RedisRateLimiter) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		clientIP := c.ClientIP()
 
-		// 检查是否被封禁
+		// 检查是否被封禁（Get 内部已将 redis.Nil 转为空串返回，此处 err 必为真实错误）
 		bannedKey := "ratelimit:ban:" + clientIP
-		isBanned, _ := r.redisClient.Get(bannedKey)
+		isBanned, err := r.redisClient.Get(bannedKey)
+		if err != nil {
+			logging.DefaultLogger.Warn("Rate limit ban check error for %s: %v", clientIP, err)
+		}
 		if isBanned != "" {
 			c.AbortWithStatusJSON(429, gin.H{
 				"code":    429,
@@ -41,38 +58,46 @@ func (r *RedisRateLimiter) Middleware() gin.HandlerFunc {
 			return
 		}
 
-		// 使用滑动窗口计数
-		counterKey := "ratelimit:count:" + clientIP
-		windowKey := "ratelimit:window:" + clientIP
+		// 原子滑动窗口（Lua 脚本保证原子性）
+		counterKey := "ratelimit:count:" + clientIP + ":" + time.Now().Truncate(r.window).Format("200601021504")
 
-		// 获取当前窗口开始时间
-		windowStart, _ := r.redisClient.Get(windowKey)
+		rdb := r.redisClient.GetRawClient()
+		ctx := r.redisClient.Context()
 
-		now := time.Now()
-		if windowStart == "" || now.Sub(parseTime(windowStart)) > r.window {
-			// 新窗口
-			r.redisClient.Set(windowKey, now.Format(time.RFC3339), r.window)
-			r.redisClient.Set(counterKey, 1, r.window)
-		} else {
-			// 当前窗口内计数
-			count, _ := r.redisClient.Incr(counterKey)
-			if count >= r.limit {
-				// 超过限制，封禁
-				r.redisClient.Set(bannedKey, "1", r.banTime)
-				c.AbortWithStatusJSON(429, gin.H{
-					"code":    429,
-					"message": "Too many requests, you have been rate limited",
-				})
-				return
-			}
+		count, err := rateLimitLuaScript.Run(ctx, rdb, []string{counterKey}, int(r.window.Seconds())).Int64()
+		if err != nil {
+			logging.DefaultLogger.Warn("Rate limit counter error for %s: %v", clientIP, err)
+			c.Next()
+			return
+		}
+
+		if count >= r.limit {
+			banCtx := context.Background()
+			rdb.Set(banCtx, bannedKey, "1", r.banTime)
+			c.AbortWithStatusJSON(429, gin.H{
+				"code":    429,
+				"message": "Too many requests, you have been rate limited",
+			})
+			return
 		}
 
 		c.Next()
 	}
 }
 
-// parseTime 解析时间字符串
-func parseTime(s string) time.Time {
-	t, _ := time.Parse(time.RFC3339, s)
-	return t
+// ManagementRateLimit 管理 API 速率限制中间件
+// 仅对 /api/v1 下的管理端点应用限流，公开端点（health/version/login/first-run）豁免
+func ManagementRateLimit(limiter *RedisRateLimiter) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+		if len(path) >= 7 && path[:7] == "/api/v1" &&
+			path != "/api/v1/health" &&
+			path != "/api/v1/version" &&
+			!strings.HasPrefix(path, "/api/v1/auth/login") &&
+			!strings.HasPrefix(path, "/api/v1/auth/first-run") {
+			limiter.Middleware()(c)
+			return
+		}
+		c.Next()
+	}
 }

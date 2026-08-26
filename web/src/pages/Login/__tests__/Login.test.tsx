@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import api from '../../../services/api'
+import api, { authApi } from '../../../services/api'
 
 // Mock i18n before importing Login
 vi.mock('react-i18next', () => ({
@@ -13,6 +13,12 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('../../../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn() },
+  authApi: {
+    firstRun: vi.fn(),
+    login: vi.fn(),
+    logout: vi.fn(),
+    changePassword: vi.fn(),
+  },
 }))
 
 vi.mock('../../../context/AuthContext', async () => {
@@ -33,6 +39,9 @@ beforeEach(() => {
   vi.mocked(api.get).mockResolvedValue({
     code: 200, message: 'success', data: { isFirstRun: false }
   })
+  vi.mocked(authApi.firstRun).mockResolvedValue({
+    code: 200, message: 'success', data: { isFirstRun: false }
+  } as any)
 })
 
 describe('Login', () => {
@@ -54,11 +63,11 @@ describe('Login', () => {
   })
 
   it('calls API and authLogin on submit', async () => {
-    vi.mocked(api.post).mockResolvedValue({
+    vi.mocked(authApi.login).mockResolvedValue({
       code: 200,
       message: 'Login successful',
       data: { token: 't', username: 'u', force_change_password: false },
-    })
+    } as any)
 
     render(<MemoryRouter><Login /></MemoryRouter>)
 
@@ -71,7 +80,7 @@ describe('Login', () => {
     fireEvent.click(submitButton)
 
     await waitFor(() => {
-      expect(api.post).toHaveBeenCalledWith('/auth/login', { username: 'username', password: 'password' })
+      expect(authApi.login).toHaveBeenCalledWith('username', 'password')
     })
     expect(mockLogin).toHaveBeenCalledWith('t', 'u')
   })

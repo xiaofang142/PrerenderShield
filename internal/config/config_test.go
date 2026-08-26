@@ -81,10 +81,13 @@ func TestValidateConfig(t *testing.T) {
 func TestUpdateConfig(t *testing.T) {
 	manager := GetInstance()
 
-	// 添加配置变化处理函数
-	configUpdated := false
+	// 添加配置变化处理函数（用 channel 同步，避免测试自身的数据竞争）
+	configUpdated := make(chan struct{}, 1)
 	manager.AddConfigChangeHandler(func(cfg *Config) {
-		configUpdated = true
+		select {
+		case configUpdated <- struct{}{}:
+		default:
+		}
 	})
 
 	// 更新配置
@@ -97,8 +100,11 @@ func TestUpdateConfig(t *testing.T) {
 	assert.Equal(t, 9090, cfg.Server.APIPort)
 
 	// 等待配置变化处理函数执行
-	time.Sleep(100 * time.Millisecond)
-	assert.True(t, configUpdated)
+	select {
+	case <-configUpdated:
+	case <-time.After(2 * time.Second):
+		t.Fatal("config change handler was not invoked")
+	}
 }
 
 func TestStartAndStopWatching(t *testing.T) {

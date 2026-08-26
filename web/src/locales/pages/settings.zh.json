@@ -1,0 +1,68 @@
+{
+  "settings": {
+    "title": "系统设置",
+    "tabs": {
+      "config": "系统配置",
+      "status": "系统状态",
+      "backup": "备份恢复",
+      "about": "关于"
+    },
+    "config": {
+      "accessLogDivider": "访问日志配置",
+      "accessLogRetention": "日志保留天数",
+      "accessLogRetentionHelp": "访问日志保留的天数，超过后自动清理",
+      "dayUnit": "天",
+      "accessLogMaxSize": "日志文件大小限制",
+      "accessLogMaxSizeHelp": "单个日志文件的最大大小(MB)",
+      "crawlerLogDivider": "爬虫日志配置",
+      "crawlerLogRetention": "爬虫日志保留天数",
+      "crawlerLogRetentionHelp": "爬虫日志保留的天数，超过后自动清理",
+      "crawlerLogMaxSize": "爬虫日志大小限制",
+      "crawlerLogMaxSizeHelp": "单个爬虫日志文件的最大大小(MB)",
+      "saveConfig": "保存配置"
+    },
+    "status": {
+      "healthTitle": "系统健康状态",
+      "serviceStatus": "服务状态",
+      "running": "运行中",
+      "redisStatus": "Redis 状态",
+      "connected": "已连接",
+      "disconnected": "未连接",
+      "sslStatus": "SSL 状态",
+      "active": "活跃",
+      "memoryUsage": "内存使用",
+      "sysMemory": "系统内存",
+      "goroutines": "Goroutine 数量",
+      "gcCycles": "GC 次数",
+      "versionTitle": "版本信息",
+      "currentVersion": "当前版本",
+      "serviceName": "服务名称",
+      "officialUrl": "官方网址"
+    },
+    "backup": {
+      "configTitle": "配置备份",
+      "createBackup": "创建备份",
+      "backupTime": "备份时间",
+      "backupKey": "备份键",
+      "restoreConfirm": "确定要恢复此备份吗？当前配置将被覆盖。",
+      "restore": "恢复",
+      "empty": "暂无备份"
+    },
+    "about": {
+      "description": "企业级 Web 应用中间件，集成 OWASP Top 10 安全防护与智能渲染预热功能",
+      "version": "版本",
+      "license": "许可证",
+      "techStack": "技术栈",
+      "docs": "官方文档"
+    },
+    "messages": {
+      "backupSuccess": "备份创建成功",
+      "backupFailed": "备份失败",
+      "restoreSuccess": "配置恢复成功",
+      "restoreFailed": "恢复失败",
+      "fetchConfigFailed": "获取配置失败",
+      "saveSuccess": "配置保存成功",
+      "saveFailed": "保存失败"
+    }
+  }
+}

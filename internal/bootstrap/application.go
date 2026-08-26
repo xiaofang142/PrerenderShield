@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"prerender-shield/internal/config"
+	"prerender-shield/internal/logging"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/utils/redisutil"
-	"prerender-shield/internal/logging"
 )
 
 // Application 应用容器
@@ -84,30 +84,31 @@ func (a *Application) Run(ctx context.Context) error {
 	return a.Shutdown(ctx)
 }
 
-// Shutdown 关闭应用
+// Shutdown 关闭应用。
+// 顺序至关重要：先对 HTTP 服务器排水（完成进行中的请求），
+// 再执行清理函数（关停调度器/引擎/监控/Redis 等依赖），
+// 否则渲染请求可能打到已关闭的浏览器池、或依赖被提前抽走
 func (a *Application) Shutdown(ctx context.Context) error {
 	logging.DefaultLogger.Info("Shutting down application...")
 
-	// 执行清理函数
+	// 快照服务器与清理函数
 	a.mu.Lock()
-	cleanupFns := make([]func(), len(a.cleanupFn))
-	copy(cleanupFns, a.cleanupFn)
 	servers := make([]*http.Server, len(a.servers))
 	copy(servers, a.servers)
+	cleanupFns := make([]func(), len(a.cleanupFn))
+	copy(cleanupFns, a.cleanupFn)
 	a.mu.Unlock()
 
-	for _, fn := range cleanupFns {
-		fn()
-	}
-
-	// 关闭所有 HTTP 服务器
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
+	// 1) 先排水：等待进行中的请求完成
 	for _, server := range servers {
-		if err := server.Shutdown(shutdownCtx); err != nil {
+		if err := server.Shutdown(ctx); err != nil {
 			logging.DefaultLogger.Info("Server shutdown error: %v", err)
 		}
+	}
+
+	// 2) 再执行模块级清理
+	for _, fn := range cleanupFns {
+		fn()
 	}
 
 	logging.DefaultLogger.Info("Application shutdown complete")

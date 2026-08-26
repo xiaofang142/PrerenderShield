@@ -10,6 +10,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+
+	"prerender-shield/internal/utils"
+	"prerender-shield/internal/websocket"
 )
 
 func TestAddSecurityHeaders(t *testing.T) {
@@ -26,7 +29,7 @@ func TestAddSecurityHeaders(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'", w.Header().Get("Content-Security-Policy"))
+	assert.Equal(t, "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'", w.Header().Get("Content-Security-Policy"))
 	assert.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
 	assert.Equal(t, "1; mode=block", w.Header().Get("X-XSS-Protection"))
 	assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
@@ -38,13 +41,14 @@ func TestAddSecurityHeaders(t *testing.T) {
 func TestAddCorsMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+	SetAllowedOrigins([]string{"http://example.com"})
 	addCorsMiddleware(router)
 
 	router.GET("/test", func(c *gin.Context) {
 		c.String(http.StatusOK, "OK")
 	})
 
-	// 测试普通 GET 请求
+	// 测试普通 GET 请求（使用白名单中的 Origin）
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("Origin", "http://example.com")
 	w := httptest.NewRecorder()
@@ -55,8 +59,16 @@ func TestAddCorsMiddleware(t *testing.T) {
 	assert.Equal(t, "GET, POST, PUT, DELETE, OPTIONS", w.Header().Get("Access-Control-Allow-Methods"))
 	assert.Contains(t, w.Header().Get("Access-Control-Allow-Headers"), "Authorization")
 
+	// 测试非白名单 Origin 不应返回 CORS 头
+	req = httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Origin", "http://evil-site.com")
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
+
 	// 测试 OPTIONS 预检请求
 	req = httptest.NewRequest(http.MethodOptions, "/test", nil)
+	req.Header.Set("Origin", "http://example.com")
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -65,11 +77,11 @@ func TestAddCorsMiddleware(t *testing.T) {
 
 func TestIsPortAvailable(t *testing.T) {
 	// 测试保留端口应该不可用
-	assert.False(t, isPortAvailable(80))
-	assert.False(t, isPortAvailable(443))
-	assert.False(t, isPortAvailable(22))
-	assert.False(t, isPortAvailable(3306))
-	assert.False(t, isPortAvailable(6379))
+	assert.False(t, utils.IsPortAvailable(80))
+	assert.False(t, utils.IsPortAvailable(443))
+	assert.False(t, utils.IsPortAvailable(22))
+	assert.False(t, utils.IsPortAvailable(3306))
+	assert.False(t, utils.IsPortAvailable(6379))
 
 	// 测试高位端口应该可用（找到一个空闲的）
 	// 注意：这个测试可能不稳定，取决于系统端口使用情况
@@ -80,7 +92,7 @@ func TestIsPortAvailable(t *testing.T) {
 
 func findAvailablePort() int {
 	for port := 10000; port < 11000; port++ {
-		if isPortAvailable(port) {
+		if utils.IsPortAvailable(port) {
 			return port
 		}
 	}
@@ -89,7 +101,7 @@ func findAvailablePort() int {
 
 func TestExtractZIP_InvalidFile(t *testing.T) {
 	// 测试不存在的文件
-	err := ExtractZIP("/nonexistent/file.zip", "/tmp/test-extract")
+	err := utils.ExtractZIP("/nonexistent/file.zip", "/tmp/test-extract")
 	assert.NotNil(t, err)
 }
 
@@ -122,7 +134,7 @@ func TestExtractZIP_ValidFile(t *testing.T) {
 	assert.Nil(t, err)
 
 	// 测试解压
-	err = ExtractZIP(zipPath, extractDir)
+	err = utils.ExtractZIP(zipPath, extractDir)
 	assert.Nil(t, err)
 
 	// 验证解压结果
@@ -162,7 +174,7 @@ func TestExtractZIP_WithSubdir(t *testing.T) {
 	assert.Nil(t, err)
 
 	// 测试解压
-	err = ExtractZIP(zipPath, extractDir)
+	err = utils.ExtractZIP(zipPath, extractDir)
 	assert.Nil(t, err)
 
 	// 验证解压结果
@@ -174,13 +186,14 @@ func TestExtractZIP_WithSubdir(t *testing.T) {
 
 func TestRouter_NewRouter(t *testing.T) {
 	// 测试 NewRouter 函数，所有依赖都为 nil 时也能创建
-	router := NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.NotNil(t, router)
+	assert.Nil(t, router.GetHub(), "未注入 Hub 时应为 nil，由 RegisterRoutes 兜底创建")
 }
 
 func TestRouter_RegisterRoutes(t *testing.T) {
 	// 创建 Router 并注册路由（所有依赖为 nil）
-	apiRouter := NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	apiRouter := NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, websocket.NewHub(nil))
 
 	// 这个测试主要用于代码覆盖，不验证实际路由功能
 	// 因为 SetupControllers 需要实际的依赖

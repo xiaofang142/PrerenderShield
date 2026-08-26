@@ -249,9 +249,11 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 // MatchRoute 匹配路由规则
+// P0-18: 修复缓存键必须包含 host+method+path，避免跨站点串扰
 func (r *Router) MatchRoute(req *http.Request) *RouteRule {
-	// 先检查缓存
-	cacheKey := fmt.Sprintf("route:%s", req.URL.Path)
+	// P0-18: 缓存键包含 host+method+path (三个维度) ，避免不同站点的规则串扰
+	host := canonicalHost(req.Host)
+	cacheKey := fmt.Sprintf("route:%s|%s|%s", host, req.Method, req.URL.Path)
 	if cachedRule, ok := r.cache.Get(cacheKey).(*RouteRule); ok {
 		return cachedRule
 	}
@@ -264,7 +266,6 @@ func (r *Router) MatchRoute(req *http.Request) *RouteRule {
 	// 1. 检查精确匹配
 	if rule, exists := r.exactRules[path]; exists {
 		if r.matcher.Match(req, rule) {
-			// 缓存匹配结果
 			r.cache.Set(cacheKey, rule, 3600)
 			return rule
 		}
@@ -275,7 +276,6 @@ func (r *Router) MatchRoute(req *http.Request) *RouteRule {
 		if strings.HasPrefix(path, prefix) {
 			for _, rule := range rules {
 				if r.matcher.Match(req, rule) {
-					// 缓存匹配结果
 					r.cache.Set(cacheKey, rule, 3600)
 					return rule
 				}
@@ -286,13 +286,24 @@ func (r *Router) MatchRoute(req *http.Request) *RouteRule {
 	// 3. 检查正则匹配
 	for _, rule := range r.regexRules {
 		if r.matcher.Match(req, rule) {
-			// 缓存匹配结果
 			r.cache.Set(cacheKey, rule, 3600)
 			return rule
 		}
 	}
 
 	return nil
+}
+
+// canonicalHost (P0-18) 提取并规范化 host (去除端口，统一小写)
+func canonicalHost(h string) string {
+	host := h
+	if idx := strings.LastIndex(host, ":"); idx != -1 {
+		// IPv6 地址以 [] 包裹，处理时要小心
+		if !strings.Contains(host[idx:], "]") {
+			host = host[:idx]
+		}
+	}
+	return strings.ToLower(strings.TrimSpace(host))
 }
 
 // executeHandler 执行路由处理函数

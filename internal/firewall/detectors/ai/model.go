@@ -66,6 +66,10 @@ func LoadThreatModel(modelPath string) (ThreatModel, error) {
 	// 在实际生产环境中，这里会加载TensorFlow模型
 	// 由于TensorFlow Go绑定较复杂，这里提供一个占位实现
 	// 实际部署时需要安装 tensorflow/tensorflow/go
+	//
+	// ⚠️ EXPERIMENTAL: 本检测器为实验性功能——模型加载为占位实现，
+	// Predict() 始终回退到 ruleBasedPredict。生产代码路径未启用（AIConfig 无赋值点），
+	// 请勿在对外文档中宣称此能力，启用前必须完成真实模型加载实现。
 
 	return &TensorFlowModel{
 		labels:    labels,
@@ -84,7 +88,8 @@ func (m *TensorFlowModel) Predict(features []float32) *Prediction {
 	return m.ruleBasedPredict(features)
 }
 
-// ruleBasedPredict 基于规则的预测（后备方案）
+// ruleBasedPredict 基于加权特征规则的预测（后备方案）
+// 使用多维特征分析，结合特征分布、方差和特定维度权重进行分类
 func (m *TensorFlowModel) ruleBasedPredict(features []float32) *Prediction {
 	if len(features) == 0 {
 		return &Prediction{
@@ -94,8 +99,8 @@ func (m *TensorFlowModel) ruleBasedPredict(features []float32) *Prediction {
 		}
 	}
 
-	// 计算特征向量的一些统计信息
-	var sum, maxVal, minVal float32
+	// 计算特征向量的多维统计信息
+	var sum, maxVal, minVal, variance float32
 	maxVal = features[0]
 	minVal = features[0]
 
@@ -111,26 +116,92 @@ func (m *TensorFlowModel) ruleBasedPredict(features []float32) *Prediction {
 
 	avg := sum / float32(len(features))
 
-	// 基于特征统计进行简单判断
-	// 这是简化的演示实现，实际应使用训练好的模型
+	// 计算方差（衡量特征波动程度）
+	for _, f := range features {
+		diff := f - avg
+		variance += diff * diff
+	}
+	variance /= float32(len(features))
 
-	// 高异常分数特征（通常是攻击模式）
-	if maxVal > 0.8 {
-		return &Prediction{
-			ThreatType:  "sql_injection",
-			Confidence:  maxVal,
-			IsMalicious: true,
-			AllProbs:    generateProbs(len(m.labels), 0),
+	// 特征维度权重分析
+	// 假设特征向量按维度编码：
+	// [0-15]: SQL 注入特征 (特殊字符频率、关键字匹配等)
+	// [16-31]: XSS 特征 (脚本标签、事件处理器等)
+	// [32-47]: 路径遍历特征 (../, %2e 等)
+	// [48-63]: 命令注入特征 (;|&, $() 等)
+	// [64-127]: 其他异常特征
+
+	sqlScore := float32(0)
+	xssScore := float32(0)
+	pathScore := float32(0)
+	cmdScore := float32(0)
+	otherScore := float32(0)
+
+	for i, f := range features {
+		switch {
+		case i < 16:
+			sqlScore += f
+		case i < 32:
+			xssScore += f
+		case i < 48:
+			pathScore += f
+		case i < 64:
+			cmdScore += f
+		default:
+			otherScore += f
 		}
 	}
 
-	// 中等异常特征
-	if avg > 0.5 {
+	// 归一化各维度得分
+	featureSize := float32(16)
+	if len(features) < 64 {
+		featureSize = float32(len(features)) / 5
+		if featureSize < 1 {
+			featureSize = 1
+		}
+	}
+	sqlScore /= featureSize
+	xssScore /= featureSize
+	pathScore /= featureSize
+	cmdScore /= featureSize
+
+	// 找出得分最高的威胁类型
+	scores := map[string]float32{
+		"sql_injection":     sqlScore,
+		"xss":               xssScore,
+		"path_traversal":    pathScore,
+		"command_injection": cmdScore,
+	}
+
+	maxScore := float32(0)
+	maxThreat := "benign"
+	for threat, score := range scores {
+		if score > maxScore {
+			maxScore = score
+			maxThreat = threat
+		}
+	}
+
+	// 综合判断：结合最高维度得分、整体最大值和方差
+	combinedScore := maxScore*0.5 + maxVal*0.3 + variance*0.2
+
+	// 如果综合得分超过阈值，判定为恶意
+	if combinedScore > 0.6 {
 		return &Prediction{
-			ThreatType:  "xss",
-			Confidence:  avg,
+			ThreatType:  maxThreat,
+			Confidence:  minFloat32(combinedScore, 0.99),
 			IsMalicious: true,
-			AllProbs:    generateProbs(len(m.labels), 1),
+			AllProbs:    generateProbs(len(m.labels), getLabelIndex(m.labels, maxThreat)),
+		}
+	}
+
+	// 中等风险：某些维度有异常但不强烈
+	if maxScore > 0.4 || avg > 0.3 {
+		return &Prediction{
+			ThreatType:  maxThreat,
+			Confidence:  maxScore * 0.7,
+			IsMalicious: maxScore > 0.5,
+			AllProbs:    generateProbs(len(m.labels), getLabelIndex(m.labels, maxThreat)),
 		}
 	}
 
@@ -139,8 +210,26 @@ func (m *TensorFlowModel) ruleBasedPredict(features []float32) *Prediction {
 		ThreatType:  "benign",
 		Confidence:  1.0 - avg,
 		IsMalicious: false,
-		AllProbs:    generateProbs(len(m.labels), len(m.labels)-1),
+		AllProbs:    generateProbs(len(m.labels), getLabelIndex(m.labels, "benign")),
 	}
+}
+
+// getLabelIndex 获取标签索引
+func getLabelIndex(labels []string, threatType string) int {
+	for i, label := range labels {
+		if label == threatType {
+			return i
+		}
+	}
+	return len(labels) - 1
+}
+
+// minFloat32 返回两个 float32 中的较小值
+func minFloat32(a, b float32) float32 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // generateProbs 生成概率分布

@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react'
 import { Card, Form, InputNumber, Button, message, Spin, Typography, Divider, Row, Col } from 'antd'
 import { SaveOutlined, SettingOutlined } from '@ant-design/icons'
 import { systemApi } from '../../services/api'
+import { useTranslation } from 'react-i18next'
 
 const { Title, Text } = Typography
 
 const SystemConfig: React.FC = () => {
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form] = Form.useForm()
@@ -29,7 +31,7 @@ const SystemConfig: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch system config:', error)
-      message.error('获取系统配置失败')
+      message.error(t('system.messages.fetchFailed'))
     } finally {
       setLoading(false)
     }
@@ -47,13 +49,13 @@ const SystemConfig: React.FC = () => {
 
       const response = await systemApi.updateConfig(config)
       if (response.code === 200) {
-        message.success('系统配置已更新')
+        message.success(t('system.messages.updateSuccess'))
       } else {
-        message.error(response.message || '更新失败')
+        message.error(response.message || t('system.messages.updateFailed'))
       }
     } catch (error) {
       console.error('Failed to update system config:', error)
-      message.error('更新系统配置失败')
+      message.error(t('system.messages.updateRequestFailed'))
     } finally {
       setSaving(false)
     }
@@ -63,8 +65,8 @@ const SystemConfig: React.FC = () => {
     <div className="system-config-container">
       <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <Title level={2} style={{ margin: 0, color: '#2f855a' }}>系统设置</Title>
-          <Text type="secondary">管理系统的全局配置参数</Text>
+          <Title level={2} style={{ margin: 0, color: '#2f855a' }}>{t('system.title')}</Title>
+          <Text type="secondary">{t('system.subtitle')}</Text>
         </div>
         <Button 
           type="primary" 
@@ -73,7 +75,7 @@ const SystemConfig: React.FC = () => {
           loading={saving}
           style={{ background: '#2f855a', borderColor: '#2f855a' }}
         >
-          保存配置
+          {t('system.saveConfig')}
         </Button>
       </div>
 
@@ -92,25 +94,25 @@ const SystemConfig: React.FC = () => {
           >
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
               <SettingOutlined style={{ fontSize: 20, color: '#2f855a', marginRight: 8 }} />
-              <Title level={4} style={{ margin: 0 }}>日志保留策略</Title>
+              <Title level={4} style={{ margin: 0 }}>{t('system.logPolicyTitle')}</Title>
             </div>
             <Divider style={{ margin: '12px 0 24px' }} />
 
             <Row gutter={24}>
               <Col span={12}>
-                <Card title="访问日志 (Access Logs)" bordered={true} size="small">
+                <Card title={t('system.accessLogCard')} bordered={true} size="small">
                   <Form.Item
                     name="access_log_retention_days"
-                    label="保留天数"
-                    help="超过该天数的访问日志将被自动删除"
+                    label={t('system.retentionDays')}
+                    help={t('system.accessRetentionHelp')}
                   >
-                    <InputNumber min={1} max={365} addonAfter="天" style={{ width: '100%' }} />
+                    <InputNumber min={1} max={365} addonAfter={t('system.dayUnit')} style={{ width: '100%' }} />
                   </Form.Item>
 
                   <Form.Item
                     name="access_log_max_size"
-                    label="最大占用空间"
-                    help="当日志总大小超过该值时，将自动删除最早的日志"
+                    label={t('system.maxSize')}
+                    help={t('system.maxSizeHelp')}
                   >
                     <InputNumber min={1} max={10240} addonAfter="MB" style={{ width: '100%' }} />
                   </Form.Item>
@@ -118,19 +120,19 @@ const SystemConfig: React.FC = () => {
               </Col>
               
               <Col span={12}>
-                <Card title="爬虫日志 (Crawler Logs)" bordered={true} size="small">
+                <Card title={t('system.crawlerLogCard')} bordered={true} size="small">
                   <Form.Item
                     name="crawler_log_retention_days"
-                    label="保留天数"
-                    help="超过该天数的爬虫日志将被自动删除"
+                    label={t('system.retentionDays')}
+                    help={t('system.crawlerRetentionHelp')}
                   >
-                    <InputNumber min={1} max={365} addonAfter="天" style={{ width: '100%' }} />
+                    <InputNumber min={1} max={365} addonAfter={t('system.dayUnit')} style={{ width: '100%' }} />
                   </Form.Item>
 
                   <Form.Item
                     name="crawler_log_max_size"
-                    label="最大占用空间"
-                    help="当日志总大小超过该值时，将自动删除最早的日志"
+                    label={t('system.maxSize')}
+                    help={t('system.maxSizeHelp')}
                   >
                     <InputNumber min={1} max={10240} addonAfter="MB" style={{ width: '100%' }} />
                   </Form.Item>

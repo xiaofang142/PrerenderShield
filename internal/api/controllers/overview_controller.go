@@ -10,6 +10,8 @@ import (
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/monitoring"
 	"prerender-shield/internal/repository"
+	"prerender-shield/internal/services"
+	"prerender-shield/internal/ssl"
 	"prerender-shield/internal/utils/country"
 )
 
@@ -19,17 +21,19 @@ type OverviewController struct {
 	monitor       *monitoring.Monitor
 	visitLogMgr   *logging.VisitLogManager
 	crawlerLogMgr *logging.CrawlerLogManager
-	wafRepo       *repository.WafRepository
+	wafStatsSvc   *services.OverviewService
+	sslMgr        ssl.Manager
 }
 
 // NewOverviewController 创建概览控制器实例
-func NewOverviewController(cfg *config.Config, monitor *monitoring.Monitor, visitLogMgr *logging.VisitLogManager, crawlerLogMgr *logging.CrawlerLogManager, wafRepo *repository.WafRepository) *OverviewController {
+func NewOverviewController(cfg *config.Config, monitor *monitoring.Monitor, visitLogMgr *logging.VisitLogManager, crawlerLogMgr *logging.CrawlerLogManager, wafStatsSvc *repository.WafRepository, sslMgr ssl.Manager) *OverviewController {
 	return &OverviewController{
 		cfg:           cfg,
 		monitor:       monitor,
 		visitLogMgr:   visitLogMgr,
 		crawlerLogMgr: crawlerLogMgr,
-		wafRepo:       wafRepo,
+		wafStatsSvc:   services.NewOverviewService(wafStatsSvc),
+		sslMgr:        sslMgr,
 	}
 }
 
@@ -60,8 +64,8 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	}
 
 	// 如果 WAF stats 可用，优先使用 DB 中的数据
-	if c.wafRepo != nil {
-		wafStats, err := c.wafRepo.GetGlobalStats(startTime.Format("2006-01-02 15:04:05"), endTime.Format("2006-01-02 15:04:05"))
+	if c.wafStatsSvc != nil {
+		wafStats, err := c.wafStatsSvc.GetWafGlobalStats(startTime.Format("2006-01-02 15:04:05"), endTime.Format("2006-01-02 15:04:05"))
 		if err == nil && wafStats != nil {
 			totalRequests = wafStats.TotalRequests
 		}
@@ -69,13 +73,20 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 
 	// 获取站点统计数据
 	activeSites := len(c.cfg.Sites)
-	sslCertificates := 0 // SSL功能已移除
+
+	// 从 SSL 管理器获取实际证书数量
+	sslCertificates := 0
+	if c.sslMgr != nil {
+		if certs, err := c.sslMgr.ListCertificates(); err == nil {
+			sslCertificates = len(certs)
+		}
+	}
 
 	// 获取地理位置统计数据
 	geoStats, _ := c.visitLogMgr.GetVisitStats("", time.Now().Add(-24*time.Hour), time.Now())
 
-	// 获取PV/UV/IP统计数据
-	pv, uv, ip := c.visitLogMgr.GetAccessStats(time.Now(), time.Now())
+	// 获取PV/UV/IP统计数据（过去24小时）
+	pv, uv, ip := c.visitLogMgr.GetAccessStats(time.Now().Add(-24*time.Hour), time.Now())
 
 	// 获取流量趋势数据
 	trafficData := c.visitLogMgr.GetTrafficTrend(time.Now(), time.Now())
@@ -146,15 +157,15 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 		"code":    200,
 		"message": "success",
 		"data": gin.H{
-			"totalRequests":    totalRequests,
-			"crawlerRequests":  crawlerTotal,
-			"blockedRequests":  blockedTotal,
+			"totalRequests":   totalRequests,
+			"crawlerRequests": crawlerTotal,
+			"blockedRequests": blockedTotal,
 			"cacheHitRate": func() float64 {
-			if v, ok := stats["cacheHitRate"].(float64); ok {
-				return float64(int(v*100)) / 100
-			}
-			return 0
-		}(),
+				if v, ok := stats["cacheHitRate"].(float64); ok {
+					return float64(int(v*100)) / 100
+				}
+				return 0
+			}(),
 			"activeBrowsers": func() int {
 				if v, ok := stats["activeBrowsers"].(float64); ok {
 					return int(v)

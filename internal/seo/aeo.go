@@ -1,6 +1,7 @@
 package seo
 
 import (
+	"regexp"
 	"strings"
 )
 
@@ -20,14 +21,14 @@ func DefaultAEOConfig() *AEOConfig {
 		EnableAnswerExtraction:   true,
 		EnableStructuredData:     true,
 		SupportedAICrawlers: []string{
-			"gptbot",      // OpenAI ChatGPT
-			"claudebot",   // Anthropic Claude
-			"perplexitybot", // Perplexity AI
+			"gptbot",          // OpenAI ChatGPT
+			"claudebot",       // Anthropic Claude
+			"perplexitybot",   // Perplexity AI
 			"google-extended", // Google AI (Gemini)
-			"cohere-ai",   // Cohere
-			"facebookbot", // Meta AI
-			"applebot",    // Apple AI
-			"bytespider",  // ByteDance
+			"cohere-ai",       // Cohere
+			"facebookbot",     // Meta AI
+			"applebot",        // Apple AI
+			"bytespider",      // ByteDance
 		},
 		AnswerFormats: []string{"summary", "bullet"},
 	}
@@ -35,10 +36,10 @@ func DefaultAEOConfig() *AEOConfig {
 
 // AICrawlerInfo AI 爬虫信息
 type AICrawlerInfo struct {
-	Name       string `json:"name"`
-	Company    string `json:"company"`
-	BotToken   string `json:"bot_token"`
-	Purpose    string `json:"purpose"` // training, search, indexing
+	Name     string `json:"name"`
+	Company  string `json:"company"`
+	BotToken string `json:"bot_token"`
+	Purpose  string `json:"purpose"` // training, search, indexing
 }
 
 // KnownAICrawlers 已知 AI 爬虫清单
@@ -85,10 +86,8 @@ func ExtractAnswer(html string, format string) string {
 	if html == "" {
 		return ""
 	}
-	// 基础实现：提取正文内容
 	content := html
 
-	// 移除脚本和样式
 	for _, tag := range []string{"<script", "<style", "<nav", "<footer", "<header"} {
 		endTag := "</" + tag[1:]
 		for {
@@ -104,5 +103,60 @@ func ExtractAnswer(html string, format string) string {
 		}
 	}
 
-	return content
+	text := stripTags(content)
+	text = collapseWhitespace(text)
+
+	switch format {
+	case "summary":
+		return truncateToSentences(text, 3)
+	case "bullet":
+		return formatAsBullets(text)
+	case "qa":
+		return formatAsQA(text)
+	default:
+		return text
+	}
+}
+
+func stripTags(s string) string {
+	tagPattern := regexp.MustCompile(`<[^>]+>`)
+	return tagPattern.ReplaceAllString(s, "")
+}
+
+func collapseWhitespace(s string) string {
+	wsPattern := regexp.MustCompile(`\s+`)
+	s = wsPattern.ReplaceAllString(s, " ")
+	return strings.TrimSpace(s)
+}
+
+func truncateToSentences(text string, maxSentences int) string {
+	sentences := strings.FieldsFunc(text, func(r rune) bool {
+		return r == '.' || r == '!' || r == '?'
+	})
+	if len(sentences) > maxSentences {
+		sentences = sentences[:maxSentences]
+	}
+	result := strings.Join(sentences, ". ")
+	if len(result) > 0 && !strings.HasSuffix(result, ".") {
+		result += "."
+	}
+	return result
+}
+
+func formatAsBullets(text string) string {
+	sentences := strings.FieldsFunc(text, func(r rune) bool {
+		return r == '.' || r == '!' || r == '?'
+	})
+	var bullets []string
+	for _, s := range sentences {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			bullets = append(bullets, "- "+s)
+		}
+	}
+	return strings.Join(bullets, "\n")
+}
+
+func formatAsQA(text string) string {
+	return "A: " + strings.TrimSpace(text)
 }

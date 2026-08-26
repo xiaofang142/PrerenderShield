@@ -33,15 +33,15 @@ func (e *AppError) Unwrap() error {
 
 // 新增错误码常量
 const (
-	CodeSuccess          = 200
-	CodeBadRequest       = 400
-	CodeUnauthorized     = 401
-	CodeForbidden        = 403
-	CodeNotFound         = 404
-	CodeInternalError    = 500
+	CodeSuccess            = 200
+	CodeBadRequest         = 400
+	CodeUnauthorized       = 401
+	CodeForbidden          = 403
+	CodeNotFound           = 404
+	CodeInternalError      = 500
 	CodeServiceUnavailable = 503
-	CodeRateLimit        = 429
-	CodeValidation       = 422
+	CodeRateLimit          = 429
+	CodeValidation         = 422
 )
 
 // 预定义错误

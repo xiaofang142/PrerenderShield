@@ -15,6 +15,7 @@ import (
 	"prerender-shield/internal/scheduler"
 	sitehandler "prerender-shield/internal/site-handler"
 	siteserver "prerender-shield/internal/site-server"
+	"prerender-shield/internal/websocket"
 )
 
 // Router API路由器，负责注册所有API路由
@@ -33,6 +34,7 @@ type Router struct {
 	wafRepo          *repository.WafRepository
 	cfg              *config.Config
 	auditLogger      *audit.Logger
+	wsHub            *websocket.Hub
 }
 
 // NewRouter 创建API路由器实例
@@ -51,6 +53,7 @@ func NewRouter(
 	wafRepo *repository.WafRepository,
 	auditLogger *audit.Logger,
 	cfg *config.Config,
+	wsHub *websocket.Hub,
 ) *Router {
 	return &Router{
 		userManager:      userManager,
@@ -67,6 +70,7 @@ func NewRouter(
 		wafRepo:          wafRepo,
 		auditLogger:      auditLogger,
 		cfg:              cfg,
+		wsHub:            wsHub,
 	}
 }
 
@@ -100,6 +104,36 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 		r.cfg,
 	)
 
+	// WebSocket Hub 由 DI 装配方（bootstrap runner）创建并注入，Router 只负责注册端点
+	structuredLogger := logging.NewStructuredLogger(logging.INFO, "")
+	if r.wsHub == nil {
+		r.wsHub = websocket.NewHub(structuredLogger)
+		go r.wsHub.Run()
+	}
+
+	// 管理 API 速率限制（必须在路由注册前 Use，否则 Gin 不会将其附加到已注册路由）
+	if r.redisClient != nil {
+		mgmtRateLimiter := middleware.NewRedisRateLimiter(
+			r.redisClient,
+			100,  // 每窗口 100 次请求
+			60,   // 60 秒窗口
+			5*60, // 超限后封禁 5 分钟
+		)
+		ginRouter.Use(middleware.ManagementRateLimit(mgmtRateLimiter))
+	}
+
 	// 注册路由
 	RegisterAllRoutes(ginRouter, controllers, r.jwtManager)
+
+	// 注册 WebSocket 路由（需要 JWT 认证）
+	wsGroup := ginRouter.Group("/ws")
+	wsGroup.Use(auth.JWTAuthMiddleware(r.jwtManager))
+	{
+		wsGroup.GET("/realtime", websocket.HandleWebSocket(r.wsHub, structuredLogger))
+	}
+}
+
+// GetHub 获取 WebSocket Hub（用于外部模块接入实时广播）
+func (r *Router) GetHub() *websocket.Hub {
+	return r.wsHub
 }

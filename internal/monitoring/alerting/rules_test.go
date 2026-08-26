@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,7 +12,9 @@ import (
 )
 
 // MockAlertHandler 模拟告警处理器
+// Send 会被 RuleEngine 的异步 goroutine 调用，字段访问必须加锁
 type MockAlertHandler struct {
+	mu        sync.Mutex
 	name      string
 	sendCount int
 	lastAlert *Alert
@@ -23,9 +26,17 @@ func (m *MockAlertHandler) Name() string {
 }
 
 func (m *MockAlertHandler) Send(ctx context.Context, alert *Alert) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.sendCount++
 	m.lastAlert = alert
 	return m.sendError
+}
+
+func (m *MockAlertHandler) getSendCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.sendCount
 }
 
 func TestNewRuleEngine(t *testing.T) {
@@ -181,7 +192,7 @@ func TestRuleEngine_EvaluateAll(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// 验证告警已发送
-	assert.Greater(t, handler.sendCount, 0)
+	assert.Greater(t, handler.getSendCount(), 0)
 }
 
 func TestRuleEngine_EvaluateAll_Cooldown(t *testing.T) {
@@ -212,7 +223,7 @@ func TestRuleEngine_EvaluateAll_Cooldown(t *testing.T) {
 	engine.evaluateAll(getMetric)
 
 	// 由于冷却时间，不会发送告警
-	assert.Equal(t, 0, handler.sendCount)
+	assert.Equal(t, 0, handler.getSendCount())
 }
 
 func TestRuleEngine_EvaluateAll_MetricError(t *testing.T) {
@@ -242,7 +253,7 @@ func TestRuleEngine_EvaluateAll_MetricError(t *testing.T) {
 	engine.evaluateAll(getMetric)
 
 	// 由于错误，不会发送告警
-	assert.Equal(t, 0, handler.sendCount)
+	assert.Equal(t, 0, handler.getSendCount())
 }
 
 func TestRuleEngine_LoadRulesFromFile(t *testing.T) {

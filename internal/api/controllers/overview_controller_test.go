@@ -34,7 +34,7 @@ func TestOverviewController_GetOverview(t *testing.T) {
 		monitor:       monitor,
 		visitLogMgr:   visitLogMgr,
 		crawlerLogMgr: crawlerLogMgr,
-		wafRepo:       nil, // 使用 nil wafRepo 进行测试
+		wafStatsSvc:   nil, // 使用 nil wafStatsSvc 进行测试
 	}
 
 	router := gin.New()
@@ -134,7 +134,7 @@ func TestOverviewController_GetOverview_NilWafRepo(t *testing.T) {
 		cfg:         cfg,
 		monitor:     monitor,
 		visitLogMgr: visitLogMgr,
-		wafRepo:     nil,
+		wafStatsSvc: nil,
 	}
 
 	router := gin.New()
@@ -159,16 +159,17 @@ func TestNewOverviewController(t *testing.T) {
 	monitor := monitoring.NewMonitor(monitoring.Config{})
 	visitLogMgr := logging.NewVisitLogManager("")
 	crawlerLogMgr := logging.NewCrawlerLogManager("")
-	wafRepo := &repository.WafRepository{}
+	wafStatsSvc := &repository.WafRepository{}
 
-	controller := NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, wafRepo)
+	controller := NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, wafStatsSvc, nil)
 
 	assert.NotNil(t, controller)
 	assert.Equal(t, cfg, controller.cfg)
 	assert.Equal(t, monitor, controller.monitor)
 	assert.Equal(t, visitLogMgr, controller.visitLogMgr)
 	assert.Equal(t, crawlerLogMgr, controller.crawlerLogMgr)
-	assert.Equal(t, wafRepo, controller.wafRepo)
+	// wafStatsSvc 字段现在持有的是包装 repository 的 OverviewService
+	assert.NotNil(t, controller.wafStatsSvc)
 }
 
 func TestOverviewController_GetOverview_WithWafRepo(t *testing.T) {
@@ -184,7 +185,7 @@ func TestOverviewController_GetOverview_WithWafRepo(t *testing.T) {
 	visitLogMgr := logging.NewVisitLogManager("")
 	crawlerLogMgr := logging.NewCrawlerLogManager("")
 
-	controller := NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, nil)
+	controller := NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, nil, nil)
 
 	router := gin.New()
 	router.GET("/overview", controller.GetOverview)
@@ -217,7 +218,7 @@ func TestOverviewController_GetOverview_MultipleSites(t *testing.T) {
 	visitLogMgr := logging.NewVisitLogManager("")
 	crawlerLogMgr := logging.NewCrawlerLogManager("")
 
-	controller := NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, nil)
+	controller := NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, nil, nil)
 
 	router := gin.New()
 	router.GET("/overview", controller.GetOverview)

@@ -24,10 +24,15 @@
     "overview": "概要",
     "sites": "サイト管理",
     "firewall": "WAFログ",
-    "logs": "ログ",
+    "logs": "ログ管理",
     "crawler": "クローラーログ",
     "monitor": "システム監視",
-    "settings": "システム設定"
+    "settings": "システム設定",
+    "wafRules": "WAFルール管理",
+    "prerender": "レンダリング预热",
+    "alertConfig": "アラート設定",
+    "ssl": "SSL証明書",
+    "systemSettings": "システム設定"
   },
   "system": {
     "visitOfficial": "公式サイト"
@@ -88,6 +93,106 @@
       "title": "初回セットアップ",
       "desc1": "初めてシステムにアクセスしました。設定するユーザー名とパスワードは以後のログインに使用されます。",
       "desc2": "注意：初期設定のユーザー名とパスワードは変更できません。安全に保管してください！"
-    }
+    },
+    "forceChangeTitle": "パスワード変更の確認",
+    "forceChangeDesc": "初回ログインのため、デフォルトパスワードを変更してください",
+    "currentPassword": "現在のパスワード",
+    "newPassword": "新しいパスワード",
+    "confirmPassword": "新しいパスワード（確認）",
+    "confirmChangeBtn": "変更してログイン",
+    "passwordChanged": "パスワードを変更しました。再度ログインしてください",
+    "passwordChangeFailed": "パスワードの変更に失敗しました",
+    "passwordMismatch": "2つのパスワードが一致しません",
+    "desc2": "注意：今回設定したユーザー名とパスワードが管理者資格になります（パスワードは後で設定から変更可能）。大切に保管してください！"
+  },
+  "push": {
+    "title": "プッシュ管理",
+    "selectSite": "サイト選択：",
+    "sitePlaceholder": "サイトを選択してください",
+    "refresh": "更新",
+    "refreshed": "統計を更新しました",
+    "totalPushes": "総プッシュ数",
+    "successCount": "成功",
+    "failedCount": "失敗",
+    "trendTitle": "30日間プッシュトレンド",
+    "pushCount": "プッシュ数",
+    "logsTitle": "プッシュログ",
+    "columns": {
+      "siteName": "サイト名",
+      "url": "プッシュURL",
+      "route": "ルート",
+      "searchEngine": "検索エンジン",
+      "status": "ステータス",
+      "pushTime": "プッシュ時刻",
+      "message": "メッセージ"
+    },
+    "engines": {
+      "baidu": "Baidu",
+      "bing": "Bing"
+    },
+    "statusText": {
+      "success": "成功",
+      "failed": "失敗",
+      "unknown": "不明"
+    },
+    "fetchSitesFailed": "サイト一覧の取得に失敗しました",
+    "fetchStatsFailed": "プッシュ統計の取得に失敗しました",
+    "fetchLogsFailed": "プッシュログの取得に失敗しました",
+    "totalRecords": "全 {{total}} 件"
+  },
+  "crawlerPage": {
+    "title": "クローラーアクセス",
+    "site": "サイト：",
+    "allSites": "すべてのサイト",
+    "granularity": "時間粒度：",
+    "granularityDay": "日",
+    "granularityWeek": "週",
+    "granularityMonth": "月",
+    "totalRequests": "総リクエスト数",
+    "cacheHitRate": "キャッシュヒット率",
+    "avgRenderTime": "平均レンダリング時間",
+    "activeUAs": "アクティブクローラーUA数",
+    "tabTrend": "アクセストレンド",
+    "tabLogs": "アクセス記録",
+    "chartLegend": {
+      "requests": "クローラーリクエスト数",
+      "cacheHits": "キャッシュヒット数",
+      "cacheMisses": "キャッシュミス数"
+    },
+    "columns": {
+      "time": "時間",
+      "site": "サイト",
+      "ip": "IPアドレス",
+      "route": "ルート",
+      "ua": "User-Agent",
+      "status": "ステータス",
+      "hitCache": "キャッシュヒット",
+      "renderTime": "レンダリング時間"
+    },
+    "yes": "はい",
+    "no": "いいえ",
+    "countUnit": "件",
+    "kindUnit": "種類",
+    "totalRecords": "全 {{total}} 件"
+  },
+  "multiTab": {
+    "overview": "概要",
+    "sites": "サイト管理",
+    "firewallRules": "WAFルール管理",
+    "prerender": "レンダリング予熱",
+    "preheat": "予熱管理",
+    "push": "プッシュ管理",
+    "monitoring": "モニタリング警告",
+    "alertConfig": "アラート設定",
+    "crawler": "クローラーログ",
+    "logs": "ログ管理",
+    "system": "システム設定",
+    "ssl": "SSL証明書",
+    "settings": "システム設定",
+    "dashboard": "Dashboard",
+    "refreshPage": "ページ更新",
+    "closeOthers": "他を閉じる",
+    "closeAll": "すべて閉じる",
+    "page": "ページ"
   }
 }

@@ -1,176 +1,119 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { Card, Table, Select, message, Spin, Row, Col, Statistic, Tabs, Input, DatePicker, Button, Space, Switch } from 'antd'
-import { SearchOutlined, DownloadOutlined, BarChartOutlined, GlobalOutlined, SyncOutlined } from '@ant-design/icons'
-import { firewallApi } from '../../services/api'
+import React, { useState } from 'react'
+import { Card, Table, Select, Spin, Row, Col, Tabs, Input, DatePicker, Button, Space, Switch } from 'antd'
+import { SearchOutlined, BarChartOutlined, GlobalOutlined, SyncOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import ExportButton from '../../components/common/ExportButton'
+import { usePolling } from '@prerender/utils'
+import { pollingIntervals } from '@prerender/design-tokens'
+import {
+  useLogs,
+  filterLogs,
+  formatLogForExport,
+} from './useLogs'
+import { useTranslation } from 'react-i18next'
 
 const { Option } = Select
 const { TabPane } = Tabs
 const { RangePicker } = DatePicker
 
+const methodColorMap: Record<string, string> = {
+  GET: '#52c41a',
+  POST: '#1890ff',
+  PUT: '#faad14',
+  DELETE: '#ff4d4f',
+  PATCH: '#722ed1',
+}
+
+const statusColor = (status: number): string =>
+  status >= 200 && status < 300 ? '#52c41a'
+    : status >= 300 && status < 400 ? '#1890ff'
+    : status >= 400 && status < 500 ? '#faad14'
+    : '#ff4d4f'
+
+const durationColor = (ms: number): string =>
+  ms < 100 ? '#52c41a' : ms < 500 ? '#faad14' : '#ff4d4f'
+
+const EmptyHint: React.FC = () => {
+  const { t } = useTranslation()
+  return (
+    <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>{t('logs.noData')}</div>
+  )
+}
+
+interface RankColumn {
+  title: string
+  key: string
+  width: number
+  render: (_: unknown, __: unknown, index: number) => number
+}
+const rankColumn: RankColumn = {
+  title: '排名',
+  key: 'rank',
+  width: 60,
+  render: (_: unknown, __: unknown, index: number) => index + 1,
+}
+
 const Logs: React.FC = () => {
-  const [logs, setLogs] = useState<any[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [currentPage, setCurrentPage] = useState(1)
+  const { t } = useTranslation()
   const [pageSize, setPageSize] = useState(20)
   const [autoRefresh, setAutoRefresh] = useState(false)
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
-  
+
   // 筛选条件
   const [filterIP, setFilterIP] = useState('')
   const [filterMethod, setFilterMethod] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null]>([null, null])
-  
-  // 统计数据
-  const [topIPs, setTopIPs] = useState<{ ip: string; count: number }[]>([])
-  const [topURLs, setTopURLs] = useState<{ url: string; count: number }[]>([])
-  const [methodStats, setMethodStats] = useState<{ method: string; count: number }[]>([])
-  const [statusStats, setStatusStats] = useState<{ status: number; count: number }[]>([])
+
+  const { logs, total, loading, currentPage, stats, fetchLogs } = useLogs({ pageSize })
+
+  // 自动刷新：usePolling 统一生命周期管理（enabled 开关）
+  usePolling(() => fetchLogs(currentPage), {
+    interval: pollingIntervals.realtime,
+    enabled: autoRefresh,
+    immediate: false,
+  })
+
+  const rankCol: RankColumn = { ...rankColumn, title: t('logs.columns.rank') }
 
   const columns = [
-    { title: '时间', dataIndex: 'time', key: 'time', render: (t: string) => dayjs(t).format('YYYY-MM-DD HH:mm:ss') },
-    { title: 'IP', dataIndex: 'ip', key: 'ip', render: (text: string) => <span style={{ fontFamily: 'monospace' }}>{text}</span> },
-    { title: '方法', dataIndex: 'method', key: 'method', width: 80, render: (text: string) => {
-      const colorMap: Record<string, string> = {
-        GET: '#52c41a',
-        POST: '#1890ff',
-        PUT: '#faad14',
-        DELETE: '#ff4d4f',
-        PATCH: '#722ed1',
-      }
-      return <span style={{ color: colorMap[text] || '#333', fontWeight: 500 }}>{text}</span>
-    }},
-    { title: '路径', dataIndex: 'path', key: 'path', ellipsis: true },
-    { title: '状态码', dataIndex: 'status', key: 'status', width: 80, render: (text: number) => {
-      const color = text >= 200 && text < 300 ? '#52c41a' 
-        : text >= 300 && text < 400 ? '#1890ff'
-        : text >= 400 && text < 500 ? '#faad14'
-        : '#ff4d4f'
-      return <span style={{ color, fontWeight: 500 }}>{text}</span>
-    }},
-    { title: '耗时(ms)', dataIndex: 'duration', key: 'duration', width: 100, render: (text: number) => {
-      const color = text < 100 ? '#52c41a' : text < 500 ? '#faad14' : '#ff4d4f'
-      return <span style={{ color }}>{text}</span>
-    }},
+    { title: t('logs.columns.time'), dataIndex: 'time', key: 'time', render: (t: string) => dayjs(t).format('YYYY-MM-DD HH:mm:ss') },
+    { title: t('logs.columns.ip'), dataIndex: 'ip', key: 'ip', render: (text: string) => <span style={{ fontFamily: 'monospace' }}>{text}</span> },
+    { title: t('logs.columns.method'), dataIndex: 'method', key: 'method', width: 80, render: (text: string) => (
+      <span style={{ color: methodColorMap[text] || '#333', fontWeight: 500 }}>{text}</span>
+    )},
+    { title: t('logs.columns.path'), dataIndex: 'path', key: 'path', ellipsis: true },
+    { title: t('logs.columns.status'), dataIndex: 'status', key: 'status', width: 80, render: (text: number) => (
+      <span style={{ color: statusColor(text), fontWeight: 500 }}>{text}</span>
+    )},
+    { title: t('logs.columns.duration'), dataIndex: 'duration', key: 'duration', width: 100, render: (text: number) => (
+      <span style={{ color: durationColor(text) }}>{text}</span>
+    )},
   ]
 
-  const fetchLogs = async (page = 1) => {
-    try {
-      setLoading(true)
-      const res = await firewallApi.getAccessLogs({ page, limit: pageSize })
-      if (res.code === 200) {
-        const logData = res.data.logs || []
-        setLogs(logData)
-        setTotal(res.data.total || 0)
-        setCurrentPage(page)
-        
-        // 计算统计数据
-        calculateStats(logData)
-      }
-    } catch (error) {
-      console.error('Failed to fetch access logs:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // 计算统计数据
-  const calculateStats = (logData: any[]) => {
-    // 统计IP
-    const ipCount: Record<string, number> = {}
-    logData.forEach(log => {
-      if (log.ip) {
-        ipCount[log.ip] = (ipCount[log.ip] || 0) + 1
-      }
-    })
-    const topIPsList = Object.entries(ipCount)
-      .map(([ip, count]) => ({ ip, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10)
-    setTopIPs(topIPsList)
-    
-    // 统计URL
-    const urlCount: Record<string, number> = {}
-    logData.forEach(log => {
-      if (log.path) {
-        urlCount[log.path] = (urlCount[log.path] || 0) + 1
-      }
-    })
-    const topURLsList = Object.entries(urlCount)
-      .map(([url, count]) => ({ url, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10)
-    setTopURLs(topURLsList)
-    
-    // 统计方法
-    const methodCount: Record<string, number> = {}
-    logData.forEach(log => {
-      if (log.method) {
-        methodCount[log.method] = (methodCount[log.method] || 0) + 1
-      }
-    })
-    const methodStatsList = Object.entries(methodCount)
-      .map(([method, count]) => ({ method, count }))
-      .sort((a, b) => b.count - a.count)
-    setMethodStats(methodStatsList)
-    
-    // 统计状态码
-    const statusCount: Record<number, number> = {}
-    logData.forEach(log => {
-      if (log.status) {
-        statusCount[log.status] = (statusCount[log.status] || 0) + 1
-      }
-    })
-    const statusStatsList = Object.entries(statusCount)
-      .map(([status, count]) => ({ status: parseInt(status), count }))
-      .sort((a, b) => b.count - a.count)
-    setStatusStats(statusStatsList)
-  }
-
-  useEffect(() => { fetchLogs() }, [pageSize])
-
-  useEffect(() => {
-    if (autoRefresh) {
-      intervalRef.current = setInterval(() => fetchLogs(currentPage), 10000)
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-  }, [autoRefresh, currentPage])
-
-  // 筛选后的日志
-  const filteredLogs = logs.filter(log => {
-    if (filterIP && !log.ip?.includes(filterIP)) return false
-    if (filterMethod && log.method !== filterMethod) return false
-    if (filterStatus && log.status !== parseInt(filterStatus)) return false
-    return true
-  })
+  const filteredLogs = filterLogs(logs, { ip: filterIP, method: filterMethod, status: filterStatus })
 
   return (
     <Spin spinning={loading}>
       <div>
-        <h1 className="page-title">日志管理</h1>
-        
+        <h1 className="page-title">{t('logs.title')}</h1>
+
         <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
           <Space>
             <SyncOutlined spin={autoRefresh} />
-            <span>自动刷新 (10s)</span>
+            <span>{t('logs.autoRefresh')}</span>
             <Switch checked={autoRefresh} onChange={setAutoRefresh} size="small" />
           </Space>
         </div>
-        
+
         <Tabs defaultActiveKey="logs">
           {/* 访问日志 */}
-          <TabPane 
+          <TabPane
             tab={
               <Space>
                 <BarChartOutlined />
-                <span>访问日志</span>
+                <span>{t('logs.tabAccessLogs')}</span>
               </Space>
-            } 
+            }
             key="logs"
           >
             {/* 筛选条件 */}
@@ -178,7 +121,7 @@ const Logs: React.FC = () => {
               <Row gutter={16} align="middle">
                 <Col>
                   <Input
-                    placeholder="筛选 IP"
+                    placeholder={t('logs.filterIp')}
                     prefix={<GlobalOutlined />}
                     value={filterIP}
                     onChange={(e) => setFilterIP(e.target.value)}
@@ -188,7 +131,7 @@ const Logs: React.FC = () => {
                 </Col>
                 <Col>
                   <Select
-                    placeholder="请求方法"
+                    placeholder={t('logs.filterMethod')}
                     value={filterMethod || undefined}
                     onChange={(value) => setFilterMethod(value || '')}
                     style={{ width: 120 }}
@@ -203,7 +146,7 @@ const Logs: React.FC = () => {
                 </Col>
                 <Col>
                   <Select
-                    placeholder="状态码"
+                    placeholder={t('logs.filterStatus')}
                     value={filterStatus || undefined}
                     onChange={(value) => setFilterStatus(value || '')}
                     style={{ width: 120 }}
@@ -216,22 +159,29 @@ const Logs: React.FC = () => {
                   </Select>
                 </Col>
                 <Col>
-                  <RangePicker 
+                  <RangePicker
                     value={dateRange as any}
                     onChange={(dates) => setDateRange(dates as any)}
                   />
                 </Col>
                 <Col>
                   <Space>
-                    <Button 
-                      icon={<SearchOutlined />} 
+                    <Button
+                      icon={<SearchOutlined />}
                       onClick={() => fetchLogs(1)}
                     >
-                      搜索
+                      {t('common.search')}
                     </Button>
-                    <ExportButton 
-                      data={filteredLogs} 
-                      columns={columns}
+                    <ExportButton
+                      data={filteredLogs.map(formatLogForExport)}
+                      columns={[
+                        { title: t('logs.columns.time'), dataIndex: '时间', key: 'time' },
+                        { title: t('logs.columns.ip'), dataIndex: 'IP', key: 'ip' },
+                        { title: t('logs.columns.method'), dataIndex: '方法', key: 'method' },
+                        { title: t('logs.columns.path'), dataIndex: '路径', key: 'path' },
+                        { title: t('logs.columns.status'), dataIndex: '状态码', key: 'status' },
+                        { title: t('logs.columns.duration'), dataIndex: '耗时ms', key: 'duration' },
+                      ]}
                       filename="access_logs"
                     />
                   </Space>
@@ -249,9 +199,9 @@ const Logs: React.FC = () => {
                   current: currentPage,
                   pageSize,
                   total,
-                  onChange: (p, ps) => { setCurrentPage(p); setPageSize(ps); fetchLogs(p) },
+                  onChange: (p, ps) => { setPageSize(ps); fetchLogs(p) },
                   showSizeChanger: true,
-                  showTotal: (t) => `共 ${t} 条记录`,
+                  showTotal: (total: number) => t('logs.totalRecords', { total }),
                 }}
                 size="middle"
               />
@@ -259,118 +209,106 @@ const Logs: React.FC = () => {
           </TabPane>
 
           {/* 统计分析 */}
-          <TabPane 
+          <TabPane
             tab={
               <Space>
                 <BarChartOutlined />
-                <span>统计分析</span>
+                <span>{t('logs.tabStats')}</span>
               </Space>
-            } 
+            }
             key="stats"
           >
             <Row gutter={[16, 16]}>
               {/* 热门IP */}
               <Col span={12}>
-                <Card className="card" title="热门 IP (Top 10)">
-                  {topIPs.length > 0 ? (
+                <Card className="card" title={t('logs.topIps')}>
+                  {stats.topIPs.length > 0 ? (
                     <Table
                       columns={[
-                        { title: '排名', key: 'rank', render: (_: any, __: any, index: number) => index + 1, width: 60 },
-                        { title: 'IP 地址', dataIndex: 'ip', key: 'ip' },
-                        { title: '请求数', dataIndex: 'count', key: 'count', render: (text: number) => <span style={{ fontWeight: 500 }}>{text}</span> },
+                        rankCol,
+                        { title: t('logs.ipAddress'), dataIndex: 'ip', key: 'ip' },
+                        { title: t('logs.requestCount'), dataIndex: 'count', key: 'count', render: (text: number) => <span style={{ fontWeight: 500 }}>{text}</span> },
                       ]}
-                      dataSource={topIPs}
+                      dataSource={stats.topIPs}
                       rowKey="ip"
                       pagination={false}
                       size="small"
                     />
                   ) : (
-                    <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>暂无数据</div>
+                    <EmptyHint />
                   )}
                 </Card>
               </Col>
 
               {/* 热门URL */}
               <Col span={12}>
-                <Card className="card" title="热门 URL (Top 10)">
-                  {topURLs.length > 0 ? (
+                <Card className="card" title={t('logs.topUrls')}>
+                  {stats.topURLs.length > 0 ? (
                     <Table
                       columns={[
-                        { title: '排名', key: 'rank', render: (_: any, __: any, index: number) => index + 1, width: 60 },
-                        { title: 'URL', dataIndex: 'url', key: 'url', ellipsis: true },
-                        { title: '请求数', dataIndex: 'count', key: 'count', render: (text: number) => <span style={{ fontWeight: 500 }}>{text}</span> },
+                        rankCol,
+                        { title: t('logs.url'), dataIndex: 'url', key: 'url', ellipsis: true },
+                        { title: t('logs.requestCount'), dataIndex: 'count', key: 'count', render: (text: number) => <span style={{ fontWeight: 500 }}>{text}</span> },
                       ]}
-                      dataSource={topURLs}
+                      dataSource={stats.topURLs}
                       rowKey="url"
                       pagination={false}
                       size="small"
                     />
                   ) : (
-                    <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>暂无数据</div>
+                    <EmptyHint />
                   )}
                 </Card>
               </Col>
 
               {/* 请求方法分布 */}
               <Col span={12}>
-                <Card className="card" title="请求方法分布">
-                  {methodStats.length > 0 ? (
+                <Card className="card" title={t('logs.methodDistribution')}>
+                  {stats.methodStats.length > 0 ? (
                     <Table
                       columns={[
-                        { title: '方法', dataIndex: 'method', key: 'method', render: (text: string) => {
-                          const colorMap: Record<string, string> = {
-                            GET: '#52c41a',
-                            POST: '#1890ff',
-                            PUT: '#faad14',
-                            DELETE: '#ff4d4f',
-                          }
-                          return <span style={{ color: colorMap[text] || '#333', fontWeight: 500 }}>{text}</span>
-                        }},
-                        { title: '请求数', dataIndex: 'count', key: 'count' },
-                        { title: '占比', key: 'percent', render: (_: any, record: any) => {
-                          const total = methodStats.reduce((sum, m) => sum + m.count, 0)
-                          const percent = ((record.count / total) * 100).toFixed(1)
-                          return `${percent}%`
+                        { title: t('logs.columns.method'), dataIndex: 'method', key: 'method', render: (text: string) => (
+                          <span style={{ color: methodColorMap[text] || '#333', fontWeight: 500 }}>{text}</span>
+                        )},
+                        { title: t('logs.requestCount'), dataIndex: 'count', key: 'count' },
+                        { title: t('logs.percent'), key: 'percent', render: (_: unknown, record: { count: number }) => {
+                          const totalCount = stats.methodStats.reduce((sum, m) => sum + m.count, 0)
+                          return `${((record.count / totalCount) * 100).toFixed(1)}%`
                         }},
                       ]}
-                      dataSource={methodStats}
+                      dataSource={stats.methodStats}
                       rowKey="method"
                       pagination={false}
                       size="small"
                     />
                   ) : (
-                    <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>暂无数据</div>
+                    <EmptyHint />
                   )}
                 </Card>
               </Col>
 
               {/* 状态码分布 */}
               <Col span={12}>
-                <Card className="card" title="状态码分布">
-                  {statusStats.length > 0 ? (
+                <Card className="card" title={t('logs.statusDistribution')}>
+                  {stats.statusStats.length > 0 ? (
                     <Table
                       columns={[
-                        { title: '状态码', dataIndex: 'status', key: 'status', render: (text: number) => {
-                          const color = text >= 200 && text < 300 ? '#52c41a' 
-                            : text >= 300 && text < 400 ? '#1890ff'
-                            : text >= 400 && text < 500 ? '#faad14'
-                            : '#ff4d4f'
-                          return <span style={{ color, fontWeight: 500 }}>{text}</span>
-                        }},
-                        { title: '请求数', dataIndex: 'count', key: 'count' },
-                        { title: '占比', key: 'percent', render: (_: any, record: any) => {
-                          const total = statusStats.reduce((sum, s) => sum + s.count, 0)
-                          const percent = ((record.count / total) * 100).toFixed(1)
-                          return `${percent}%`
+                        { title: t('logs.columns.status'), dataIndex: 'status', key: 'status', render: (text: number) => (
+                          <span style={{ color: statusColor(text), fontWeight: 500 }}>{text}</span>
+                        )},
+                        { title: t('logs.requestCount'), dataIndex: 'count', key: 'count' },
+                        { title: t('logs.percent'), key: 'percent', render: (_: unknown, record: { count: number }) => {
+                          const totalCount = stats.statusStats.reduce((sum, s) => sum + s.count, 0)
+                          return `${((record.count / totalCount) * 100).toFixed(1)}%`
                         }},
                       ]}
-                      dataSource={statusStats}
+                      dataSource={stats.statusStats}
                       rowKey="status"
                       pagination={false}
                       size="small"
                     />
                   ) : (
-                    <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>暂无数据</div>
+                    <EmptyHint />
                   )}
                 </Card>
               </Col>

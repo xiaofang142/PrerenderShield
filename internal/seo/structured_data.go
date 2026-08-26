@@ -255,6 +255,8 @@ func (o *StructuredDataOptimizer) OptimizeStructuredData(html string, pageType s
 		result.JSONLD = o.generateFAQSchema(data)
 	case "BreadcrumbList":
 		result.JSONLD = o.generateBreadcrumbSchema(data)
+	case "WebSite":
+		result.JSONLD = o.generateWebSiteSchema(data)
 	default:
 		// 默认使用 WebPage
 		result.JSONLD = o.generateWebPageSchema(data)
@@ -534,6 +536,38 @@ func (o *StructuredDataOptimizer) generateBreadcrumbSchema(data map[string]inter
 			itemListElement = append(itemListElement, listItem)
 		}
 		schema["itemListElement"] = itemListElement
+	}
+
+	return schema
+}
+
+// generateWebSiteSchema 生成网站结构化数据
+func (o *StructuredDataOptimizer) generateWebSiteSchema(data map[string]interface{}) map[string]interface{} {
+	schema := map[string]interface{}{
+		"@context": "https://schema.org",
+		"@type":    "WebSite",
+	}
+
+	if v, ok := data["name"]; ok {
+		schema["name"] = v
+	}
+	if v, ok := data["url"]; ok {
+		schema["url"] = v
+	}
+	if v, ok := data["description"]; ok {
+		schema["description"] = v
+	}
+	if v, ok := data["publisher"]; ok {
+		schema["publisher"] = v
+	}
+
+	// 潜在搜索操作
+	if v, ok := data["search_url"]; ok {
+		schema["potentialAction"] = map[string]interface{}{
+			"@type":       "SearchAction",
+			"target":      v,
+			"query-input": "required name=search_term_string",
+		}
 	}
 
 	return schema

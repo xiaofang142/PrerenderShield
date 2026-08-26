@@ -95,6 +95,10 @@ func (m *MockRedisClient) HashGet(key, field string) (string, error) {
 	return "", nil
 }
 
+func (m *MockRedisClient) HashIncrBy(key, field string, incr int64) (int64, error) {
+	return incr, nil
+}
+
 func (m *MockRedisClient) HashGetAll(key string) (map[string]string, error) {
 	return nil, nil
 }

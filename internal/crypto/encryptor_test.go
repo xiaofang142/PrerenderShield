@@ -11,7 +11,7 @@ func TestNewEncryptor(t *testing.T) {
 	encryptor, err := NewEncryptor("short")
 	assert.NoError(t, err)
 	assert.NotNil(t, encryptor)
-	assert.Len(t, encryptor.key, 16)
+	assert.Len(t, encryptor.key, 32)
 
 	// 测试正常密钥
 	encryptor, err = NewEncryptor("this-is-a-16-char-key!")

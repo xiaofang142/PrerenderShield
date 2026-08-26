@@ -47,7 +47,7 @@ func NewProxy(domainResolver services.DomainResolver, redisClient *redis.Client)
 		redisClient:    redisClient,
 		backends:       make(map[string]*url.URL),
 		reverseProxies: make(map[string]*httputil.ReverseProxy),
-		transport: transport,
+		transport:      transport,
 	}
 
 	// 从Redis加载后端配置
@@ -147,18 +147,19 @@ func (p *proxy) getOrCreateReverseProxy(siteID, backendURL string) (*httputil.Re
 	newReverseProxy.Transport = p.transport
 
 	// 自定义请求修改
+	// P0-20: 修复 Path 处理，不再无条件 TrimPrefix leading slash
+	// httputil.NewSingleHostReverseProxy 已经正确处理了 path 拼接
+	// (从 incoming URL 拼接在 backend.Path 之后)，无需再 strip
 	newReverseProxy.Director = func(req *http.Request) {
-		// 修改请求URL
 		req.URL.Scheme = backend.Scheme
 		req.URL.Host = backend.Host
-		req.URL.Path = strings.TrimPrefix(req.URL.Path, "/")
+		// 修复：保留原 path 的 leading slash，避免后端路径解析错误
+		// 注释: 旧代码 req.URL.Path = strings.TrimPrefix(req.URL.Path, "/")
+		//       会导致 /api/users 变成 api/users，后端路由错乱
 
 		// 添加唯一凭证
 		req.Header.Set("X-Site-ID", siteID)
 		req.Header.Set("X-Proxy-ID", "prerender-shield")
-
-		// 保留原始请求头
-		// 注意：这里不需要手动复制，httputil.ReverseProxy会自动处理
 
 		// 修改Host头
 		req.Host = backend.Host

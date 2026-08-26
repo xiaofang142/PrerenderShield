@@ -1,0 +1,68 @@
+{
+  "settings": {
+    "title": "시스템 설정",
+    "tabs": {
+      "config": "시스템 설정",
+      "status": "시스템 상태",
+      "backup": "백업 및 복원",
+      "about": "정보"
+    },
+    "config": {
+      "accessLogDivider": "액세스 로그 설정",
+      "accessLogRetention": "로그 보존 일수",
+      "accessLogRetentionHelp": "액세스 로그 보존 일수, 초과 시 자동 정리됩니다",
+      "dayUnit": "일",
+      "accessLogMaxSize": "로그 파일 크기 제한",
+      "accessLogMaxSizeHelp": "단일 로그 파일의 최대 크기(MB)",
+      "crawlerLogDivider": "크롤러 로그 설정",
+      "crawlerLogRetention": "크롤러 로그 보존 일수",
+      "crawlerLogRetentionHelp": "크롤러 로그 보존 일수, 초과 시 자동 정리됩니다",
+      "crawlerLogMaxSize": "크롤러 로그 크기 제한",
+      "crawlerLogMaxSizeHelp": "단일 크롤러 로그 파일의 최대 크기(MB)",
+      "saveConfig": "설정 저장"
+    },
+    "status": {
+      "healthTitle": "시스템 상태",
+      "serviceStatus": "서비스 상태",
+      "running": "실행 중",
+      "redisStatus": "Redis 상태",
+      "connected": "연결됨",
+      "disconnected": "연결 안 됨",
+      "sslStatus": "SSL 상태",
+      "active": "활성",
+      "memoryUsage": "메모리 사용량",
+      "sysMemory": "시스템 메모리",
+      "goroutines": "Goroutine 수",
+      "gcCycles": "GC 횟수",
+      "versionTitle": "버전 정보",
+      "currentVersion": "현재 버전",
+      "serviceName": "서비스 이름",
+      "officialUrl": "공식 웹사이트"
+    },
+    "backup": {
+      "configTitle": "설정 백업",
+      "createBackup": "백업 생성",
+      "backupTime": "백업 시간",
+      "backupKey": "백업 키",
+      "restoreConfirm": "이 백업을 복원하시겠습니까? 현재 설정이 덮어쓰여집니다.",
+      "restore": "복원",
+      "empty": "백업이 없습니다"
+    },
+    "about": {
+      "description": "OWASP Top 10 보안 보호와 지능형 렌더링 프리워밍 기능을 통합한 엔터프라이즈급 웹 애플리케이션 미들웨어",
+      "version": "버전",
+      "license": "라이선스",
+      "techStack": "기술 스택",
+      "docs": "공식 문서"
+    },
+    "messages": {
+      "backupSuccess": "백업 생성 성공",
+      "backupFailed": "백업 실패",
+      "restoreSuccess": "설정 복원 성공",
+      "restoreFailed": "복원 실패",
+      "fetchConfigFailed": "설정 조회 실패",
+      "saveSuccess": "설정 저장 성공",
+      "saveFailed": "저장 실패"
+    }
+  }
+}

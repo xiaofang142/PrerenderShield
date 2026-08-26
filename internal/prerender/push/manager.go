@@ -27,6 +27,7 @@ type RedisClient interface {
 	GetPushStatsWithURLCounts(siteID string) (map[string]interface{}, error)
 	GetLast15DaysPushCount(siteID string) (map[string]int64, error)
 	GetPushLogs(siteID string, limit, offset int) ([]interface{}, error)
+	GetPushLogCount(siteID string) (int64, error)
 }
 
 // 确保 redis.Client 实现 RedisClient 接口
@@ -265,6 +266,47 @@ func (pm *PushManager) executePush(task PushTask, siteConfig *config.SiteConfig)
 
 			// 避免推送过快
 			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	// 推送到 IndexNow (Bing/Yandex/Naver/Seznam)
+	if pushConfig.IndexNowEnabled && pushConfig.IndexNowKey != "" {
+		// 构建完整 URL 列表
+		var indexnowURLs []string
+		for _, route := range allURLs {
+			fullURL := buildFullURL(pushConfig.PushDomain, siteConfig.Port, route)
+			indexnowURLs = append(indexnowURLs, fullURL)
+		}
+
+		// IndexNow 单次最多推送 10000 个 URL
+		batchSize := 10000
+		for i := 0; i < len(indexnowURLs); i += batchSize {
+			end := i + batchSize
+			if end > len(indexnowURLs) {
+				end = len(indexnowURLs)
+			}
+			batch := indexnowURLs[i:end]
+
+			client := NewIndexNowClient(pushConfig.IndexNowKey)
+			host := pushConfig.PushDomain
+			if host == "" && len(siteConfig.Domains) > 0 {
+				host = siteConfig.Domains[0]
+			}
+
+			result, err := client.Push(batch, host)
+			if err != nil || !result.Success {
+				failedCount += len(batch)
+				// 记录失败日志
+				errMsg := result.Message
+				if err != nil {
+					errMsg = fmt.Sprintf("IndexNow push failed: %v", err)
+				}
+				pm.logPushResult(task.SiteID, siteConfig.Name, fmt.Sprintf("%d URLs", len(batch)), "indexnow", "indexnow", "failed", errMsg)
+			} else {
+				successCount += len(batch)
+				pm.logPushResult(task.SiteID, siteConfig.Name, fmt.Sprintf("%d URLs", len(batch)), "indexnow", "indexnow", "success", result.Message)
+			}
+			totalPushed += len(batch)
 		}
 	}
 
@@ -508,6 +550,14 @@ func (pm *PushManager) GetPushLogs(siteID string, limit, offset int) ([]PushLog,
 	}
 
 	return pushLogs, nil
+}
+
+// GetPushLogCount 获取推送日志总数
+func (pm *PushManager) GetPushLogCount(siteID string) (int64, error) {
+	if pm.redisClient == nil {
+		return 0, fmt.Errorf("redis client is nil")
+	}
+	return pm.redisClient.GetPushLogCount(siteID)
 }
 
 // GetPushConfig 获取推送配置

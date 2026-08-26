@@ -1,14 +1,19 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, Row, Col, Button, Table, message, Select, Tag, Space, Tooltip } from 'antd'
 import { ReloadOutlined, StopOutlined, CheckCircleOutlined, GlobalOutlined, ClockCircleOutlined } from '@ant-design/icons'
-import { firewallApi, sitesApi } from '../../services/api'
+import { firewallApi, extractErrorMessage } from '../../services/api'
+import { useSites } from '../../hooks/useSites'
+import { useTranslation } from 'react-i18next'
 import dayjs from 'dayjs'
 
 const { Option } = Select
 
 const Firewall: React.FC = () => {
-  const [sites, setSites] = useState<any[]>([])
-  const [selectedSite, setSelectedSite] = useState<string>('')
+  const { t } = useTranslation()
+  const { sites, selectedSiteId: selectedSite, setSelectedSiteId: setSelectedSite } = useSites({
+    autoSelectFirst: true,
+    onFetchError: (msg) => message.error(msg),
+  })
   const [loading, setLoading] = useState(false)
   
   // Attack Logs State
@@ -16,30 +21,17 @@ const Firewall: React.FC = () => {
   const [total, setTotal] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
-
-  // Fetch Sites
-  const fetchSites = async () => {
-    try {
-      const res = await sitesApi.getSites()
-      if (res.code === 200) {
-        setSites(res.data)
-        if (res.data.length > 0) {
-          setSelectedSite(res.data[0].id)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch sites:', error)
-      message.error('获取站点列表失败')
-    }
-  }
+  // 竞态防护：站点快速切换时，旧请求的响应不再写入 state
+  const requestVersionRef = useRef(0)
 
   // Fetch Attack Logs
   const fetchLogs = async (page = 1) => {
     if (!selectedSite) {
-      message.warning('请先选择一个站点')
+      message.warning(t('firewallPage.selectSiteFirst'))
       return
     }
-    
+
+    const version = ++requestVersionRef.current
     try {
       setLoading(true)
       const res = await firewallApi.getAttackLogs({
@@ -47,7 +39,8 @@ const Firewall: React.FC = () => {
         page: page,
         limit: pageSize
       })
-      
+
+      if (version !== requestVersionRef.current) return
       if (res.code === 200) {
         setLogs(res.data.logs || [])
         setTotal(res.data.total || 0)
@@ -55,44 +48,32 @@ const Firewall: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch attack logs:', error)
-      message.error('获取攻击记录失败')
+      message.error(t('firewallPage.fetchLogsFailed'))
     } finally {
       setLoading(false)
     }
   }
 
-  // Handle Add to Whitelist
-  const handleAddToWhitelist = async (ip: string) => {
+  // 白/黑名单操作统一处理（原两份重复函数收敛）
+  const handleIpAction = async (ip: string, action: 'whitelist' | 'blacklist') => {
     try {
-      const res = await firewallApi.addToWhitelist(selectedSite, ip)
+      const apiCall = action === 'whitelist' ? firewallApi.addToWhitelist : firewallApi.addToBlacklist
+      const res = await apiCall(selectedSite, ip)
       if (res.code === 200) {
-        message.success(`已将 IP ${ip} 加入白名单`)
+        message.success(
+          action === 'whitelist'
+            ? t('firewallPage.whitelistAdded', { ip })
+            : t('firewallPage.blacklistAdded', { ip })
+        )
       } else {
-        message.error(res.message || '操作失败')
+        message.error(res.message || t('firewallPage.operationFailed'))
       }
     } catch (error) {
-      message.error('操作失败')
+      message.error(extractErrorMessage(error))
     }
   }
 
-  // Handle Add to Blacklist
-  const handleAddToBlacklist = async (ip: string) => {
-    try {
-      const res = await firewallApi.addToBlacklist(selectedSite, ip)
-      if (res.code === 200) {
-        message.success(`已将 IP ${ip} 加入黑名单`)
-      } else {
-        message.error(res.message || '操作失败')
-      }
-    } catch (error) {
-      message.error('操作失败')
-    }
-  }
-
-  // Initialize
-  useEffect(() => {
-    fetchSites()
-  }, [])
+  // Initialize（站点列表由 useSites 自动加载）
 
   // On Site Change
   useEffect(() => {
@@ -104,23 +85,23 @@ const Firewall: React.FC = () => {
   // Table Columns
   const columns = [
     {
-      title: 'IP地址',
+      title: t('firewallPage.columns.ipAddress'),
       dataIndex: 'ip_address',
       key: 'ip_address',
       render: (text: string) => <Tag color="blue">{text}</Tag>
     },
     {
-      title: '地理位置',
+      title: t('firewallPage.columns.location'),
       key: 'location',
       render: (_: any, record: any) => (
         <Space>
           <GlobalOutlined />
-          <span>{record.country || '未知'} {record.city}</span>
+          <span>{record.country || t('firewallPage.unknown')} {record.city}</span>
         </Space>
       )
     },
     {
-      title: '攻击时间',
+      title: t('firewallPage.columns.attackTime'),
       dataIndex: 'created_at',
       key: 'created_at',
       render: (text: string) => (
@@ -131,37 +112,37 @@ const Firewall: React.FC = () => {
       )
     },
     {
-      title: '拦截原因',
+      title: t('firewallPage.columns.blockReason'),
       key: 'reason',
       render: (_: any, record: any) => (
         <span>{record.reason || record.rule_id || 'Unknown'}</span>
       )
     },
     {
-      title: '操作',
+      title: t('firewallPage.columns.actions'),
       key: 'action',
       render: (_: any, record: any) => (
         <Space>
-          <Tooltip title="加入白名单">
-            <Button 
-              type="link" 
-              size="small" 
-              icon={<CheckCircleOutlined />} 
-              onClick={() => handleAddToWhitelist(record.ip_address)}
+          <Tooltip title={t('firewallPage.addToWhitelist')}>
+            <Button
+              type="link"
+              size="small"
+              icon={<CheckCircleOutlined />}
+              onClick={() => handleIpAction(record.ip_address, 'whitelist')}
               style={{ color: '#52c41a' }}
             >
-              白名单
+              {t('firewallPage.whitelist')}
             </Button>
           </Tooltip>
-          <Tooltip title="加入黑名单">
-            <Button 
-              type="link" 
-              size="small" 
-              icon={<StopOutlined />} 
+          <Tooltip title={t('firewallPage.addToBlacklist')}>
+            <Button
+              type="link"
+              size="small"
+              icon={<StopOutlined />}
               danger
-              onClick={() => handleAddToBlacklist(record.ip_address)}
+              onClick={() => handleIpAction(record.ip_address, 'blacklist')}
             >
-              黑名单
+              {t('firewallPage.blacklist')}
             </Button>
           </Tooltip>
         </Space>
@@ -173,9 +154,9 @@ const Firewall: React.FC = () => {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h1 className="page-title" style={{ margin: 0 }}>防火墙拦截记录</h1>
+          <h1 className="page-title" style={{ margin: 0 }}>{t('firewallPage.title')}</h1>
           <div style={{ color: '#666', marginTop: 8 }}>
-            查看被防火墙拦截的恶意请求记录
+            {t('firewallPage.subtitle')}
           </div>
         </div>
       </div>
@@ -185,17 +166,17 @@ const Firewall: React.FC = () => {
         <Row align="middle">
           <Col span={12}>
             <Space>
-              <label>选择站点：</label>
+              <label>{t('firewallPage.selectSite')}</label>
               <Select
                 value={selectedSite}
                 onChange={setSelectedSite}
                 style={{ width: 250 }}
                 loading={sites.length === 0}
-                placeholder="请选择站点"
+                placeholder={t('firewallPage.sitePlaceholder')}
               >
                 {sites.map((site) => (
-                  <Option key={site.name} value={site.name}>
-                    {site.name} ({site.domain})
+                  <Option key={site.id} value={site.id}>
+                    {site.name} ({site.domains?.[0] || site.id})
                   </Option>
                 ))}
               </Select>
@@ -203,14 +184,14 @@ const Firewall: React.FC = () => {
           </Col>
           <Col span={12} style={{ textAlign: 'right' }}>
             <Button type="primary" icon={<ReloadOutlined />} onClick={() => fetchLogs(currentPage)} loading={loading}>
-              刷新列表
+              {t('firewallPage.refreshList')}
             </Button>
           </Col>
         </Row>
       </Card>
       
       {/* Attack Log List */}
-      <Card className="card" title="攻击记录列表">
+      <Card className="card" title={t('firewallPage.logListTitle')}>
         <Table
           columns={columns}
           dataSource={logs}
@@ -222,7 +203,7 @@ const Firewall: React.FC = () => {
             total: total,
             showSizeChanger: true,
             showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`,
+            showTotal: (total) => t('firewallPage.totalRecords', { total }),
             onChange: (page, size) => {
               setPageSize(size)
               fetchLogs(page)

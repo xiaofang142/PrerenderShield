@@ -67,15 +67,15 @@ func GlobalErrorHandler() gin.HandlerFunc {
 type ErrorCode int
 
 const (
-	ErrCodeBadRequest      ErrorCode = 40000
-	ErrCodeUnauthorized    ErrorCode = 40100
-	ErrCodeForbidden       ErrorCode = 40300
-	ErrCodeNotFound        ErrorCode = 40400
-	ErrCodeRateLimit       ErrorCode = 42900
-	ErrCodeInternal        ErrorCode = 50000
-	ErrCodeValidation      ErrorCode = 40001
-	ErrCodeDuplicate       ErrorCode = 40900
-	ErrCodeDependencyFail  ErrorCode = 50200
+	ErrCodeBadRequest     ErrorCode = 40000
+	ErrCodeUnauthorized   ErrorCode = 40100
+	ErrCodeForbidden      ErrorCode = 40300
+	ErrCodeNotFound       ErrorCode = 40400
+	ErrCodeRateLimit      ErrorCode = 42900
+	ErrCodeInternal       ErrorCode = 50000
+	ErrCodeValidation     ErrorCode = 40001
+	ErrCodeDuplicate      ErrorCode = 40900
+	ErrCodeDependencyFail ErrorCode = 50200
 )
 
 // ErrorResponse 带业务码的错误响应

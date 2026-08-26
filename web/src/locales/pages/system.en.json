@@ -1,0 +1,22 @@
+{
+  "system": {
+    "title": "System Settings",
+    "subtitle": "Manage global configuration parameters of the system",
+    "saveConfig": "Save Configuration",
+    "logPolicyTitle": "Log Retention Policy",
+    "accessLogCard": "Access Logs",
+    "crawlerLogCard": "Crawler Logs",
+    "retentionDays": "Retention Days",
+    "accessRetentionHelp": "Access logs older than this number of days will be deleted automatically",
+    "crawlerRetentionHelp": "Crawler logs older than this number of days will be deleted automatically",
+    "maxSize": "Max Storage Size",
+    "maxSizeHelp": "When total log size exceeds this value, the oldest logs will be deleted automatically",
+    "dayUnit": "days",
+    "messages": {
+      "fetchFailed": "Failed to fetch system configuration",
+      "updateSuccess": "System configuration updated",
+      "updateFailed": "Update failed",
+      "updateRequestFailed": "Failed to update system configuration"
+    }
+  }
+}

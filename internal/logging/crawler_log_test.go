@@ -279,11 +279,11 @@ func TestUpdateLog(t *testing.T) {
 	}
 
 	log := CrawlerLog{
-		Site:     "test.com",
-		IP:       "192.168.1.1",
-		Time:     time.Now(),
-		Washed:   false,
-		Country:  "US",
+		Site:    "test.com",
+		IP:      "192.168.1.1",
+		Time:    time.Now(),
+		Washed:  false,
+		Country: "US",
 	}
 	manager.saveLog(log)
 	time.Sleep(100 * time.Millisecond)

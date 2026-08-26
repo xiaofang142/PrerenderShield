@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"prerender-shield/internal/logging"
 	"sync"
 	"time"
-	"prerender-shield/internal/logging"
 )
 
 // RuleEngine 告警规则引擎
@@ -78,6 +78,20 @@ func (e *RuleEngine) AddRule(rule *Rule) {
 	e.rules = append(e.rules, rule)
 }
 
+// UpdateRule 原子更新规则：同 ID 就地替换，不存在则追加。
+// 替代先 Remove 后 Add 的两步操作，避免中间态窗口内评估到缺失规则
+func (e *RuleEngine) UpdateRule(rule *Rule) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for i, r := range e.rules {
+		if r.ID == rule.ID {
+			e.rules[i] = rule
+			return
+		}
+	}
+	e.rules = append(e.rules, rule)
+}
+
 // RemoveRule 移除规则
 func (e *RuleEngine) RemoveRule(ruleID string) {
 	e.mu.Lock()
@@ -88,6 +102,15 @@ func (e *RuleEngine) RemoveRule(ruleID string) {
 			return
 		}
 	}
+}
+
+// GetRules 获取所有规则
+func (e *RuleEngine) GetRules() []*Rule {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	result := make([]*Rule, len(e.rules))
+	copy(result, e.rules)
+	return result
 }
 
 // AddHandler 添加处理器

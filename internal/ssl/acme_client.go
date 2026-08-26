@@ -5,8 +5,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -70,9 +72,14 @@ func NewACMEClient(config ACMEConfig) (*ACMEClient, error) {
 	}
 
 	// 配置 ACME 目录 URL
+	// 优先级: 环境变量 ACME_DIRECTORY_URL(本地 Pebble 测试/私有 CA) > staging > production
 	directoryURL := lego.LEDirectoryStaging
 	if config.Production {
 		directoryURL = lego.LEDirectoryProduction
+	}
+	if custom := os.Getenv("ACME_DIRECTORY_URL"); custom != "" {
+		directoryURL = custom
+		logging.DefaultLogger.Info("Using custom ACME directory URL: %s", directoryURL)
 	}
 
 	// 创建 LEGO 客户端配置（包含证书密钥类型）
@@ -81,6 +88,19 @@ func NewACMEClient(config ACMEConfig) (*ACMEClient, error) {
 		UserAgent: "PrerenderShield/1.0",
 	}
 	legoConfig.Certificate.KeyType = certcrypto.RSA2048
+
+	// 测试环境插桩: Pebble 等本地 ACME 服务使用自签 HTTPS，需跳过校验
+	if os.Getenv("ACME_TLS_INSECURE") == "1" {
+		hc := legoConfig.HTTPClient
+		tr, _ := hc.Transport.(*http.Transport)
+		cloned := tr.Clone()
+		if cloned.TLSClientConfig == nil {
+			cloned.TLSClientConfig = &tls.Config{}
+		}
+		cloned.TLSClientConfig.InsecureSkipVerify = true
+		hc.Transport = cloned
+		logging.DefaultLogger.Warn("ACME_TLS_INSECURE enabled — only for local test CAs")
+	}
 
 	// 创建 LEGO 客户端
 	client, err := lego.NewClient(legoConfig)

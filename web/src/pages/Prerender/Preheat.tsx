@@ -1,14 +1,21 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, Row, Col, Statistic, Button, Select, Space, message, Table } from 'antd'
 import { ReloadOutlined, FireOutlined, PlayCircleOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
-import { sitesApi, prerenderApi } from '../../services/api'
+import { useSites } from '../../hooks/useSites'
+import { prerenderApi } from '../../services/api'
+import { useTranslation } from 'react-i18next'
 
 const { Option } = Select
 
 const Preheat: React.FC = () => {
-  const [sites, setSites] = useState<any[]>([])
-  const [selectedSiteId, setSelectedSiteId] = useState<string>('')
-  const [selectedSiteName, setSelectedSiteName] = useState<string>('')
+  const { t } = useTranslation()
+  const { sites, selectedSiteId, setSelectedSiteId } = useSites({
+    autoSelectFirst: true,
+    filter: (site) => site.mode === 'static',
+    onFetchError: (msg) => message.error(msg),
+  })
+  // 选中站点名称由列表派生，无需独立 state
+  const selectedSiteName = sites.find((s) => s.id === selectedSiteId)?.name || sites.find((s) => s.id === selectedSiteId)?.Name || ''
   const [stats, setStats] = useState({
     urlCount: 0,
     cacheCount: 0,
@@ -23,6 +30,8 @@ const Preheat: React.FC = () => {
   const [total, setTotal] = useState(0)
   const [isPreheating, setIsPreheating] = useState(false)
   const [isClearingCache, setIsClearingCache] = useState(false)
+  // 竞态防护：站点快速切换时，旧请求的响应不再写入 state
+  const requestVersionRef = useRef(0)
 
   // 表格列配置
   const columns = [
@@ -38,13 +47,13 @@ const Preheat: React.FC = () => {
       )
     },
     {
-      title: '站点名称',
+      title: t('preheat.columns.siteName'),
       dataIndex: 'siteName',
       key: 'siteName',
       render: () => selectedSiteName || '-'
     },
     {
-      title: '更新时间',
+      title: t('preheat.columns.updatedAt'),
       dataIndex: 'updatedAt',
       key: 'updatedAt',
       render: (time: string) => {
@@ -55,33 +64,13 @@ const Preheat: React.FC = () => {
     },
   ]
 
-  // 获取静态网站列表
-  const fetchSites = async () => {
-    try {
-      setLoading(true)
-      const res = await sitesApi.getSites()
-      if (res.code === 200) {
-        // 只保留静态模式的站点
-        const staticSites = res.data.filter((site: any) => site.mode === 'static')
-        setSites(staticSites)
-        if (staticSites.length > 0 && !selectedSiteId) {
-          setSelectedSiteId(staticSites[0].id)
-          setSelectedSiteName(staticSites[0].name || staticSites[0].Name || '')
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch sites:', error)
-      message.error('获取站点列表失败')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   // 获取预热统计数据
    const fetchStats = async () => {
+    const version = ++requestVersionRef.current
     try {
       setLoading(true)
       const res = await prerenderApi.getPreheatStats(selectedSiteId)
+      if (version !== requestVersionRef.current) return
       if (res.code === 200) {
         setStats({
           urlCount: res.data.urlCount || 0,
@@ -92,7 +81,7 @@ const Preheat: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch stats:', error)
-      message.error('获取统计数据失败')
+      message.error(t('preheat.fetchStatsFailed'))
     } finally {
       setLoading(false)
     }
@@ -100,9 +89,11 @@ const Preheat: React.FC = () => {
 
   // 获取URL列表
   const fetchUrls = async (page: number = 1, size: number = 20) => {
+    const version = ++requestVersionRef.current
     try {
       setUrlLoading(true)
       const res = await prerenderApi.getUrls(selectedSiteId, page, size)
+      if (version !== requestVersionRef.current) return
       if (res.code === 200) {
         setUrlList(res.data.list || [])
         setTotal(res.data.total || 0)
@@ -111,7 +102,7 @@ const Preheat: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch URLs:', error)
-      message.error('获取URL列表失败')
+      message.error(t('preheat.fetchUrlsFailed'))
     } finally {
       setUrlLoading(false)
     }
@@ -121,7 +112,7 @@ const Preheat: React.FC = () => {
 
   // 初始化数据
   useEffect(() => {
-    fetchSites()
+    // 站点列表由 useSites 自动加载
   }, [])
 
   // 当选中站点变化时，重新获取统计数据和URL列表
@@ -136,13 +127,13 @@ const Preheat: React.FC = () => {
   const handleRefreshStats = () => {
     fetchStats()
     fetchUrls(currentPage, pageSize)
-    message.success('数据已刷新')
+    message.success(t('preheat.refreshed'))
   }
 
   // 触发站点预热
   const handleTriggerPreheat = async () => {
     if (!selectedSiteId) {
-      message.warning('请先选择站点')
+      message.warning(t('preheat.selectSiteFirst'))
       return
     }
 
@@ -150,11 +141,11 @@ const Preheat: React.FC = () => {
       setIsPreheating(true)
       const res = await prerenderApi.triggerPreheat(selectedSiteId)
       if (res.code === 200) {
-        message.success('预热任务已创建成功，请稍后查看')
+        message.success(t('preheat.preheatCreated'))
       }
     } catch (error) {
       console.error('Failed to trigger preheat:', error)
-      message.error('触发预热失败')
+      message.error(t('preheat.triggerPreheatFailed'))
     } finally {
       setIsPreheating(false)
     }
@@ -163,7 +154,7 @@ const Preheat: React.FC = () => {
   // 清除站点缓存
   const handleClearCache = async () => {
     if (!selectedSiteId) {
-      message.warning('请先选择站点')
+      message.warning(t('preheat.selectSiteFirst'))
       return
     }
 
@@ -171,14 +162,14 @@ const Preheat: React.FC = () => {
       setIsClearingCache(true)
       const res = await prerenderApi.clearCache(selectedSiteId)
       if (res.code === 200) {
-        message.success(`缓存清除成功，共清除 ${res.data.clearedCount} 个缓存`)
+        message.success(t('preheat.clearCacheSuccess', { count: res.data.clearedCount }))
         // 刷新统计数据和URL列表
         fetchStats()
         fetchUrls(currentPage, pageSize)
       }
     } catch (error) {
       console.error('Failed to clear cache:', error)
-      message.error('清除缓存失败')
+      message.error(t('preheat.clearCacheFailed'))
     } finally {
       setIsClearingCache(false)
     }
@@ -195,23 +186,21 @@ const Preheat: React.FC = () => {
 
   return (
     <div>
-      <h1 className="page-title">渲染预热</h1>
+      <h1 className="page-title">{t('preheat.title')}</h1>
       
       {/* 站点选择栏 */}
       <Card className="card" style={{ marginBottom: 16 }}>
         <Row align="middle" gutter={16}>
           <Col span={8}>
-            <label style={{ marginRight: 8, fontWeight: 'bold' }}>选择站点：</label>
+            <label style={{ marginRight: 8, fontWeight: 'bold' }}>{t('preheat.selectSite')}</label>
             <Select
               value={selectedSiteId}
               onChange={(value) => {
-                const site = sites.find((s: any) => s.id === value)
                 setSelectedSiteId(value)
-                setSelectedSiteName(site?.name || site?.Name || '')
               }}
               style={{ width: 200 }}
               loading={loading}
-              placeholder="请选择站点"
+              placeholder={t('preheat.sitePlaceholder')}
             >
               {sites.map((site: any) => (
                 <Option key={site.id} value={site.id}>
@@ -223,13 +212,13 @@ const Preheat: React.FC = () => {
           <Col span={12}>
             <Space>
               <Button type="primary" icon={<ReloadOutlined />} onClick={handleRefreshStats} loading={loading}>
-                刷新数据
+                {t('preheat.refreshData')}
               </Button>
               <Button type="primary" icon={<FireOutlined />} onClick={handleTriggerPreheat} loading={isPreheating}>
-                触发站点预热
+                {t('preheat.triggerPreheat')}
               </Button>
               <Button danger icon={<DeleteOutlined />} onClick={handleClearCache} loading={isClearingCache}>
-                清除缓存
+                {t('preheat.clearCache')}
               </Button>
             </Space>
           </Col>
@@ -241,7 +230,7 @@ const Preheat: React.FC = () => {
         <Row gutter={[16, 16]}>
           <Col span={6}>
             <Statistic
-              title="URL总数"
+              title={t('preheat.stats.urlCount')}
               value={stats.urlCount}
               prefix={<SearchOutlined />}
               valueStyle={{ color: '#1890ff' }}
@@ -249,7 +238,7 @@ const Preheat: React.FC = () => {
           </Col>
           <Col span={6}>
             <Statistic
-              title="缓存数"
+              title={t('preheat.stats.cacheCount')}
               value={stats.cacheCount}
               prefix={<FireOutlined />}
               valueStyle={{ color: '#52c41a' }}
@@ -257,7 +246,7 @@ const Preheat: React.FC = () => {
           </Col>
           <Col span={6}>
             <Statistic
-              title="缓存大小"
+              title={t('preheat.stats.cacheSize')}
               value={stats.totalCacheSize}
               prefix={<DeleteOutlined />}
               valueStyle={{ color: '#faad14' }}
@@ -271,7 +260,7 @@ const Preheat: React.FC = () => {
           </Col>
           <Col span={6}>
               <Statistic
-                title="浏览器池大小"
+                title={t('preheat.stats.browserPoolSize')}
                 value={stats.browserPoolSize}
                 prefix={<PlayCircleOutlined />}
                 valueStyle={{ color: '#722ed1' }}
@@ -281,7 +270,7 @@ const Preheat: React.FC = () => {
       </Card>
       
       {/* URL列表 */}
-      <Card className="card" title="URL列表">
+      <Card className="card" title={t('preheat.urlListTitle')}>
         <Table
           columns={columns}
           dataSource={urlList}
@@ -294,7 +283,7 @@ const Preheat: React.FC = () => {
             onChange: handlePageChange,
             showSizeChanger: true,
             pageSizeOptions: ['20', '50', '100'],
-            showTotal: (total) => `共 ${total} 条记录`,
+            showTotal: (total) => t('preheat.totalRecords', { total }),
           }}
         />
       </Card>

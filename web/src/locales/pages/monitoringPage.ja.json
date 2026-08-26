@@ -1,0 +1,25 @@
+{
+  "monitoringPage": {
+    "title": "モニタリング警告",
+    "fetchFailed": "モニタリングデータの取得に失敗しました",
+    "cpuUsage": "CPU使用率",
+    "memoryUsage": "メモリ使用率",
+    "diskUsage": "ディスク使用率",
+    "metricsOverview": "システム指標概要",
+    "requestsPerSecond": "リクエスト/秒",
+    "memoryDetail": "メモリ詳細",
+    "totalMemory": "総メモリ",
+    "usedMemory": "使用済みメモリ",
+    "freeMemory": "空きメモリ",
+    "usageRate": "使用率",
+    "diskDetail": "ディスク詳細",
+    "totalCapacity": "総容量",
+    "usedCapacity": "使用済み容量",
+    "freeCapacity": "空き容量",
+    "networkTraffic": "ネットワークトラフィック",
+    "sentBytes": "送信バイト",
+    "recvBytes": "受信バイト",
+    "sentPackets": "送信パケット数",
+    "recvPackets": "受信パケット数"
+  }
+}

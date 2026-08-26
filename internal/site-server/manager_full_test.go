@@ -14,7 +14,7 @@ import (
 
 // TestNewManager_NilMonitor 测试创建管理器时 monitor 为 nil
 func TestNewManager_NilMonitor(t *testing.T) {
-	manager := NewManager(nil)
+	manager := NewManager(nil, nil)
 	assert.NotNil(t, manager)
 	assert.Nil(t, manager.monitor)
 	assert.NotNil(t, manager.siteServers)
@@ -41,7 +41,7 @@ func TestStartSiteServer(t *testing.T) {
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false})
 	defer monitor.Stop()
 
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	site := config.SiteConfig{
 		ID:      "test-site",
@@ -86,7 +86,7 @@ func TestStartSiteServer_MultipleServers(t *testing.T) {
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false})
 	defer monitor.Stop()
 
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -117,7 +117,7 @@ func TestStopSiteServer_NonExistent(t *testing.T) {
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false})
 	defer monitor.Stop()
 
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	// 停止不存在的服务器应该返回 nil（无错误）
 	err := manager.StopSiteServer("non-existent")
@@ -129,7 +129,7 @@ func TestStopSiteServer(t *testing.T) {
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false})
 	defer monitor.Stop()
 
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -170,7 +170,7 @@ func TestListSiteServers_WithServers(t *testing.T) {
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false})
 	defer monitor.Stop()
 
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -203,7 +203,7 @@ func TestStopAllServers_WithMultipleServers(t *testing.T) {
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false})
 	defer monitor.Stop()
 
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -236,7 +236,7 @@ func TestGetSiteServer_EmptyManager(t *testing.T) {
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false})
 	defer monitor.Stop()
 
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	server, exists := manager.GetSiteServer("any-site")
 	assert.False(t, exists)
@@ -248,7 +248,7 @@ func TestListSiteServers_ReturnsMap(t *testing.T) {
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false})
 	defer monitor.Stop()
 
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	servers := manager.ListSiteServers()
 	assert.NotNil(t, servers)
@@ -277,7 +277,7 @@ func TestStartSiteServer_WithActualHTTP(t *testing.T) {
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false})
 	defer monitor.Stop()
 
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -317,7 +317,7 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 	monitor := monitoring.NewMonitor(monitoring.Config{Enabled: false})
 	defer monitor.Stop()
 
-	manager := NewManager(monitor)
+	manager := NewManager(monitor, nil)
 
 	done := make(chan bool, 20)
 

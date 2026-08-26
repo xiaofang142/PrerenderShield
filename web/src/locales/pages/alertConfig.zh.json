@@ -1,0 +1,146 @@
+{
+  "alertConfig": {
+    "title": "告警配置",
+    "tabs": {
+      "rules": "告警规则",
+      "records": "告警记录",
+      "channels": "通知渠道",
+      "templates": "规则模板"
+    },
+    "toolbar": {
+      "addRule": "添加规则",
+      "refresh": "刷新",
+      "refreshed": "规则已刷新",
+      "rulesTotal": "共 {{count}} 条规则",
+      "rulesEnabled": "{{count}} 条启用"
+    },
+    "ruleColumns": {
+      "name": "规则名称",
+      "metric": "监控指标",
+      "condition": "条件",
+      "severity": "严重程度",
+      "cooldown": "冷却时间",
+      "cooldownMinutes": "{{minutes}} 分钟",
+      "status": "状态",
+      "actions": "操作"
+    },
+    "recordColumns": {
+      "ruleName": "告警规则",
+      "severity": "严重程度",
+      "message": "告警信息",
+      "triggerValue": "触发值",
+      "triggerTime": "触发时间",
+      "status": "状态"
+    },
+    "statusTag": {
+      "active": "告警中",
+      "resolved": "已恢复"
+    },
+    "stats": {
+      "active": "活跃告警",
+      "resolved": "已恢复",
+      "critical": "严重告警",
+      "warning": "警告"
+    },
+    "recordsTotal": "共 {{total}} 条记录",
+    "channels": {
+      "description": "配置告警通知渠道，当告警触发时将通过启用的渠道发送通知",
+      "on": "启用",
+      "off": "禁用",
+      "names": {
+        "webhook": "Webhook",
+        "email": "邮件",
+        "slack": "Slack",
+        "dingtalk": "钉钉"
+      }
+    },
+    "templates": {
+      "description": "选择一个模板快速添加常用告警规则",
+      "items": {
+        "cpu_high": {
+          "name": "CPU 使用率过高",
+          "description": "当 CPU 使用率超过 90% 时触发告警"
+        },
+        "memory_high": {
+          "name": "内存使用率过高",
+          "description": "当内存使用率超过 85% 时触发告警"
+        },
+        "disk_high": {
+          "name": "磁盘使用率过高",
+          "description": "当磁盘使用率超过 90% 时触发告警"
+        },
+        "threat_spike": {
+          "name": "威胁检测激增",
+          "description": "当每分钟检测到的威胁数超过 100 时触发告警"
+        },
+        "render_queue_backlog": {
+          "name": "渲染队列积压",
+          "description": "当渲染队列积压超过 50 时触发告警"
+        },
+        "ssl_expiring": {
+          "name": "SSL 证书即将过期",
+          "description": "当 SSL 证书将在 30 天内过期时触发告警"
+        }
+      }
+    },
+    "form": {
+      "addTitle": "添加告警规则",
+      "editTitle": "编辑告警规则",
+      "name": "规则名称",
+      "nameRequired": "请输入规则名称",
+      "namePlaceholder": "例如：CPU 使用率过高",
+      "description": "规则描述",
+      "descriptionPlaceholder": "规则描述",
+      "metric": "监控指标",
+      "metricRequired": "请选择监控指标",
+      "selectMetric": "选择指标",
+      "metricOptions": {
+        "system_cpu_usage": "CPU 使用率",
+        "system_memory_usage": "内存使用率",
+        "system_disk_usage": "磁盘使用率",
+        "threats_per_minute": "威胁检测/分钟",
+        "render_queue_size": "渲染队列大小",
+        "ssl_cert_days_remaining": "SSL 证书剩余天数"
+      },
+      "severity": "严重程度",
+      "severityRequired": "请选择严重程度",
+      "selectSeverity": "选择严重程度",
+      "severityOptions": {
+        "critical": "严重",
+        "warning": "警告",
+        "info": "信息"
+      },
+      "operator": "操作符",
+      "operatorRequired": "请选择操作符",
+      "selectOperator": "选择操作符",
+      "operatorOptions": {
+        "gt": "大于 (>)",
+        "lt": "小于 (<)",
+        "eq": "等于 (=)",
+        "ge": "大于等于 (>=)",
+        "le": "小于等于 (<=)"
+      },
+      "threshold": "阈值",
+      "thresholdRequired": "请输入阈值",
+      "thresholdPlaceholder": "阈值",
+      "cooldown": "冷却时间(秒)",
+      "cooldownRequired": "请输入冷却时间",
+      "cooldownPlaceholder": "秒",
+      "updateRule": "更新规则"
+    },
+    "messages": {
+      "updateSuccess": "规则更新成功",
+      "addSuccess": "规则添加成功",
+      "localSaveWarning": "规则已本地保存，但后端同步失败",
+      "deleteSuccess": "规则删除成功",
+      "deleteFail": "删除失败",
+      "statusUpdateFail": "更新状态失败",
+      "channelEnabled": "{{name}} 已启用",
+      "channelDisabled": "{{name}} 已禁用",
+      "channelSyncFail": "渠道配置后端同步失败",
+      "applyTemplateSuccess": "已应用模板: {{name}}",
+      "applyTemplateFail": "应用模板失败"
+    },
+    "deleteConfirm": "确定要删除这个规则吗？"
+  }
+}

@@ -3,13 +3,13 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -60,7 +60,7 @@ func setupTestEnv(t *testing.T) (*gin.Engine, *controllers.SitesController, stri
 	// This is risky but works for basic CRUD tests where we don't trigger WAF blocking or Prerender
 	siteHandler := sitehandler.NewHandler(nil, nil, nil, nil, nil, nil)
 
-	siteServerMgr := siteserver.NewManager(monitor)
+	siteServerMgr := siteserver.NewManager(monitor, nil)
 
 	// Initialize Controller - use configManager for proper functionality
 	sitesController := controllers.NewSitesController(
@@ -94,8 +94,16 @@ func TestSitesCRUD(t *testing.T) {
 	router, _, tmpDir := setupTestEnv(t)
 	defer os.RemoveAll(tmpDir)
 
-	// Use a random high port to avoid conflicts
-	testPort := 50000 + (time.Now().UnixNano() % 10000)
+	// 向操作系统申请一个确定空闲的端口（伪随机端口可能与本机无关服务冲突）
+	getFreePort := func() int {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("failed to reserve free port: %v", err)
+		}
+		defer l.Close()
+		return l.Addr().(*net.TCPAddr).Port
+	}
+	testPort := getFreePort()
 
 	// 1. Test Add Site
 	newSite := config.SiteConfig{
@@ -134,8 +142,8 @@ func TestSitesCRUD(t *testing.T) {
 	assert.Equal(t, 1, len(sites))
 
 	// 3. Test Update Site
-	// Use a new port for update
-	updatedPort := testPort + 1
+	// Use a new free port for update
+	updatedPort := getFreePort()
 	updateSite := config.SiteConfig{
 		Name:    "Updated Test Site",
 		Domains: []string{"localhost"},

@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Card, Row, Col, Statistic, Spin, Select, Tag, Progress } from 'antd'
-import * as echarts from 'echarts'
+import echarts from '../../components/charts/echarts'
+import type { EChartsOption } from 'echarts'
 import BaseChart from '../../components/charts/BaseChart'
-import { overviewApi, monitoringApi } from '../../services/api'
+import { overviewApi, monitoringApi, firewallApi } from '../../services/api'
+import { usePolling } from '@prerender/utils'
+import { pollingIntervals } from '@prerender/design-tokens'
 import { useTranslation } from 'react-i18next'
 
 const { Option } = Select
@@ -40,6 +43,19 @@ interface OverviewStats {
   };
 }
 
+interface SecurityEvent {
+  type: string;
+  count: number;
+  timestamp?: string;
+}
+
+interface RenderStats {
+  successRate: number;
+  avgRenderTime: number;
+  cacheHitRate: number;
+  renderTimeDistribution?: { range: string; count: number }[];
+}
+
 const Overview: React.FC = () => {
   const { t } = useTranslation()
   const [mapType, setMapType] = useState<string>('2d') // 地图类型：2d, 3d, bar，默认使用2D地图
@@ -71,12 +87,19 @@ const Overview: React.FC = () => {
   const [systemHealth, setSystemHealth] = useState({ cpu: 0, memory: 0, disk: 0 })
 
   const [isMapLoaded, setIsMapLoaded] = useState(false)
+  const [securityEvents, setSecurityEvents] = useState<SecurityEvent[]>([])
+  const [renderStats, setRenderStats] = useState<RenderStats>({
+    successRate: 0,
+    avgRenderTime: 0,
+    cacheHitRate: 0,
+    renderTimeDistribution: []
+  })
 
 
 
   // 如果地图未加载完成，暂时不渲染地图相关的 Option
   // 或者修改 series type 为 'map'，这样不需要经纬度数据，直接用 name 匹配
-  const mapSeriesOption: echarts.EChartsOption = {
+  const mapSeriesOption: EChartsOption = {
     tooltip: {
         trigger: 'item',
         formatter: (params: any) => {
@@ -87,7 +110,7 @@ const Overview: React.FC = () => {
     visualMap: {
         min: 0,
         max: 10000,
-        text: ['High', 'Low'],
+        text: [t('overview.high'), t('overview.low')],
         realtime: false,
         calculable: true,
         inRange: {
@@ -96,7 +119,7 @@ const Overview: React.FC = () => {
     },
     series: [
         {
-            name: '访问分布',
+            name: t('overview.mapSeries'),
             type: 'map',
             map: 'world', // 必须与 registerMap 的名字一致
             roam: true,
@@ -116,19 +139,19 @@ const Overview: React.FC = () => {
   };
 
   // 柱状图配置（作为备选）
-  const barOption: echarts.EChartsOption = {
+  const barOption: EChartsOption = {
     tooltip: {
       trigger: 'axis',
       axisPointer: {
         type: 'shadow'
       },
-      formatter: '{b}<br/>30天内访问数量: {c}',
+      formatter: t('overview.barTooltip'),
     },
     xAxis: {
       type: 'category',
       data: (stats.geoData?.countryData || accessStats.countryData).length > 0
         ? (stats.geoData?.countryData || accessStats.countryData).map(item => item.country)
-        : ['暂无数据'], // 空数据占位
+        : [t('overview.noData')], // 空数据占位
       axisLabel: {
         rotate: 45,
         interval: 0
@@ -136,11 +159,11 @@ const Overview: React.FC = () => {
     },
     yAxis: {
       type: 'value',
-      name: '访问数量'
+      name: t('overview.visitCount')
     },
     series: [
       {
-        name: '访问数量',
+        name: t('overview.visitCount'),
         type: 'bar',
         data: (stats.geoData?.countryData || accessStats.countryData).length > 0
           ? (stats.geoData?.countryData || accessStats.countryData).map(item => item.count)
@@ -173,13 +196,155 @@ const Overview: React.FC = () => {
     ]
   }
 
+  // 安全事件类型分布饼图
+  const securityPieOption: EChartsOption = {
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: {c} ({d}%)'
+    },
+    legend: {
+      orient: 'vertical',
+      left: 'left',
+      top: 'center'
+    },
+    series: [
+      {
+        name: t('overview.attackTypeDistribution'),
+        type: 'pie',
+        radius: ['40%', '70%'],
+        center: ['55%', '50%'],
+        avoidLabelOverlap: true,
+        itemStyle: {
+          borderRadius: 6,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: {
+          show: true,
+          formatter: '{b}\n{d}%'
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 14,
+            fontWeight: 'bold'
+          }
+        },
+        data: securityEvents.length > 0 
+          ? securityEvents.reduce((acc: any[], event) => {
+              const existing = acc.find(a => a.name === event.type)
+              if (existing) {
+                existing.value += event.count
+              } else {
+                acc.push({ name: event.type, value: event.count })
+              }
+              return acc
+            }, [])
+          : [{ name: t('overview.noData'), value: 0 }]
+      }
+    ]
+  }
+
+  // 渲染性能图表 - 渲染时间分布
+  const renderPerformanceOption: EChartsOption = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow'
+      }
+    },
+    xAxis: {
+      type: 'category',
+      data: (renderStats.renderTimeDistribution?.length ?? 0) > 0 
+        ? renderStats.renderTimeDistribution!.map(d => d.range)
+        : ['<100ms', '100-500ms', '500ms-1s', '1-2s', '>2s'],
+      axisLabel: {
+        rotate: 0
+      }
+    },
+    yAxis: {
+      type: 'value',
+      name: t('overview.requestCount')
+    },
+    series: [
+      {
+        name: t('overview.requestCount'),
+        type: 'bar',
+        data: (renderStats.renderTimeDistribution?.length ?? 0) > 0 
+          ? renderStats.renderTimeDistribution!.map(d => d.count)
+          : [0, 0, 0, 0, 0],
+        itemStyle: {
+          color: function(params: any) {
+            const colors = ['#52c41a', '#73d13d', '#95de64', '#faad14', '#ff4d4f']
+            return colors[params.dataIndex] || '#1890ff'
+          }
+        },
+        barWidth: '60%'
+      }
+    ]
+  }
+
+  // 缓存命中率趋势图
+  const cacheHitTrendOption: EChartsOption = {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: any) => {
+        const data = params[0]
+        return t('overview.cacheHitTooltip', { time: data.axisValue, value: data.value })
+      }
+    },
+    xAxis: {
+      type: 'category',
+      data: (stats.trafficData || []).map((d: any) => d.time || '').filter((v: string) => v),
+      boundaryGap: false
+    },
+    yAxis: {
+      type: 'value',
+      name: t('overview.hitRatePercent'),
+      min: 0,
+      max: 100,
+      axisLabel: {
+        formatter: '{value}%'
+      }
+    },
+    series: [
+      {
+        name: t('overview.cacheHitRate'),
+        type: 'line',
+        data: (stats.trafficData || []).map((d: any) => d.cacheHitRate || renderStats.cacheHitRate || 0),
+        smooth: true,
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(82, 196, 26, 0.4)' },
+              { offset: 1, color: 'rgba(82, 196, 26, 0.05)' }
+            ]
+          }
+        },
+        lineStyle: {
+          color: '#52c41a',
+          width: 2
+        },
+        itemStyle: {
+          color: '#52c41a'
+        }
+      }
+    ]
+  }
+
   // 获取概览数据
   const fetchData = async () => {
     try {
       setLoading(true)
-      const [overviewRes, monitoringRes] = await Promise.all([
+      const [overviewRes, monitoringRes, securityRes] = await Promise.all([
         overviewApi.getStats(),
-        monitoringApi.getStats()
+        monitoringApi.getStats(),
+        firewallApi.getAttackLogs({ site_id: '', page: 1, limit: 100 }).catch(() => ({ code: 200, data: { list: [] } }))
       ])
       
       if (overviewRes.code === 200) {
@@ -191,6 +356,20 @@ const Overview: React.FC = () => {
           memory: monitoringRes.data.memoryUsage || 0,
           disk: monitoringRes.data.diskUsage || 0,
         })
+        setRenderStats({
+          successRate: monitoringRes.data.renderSuccessRate || 0,
+          avgRenderTime: monitoringRes.data.avgRenderTime || 0,
+          cacheHitRate: monitoringRes.data.cacheHitRate || 0,
+          renderTimeDistribution: monitoringRes.data.renderTimeDistribution || []
+        })
+      }
+      if (securityRes.code === 200 && securityRes.data?.list) {
+        const events: SecurityEvent[] = securityRes.data.list.map((item: any) => ({
+          type: item.type || item.attack_type || 'unknown',
+          count: item.count || 1,
+          timestamp: item.timestamp || item.created_at
+        }))
+        setSecurityEvents(events)
       }
     } catch (error) {
       console.error('Failed to fetch overview data:', error)
@@ -199,9 +378,8 @@ const Overview: React.FC = () => {
     }
   }
 
+  // 注册地图（一次性）：本地优先，失败回退 CDN
   useEffect(() => {
-    // 注册地图
-    // 使用本地地图文件，避免CDN访问超时问题
     fetch('/maps/world.json')
       .then(response => response.json())
       .then(mapJson => {
@@ -210,7 +388,6 @@ const Overview: React.FC = () => {
       })
       .catch(e => {
         console.error('Failed to load world map, trying fallback CDN', e)
-        // 如果本地加载失败，尝试使用CDN作为备选
         fetch('https://cdn.jsdelivr.net/npm/echarts@4.9.0/map/json/world.json')
           .then(response => response.json())
           .then(mapJson => {
@@ -219,14 +396,10 @@ const Overview: React.FC = () => {
           })
           .catch(e2 => console.error('Failed to load world map from CDN', e2))
       })
-
-    fetchData()
-    // 每30秒刷新一次数据
-    const interval = setInterval(() => {
-      fetchData()
-    }, 30000)
-    return () => clearInterval(interval)
   }, [])
+
+  // 数据轮询：卸载自动清理，页面不可见时暂停
+  usePolling(fetchData, { interval: pollingIntervals.dashboard })
 
   return (
     <Spin spinning={loading} tip={t('common.loading')}>
@@ -235,11 +408,11 @@ const Overview: React.FC = () => {
         
         {/* 系统健康状态 */}
         <Card className="card" style={{ marginTop: 16 }}>
-          <h3 style={{ marginBottom: 16 }}>系统健康</h3>
+          <h3 style={{ marginBottom: 16 }}>{t('overview.systemHealth')}</h3>
           <Row gutter={[16, 16]}>
             <Col span={8}>
               <Card variant="outlined" bodyStyle={{ padding: '16px' }}>
-                <Statistic title="CPU 使用率" value={systemHealth.cpu} suffix="%" precision={1}
+                <Statistic title={t('overview.cpuUsage')} value={systemHealth.cpu} suffix="%" precision={1}
                   valueStyle={{ color: systemHealth.cpu > 90 ? '#ff4d4f' : systemHealth.cpu > 70 ? '#faad14' : '#52c41a' }} />
                 <Progress percent={systemHealth.cpu} showInfo={false} strokeColor={
                   systemHealth.cpu > 90 ? '#ff4d4f' : systemHealth.cpu > 70 ? '#faad14' : '#52c41a'
@@ -248,7 +421,7 @@ const Overview: React.FC = () => {
             </Col>
             <Col span={8}>
               <Card variant="outlined" bodyStyle={{ padding: '16px' }}>
-                <Statistic title="内存使用率" value={systemHealth.memory} suffix="%" precision={1}
+                <Statistic title={t('overview.memoryUsage')} value={systemHealth.memory} suffix="%" precision={1}
                   valueStyle={{ color: systemHealth.memory > 85 ? '#ff4d4f' : systemHealth.memory > 70 ? '#faad14' : '#52c41a' }} />
                 <Progress percent={systemHealth.memory} showInfo={false} strokeColor={
                   systemHealth.memory > 85 ? '#ff4d4f' : systemHealth.memory > 70 ? '#faad14' : '#52c41a'
@@ -257,7 +430,7 @@ const Overview: React.FC = () => {
             </Col>
             <Col span={8}>
               <Card variant="outlined" bodyStyle={{ padding: '16px' }}>
-                <Statistic title="磁盘使用率" value={systemHealth.disk} suffix="%" precision={1}
+                <Statistic title={t('overview.diskUsage')} value={systemHealth.disk} suffix="%" precision={1}
                   valueStyle={{ color: systemHealth.disk > 90 ? '#ff4d4f' : systemHealth.disk > 80 ? '#faad14' : '#52c41a' }} />
                 <Progress percent={systemHealth.disk} showInfo={false} strokeColor={
                   systemHealth.disk > 90 ? '#ff4d4f' : systemHealth.disk > 80 ? '#faad14' : '#52c41a'
@@ -279,8 +452,8 @@ const Overview: React.FC = () => {
                 style={{ width: 120 }}
                 size="small"
               >
-                <Option value="2d">2D Map</Option>
-                <Option value="bar">Bar Chart</Option>
+                <Option value="2d">{t('overview.map2d')}</Option>
+                <Option value="bar">{t('overview.mapBar')}</Option>
               </Select>
             </div>
           </div>
@@ -363,18 +536,111 @@ const Overview: React.FC = () => {
 
         {/* 流量趋势图 */}
         <Card className="card" style={{ marginTop: 16 }}>
-          <h3 style={{ marginBottom: 16 }}>24小时流量趋势</h3>
+          <h3 style={{ marginBottom: 16 }}>{t('overview.trafficTrend24h')}</h3>
           <BaseChart option={{
             tooltip: { trigger: 'axis' },
-            legend: { data: ['总请求', '爬虫请求', '拦截请求'] },
+            legend: { data: [t('overview.totalRequestsShort'), t('overview.crawlerRequests'), t('overview.blockedRequests')] },
             xAxis: { type: 'category', data: (stats.trafficData || []).map((d: any) => d.time || '') },
             yAxis: { type: 'value' },
             series: [
-              { name: '总请求', type: 'line', data: (stats.trafficData || []).map((d: any) => d.totalRequests || 0), smooth: true, itemStyle: { color: '#1890ff' } },
-              { name: '爬虫请求', type: 'line', data: (stats.trafficData || []).map((d: any) => d.crawlerRequests || 0), smooth: true, itemStyle: { color: '#52c41a' } },
-              { name: '拦截请求', type: 'line', data: (stats.trafficData || []).map((d: any) => d.blockedRequests || 0), smooth: true, itemStyle: { color: '#ff4d4f' } },
+              { name: t('overview.totalRequestsShort'), type: 'line', data: (stats.trafficData || []).map((d: any) => d.totalRequests || 0), smooth: true, itemStyle: { color: '#1890ff' } },
+              { name: t('overview.crawlerRequests'), type: 'line', data: (stats.trafficData || []).map((d: any) => d.crawlerRequests || 0), smooth: true, itemStyle: { color: '#52c41a' } },
+              { name: t('overview.blockedRequests'), type: 'line', data: (stats.trafficData || []).map((d: any) => d.blockedRequests || 0), smooth: true, itemStyle: { color: '#ff4d4f' } },
             ]
           }} style={{ height: 300 }} />
+        </Card>
+
+        {/* 渲染成功率和缓存命中率指标 */}
+        <Card className="card" style={{ marginTop: 16 }}>
+          <h3 style={{ marginBottom: 16 }}>{t('overview.renderCacheMetrics')}</h3>
+          <Row gutter={[16, 16]}>
+            <Col span={6}>
+              <Card variant="outlined" bodyStyle={{ padding: '20px', textAlign: 'center' }}>
+                <Statistic 
+                  title={t('overview.renderSuccessRate')} 
+                  value={renderStats.successRate} 
+                  suffix="%" 
+                  precision={1}
+                  valueStyle={{ color: renderStats.successRate >= 95 ? '#52c41a' : renderStats.successRate >= 80 ? '#faad14' : '#ff4d4f', fontSize: '28px' }} 
+                />
+                <Progress 
+                  percent={renderStats.successRate} 
+                  showInfo={false} 
+                  strokeColor={renderStats.successRate >= 95 ? '#52c41a' : renderStats.successRate >= 80 ? '#faad14' : '#ff4d4f'} 
+                  style={{ marginTop: 12 }} 
+                />
+              </Card>
+            </Col>
+            <Col span={6}>
+              <Card variant="outlined" bodyStyle={{ padding: '20px', textAlign: 'center' }}>
+                <Statistic 
+                  title={t('overview.cacheHitRate')} 
+                  value={renderStats.cacheHitRate} 
+                  suffix="%" 
+                  precision={1}
+                  valueStyle={{ color: renderStats.cacheHitRate >= 90 ? '#52c41a' : renderStats.cacheHitRate >= 70 ? '#faad14' : '#ff4d4f', fontSize: '28px' }} 
+                />
+                <Progress 
+                  percent={renderStats.cacheHitRate} 
+                  showInfo={false} 
+                  strokeColor={renderStats.cacheHitRate >= 90 ? '#52c41a' : renderStats.cacheHitRate >= 70 ? '#faad14' : '#ff4d4f'} 
+                  style={{ marginTop: 12 }} 
+                />
+              </Card>
+            </Col>
+            <Col span={6}>
+              <Card variant="outlined" bodyStyle={{ padding: '20px', textAlign: 'center' }}>
+                <Statistic 
+                  title={t('overview.avgRenderTime')} 
+                  value={renderStats.avgRenderTime} 
+                  suffix="ms" 
+                  precision={0}
+                  valueStyle={{ color: renderStats.avgRenderTime <= 500 ? '#52c41a' : renderStats.avgRenderTime <= 1000 ? '#faad14' : '#ff4d4f', fontSize: '28px' }} 
+                />
+                <div style={{ marginTop: 12, color: '#666', fontSize: '12px' }}>
+                  {renderStats.avgRenderTime <= 500 ? t('overview.perfExcellent') : renderStats.avgRenderTime <= 1000 ? t('overview.perfGood') : t('overview.perfOptimize')}
+                </div>
+              </Card>
+            </Col>
+            <Col span={6}>
+              <Card variant="outlined" bodyStyle={{ padding: '20px', textAlign: 'center' }}>
+                <Statistic 
+                  title={t('overview.securityEventsTotal')} 
+                  value={securityEvents.length} 
+                  valueStyle={{ color: securityEvents.length === 0 ? '#52c41a' : '#ff4d4f', fontSize: '28px' }} 
+                />
+                <div style={{ marginTop: 12, color: '#666', fontSize: '12px' }}>
+                  {securityEvents.length === 0 ? t('overview.securityGood') : t('overview.needsAttention')}
+                </div>
+              </Card>
+            </Col>
+          </Row>
+        </Card>
+
+        {/* 安全事件和渲染性能图表 */}
+        <Card className="card" style={{ marginTop: 16 }}>
+          <Row gutter={[16, 16]}>
+            <Col span={12}>
+              <Card title={t('overview.securityEventDistribution')} variant="outlined" bodyStyle={{ padding: '16px' }}>
+                <div style={{ height: 300 }}>
+                  <BaseChart option={securityPieOption} style={{ height: '100%' }} />
+                </div>
+              </Card>
+            </Col>
+            <Col span={12}>
+              <Card title={t('overview.renderTimeDistribution')} variant="outlined" bodyStyle={{ padding: '16px' }}>
+                <div style={{ height: 300 }}>
+                  <BaseChart option={renderPerformanceOption} style={{ height: '100%' }} />
+                </div>
+              </Card>
+            </Col>
+          </Row>
+        </Card>
+
+        {/* 缓存命中率趋势 */}
+        <Card className="card" style={{ marginTop: 16 }}>
+          <h3 style={{ marginBottom: 16 }}>{t('overview.cacheHitTrend')}</h3>
+          <BaseChart option={cacheHitTrendOption} style={{ height: 250 }} />
         </Card>
       </div>
     </Spin>

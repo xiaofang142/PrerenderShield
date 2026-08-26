@@ -1,0 +1,145 @@
+{
+  "firewallRules": {
+    "title": "WAFルール管理",
+    "selectSite": "サイトを選択してください",
+    "toolbar": {
+      "addRule": "ルール追加",
+      "useTemplate": "テンプレートを使用",
+      "testRule": "ルールテスト",
+      "exportRules": "ルールをエクスポート",
+      "saveRules": "ルールを保存",
+      "refresh": "更新"
+    },
+    "stats": {
+      "total": "総ルール数",
+      "enabled": "有効なルール",
+      "blocked": "ブロックルール",
+      "disabled": "無効なルール"
+    },
+    "list": {
+      "title": "ルール一覧",
+      "total": "全 {{total}} 件のルール"
+    },
+    "columns": {
+      "name": "ルール名",
+      "field": "マッチフィールド",
+      "operator": "オペレーター",
+      "value": "マッチ値",
+      "action": "アクション",
+      "status": "ステータス",
+      "actions": "操作"
+    },
+    "deleteConfirm": "このルールを削除してもよろしいですか？",
+    "form": {
+      "addTitle": "ルール追加",
+      "editTitle": "ルール編集",
+      "ruleName": "ルール名",
+      "ruleNameRequired": "ルール名を入力してください",
+      "namePlaceholder": "例：SQLインジェクション対策",
+      "fieldRequired": "マッチフィールドを選択してください",
+      "selectField": "フィールドを選択",
+      "fieldOptions": {
+        "query": "クエリパラメータ",
+        "path": "URLパス",
+        "header": "リクエストヘッダー",
+        "body": "リクエストボディ",
+        "ip": "IPアドレス",
+        "user_agent": "User-Agent",
+        "country": "国/地域"
+      },
+      "operatorRequired": "オペレーターを選択してください",
+      "selectOperator": "オペレーターを選択",
+      "operatorOptions": {
+        "contains": "含む",
+        "equals": "一致",
+        "matches": "正規表現マッチ",
+        "gt": "より大きい",
+        "lt": "より小さい",
+        "in": "リスト内"
+      },
+      "actionRequired": "アクションを選択してください",
+      "selectAction": "アクションを選択",
+      "actionOptions": {
+        "block": "ブロック",
+        "allow": "許可",
+        "log": "記録"
+      },
+      "valueRequired": "マッチ値を入力してください",
+      "valueHelp": "複数の値はカンマで区切ってください",
+      "valuePlaceholder": "例：' OR 1=1, UNION SELECT",
+      "updateRule": "ルール更新"
+    },
+    "templates": {
+      "title": "ルールテンプレート",
+      "description": "テンプレートを選んでよく使うルールを素早く追加",
+      "ruleCount": "{{count}} 件のルール",
+      "categories": {
+        "injection": "インジェクション対策",
+        "script": "スクリプト対策",
+        "path": "パス対策",
+        "access": "アクセス制御"
+      },
+      "items": {
+        "sql_injection": {
+          "name": "SQLインジェクション対策",
+          "description": "SQLインジェクション攻撃を検出・阻止"
+        },
+        "xss_protection": {
+          "name": "XSS対策",
+          "description": "クロスサイトスクリプティング攻撃を検出・阻止"
+        },
+        "path_traversal": {
+          "name": "パストラバーサル対策",
+          "description": "パストラバーサル攻撃を検出・阻止"
+        },
+        "rate_limit": {
+          "name": "レート制限",
+          "description": "単一IPのリクエスト頻度を制限"
+        },
+        "geo_block": {
+          "name": "地理的ブロック",
+          "description": "特定の国/地域からのアクセスをブロック"
+        }
+      }
+    },
+    "test": {
+      "query": "クエリパラメータ",
+      "path": "URLパス",
+      "ip": "IPアドレス",
+      "userAgent": "User-Agent",
+      "body": "リクエストボディ",
+      "phQuery": "例：id=1' OR 1=1",
+      "phPath": "例：/api/users",
+      "phIp": "例：192.168.1.1",
+      "phUserAgent": "例：Mozilla/5.0...",
+      "phBody": "リクエストボディの内容",
+      "result": {
+        "title": "テスト結果",
+        "matched": "マッチ済み",
+        "unmatched": "未マッチ",
+        "matchStatus": "マッチ状態",
+        "execAction": "実行アクション",
+        "matchedRule": "マッチしたルール",
+        "noMatch": "リクエストはどのルールにもマッチしませんでした",
+        "detail": "マッチしたルール: {{name}}"
+      }
+    },
+    "messages": {
+      "fetchFail": "ルール一覧の取得に失敗しました",
+      "ruleGone": "ルールは既に存在しません。更新してから再試行してください",
+      "addSuccess": "ルールを追加しました",
+      "updateSuccess": "ルールを更新しました",
+      "addFail": "ルールの追加に失敗しました",
+      "updateFail": "ルールの更新に失敗しました",
+      "deleteSuccess": "ルールを削除しました",
+      "deleteFail": "ルールの削除に失敗しました",
+      "statusUpdateFail": "ステータスの更新に失敗しました",
+      "applyTemplateSuccess": "テンプレートを適用しました: {{name}}",
+      "applyTemplateFail": "テンプレートの適用に失敗しました",
+      "saveSuccess": "ルールを保存しました",
+      "saveFail": "ルールの保存に失敗しました",
+      "exportSuccess": "ルールをエクスポートしました",
+      "testFail": "テストに失敗しました"
+    }
+  }
+}

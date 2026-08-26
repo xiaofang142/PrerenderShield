@@ -12,12 +12,14 @@ import (
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/prerender"
 	"prerender-shield/internal/redis"
+	"prerender-shield/internal/scheduler"
 )
 
 // PreheatController 预热控制器
 type PreheatController struct {
 	prerenderManager *prerender.EngineManager
 	redisClient      *redis.Client
+	scheduler        *scheduler.Scheduler
 	cfg              *config.Config
 }
 
@@ -25,12 +27,80 @@ type PreheatController struct {
 func NewPreheatController(
 	prerenderManager *prerender.EngineManager,
 	redisClient *redis.Client,
+	scheduler *scheduler.Scheduler,
 	cfg *config.Config,
 ) *PreheatController {
 	return &PreheatController{
 		prerenderManager: prerenderManager,
 		redisClient:      redisClient,
+		scheduler:        scheduler,
 		cfg:              cfg,
+	}
+}
+
+// getCacheTotalSize 采样估算缓存总大小
+func (c *PreheatController) getCacheTotalSize(cacheCount int64) int64 {
+	if c.redisClient == nil || cacheCount == 0 {
+		return 0
+	}
+	rawClient := c.redisClient.GetRawClient()
+	ctx := rawClient.Context()
+
+	sampleSize := 50
+	var totalSampleSize int64
+	var sampled int
+
+	var cursor uint64
+	for sampled < sampleSize {
+		keys, nextCursor, err := rawClient.Scan(ctx, cursor, "cache:*", int64(sampleSize-sampled)).Result()
+		if err != nil {
+			break
+		}
+		cursor = nextCursor
+		for _, key := range keys {
+			size, err := rawClient.MemoryUsage(ctx, key).Result()
+			if err == nil {
+				totalSampleSize += size
+				sampled++
+			}
+			if sampled >= sampleSize {
+				break
+			}
+		}
+		if cursor == 0 {
+			break
+		}
+	}
+
+	if sampled == 0 {
+		return cacheCount * 1024 * 1024
+	}
+
+	avgSize := totalSampleSize / int64(sampled)
+	return avgSize * cacheCount
+}
+
+// collectSiteStats 收集单个站点的预热统计数据
+// cacheCount/totalCacheSize 为全局量，由调用方预计算一次传入，避免 N 站点循环重复查询 Redis
+func (c *PreheatController) collectSiteStats(siteID, siteName string, cacheCount, totalCacheSize int64) gin.H {
+	urlCount := int64(0)
+	browserPoolSize := int64(0)
+
+	if c.redisClient != nil {
+		urlCount, _ = c.redisClient.GetURLCount(siteID)
+	}
+
+	if engine, exists := c.prerenderManager.GetEngine(siteID); exists {
+		browserPoolSize = int64(engine.GetPoolSize())
+	}
+
+	return gin.H{
+		"siteId":          siteID,
+		"siteName":        siteName,
+		"urlCount":        urlCount,
+		"cacheCount":      cacheCount,
+		"totalCacheSize":  totalCacheSize,
+		"browserPoolSize": browserPoolSize,
 	}
 }
 
@@ -106,37 +176,17 @@ func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 	}
 
 	if siteId == "" {
+		// 缓存计数为全局量，仅计算一次
+		globalCacheCount, globalCacheSize := int64(0), int64(0)
+		if c.redisClient != nil {
+			globalCacheCount, _ = c.redisClient.GetCacheCount()
+			globalCacheSize = c.getCacheTotalSize(globalCacheCount)
+		}
+
 		// 获取所有站点的统计数据
-		var allStats []gin.H
-
+		allStats := make([]gin.H, 0, len(c.cfg.Sites))
 		for _, site := range c.cfg.Sites {
-			// 初始化统计数据
-			urlCount := int64(0)
-			cacheCount := int64(0)
-			totalCacheSize := int64(0)
-			browserPoolSize := int64(0)
-
-			// 检查Redis客户端是否可用
-			if c.redisClient != nil {
-				// 从Redis获取URL总数，使用站点ID作为siteName
-				urlCount, _ = c.redisClient.GetURLCount(site.ID)
-
-				// 从Redis获取缓存数
-				cacheCount, _ = c.redisClient.GetCacheCount()
-
-				// 直接计算总缓存大小
-				totalCacheSize = cacheCount * 1024 * 1024 // 假设平均每个缓存1MB
-			}
-
-			// 构建站点统计信息
-			allStats = append(allStats, gin.H{
-				"siteId":          site.ID,
-				"siteName":        site.Name,
-				"urlCount":        urlCount,
-				"cacheCount":      cacheCount,
-				"totalCacheSize":  totalCacheSize,
-				"browserPoolSize": browserPoolSize,
-			})
+			allStats = append(allStats, c.collectSiteStats(site.ID, site.Name, globalCacheCount, globalCacheSize))
 		}
 
 		ctx.JSON(http.StatusOK, gin.H{
@@ -165,35 +215,19 @@ func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 		return
 	}
 
-	// 初始化统计数据
-	urlCount := int64(0)
-	cacheCount := int64(0)
-	totalCacheSize := int64(0)
-	browserPoolSize := int64(0)
-
-	// 检查Redis客户端是否可用
-	if c.redisClient != nil {
-		// 从Redis获取URL总数，使用站点ID作为siteName
-		urlCount, _ = c.redisClient.GetURLCount(siteId)
-
-		// 从Redis获取缓存数
-		cacheCount, _ = c.redisClient.GetCacheCount()
-
-		// 直接计算总缓存大小
-		totalCacheSize = cacheCount * 1024 * 1024 // 假设平均每个缓存1MB
-	}
-
 	// 返回实际统计数据
+	singleCacheCount, singleCacheSize := int64(0), int64(0)
+	if c.redisClient != nil {
+		singleCacheCount, _ = c.redisClient.GetCacheCount()
+		singleCacheSize = c.getCacheTotalSize(singleCacheCount)
+	}
+	stats := c.collectSiteStats(siteId, siteConfig.Name, singleCacheCount, singleCacheSize)
+	delete(stats, "siteName") // 保持单站点响应结构与历史版本一致
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
-		"data": gin.H{
-			"siteId":          siteId,
-			"urlCount":        urlCount,
-			"cacheCount":      cacheCount,
-			"totalCacheSize":  totalCacheSize,
-			"browserPoolSize": browserPoolSize,
-		},
+		"data":    stats,
 	})
 }
 
@@ -425,35 +459,56 @@ func (c *PreheatController) GetPreheatTaskStatus(ctx *gin.Context) {
 		isRunning = false
 	}
 
+	// 从调度器获取实际的调度状态和下次执行时间
+	var scheduled bool
+	var nextRun string
+	if c.scheduler != nil {
+		scheduled, nextRun = c.scheduler.GetTaskStatus(siteId)
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
 		"data": gin.H{
 			"siteId":    siteId,
 			"isRunning": isRunning,
-			"scheduled": false,
-			"nextRun":   "",
+			"scheduled": scheduled,
+			"nextRun":   nextRun,
 		},
 	})
 }
 
 // GetCrawlerHeaders 获取爬虫协议头列表
 func (c *PreheatController) GetCrawlerHeaders(ctx *gin.Context) {
-	// 获取爬虫协议头列表
-	defaultHeaders := []string{
-		"Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)",
-		"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-		"Mozilla/5.0 (compatible; Sogou spider/4.0; +http://www.sogou.com/docs/help/webmasters.htm#07)",
-		"Mozilla/5.0 (compatible; Bytespider; https://zhanzhang.toutiao.com/)",
-		"Mozilla/5.0 (compatible; HaosouSpider; http://www.haosou.com/help/help_3_2.html)",
-		"Mozilla/5.0 (compatible; YisouSpider/1.0; http://www.yisou.com/help/webmaster/spider_guide.html)",
-		"Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+	var headers []string
+
+	// 从配置中读取爬虫头列表
+	if c.cfg != nil && len(c.cfg.Sites) > 0 {
+		for _, site := range c.cfg.Sites {
+			if len(site.Prerender.CrawlerHeaders) > 0 {
+				headers = site.Prerender.CrawlerHeaders
+				break
+			}
+		}
+	}
+
+	// 如果配置中没有，使用默认列表
+	if len(headers) == 0 {
+		headers = []string{
+			"Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)",
+			"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+			"Mozilla/5.0 (compatible; Sogou spider/4.0; +http://www.sogou.com/docs/help/webmasters.htm#07)",
+			"Mozilla/5.0 (compatible; Bytespider; https://zhanzhang.toutiao.com/)",
+			"Mozilla/5.0 (compatible; HaosouSpider; http://www.haosou.com/help/help_3_2.html)",
+			"Mozilla/5.0 (compatible; YisouSpider/1.0; http://www.yisou.com/help/webmaster/spider_guide.html)",
+			"Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+		}
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
-		"data":    defaultHeaders,
+		"data":    headers,
 	})
 }
 
@@ -498,6 +553,9 @@ func (c *PreheatController) ClearCache(ctx *gin.Context) {
 		return
 	}
 
+	// 先获取要清除的缓存数量
+	clearedCount, _ := c.redisClient.GetCacheCount()
+
 	// 调用Redis客户端的ClearCache方法清除缓存
 	err := c.redisClient.ClearCache()
 	if err != nil {
@@ -512,7 +570,7 @@ func (c *PreheatController) ClearCache(ctx *gin.Context) {
 		"code":    200,
 		"message": "缓存清除成功",
 		"data": gin.H{
-			"clearedCount": 0,
+			"clearedCount": clearedCount,
 		},
 	})
 }

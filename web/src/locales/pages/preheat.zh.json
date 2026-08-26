@@ -1,0 +1,30 @@
+{
+  "preheat": {
+    "title": "渲染预热",
+    "selectSite": "选择站点：",
+    "sitePlaceholder": "请选择站点",
+    "refreshData": "刷新数据",
+    "triggerPreheat": "触发站点预热",
+    "clearCache": "清除缓存",
+    "stats": {
+      "urlCount": "URL总数",
+      "cacheCount": "缓存数",
+      "cacheSize": "缓存大小",
+      "browserPoolSize": "浏览器池大小"
+    },
+    "urlListTitle": "URL列表",
+    "columns": {
+      "siteName": "站点名称",
+      "updatedAt": "更新时间"
+    },
+    "totalRecords": "共 {{total}} 条记录",
+    "fetchStatsFailed": "获取统计数据失败",
+    "fetchUrlsFailed": "获取URL列表失败",
+    "refreshed": "数据已刷新",
+    "selectSiteFirst": "请先选择站点",
+    "preheatCreated": "预热任务已创建成功，请稍后查看",
+    "triggerPreheatFailed": "触发预热失败",
+    "clearCacheSuccess": "缓存清除成功，共清除 {{count}} 个缓存",
+    "clearCacheFailed": "清除缓存失败"
+  }
+}

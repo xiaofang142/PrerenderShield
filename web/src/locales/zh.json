@@ -24,10 +24,15 @@
     "overview": "概览",
     "sites": "站点管理",
     "firewall": "WAF日志",
-    "logs": "日志",
+    "logs": "日志管理",
     "crawler": "爬虫日志",
     "monitor": "系统监控",
-    "settings": "系统设置"
+    "settings": "系统设置",
+    "wafRules": "WAF 规则管理",
+    "prerender": "渲染预热",
+    "alertConfig": "告警配置",
+    "ssl": "SSL 证书",
+    "systemSettings": "系统设置"
   },
   "system": {
     "visitOfficial": "访问官网"
@@ -97,6 +102,97 @@
     "confirmChangeBtn": "确认修改",
     "passwordChanged": "密码修改成功",
     "passwordChangeFailed": "密码修改失败",
-    "passwordMismatch": "两次输入的密码不一致"
+    "passwordMismatch": "两次输入的密码不一致",
+    "desc2": "注意：此次设置的用户名和密码将作为管理员凭据（密码后续可在设置中修改），请妥善保管！"
+  },
+  "push": {
+    "title": "推送管理",
+    "selectSite": "选择站点：",
+    "sitePlaceholder": "请选择站点",
+    "refresh": "刷新数据",
+    "refreshed": "统计数据已刷新",
+    "totalPushes": "推送总数",
+    "successCount": "成功数",
+    "failedCount": "失败数",
+    "trendTitle": "30天推送趋势",
+    "pushCount": "推送数",
+    "logsTitle": "推送日志",
+    "columns": {
+      "siteName": "站点名称",
+      "url": "推送URL",
+      "route": "路由",
+      "searchEngine": "搜索引擎",
+      "status": "状态",
+      "pushTime": "推送时间",
+      "message": "消息"
+    },
+    "engines": {
+      "baidu": "百度",
+      "bing": "必应"
+    },
+    "statusText": {
+      "success": "成功",
+      "failed": "失败",
+      "unknown": "未知"
+    },
+    "fetchSitesFailed": "获取站点列表失败",
+    "fetchStatsFailed": "获取推送统计数据失败",
+    "fetchLogsFailed": "获取推送日志失败",
+    "totalRecords": "共 {{total}} 条记录"
+  },
+  "crawlerPage": {
+    "title": "爬虫访问",
+    "site": "站点：",
+    "allSites": "所有站点",
+    "granularity": "时间粒度：",
+    "granularityDay": "日",
+    "granularityWeek": "周",
+    "granularityMonth": "月",
+    "totalRequests": "总请求数",
+    "cacheHitRate": "缓存命中率",
+    "avgRenderTime": "平均渲染时间",
+    "activeUAs": "活跃爬虫UA数",
+    "tabTrend": "访问趋势",
+    "tabLogs": "访问记录",
+    "chartLegend": {
+      "requests": "爬虫请求数",
+      "cacheHits": "缓存命中数",
+      "cacheMisses": "缓存未命中数"
+    },
+    "columns": {
+      "time": "时间",
+      "site": "站点",
+      "ip": "IP地址",
+      "route": "路由",
+      "ua": "User-Agent",
+      "status": "状态",
+      "hitCache": "缓存命中",
+      "renderTime": "渲染时间"
+    },
+    "yes": "是",
+    "no": "否",
+    "countUnit": "条",
+    "kindUnit": "种",
+    "totalRecords": "共 {{total}} 条记录"
+  },
+  "multiTab": {
+    "overview": "概览",
+    "sites": "站点管理",
+    "firewallRules": "WAF 规则管理",
+    "prerender": "渲染预热",
+    "preheat": "预热管理",
+    "push": "推送管理",
+    "monitoring": "监控警告",
+    "alertConfig": "告警配置",
+    "crawler": "爬虫日志",
+    "logs": "日志管理",
+    "system": "系统配置",
+    "ssl": "SSL 证书",
+    "settings": "系统设置",
+    "dashboard": "Dashboard",
+    "refreshPage": "刷新页面",
+    "closeOthers": "关闭其他",
+    "closeAll": "关闭所有",
+    "page": "页面"
   }
 }

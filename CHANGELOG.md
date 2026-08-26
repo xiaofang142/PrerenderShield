@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Redis-only architecture: removed MemoryCache, all data goes through Redis
 - Config encryption: AES-256-GCM for sensitive fields (`internal/crypto/`)
-- Audit logging: 18 operation types with Redis persistence (`internal/audit/`)
+- Audit logging: 14 operation types with Redis persistence (`internal/audit/`)
 - Multi-channel alerting: DingTalk, WeChat Work, Slack, Feishu, Email (`internal/monitoring/alerting/channels.go`)
 - Request coalescer: deduplicate concurrent render requests (`internal/prerender/request_coalescer.go`)
 - Persistent task queue: Redis-backed render queue (`internal/prerender/persistent_queue.go`)

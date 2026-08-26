@@ -22,10 +22,15 @@ func TestIsPrivateIP(t *testing.T) {
 		{"192.168.0.1", true},
 		{"192.168.255.255", true},
 		{"172.16.0.1", true},
-		{"172.0.0.1", true},
+		{"172.31.255.255", true},
+		{"172.0.0.1", false},  // 不在 172.16/12 范围内
+		{"172.32.0.1", false}, // 不在 172.16/12 范围内
 		{"8.8.8.8", false},
 		{"1.1.1.1", false},
-		{"203.0.113.1", false},
+		{"203.0.113.1", true},  // 文档地址 (TEST-NET-3)，不应在公网出现
+		{"198.51.100.1", true}, // 文档地址 (TEST-NET-2)
+		{"169.254.1.1", true},  // 链路本地地址
+		{"100.64.0.1", true},   // CGNAT 共享地址
 	}
 
 	for _, tc := range testCases {
@@ -223,8 +228,9 @@ func TestIsPrivateIP_EdgeCases(t *testing.T) {
 	// 公网 IP
 	assert.False(t, isPrivateIP("8.8.8.8"))
 	assert.False(t, isPrivateIP("1.1.1.1"))
-	// 注意：isPrivateIP 简单检查 172.* 都算私有 IP，虽然实际私有范围是 172.16-31
-	assert.True(t, isPrivateIP("172.0.0.1"))
+	// 172.0.0.1 不在 172.16.0.0/12 私有范围内
+	assert.False(t, isPrivateIP("172.0.0.1"))
+	assert.False(t, isPrivateIP("172.32.0.1"))
 }
 
 func TestGeoIPService_LookupCountryISO_EmptyCache(t *testing.T) {

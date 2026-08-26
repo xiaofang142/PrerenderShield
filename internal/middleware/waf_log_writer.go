@@ -11,12 +11,12 @@ import (
 
 // WafLogWriter 异步批量写入 WAF 日志，兼顾性能和可靠性
 type WafLogWriter struct {
-	wafRepo  *repository.WafRepository
-	logChan  chan models.AccessLog
-	batchSize int
+	wafRepo       *repository.WafRepository
+	logChan       chan models.AccessLog
+	batchSize     int
 	flushInterval time.Duration
-	wg      sync.WaitGroup
-	stopChan chan struct{}
+	wg            sync.WaitGroup
+	stopChan      chan struct{}
 }
 
 // NewWafLogWriter 创建批量日志写入器

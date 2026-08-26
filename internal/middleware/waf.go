@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 
 	"prerender-shield/internal/config"
@@ -15,13 +17,13 @@ import (
 	"prerender-shield/internal/firewall/types"
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/models"
-	"prerender-shield/internal/redis"
+	pkgredis "prerender-shield/internal/redis"
 	"prerender-shield/internal/repository"
 	"prerender-shield/internal/services"
 )
 
 // WafMiddleware implements the Web Application Firewall logic
-func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, redisClient *redis.Client, geoIP services.GeoIPResolver, wafEngine *firewall.Engine, logWriter *WafLogWriter) gin.HandlerFunc {
+func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, redisClient *pkgredis.Client, geoIP services.GeoIPResolver, wafEngine *firewall.Engine, logWriter *WafLogWriter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !site.Firewall.Enabled {
 			c.Next()
@@ -127,7 +129,7 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 			return
 		}
 
-		// 5. Rate Limiting - 频率限制
+		// 5. Rate Limiting - 频率限制（原子操作，使用 Lua 脚本避免竞态）
 		if site.Firewall.RateLimitConfig.Enabled && redisClient != nil {
 			limit := site.Firewall.RateLimitConfig.Requests
 			window := site.Firewall.RateLimitConfig.Window
@@ -136,15 +138,10 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 			rdb := redisClient.GetRawClient()
 			ctx := redisClient.Context()
 
-			count, err := rdb.Incr(ctx, key).Result()
-			if err == nil {
-				if count == 1 {
-					rdb.Expire(ctx, key, time.Duration(window)*time.Second)
-				}
-				if int(count) > limit {
-					block("Rate limit exceeded", "rate_limit", nil)
-					return
-				}
+			count, err := atomicIncrWithExpire(ctx, rdb, key, time.Duration(window)*time.Second)
+			if err == nil && int(count) > limit {
+				block("Rate limit exceeded", "rate_limit", nil)
+				return
 			}
 		}
 
@@ -181,6 +178,20 @@ var sensitivePatterns = []string{
 	"/proc/self", "/proc/version",
 	"web.config", ".env", ".git/",
 	"/win.ini", "/winnt/system32",
+}
+
+// atomicIncrWithExpire 使用 Lua 脚本原子性地执行 INCR + EXPIRE，避免竞态条件
+var rateLimitScript = redis.NewScript(`
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return current
+`)
+
+func atomicIncrWithExpire(ctx context.Context, rdb *redis.Client, key string, ttl time.Duration) (int64, error) {
+	result, err := rateLimitScript.Run(ctx, rdb, []string{key}, int(ttl.Seconds())).Int64()
+	return result, err
 }
 
 // isPathTraversal 检测路径遍历攻击

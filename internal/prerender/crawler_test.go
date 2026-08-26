@@ -160,7 +160,7 @@ func TestNewCrawler_DefaultDepth(t *testing.T) {
 
 	crawler := NewCrawler(config)
 
-	assert.Equal(t, 3, crawler.maxDepth) // 默认深度
+	assert.Equal(t, 3, crawler.maxDepth)    // 默认深度
 	assert.Equal(t, 5, crawler.concurrency) // 默认并发
 }
 

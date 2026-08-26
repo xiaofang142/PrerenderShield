@@ -1,22 +1,19 @@
 package routes
 
 import (
-	"archive/zip"
-	"fmt"
-	"io"
-	"net"
 	"net/http"
-	"os"
-	"path/filepath"
+	"sync"
 
 	"github.com/gin-gonic/gin"
+
+	"prerender-shield/internal/utils"
 )
 
 // 添加安全头中间件
 func addSecurityHeaders(ginRouter *gin.Engine) {
 	ginRouter.Use(func(c *gin.Context) {
 		// Content-Security-Policy (CSP) 头，防止XSS攻击
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'")
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'")
 
 		// X-Frame-Options 头，防止Clickjacking攻击
 		c.Header("X-Frame-Options", "DENY")
@@ -40,6 +37,34 @@ func addSecurityHeaders(ginRouter *gin.Engine) {
 	})
 }
 
+var (
+	customAllowedOriginsMu sync.RWMutex
+	// customAllowedOrigins 运行时可被 SetAllowedOrigins 重写（配置热更新），
+	// 而 CORS 中间件每请求并发读，必须用 RWMutex 保护
+	customAllowedOrigins map[string]bool
+)
+
+func SetAllowedOrigins(origins []string) {
+	utils.SetAllowedOrigins(origins)
+}
+
+func isOriginAllowed(origin string) bool {
+	if allowedOriginsStatic[origin] {
+		return true
+	}
+	customAllowedOriginsMu.RLock()
+	defer customAllowedOriginsMu.RUnlock()
+	return customAllowedOrigins[origin]
+}
+
+// allowedOriginsStatic 内置允许来源（不可变，无需加锁）
+var allowedOriginsStatic = map[string]bool{
+	"http://localhost:9597": true,
+	"http://localhost:3000": true,
+	"http://127.0.0.1:9597": true,
+	"http://127.0.0.1:3000": true,
+}
+
 // 添加CORS中间件
 func addCorsMiddleware(ginRouter *gin.Engine) {
 	ginRouter.Use(func(c *gin.Context) {
@@ -47,11 +72,13 @@ func addCorsMiddleware(ginRouter *gin.Engine) {
 		if origin == "" {
 			origin = c.Request.Header.Get("Referer")
 		}
-		// Only allow requests from same origin or configured public URL
-		c.Header("Access-Control-Allow-Origin", origin)
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, Authorization")
-		c.Header("Access-Control-Allow-Credentials", "true")
+
+		if utils.IsOriginAllowed(origin) {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, Authorization")
+			c.Header("Access-Control-Allow-Credentials", "true")
+		}
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -60,112 +87,4 @@ func addCorsMiddleware(ginRouter *gin.Engine) {
 
 		c.Next()
 	})
-}
-
-// 检查端口是否可用
-func isPortAvailable(port int) bool {
-	// 常用互联网端口列表，这些端口将被排除
-	reservedPorts := map[int]bool{
-		// 常用服务端口
-		21:  true, // FTP
-		22:  true, // SSH
-		23:  true, // Telnet
-		25:  true, // SMTP
-		53:  true, // DNS
-		80:  true, // HTTP
-		110: true, // POP3
-		143: true, // IMAP
-		443: true, // HTTPS
-		465: true, // SMTPS
-		587: true, // SMTP (STARTTLS)
-		993: true, // IMAPS
-		995: true, // POP3S
-
-		// 常用应用端口
-		3306:  true, // MySQL
-		5432:  true, // PostgreSQL
-		6379:  true, // Redis
-		8080:  true, // Tomcat
-		9000:  true, // PHP-FPM
-		9090:  true, // Prometheus
-		15672: true, // RabbitMQ
-		27017: true, // MongoDB
-	}
-
-	// 检查是否是保留端口
-	if reservedPorts[port] {
-		return false
-	}
-
-	// 尝试监听端口
-	addr := fmt.Sprintf(":%d", port)
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return false
-	}
-	defer listener.Close()
-
-	return true
-}
-
-// ExtractZIP 解压ZIP文件，导出供测试使用
-func ExtractZIP(filePath, destDir string) error {
-	// 打开ZIP文件
-	reader, err := zip.OpenReader(filePath)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-
-	// 确保目标目录存在
-	if err := os.MkdirAll(destDir, 0755); err != nil {
-		return err
-	}
-
-	// 遍历ZIP文件中的所有文件
-	for _, file := range reader.File {
-		// 构建目标文件路径
-		destFilePath := filepath.Join(destDir, file.Name)
-
-		// 检查文件是否是目录
-		if file.FileInfo().IsDir() {
-			// 创建目录
-			if err := os.MkdirAll(destFilePath, file.Mode()); err != nil {
-				return err
-			}
-			continue
-		}
-
-		// 确保父目录存在
-		if err := os.MkdirAll(filepath.Dir(destFilePath), 0755); err != nil {
-			return err
-		}
-
-		// 创建目标文件
-		destFile, err := os.OpenFile(destFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
-		if err != nil {
-			return err
-		}
-		// 不使用defer，而是立即关闭文件
-
-		// 获取ZIP文件中的文件
-		zipFile, err := file.Open()
-		if err != nil {
-			destFile.Close() // 确保文件关闭
-			return err
-		}
-
-		// 复制文件内容
-		if _, err := io.Copy(destFile, zipFile); err != nil {
-			zipFile.Close()
-			destFile.Close() // 确保文件关闭
-			return err
-		}
-
-		// 立即关闭文件，避免资源泄漏和文件锁定问题
-		zipFile.Close()
-		destFile.Close()
-	}
-
-	return nil
 }

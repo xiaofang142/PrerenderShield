@@ -109,9 +109,9 @@ func hashKey(key string) []byte {
 	return hash[:]
 }
 
-// padKey 填充密钥到有效长度
+// padKey 填充密钥到有效长度（使用最大可用长度）
 func padKey(key []byte) []byte {
-	validLengths := []int{16, 24, 32}
+	validLengths := []int{32, 24, 16}
 
 	for _, validLen := range validLengths {
 		if len(key) >= validLen {
@@ -119,10 +119,9 @@ func padKey(key []byte) []byte {
 		}
 	}
 
-	// 如果密钥太短，填充到 16 字节
-	padded := make([]byte, 16)
-	copy(padded, key)
-	return padded
+	// 密钥太短时使用 SHA-256 哈希扩展
+	hashed := hashKey(string(key))
+	return hashed[:16]
 }
 
 // EncryptField 加密敏感字段

@@ -1,0 +1,30 @@
+{
+  "preheat": {
+    "title": "Prerender & Preheat",
+    "selectSite": "Select Site: ",
+    "sitePlaceholder": "Please select a site",
+    "refreshData": "Refresh Data",
+    "triggerPreheat": "Trigger Site Preheat",
+    "clearCache": "Clear Cache",
+    "stats": {
+      "urlCount": "Total URLs",
+      "cacheCount": "Cached Items",
+      "cacheSize": "Cache Size",
+      "browserPoolSize": "Browser Pool Size"
+    },
+    "urlListTitle": "URL List",
+    "columns": {
+      "siteName": "Site Name",
+      "updatedAt": "Updated At"
+    },
+    "totalRecords": "Total {{total}} records",
+    "fetchStatsFailed": "Failed to fetch statistics",
+    "fetchUrlsFailed": "Failed to fetch URL list",
+    "refreshed": "Data refreshed",
+    "selectSiteFirst": "Please select a site first",
+    "preheatCreated": "Preheat task created successfully, please check back later",
+    "triggerPreheatFailed": "Failed to trigger preheat",
+    "clearCacheSuccess": "Cache cleared successfully, {{count}} items removed",
+    "clearCacheFailed": "Failed to clear cache"
+  }
+}

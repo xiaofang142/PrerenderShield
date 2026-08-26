@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Table, Button, Modal, Form, Input, Select, Space, Tag, message, Row, Col, Tabs, Tooltip, Popconfirm, Switch, InputNumber, Empty } from 'antd'
+import { useTranslation } from 'react-i18next'
+import { Card, Table, Button, Modal, Form, Input, Select, Space, Tag, message, Row, Col, Tabs, Tooltip, Popconfirm, Switch, InputNumber } from 'antd'
 import { 
   PlusOutlined, 
   ReloadOutlined, 
@@ -7,79 +8,65 @@ import {
   EditOutlined,
   BellOutlined,
   WarningOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  SaveOutlined
+  CheckCircleOutlined
 } from '@ant-design/icons'
 import { monitoringApi } from '../../services/api'
 
 const { Option } = Select
 const { TabPane } = Tabs
 
-// 告警规则模板
+// 告警规则模板（名称/描述文案经 i18n 解析）
 const alertRuleTemplates = [
   {
     id: 'cpu_high',
-    name: 'CPU 使用率过高',
     metric: 'system_cpu_usage',
     operator: 'gt',
     threshold: 90,
     severity: 'warning',
-    description: '当 CPU 使用率超过 90% 时触发告警',
   },
   {
     id: 'memory_high',
-    name: '内存使用率过高',
     metric: 'system_memory_usage',
     operator: 'gt',
     threshold: 85,
     severity: 'warning',
-    description: '当内存使用率超过 85% 时触发告警',
   },
   {
     id: 'disk_high',
-    name: '磁盘使用率过高',
     metric: 'system_disk_usage',
     operator: 'gt',
     threshold: 90,
     severity: 'warning',
-    description: '当磁盘使用率超过 90% 时触发告警',
   },
   {
     id: 'threat_spike',
-    name: '威胁检测激增',
     metric: 'threats_per_minute',
     operator: 'gt',
     threshold: 100,
     severity: 'critical',
-    description: '当每分钟检测到的威胁数超过 100 时触发告警',
   },
   {
     id: 'render_queue_backlog',
-    name: '渲染队列积压',
     metric: 'render_queue_size',
     operator: 'gt',
     threshold: 50,
     severity: 'warning',
-    description: '当渲染队列积压超过 50 时触发告警',
   },
   {
     id: 'ssl_expiring',
-    name: 'SSL 证书即将过期',
     metric: 'ssl_cert_days_remaining',
     operator: 'lt',
     threshold: 30,
     severity: 'critical',
-    description: '当 SSL 证书将在 30 天内过期时触发告警',
   },
 ]
 
-// 通知渠道
+// 通知渠道（名称文案经 i18n 解析）
 const notificationChannels = [
-  { id: 'webhook', name: 'Webhook', enabled: true, icon: '🔗' },
-  { id: 'email', name: '邮件', enabled: false, icon: '📧' },
-  { id: 'slack', name: 'Slack', enabled: false, icon: '💬' },
-  { id: 'dingtalk', name: '钉钉', enabled: false, icon: '🔔' },
+  { id: 'webhook', enabled: true, icon: '🔗' },
+  { id: 'email', enabled: false, icon: '📧' },
+  { id: 'slack', enabled: false, icon: '💬' },
+  { id: 'dingtalk', enabled: false, icon: '🔔' },
 ]
 
 interface AlertRule {
@@ -106,6 +93,7 @@ interface AlertRecord {
 }
 
 const AlertConfig: React.FC = () => {
+  const { t } = useTranslation()
   const [alertRules, setAlertRules] = useState<AlertRule[]>([])
   const [alertRecords, setAlertRecords] = useState<AlertRecord[]>([])
   const [loading, setLoading] = useState(false)
@@ -117,8 +105,20 @@ const AlertConfig: React.FC = () => {
 
   // 初始化数据
   useEffect(() => {
+    fetchAlertRules()
     fetchAlertData()
   }, [])
+
+  const fetchAlertRules = async () => {
+    try {
+      const res = await monitoringApi.getAlertRules()
+      if (res.code === 200 && res.data) {
+        setAlertRules(res.data || [])
+      }
+    } catch {
+      // Alert rules may not be available, use empty state
+    }
+  }
 
   const fetchAlertData = async () => {
     setLoading(true)
@@ -137,66 +137,114 @@ const AlertConfig: React.FC = () => {
   // 添加/编辑规则
   const handleSaveRule = async (values: any) => {
     try {
+      let updatedRules: AlertRule[]
       if (editingRule) {
         // 编辑规则
-        setAlertRules(alertRules.map(r => 
+        updatedRules = alertRules.map(r => 
           r.id === editingRule.id ? { ...r, ...values } : r
-        ))
-        message.success('规则更新成功')
+        )
+        message.success(t('alertConfig.messages.updateSuccess'))
       } else {
         // 添加规则
         const newRule: AlertRule = {
           id: `rule-${Date.now()}`,
           ...values,
           enabled: true,
+          cooldown: values.cooldown || 300,
         }
-        setAlertRules([...alertRules, newRule])
-        message.success('规则添加成功')
+        updatedRules = [...alertRules, newRule]
+        message.success(t('alertConfig.messages.addSuccess'))
       }
+      setAlertRules(updatedRules)
+
+      // 持久化到后端（逐条保存，与后端单条规则 API 对齐）
+      try {
+        for (const rule of updatedRules) {
+          await monitoringApi.saveAlertRule(rule)
+        }
+      } catch {
+        message.warning(t('alertConfig.messages.localSaveWarning'))
+      }
+
       setRuleModalVisible(false)
       setEditingRule(null)
       form.resetFields()
     } catch (error) {
-      message.error('操作失败')
+      message.error(t('common.error'))
     }
   }
 
   // 删除规则
-  const handleDeleteRule = (ruleId: string) => {
-    setAlertRules(alertRules.filter(r => r.id !== ruleId))
-    message.success('规则删除成功')
+  const handleDeleteRule = async (ruleId: string) => {
+    try {
+      const res = await monitoringApi.deleteAlertRule(ruleId)
+      if (res.code === 200) {
+        setAlertRules(alertRules.filter(r => r.id !== ruleId))
+        message.success(t('alertConfig.messages.deleteSuccess'))
+      } else {
+        message.error(res.message || t('alertConfig.messages.deleteFail'))
+      }
+    } catch (error) {
+      message.error(t('alertConfig.messages.deleteFail'))
+    }
   }
 
   // 切换规则状态
-  const handleToggleRule = (ruleId: string, enabled: boolean) => {
-    setAlertRules(alertRules.map(r => 
-      r.id === ruleId ? { ...r, enabled } : r
-    ))
+  const handleToggleRule = async (ruleId: string, enabled: boolean) => {
+    try {
+      const rule = alertRules.find(r => r.id === ruleId)
+      if (rule) {
+        await monitoringApi.saveAlertRule({ ...rule, enabled })
+        setAlertRules(alertRules.map(r => 
+          r.id === ruleId ? { ...r, enabled } : r
+        ))
+      }
+    } catch (error) {
+      message.error(t('alertConfig.messages.statusUpdateFail'))
+    }
   }
 
   // 切换通知渠道
-  const handleToggleChannel = (channelId: string, enabled: boolean) => {
-    setChannels(channels.map(c => 
+  const handleToggleChannel = async (channelId: string, enabled: boolean) => {
+    const updatedChannels = channels.map(c => 
       c.id === channelId ? { ...c, enabled } : c
-    ))
-    message.success(`${channels.find(c => c.id === channelId)?.name} 已${enabled ? '启用' : '禁用'}`)
+    )
+    setChannels(updatedChannels)
+    message.success(t(enabled ? 'alertConfig.messages.channelEnabled' : 'alertConfig.messages.channelDisabled', {
+      name: t(`alertConfig.channels.names.${channelId}`),
+    }))
+    try {
+      await monitoringApi.saveNotificationChannels(updatedChannels)
+    } catch {
+      message.warning(t('alertConfig.messages.channelSyncFail'))
+    }
   }
 
   // 应用模板
-  const handleApplyTemplate = (template: any) => {
+  const handleApplyTemplate = async (template: any) => {
+    const templateName = t(`alertConfig.templates.items.${template.id}.name`)
     const newRule: AlertRule = {
       id: `rule-${Date.now()}`,
-      name: template.name,
+      name: templateName,
       metric: template.metric,
       operator: template.operator,
       threshold: template.threshold,
       severity: template.severity,
       enabled: true,
       cooldown: 300,
-      description: template.description,
+      description: t(`alertConfig.templates.items.${template.id}.description`),
     }
-    setAlertRules([...alertRules, newRule])
-    message.success(`已应用模板: ${template.name}`)
+    try {
+      const res = await monitoringApi.saveAlertRule(newRule)
+      if (res.code === 200) {
+        message.success(t('alertConfig.messages.applyTemplateSuccess', { name: templateName }))
+        fetchAlertRules()
+      } else {
+        message.error(res.message || t('alertConfig.messages.applyTemplateFail'))
+      }
+    } catch (error) {
+      message.error(t('alertConfig.messages.applyTemplateFail'))
+    }
   }
 
   // 严重程度标签颜色
@@ -212,27 +260,27 @@ const AlertConfig: React.FC = () => {
   // 状态标签
   const getStatusTag = (status: string) => {
     if (status === 'active') {
-      return <Tag icon={<WarningOutlined />} color="error">告警中</Tag>
+      return <Tag icon={<WarningOutlined />} color="error">{t('alertConfig.statusTag.active')}</Tag>
     }
-    return <Tag icon={<CheckCircleOutlined />} color="success">已恢复</Tag>
+    return <Tag icon={<CheckCircleOutlined />} color="success">{t('alertConfig.statusTag.resolved')}</Tag>
   }
 
   // 规则表格列
   const ruleColumns = [
     {
-      title: '规则名称',
+      title: t('alertConfig.ruleColumns.name'),
       dataIndex: 'name',
       key: 'name',
       render: (text: string) => <span style={{ fontWeight: 500 }}>{text}</span>,
     },
     {
-      title: '监控指标',
+      title: t('alertConfig.ruleColumns.metric'),
       dataIndex: 'metric',
       key: 'metric',
       render: (text: string) => <Tag>{text}</Tag>,
     },
     {
-      title: '条件',
+      title: t('alertConfig.ruleColumns.condition'),
       key: 'condition',
       render: (_: any, record: AlertRule) => (
         <span>
@@ -241,19 +289,19 @@ const AlertConfig: React.FC = () => {
       ),
     },
     {
-      title: '严重程度',
+      title: t('alertConfig.ruleColumns.severity'),
       dataIndex: 'severity',
       key: 'severity',
       render: (text: string) => <Tag color={getSeverityColor(text)}>{text}</Tag>,
     },
     {
-      title: '冷却时间',
+      title: t('alertConfig.ruleColumns.cooldown'),
       dataIndex: 'cooldown',
       key: 'cooldown',
-      render: (text: number) => `${text / 60} 分钟`,
+      render: (text: number) => t('alertConfig.ruleColumns.cooldownMinutes', { minutes: text / 60 }),
     },
     {
-      title: '状态',
+      title: t('alertConfig.ruleColumns.status'),
       dataIndex: 'enabled',
       key: 'enabled',
       render: (enabled: boolean, record: AlertRule) => (
@@ -265,11 +313,11 @@ const AlertConfig: React.FC = () => {
       ),
     },
     {
-      title: '操作',
+      title: t('alertConfig.ruleColumns.actions'),
       key: 'action',
       render: (_: any, record: AlertRule) => (
         <Space size="small">
-          <Tooltip title="编辑">
+          <Tooltip title={t('common.edit')}>
             <Button 
               type="link" 
               size="small" 
@@ -282,12 +330,12 @@ const AlertConfig: React.FC = () => {
             />
           </Tooltip>
           <Popconfirm
-            title="确定要删除这个规则吗？"
+            title={t('alertConfig.deleteConfirm')}
             onConfirm={() => handleDeleteRule(record.id)}
-            okText="确定"
-            cancelText="取消"
+            okText={t('common.ok')}
+            cancelText={t('common.cancel')}
           >
-            <Tooltip title="删除">
+            <Tooltip title={t('common.delete')}>
               <Button type="link" size="small" danger icon={<DeleteOutlined />} />
             </Tooltip>
           </Popconfirm>
@@ -299,37 +347,37 @@ const AlertConfig: React.FC = () => {
   // 告警记录表格列
   const recordColumns = [
     {
-      title: '告警规则',
+      title: t('alertConfig.recordColumns.ruleName'),
       dataIndex: 'ruleName',
       key: 'ruleName',
       render: (text: string) => <span style={{ fontWeight: 500 }}>{text}</span>,
     },
     {
-      title: '严重程度',
+      title: t('alertConfig.recordColumns.severity'),
       dataIndex: 'severity',
       key: 'severity',
       render: (text: string) => <Tag color={getSeverityColor(text)}>{text}</Tag>,
     },
     {
-      title: '告警信息',
+      title: t('alertConfig.recordColumns.message'),
       dataIndex: 'message',
       key: 'message',
       ellipsis: true,
     },
     {
-      title: '触发值',
+      title: t('alertConfig.recordColumns.triggerValue'),
       dataIndex: 'value',
       key: 'value',
       render: (text: number) => text.toFixed(1),
     },
     {
-      title: '触发时间',
+      title: t('alertConfig.recordColumns.triggerTime'),
       dataIndex: 'timestamp',
       key: 'timestamp',
       render: (text: string) => new Date(text).toLocaleString(),
     },
     {
-      title: '状态',
+      title: t('alertConfig.recordColumns.status'),
       dataIndex: 'status',
       key: 'status',
       render: (text: string) => getStatusTag(text),
@@ -338,7 +386,7 @@ const AlertConfig: React.FC = () => {
 
   return (
     <div>
-      <h1 className="page-title">告警配置</h1>
+      <h1 className="page-title">{t('alertConfig.title')}</h1>
       
       <Tabs defaultActiveKey="rules">
         {/* 告警规则 */}
@@ -346,7 +394,7 @@ const AlertConfig: React.FC = () => {
           tab={
             <Space>
               <BellOutlined />
-              <span>告警规则</span>
+              <span>{t('alertConfig.tabs.rules')}</span>
             </Space>
           } 
           key="rules"
@@ -365,20 +413,20 @@ const AlertConfig: React.FC = () => {
                       setRuleModalVisible(true)
                     }}
                   >
-                    添加规则
+                    {t('alertConfig.toolbar.addRule')}
                   </Button>
                   <Button 
                     icon={<ReloadOutlined />}
-                    onClick={() => message.success('规则已刷新')}
+                    onClick={() => message.success(t('alertConfig.toolbar.refreshed'))}
                   >
-                    刷新
+                    {t('alertConfig.toolbar.refresh')}
                   </Button>
                 </Space>
               </Col>
               <Col>
                 <Space>
-                  <Tag color="blue">共 {alertRules.length} 条规则</Tag>
-                  <Tag color="green">{alertRules.filter(r => r.enabled).length} 条启用</Tag>
+                  <Tag color="blue">{t('alertConfig.toolbar.rulesTotal', { count: alertRules.length })}</Tag>
+                  <Tag color="green">{t('alertConfig.toolbar.rulesEnabled', { count: alertRules.filter(r => r.enabled).length })}</Tag>
                 </Space>
               </Col>
             </Row>
@@ -400,7 +448,7 @@ const AlertConfig: React.FC = () => {
           tab={
             <Space>
               <WarningOutlined />
-              <span>告警记录</span>
+              <span>{t('alertConfig.tabs.records')}</span>
             </Space>
           } 
           key="records"
@@ -413,7 +461,7 @@ const AlertConfig: React.FC = () => {
                     <div style={{ fontSize: 24, fontWeight: 'bold', color: '#ff4d4f' }}>
                       {alertRecords.filter(r => r.status === 'active').length}
                     </div>
-                    <div style={{ color: '#666' }}>活跃告警</div>
+                    <div style={{ color: '#666' }}>{t('alertConfig.stats.active')}</div>
                   </div>
                 </Card>
               </Col>
@@ -423,7 +471,7 @@ const AlertConfig: React.FC = () => {
                     <div style={{ fontSize: 24, fontWeight: 'bold', color: '#52c41a' }}>
                       {alertRecords.filter(r => r.status === 'resolved').length}
                     </div>
-                    <div style={{ color: '#666' }}>已恢复</div>
+                    <div style={{ color: '#666' }}>{t('alertConfig.stats.resolved')}</div>
                   </div>
                 </Card>
               </Col>
@@ -433,7 +481,7 @@ const AlertConfig: React.FC = () => {
                     <div style={{ fontSize: 24, fontWeight: 'bold', color: '#ff4d4f' }}>
                       {alertRecords.filter(r => r.severity === 'critical').length}
                     </div>
-                    <div style={{ color: '#666' }}>严重告警</div>
+                    <div style={{ color: '#666' }}>{t('alertConfig.stats.critical')}</div>
                   </div>
                 </Card>
               </Col>
@@ -443,7 +491,7 @@ const AlertConfig: React.FC = () => {
                     <div style={{ fontSize: 24, fontWeight: 'bold', color: '#faad14' }}>
                       {alertRecords.filter(r => r.severity === 'warning').length}
                     </div>
-                    <div style={{ color: '#666' }}>警告</div>
+                    <div style={{ color: '#666' }}>{t('alertConfig.stats.warning')}</div>
                   </div>
                 </Card>
               </Col>
@@ -453,10 +501,11 @@ const AlertConfig: React.FC = () => {
               columns={recordColumns}
               dataSource={alertRecords}
               rowKey="id"
+              loading={loading}
               pagination={{
                 showSizeChanger: true,
                 showQuickJumper: true,
-                showTotal: (total) => `共 ${total} 条记录`,
+                showTotal: (total) => t('alertConfig.recordsTotal', { total }),
               }}
             />
           </Card>
@@ -467,14 +516,14 @@ const AlertConfig: React.FC = () => {
           tab={
             <Space>
               <CheckCircleOutlined />
-              <span>通知渠道</span>
+              <span>{t('alertConfig.tabs.channels')}</span>
             </Space>
           } 
           key="channels"
         >
           <Card className="card">
             <div style={{ marginBottom: 16, color: '#666' }}>
-              配置告警通知渠道，当告警触发时将通过启用的渠道发送通知
+              {t('alertConfig.channels.description')}
             </div>
             
             <Row gutter={[16, 16]}>
@@ -488,12 +537,12 @@ const AlertConfig: React.FC = () => {
                   >
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: 32, marginBottom: 8 }}>{channel.icon}</div>
-                      <div style={{ fontWeight: 'bold', marginBottom: 8 }}>{channel.name}</div>
+                      <div style={{ fontWeight: 'bold', marginBottom: 8 }}>{t(`alertConfig.channels.names.${channel.id}`)}</div>
                       <Switch 
                         checked={channel.enabled}
                         onChange={(checked) => handleToggleChannel(channel.id, checked)}
-                        checkedChildren="启用"
-                        unCheckedChildren="禁用"
+                        checkedChildren={t('alertConfig.channels.on')}
+                        unCheckedChildren={t('alertConfig.channels.off')}
                       />
                     </div>
                   </Card>
@@ -508,14 +557,14 @@ const AlertConfig: React.FC = () => {
           tab={
             <Space>
               <EditOutlined />
-              <span>规则模板</span>
+              <span>{t('alertConfig.tabs.templates')}</span>
             </Space>
           } 
           key="templates"
         >
           <Card className="card">
             <div style={{ marginBottom: 16, color: '#666' }}>
-              选择一个模板快速添加常用告警规则
+              {t('alertConfig.templates.description')}
             </div>
             
             <Row gutter={[16, 16]}>
@@ -526,9 +575,11 @@ const AlertConfig: React.FC = () => {
                     onClick={() => handleApplyTemplate(template)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <div style={{ fontWeight: 'bold', marginBottom: 8 }}>{template.name}</div>
+                    <div style={{ fontWeight: 'bold', marginBottom: 8 }}>
+                      {t(`alertConfig.templates.items.${template.id}.name`)}
+                    </div>
                     <div style={{ color: '#666', fontSize: 12, marginBottom: 8 }}>
-                      {template.description}
+                      {t(`alertConfig.templates.items.${template.id}.description`)}
                     </div>
                     <div>
                       <Tag color={getSeverityColor(template.severity)}>{template.severity}</Tag>
@@ -544,7 +595,7 @@ const AlertConfig: React.FC = () => {
 
       {/* 添加/编辑规则弹窗 */}
       <Modal
-        title={editingRule ? '编辑告警规则' : '添加告警规则'}
+        title={editingRule ? t('alertConfig.form.editTitle') : t('alertConfig.form.addTitle')}
         open={ruleModalVisible}
         onCancel={() => {
           setRuleModalVisible(false)
@@ -566,46 +617,46 @@ const AlertConfig: React.FC = () => {
         >
           <Form.Item
             name="name"
-            label="规则名称"
-            rules={[{ required: true, message: '请输入规则名称' }]}
+            label={t('alertConfig.form.name')}
+            rules={[{ required: true, message: t('alertConfig.form.nameRequired') }]}
           >
-            <Input placeholder="例如：CPU 使用率过高" />
+            <Input placeholder={t('alertConfig.form.namePlaceholder')} />
           </Form.Item>
           
           <Form.Item
             name="description"
-            label="规则描述"
+            label={t('alertConfig.form.description')}
           >
-            <Input.TextArea rows={2} placeholder="规则描述" />
+            <Input.TextArea rows={2} placeholder={t('alertConfig.form.descriptionPlaceholder')} />
           </Form.Item>
           
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
                 name="metric"
-                label="监控指标"
-                rules={[{ required: true, message: '请选择监控指标' }]}
+                label={t('alertConfig.form.metric')}
+                rules={[{ required: true, message: t('alertConfig.form.metricRequired') }]}
               >
-                <Select placeholder="选择指标">
-                  <Option value="system_cpu_usage">CPU 使用率</Option>
-                  <Option value="system_memory_usage">内存使用率</Option>
-                  <Option value="system_disk_usage">磁盘使用率</Option>
-                  <Option value="threats_per_minute">威胁检测/分钟</Option>
-                  <Option value="render_queue_size">渲染队列大小</Option>
-                  <Option value="ssl_cert_days_remaining">SSL 证书剩余天数</Option>
+                <Select placeholder={t('alertConfig.form.selectMetric')}>
+                  <Option value="system_cpu_usage">{t('alertConfig.form.metricOptions.system_cpu_usage')}</Option>
+                  <Option value="system_memory_usage">{t('alertConfig.form.metricOptions.system_memory_usage')}</Option>
+                  <Option value="system_disk_usage">{t('alertConfig.form.metricOptions.system_disk_usage')}</Option>
+                  <Option value="threats_per_minute">{t('alertConfig.form.metricOptions.threats_per_minute')}</Option>
+                  <Option value="render_queue_size">{t('alertConfig.form.metricOptions.render_queue_size')}</Option>
+                  <Option value="ssl_cert_days_remaining">{t('alertConfig.form.metricOptions.ssl_cert_days_remaining')}</Option>
                 </Select>
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item
                 name="severity"
-                label="严重程度"
-                rules={[{ required: true, message: '请选择严重程度' }]}
+                label={t('alertConfig.form.severity')}
+                rules={[{ required: true, message: t('alertConfig.form.severityRequired') }]}
               >
-                <Select placeholder="选择严重程度">
-                  <Option value="critical">严重</Option>
-                  <Option value="warning">警告</Option>
-                  <Option value="info">信息</Option>
+                <Select placeholder={t('alertConfig.form.selectSeverity')}>
+                  <Option value="critical">{t('alertConfig.form.severityOptions.critical')}</Option>
+                  <Option value="warning">{t('alertConfig.form.severityOptions.warning')}</Option>
+                  <Option value="info">{t('alertConfig.form.severityOptions.info')}</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -615,34 +666,34 @@ const AlertConfig: React.FC = () => {
             <Col span={8}>
               <Form.Item
                 name="operator"
-                label="操作符"
-                rules={[{ required: true, message: '请选择操作符' }]}
+                label={t('alertConfig.form.operator')}
+                rules={[{ required: true, message: t('alertConfig.form.operatorRequired') }]}
               >
-                  <Select placeholder="选择操作符">
-                    <Option value="gt">大于 (&gt;)</Option>
-                    <Option value="lt">小于 (&lt;)</Option>
-                    <Option value="eq">等于 (=)</Option>
-                    <Option value="ge">大于等于 (&gt;=)</Option>
-                    <Option value="le">小于等于 (&lt;=)</Option>
+                  <Select placeholder={t('alertConfig.form.selectOperator')}>
+                    <Option value="gt">{t('alertConfig.form.operatorOptions.gt')}</Option>
+                    <Option value="lt">{t('alertConfig.form.operatorOptions.lt')}</Option>
+                    <Option value="eq">{t('alertConfig.form.operatorOptions.eq')}</Option>
+                    <Option value="ge">{t('alertConfig.form.operatorOptions.ge')}</Option>
+                    <Option value="le">{t('alertConfig.form.operatorOptions.le')}</Option>
                   </Select>
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item
                 name="threshold"
-                label="阈值"
-                rules={[{ required: true, message: '请输入阈值' }]}
+                label={t('alertConfig.form.threshold')}
+                rules={[{ required: true, message: t('alertConfig.form.thresholdRequired') }]}
               >
-                <InputNumber style={{ width: '100%' }} placeholder="阈值" />
+                <InputNumber style={{ width: '100%' }} placeholder={t('alertConfig.form.thresholdPlaceholder')} />
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item
                 name="cooldown"
-                label="冷却时间(秒)"
-                rules={[{ required: true, message: '请输入冷却时间' }]}
+                label={t('alertConfig.form.cooldown')}
+                rules={[{ required: true, message: t('alertConfig.form.cooldownRequired') }]}
               >
-                <InputNumber style={{ width: '100%' }} min={60} max={3600} placeholder="秒" />
+                <InputNumber style={{ width: '100%' }} min={60} max={3600} placeholder={t('alertConfig.form.cooldownPlaceholder')} />
               </Form.Item>
             </Col>
           </Row>
@@ -650,14 +701,14 @@ const AlertConfig: React.FC = () => {
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
-                {editingRule ? '更新规则' : '添加规则'}
+                {editingRule ? t('alertConfig.form.updateRule') : t('alertConfig.toolbar.addRule')}
               </Button>
               <Button onClick={() => {
                 setRuleModalVisible(false)
                 setEditingRule(null)
                 form.resetFields()
               }}>
-                取消
+                {t('common.cancel')}
               </Button>
             </Space>
           </Form.Item>

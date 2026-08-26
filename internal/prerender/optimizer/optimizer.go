@@ -2,6 +2,8 @@ package optimizer
 
 import (
 	"context"
+	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
@@ -39,6 +41,22 @@ func DefaultConfig() Config {
 		MemoryLimitMB:       512,
 		MemoryCheckInterval: 10 * time.Second,
 	}
+}
+
+// BlockedResourcesJSON 返回 JSON 格式的资源类型数组
+func (c Config) BlockedResourcesJSON() string {
+	if len(c.BlockedResources) == 0 {
+		return "[]"
+	}
+	result := "["
+	for i, r := range c.BlockedResources {
+		if i > 0 {
+			result += ","
+		}
+		result += `"` + r + `"`
+	}
+	result += "]"
+	return result
 }
 
 // Optimizer 渲染优化器
@@ -109,13 +127,63 @@ func (o *Optimizer) ApplyOptions(ctx context.Context) context.Context {
 
 // setupResourceBlocking 设置资源阻止
 func (o *Optimizer) setupResourceBlocking(ctx context.Context, actions *[]chromedp.Action) {
-	// 使用 chromedp 的 Network 设置来阻止资源
+	// 通过注入 JS 拦截并阻止不需要的资源加载
+	script := fmt.Sprintf(`
+(function() {
+	var blockedTypes = %s;
+	var blocked = 0;
+
+	// 拦截 XMLHttpRequest
+	var origOpen = XMLHttpRequest.prototype.open;
+	XMLHttpRequest.prototype.open = function(method, url) {
+		var ext = url.split('?')[0].split('.').pop().toLowerCase();
+		var typeMap = {
+			'css': 'stylesheet',
+			'jpg': 'image', 'jpeg': 'image', 'png': 'image', 'gif': 'image', 'svg': 'image', 'webp': 'image',
+			'mp3': 'media', 'mp4': 'media', 'wav': 'media', 'ogg': 'media',
+			'woff': 'font', 'woff2': 'font', 'ttf': 'font', 'otf': 'font'
+		};
+		if (blockedTypes.indexOf(typeMap[ext]) !== -1) {
+			blocked++;
+			this.abort();
+			return;
+		}
+		origOpen.apply(this, arguments);
+	};
+
+	// 拦截 fetch
+	var origFetch = window.fetch;
+	window.fetch = function(url, opts) {
+		var ext = url.toString().split('?')[0].split('.').pop().toLowerCase();
+		var typeMap = {
+			'css': 'stylesheet',
+			'jpg': 'image', 'jpeg': 'image', 'png': 'image', 'gif': 'image', 'svg': 'image', 'webp': 'image',
+			'mp3': 'media', 'mp4': 'media', 'wav': 'media', 'ogg': 'media',
+			'woff': 'font', 'woff2': 'font', 'ttf': 'font', 'otf': 'font'
+		};
+		if (blockedTypes.indexOf(typeMap[ext]) !== -1) {
+			blocked++;
+			return Promise.resolve(new Response('', {status: 0, statusText: 'blocked'}));
+		}
+		return origFetch.apply(this, arguments);
+	};
+
+	// 移除已有的匹配资源
+	document.querySelectorAll('link[rel="stylesheet"]').forEach(function(el) {
+		if (blockedTypes.indexOf('stylesheet') !== -1) el.remove();
+	});
+	document.querySelectorAll('img').forEach(function(el) {
+		if (blockedTypes.indexOf('image') !== -1) el.remove();
+	});
+
+	window.__blockedResources = blocked;
+})();
+`, o.config.BlockedResourcesJSON())
+
 	*actions = append(*actions,
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			// 设置资源拦截 - 简化实现
-			// 实际使用时，可以在请求级别通过 SetRequestInterception 实现
-			o.logger.Debug("配置资源阻止", zap.Strings("types", o.config.BlockedResources))
-			return nil
+			var result interface{}
+			return chromedp.Evaluate(script, &result).Do(ctx)
 		}),
 	)
 
@@ -202,14 +270,27 @@ func (o *Optimizer) memoryMonitorWorker() {
 
 // checkMemory 检查内存使用
 func (o *Optimizer) checkMemory() {
-	// 获取 Chrome 内存使用情况（简化实现）
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	currentMB := float64(m.Alloc) / 1024 / 1024
+
 	o.mu.Lock()
+	o.memoryStats.CurrentMB = currentMB
 	o.memoryStats.LastCheck = time.Now()
+	if currentMB > o.memoryStats.PeakMB {
+		o.memoryStats.PeakMB = currentMB
+	}
+	if o.memoryStats.LimitMB > 0 {
+		o.memoryStats.UsagePercent = (currentMB / o.memoryStats.LimitMB) * 100
+	}
 	o.mu.Unlock()
 
 	o.logger.Debug("内存检查完成",
-		zap.Float64("current_mb", o.memoryStats.CurrentMB),
+		zap.Float64("current_mb", currentMB),
+		zap.Float64("peak_mb", o.memoryStats.PeakMB),
 		zap.Float64("limit_mb", o.memoryStats.LimitMB),
+		zap.Float64("usage_percent", o.memoryStats.UsagePercent),
 	)
 }
 

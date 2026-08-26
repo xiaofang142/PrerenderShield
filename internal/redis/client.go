@@ -192,6 +192,48 @@ func (c *Client) Del(key string) error {
 	return nil
 }
 
+// ZAdd 向有序集合添加成员（score 为排序权重）
+func (c *Client) ZAdd(key string, score float64, member string) error {
+	if err := c.checkCircuitBreaker(); err != nil {
+		return err
+	}
+	err := c.client.ZAdd(c.ctx, key, &redis.Z{Score: score, Member: member}).Err()
+	if err != nil {
+		c.recordFailure()
+		return err
+	}
+	c.recordSuccess()
+	return nil
+}
+
+// ZRevRange 按分数从高到低返回有序集合成员
+func (c *Client) ZRevRange(key string, start, stop int64) ([]string, error) {
+	if err := c.checkCircuitBreaker(); err != nil {
+		return nil, err
+	}
+	vals, err := c.client.ZRevRange(c.ctx, key, start, stop).Result()
+	if err != nil {
+		c.recordFailure()
+		return nil, err
+	}
+	c.recordSuccess()
+	return vals, nil
+}
+
+// ZRemRangeByScore 移除有序集合中分数区间内的成员，返回移除数量
+func (c *Client) ZRemRangeByScore(key, min, max string) (int64, error) {
+	if err := c.checkCircuitBreaker(); err != nil {
+		return 0, err
+	}
+	n, err := c.client.ZRemRangeByScore(c.ctx, key, min, max).Result()
+	if err != nil {
+		c.recordFailure()
+		return 0, err
+	}
+	c.recordSuccess()
+	return n, nil
+}
+
 // Exists 检查键是否存在
 func (c *Client) Exists(key string) (bool, error) {
 	if err := c.checkCircuitBreaker(); err != nil {
@@ -232,6 +274,21 @@ func (c *Client) HashGet(key, field string) (string, error) {
 	} else if err != nil {
 		c.recordFailure()
 		return "", err
+	}
+	c.recordSuccess()
+	return val, nil
+}
+
+// HashIncrBy 哈希字段原子自增（不存在时从 0 开始），返回自增后的值。
+// 用于并发计数场景（如缓存命中数），替代非原子的 HashGet+HashSet 读改写
+func (c *Client) HashIncrBy(key, field string, incr int64) (int64, error) {
+	if err := c.checkCircuitBreaker(); err != nil {
+		return 0, err
+	}
+	val, err := c.client.HIncrBy(c.ctx, key, field, incr).Result()
+	if err != nil {
+		c.recordFailure()
+		return 0, err
 	}
 	c.recordSuccess()
 	return val, nil
@@ -308,6 +365,26 @@ func (c *Client) ListRange(key string, start, stop int64) ([]string, error) {
 	}
 	c.recordSuccess()
 	return result, nil
+}
+
+// ListLength 获取列表长度
+func (c *Client) ListLength(key string) (int64, error) {
+	if err := c.checkCircuitBreaker(); err != nil {
+		return 0, err
+	}
+	length, err := c.client.LLen(c.ctx, key).Result()
+	if err != nil {
+		c.recordFailure()
+		return 0, err
+	}
+	c.recordSuccess()
+	return length, nil
+}
+
+// GetPushLogCount 获取推送日志总数
+func (c *Client) GetPushLogCount(siteID string) (int64, error) {
+	key := fmt.Sprintf("site:%s:push:logs", siteID)
+	return c.ListLength(key)
 }
 
 // SetAdd 向集合添加元素
@@ -960,8 +1037,8 @@ func (c *Client) GetSystemConfig() (map[string]string, error) {
 func (c *Client) SaveSystemConfig(config map[string]interface{}) error {
 	// 基础校验：不允许覆盖关键系统字段
 	blockedKeys := map[string]bool{
-		"jwt_secret":   true,
-		"redis_url":    true,
+		"jwt_secret":     true,
+		"redis_url":      true,
 		"admin_password": true,
 	}
 	for k := range config {

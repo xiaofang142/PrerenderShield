@@ -14,12 +14,12 @@ import (
 type ChannelType string
 
 const (
-	ChannelWebhook    ChannelType = "webhook"
-	ChannelEmail     ChannelType = "email"
-	ChannelDingTalk  ChannelType = "dingtalk"
-	ChannelWeChat    ChannelType = "wechat"
-	ChannelSlack     ChannelType = "slack"
-	ChannelFeishu    ChannelType = "feishu"
+	ChannelWebhook  ChannelType = "webhook"
+	ChannelEmail    ChannelType = "email"
+	ChannelDingTalk ChannelType = "dingtalk"
+	ChannelWeChat   ChannelType = "wechat"
+	ChannelSlack    ChannelType = "slack"
+	ChannelFeishu   ChannelType = "feishu"
 )
 
 // MultiChannelNotifier 多渠道通知器
@@ -37,11 +37,11 @@ type Channel interface {
 
 // ChannelConfig 渠道配置
 type ChannelConfig struct {
-	Type      ChannelType `yaml:"type" json:"type"`
-	Name      string      `yaml:"name" json:"name"`
-	WebhookURL string     `yaml:"webhook_url" json:"webhook_url"`
-	Secret    string      `yaml:"secret" json:"secret"`
-	Enabled   bool        `yaml:"enabled" json:"enabled"`
+	Type       ChannelType `yaml:"type" json:"type"`
+	Name       string      `yaml:"name" json:"name"`
+	WebhookURL string      `yaml:"webhook_url" json:"webhook_url"`
+	Secret     string      `yaml:"secret" json:"secret"`
+	Enabled    bool        `yaml:"enabled" json:"enabled"`
 }
 
 // NewMultiChannelNotifier 创建多渠道通知器
@@ -109,17 +109,17 @@ type genericWebhookChannel struct {
 	url  string
 }
 
-func (c *genericWebhookChannel) Name() string          { return c.name }
+func (c *genericWebhookChannel) Name() string           { return c.name }
 func (c *genericWebhookChannel) Type() ChannelType      { return ChannelWebhook }
 func (c *genericWebhookChannel) Send(alert Alert) error { return postJSON(c.url, alert) }
 
 // dingTalkChannel 钉钉渠道
 type dingTalkChannel struct {
-	name        string
-	webhookURL  string
+	name       string
+	webhookURL string
 }
 
-func (c *dingTalkChannel) Name() string     { return c.name }
+func (c *dingTalkChannel) Name() string      { return c.name }
 func (c *dingTalkChannel) Type() ChannelType { return ChannelDingTalk }
 func (c *dingTalkChannel) Send(alert Alert) error {
 	val := alert.Value
@@ -127,7 +127,7 @@ func (c *dingTalkChannel) Send(alert Alert) error {
 		"msgtype": "markdown",
 		"markdown": map[string]string{
 			"title": fmt.Sprintf("[%s] %s", alert.Severity, alert.RuleName),
-			"text":  fmt.Sprintf("### %s 告警\n- **级别**: %s\n- **指标**: %s\n- **当前值**: %.2f\n- **时间**: %s",
+			"text": fmt.Sprintf("### %s 告警\n- **级别**: %s\n- **指标**: %s\n- **当前值**: %.2f\n- **时间**: %s",
 				alert.RuleName, alert.Severity, alert.Metric, val, alert.Timestamp.Format("2006-01-02 15:04:05")),
 		},
 	}
@@ -136,12 +136,12 @@ func (c *dingTalkChannel) Send(alert Alert) error {
 
 // weChatChannel 企业微信渠道
 type weChatChannel struct {
-	name        string
-	webhookURL  string
-	secret      string
+	name       string
+	webhookURL string
+	secret     string
 }
 
-func (c *weChatChannel) Name() string     { return c.name }
+func (c *weChatChannel) Name() string      { return c.name }
 func (c *weChatChannel) Type() ChannelType { return ChannelWeChat }
 func (c *weChatChannel) Send(alert Alert) error {
 	val := alert.Value
@@ -157,11 +157,11 @@ func (c *weChatChannel) Send(alert Alert) error {
 
 // slackChannel Slack 渠道
 type slackChannel struct {
-	name        string
-	webhookURL  string
+	name       string
+	webhookURL string
 }
 
-func (c *slackChannel) Name() string     { return c.name }
+func (c *slackChannel) Name() string      { return c.name }
 func (c *slackChannel) Type() ChannelType { return ChannelSlack }
 func (c *slackChannel) Send(alert Alert) error {
 	color := "#FF0000"
@@ -189,11 +189,11 @@ func (c *slackChannel) Send(alert Alert) error {
 
 // feishuChannel 飞书渠道
 type feishuChannel struct {
-	name        string
-	webhookURL  string
+	name       string
+	webhookURL string
 }
 
-func (c *feishuChannel) Name() string     { return c.name }
+func (c *feishuChannel) Name() string      { return c.name }
 func (c *feishuChannel) Type() ChannelType { return ChannelFeishu }
 func (c *feishuChannel) Send(alert Alert) error {
 	val := alert.Value

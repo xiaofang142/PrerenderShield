@@ -16,13 +16,13 @@ import (
 
 // mockWafRedisClient 模拟 WafRepository 使用的 Redis 客户端
 type mockWafRedisClient struct {
-	data       map[string]interface{}
-	lists      map[string][]string
-	mu         sync.RWMutex
-	getError   bool
-	setError   bool
-	listError  bool
-	jsonError  bool
+	data      map[string]interface{}
+	lists     map[string][]string
+	mu        sync.RWMutex
+	getError  bool
+	setError  bool
+	listError bool
+	jsonError bool
 }
 
 func newMockWafRedisClient() *mockWafRedisClient {
@@ -421,10 +421,10 @@ func TestSiteRepository_Create(t *testing.T) {
 	repo := NewSiteRepository(mockClient)
 
 	tests := []struct {
-		name      string
-		site      *models.Site
-		wantErr   bool
-		wantID    bool
+		name        string
+		site        *models.Site
+		wantErr     bool
+		wantID      bool
 		errContains string
 	}{
 		{
@@ -736,11 +736,11 @@ func TestWafRepository_GetWafConfigBySiteID(t *testing.T) {
 	repo := NewWafRepository(mockClient)
 
 	tests := []struct {
-		name          string
-		setupData     *models.WafConfig
-		getError      bool
-		wantConfig    bool
-		wantErr       bool
+		name       string
+		setupData  *models.WafConfig
+		getError   bool
+		wantConfig bool
+		wantErr    bool
 	}{
 		{
 			name:       "config not found",
@@ -799,26 +799,26 @@ func TestWafRepository_CreateWafConfig(t *testing.T) {
 	repo := NewWafRepository(mockClient)
 
 	tests := []struct {
-		name      string
-		config    *models.WafConfig
-		setError  bool
-		wantErr   bool
+		name     string
+		config   *models.WafConfig
+		setError bool
+		wantErr  bool
 	}{
 		{
 			name: "create success",
 			config: &models.WafConfig{
-				ID:       "config1",
-				SiteID:   "site1",
-				Enabled:  true,
+				ID:      "config1",
+				SiteID:  "site1",
+				Enabled: true,
 			},
 			wantErr: false,
 		},
 		{
 			name: "set error",
 			config: &models.WafConfig{
-				ID:       "config2",
-				SiteID:   "site2",
-				Enabled:  true,
+				ID:      "config2",
+				SiteID:  "site2",
+				Enabled: true,
 			},
 			setError: true,
 			wantErr:  true,
@@ -852,26 +852,26 @@ func TestWafRepository_UpdateWafConfig(t *testing.T) {
 	repo := NewWafRepository(mockClient)
 
 	tests := []struct {
-		name      string
-		config    *models.WafConfig
-		setError  bool
-		wantErr   bool
+		name     string
+		config   *models.WafConfig
+		setError bool
+		wantErr  bool
 	}{
 		{
 			name: "update success",
 			config: &models.WafConfig{
-				ID:       "config1",
-				SiteID:   "site1",
-				Enabled:  false,
+				ID:      "config1",
+				SiteID:  "site1",
+				Enabled: false,
 			},
 			wantErr: false,
 		},
 		{
 			name: "set error",
 			config: &models.WafConfig{
-				ID:       "config2",
-				SiteID:   "site2",
-				Enabled:  true,
+				ID:      "config2",
+				SiteID:  "site2",
+				Enabled: true,
 			},
 			setError: true,
 			wantErr:  true,
@@ -1061,21 +1061,21 @@ func TestWafRepository_AddIPToWhitelist(t *testing.T) {
 
 	// 设置初始配置
 	config := &models.WafConfig{
-		ID:           "config1",
-		SiteID:       "site1",
-		Enabled:      true,
-		IPWhitelist:  []models.IPWhitelist{{IPAddress: "1.1.1.1"}},
-		IPBlacklist:  []models.IPBlacklist{{IPAddress: "2.2.2.2"}},
+		ID:          "config1",
+		SiteID:      "site1",
+		Enabled:     true,
+		IPWhitelist: []models.IPWhitelist{{IPAddress: "1.1.1.1"}},
+		IPBlacklist: []models.IPBlacklist{{IPAddress: "2.2.2.2"}},
 	}
 	configData, _ := json.Marshal(config)
 	mockClient.data["waf:config:site1"] = string(configData)
 
 	tests := []struct {
-		name           string
-		ip             string
-		getError       bool
-		setError       bool
-		wantErr        bool
+		name              string
+		ip                string
+		getError          bool
+		setError          bool
+		wantErr           bool
 		expectInWhitelist bool
 		expectInBlacklist bool
 	}{
@@ -1138,43 +1138,43 @@ func TestWafRepository_AddIPToBlacklist(t *testing.T) {
 
 	// 设置初始配置
 	config := &models.WafConfig{
-		ID:           "config1",
-		SiteID:       "site1",
-		Enabled:      true,
-		IPWhitelist:  []models.IPWhitelist{{IPAddress: "1.1.1.1"}},
-		IPBlacklist:  []models.IPBlacklist{{IPAddress: "2.2.2.2"}},
+		ID:          "config1",
+		SiteID:      "site1",
+		Enabled:     true,
+		IPWhitelist: []models.IPWhitelist{{IPAddress: "1.1.1.1"}},
+		IPBlacklist: []models.IPBlacklist{{IPAddress: "2.2.2.2"}},
 	}
 	configData, _ := json.Marshal(config)
 	mockClient.data["waf:config:site1"] = string(configData)
 
 	tests := []struct {
-		name           string
-		ip             string
-		getError       bool
-		setError       bool
-		wantErr        bool
+		name     string
+		ip       string
+		getError bool
+		setError bool
+		wantErr  bool
 	}{
 		{
 			name:    "add new ip to blacklist",
-		ip:             "3.3.3.3",
+			ip:      "3.3.3.3",
 			wantErr: false,
 		},
 		{
 			name:    "ip already in blacklist",
-			ip:             "2.2.2.2",
+			ip:      "2.2.2.2",
 			wantErr: false,
 		},
 		{
-			name:    "get error",
-			ip:             "4.4.4.4",
+			name:     "get error",
+			ip:       "4.4.4.4",
 			getError: true,
-			wantErr: true,
+			wantErr:  true,
 		},
 		{
-			name:    "set error",
-			ip:             "5.5.5.5",
+			name:     "set error",
+			ip:       "5.5.5.5",
 			setError: true,
-			wantErr: true,
+			wantErr:  true,
 		},
 	}
 
@@ -1221,9 +1221,9 @@ func TestWafRepository_CreateAccessLog(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name:      "create access log success",
-			log:       log,
-			wantErr:   false,
+			name:    "create access log success",
+			log:     log,
+			wantErr: false,
 		},
 		{
 			name:      "lpush error",
@@ -1258,29 +1258,29 @@ func TestWafRepository_GetGlobalStats(t *testing.T) {
 	mockClient.data["waf:stats:global:blocked"] = "20"
 
 	tests := []struct {
-		name       string
-		total      string
-		blocked    string
-		getError   bool
-		wantErr    bool
-		wantTotal  int64
+		name        string
+		total       string
+		blocked     string
+		getError    bool
+		wantErr     bool
+		wantTotal   int64
 		wantBlocked int64
 	}{
 		{
-			name:      "get stats success",
-			total:     "100",
-			blocked:   "20",
-			wantTotal: 100,
+			name:        "get stats success",
+			total:       "100",
+			blocked:     "20",
+			wantTotal:   100,
 			wantBlocked: 20,
-			wantErr:   false,
+			wantErr:     false,
 		},
 		{
-			name:      "empty stats",
-			total:     "",
-			blocked:   "",
-			wantTotal: 0,
+			name:        "empty stats",
+			total:       "",
+			blocked:     "",
+			wantTotal:   0,
 			wantBlocked: 0,
-			wantErr:   false,
+			wantErr:     false,
 		},
 	}
 
@@ -1314,13 +1314,13 @@ func TestWafRepository_GetTrafficStats(t *testing.T) {
 	mockClient.data[hourKey] = map[string]int64{"total": 10, "blocked": 2}
 
 	tests := []struct {
-		name        string
-		startTime   string
-		endTime     string
-		setupData   bool
-		wantLen     int
-		wantTotal   int64
-		wantErr     bool
+		name      string
+		startTime string
+		endTime   string
+		setupData bool
+		wantLen   int
+		wantTotal int64
+		wantErr   bool
 	}{
 		{
 			name:      "get traffic stats success",

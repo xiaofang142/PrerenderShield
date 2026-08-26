@@ -1,0 +1,28 @@
+{
+  "firewallPage": {
+    "title": "Firewall Block Records",
+    "subtitle": "View records of malicious requests blocked by the firewall",
+    "selectSite": "Select Site:",
+    "sitePlaceholder": "Please select a site",
+    "selectSiteFirst": "Please select a site first",
+    "refreshList": "Refresh List",
+    "logListTitle": "Attack Log List",
+    "fetchLogsFailed": "Failed to fetch attack logs",
+    "whitelistAdded": "IP {{ip}} added to whitelist",
+    "blacklistAdded": "IP {{ip}} added to blacklist",
+    "operationFailed": "Operation failed",
+    "unknown": "Unknown",
+    "addToWhitelist": "Add to Whitelist",
+    "addToBlacklist": "Add to Blacklist",
+    "whitelist": "Whitelist",
+    "blacklist": "Blacklist",
+    "totalRecords": "{{total}} records in total",
+    "columns": {
+      "ipAddress": "IP Address",
+      "location": "Location",
+      "attackTime": "Attack Time",
+      "blockReason": "Block Reason",
+      "actions": "Actions"
+    }
+  }
+}

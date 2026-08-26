@@ -27,6 +27,42 @@ type CrawlerRedisClient interface {
 // 确保 redis.Client 实现 CrawlerRedisClient 接口
 var _ CrawlerRedisClient = (*redis.Client)(nil)
 
+// knownCrawlerKeywords 已知搜索引擎/社交爬虫的 UA 关键词。
+// 注意：刻意不包含 curl/wget/fetch 等 CLI/HTTP 库关键词，避免攻击者
+// 伪造 UA 即可触发资源密集型的 Chromium 渲染（DoS 攻击面）。
+var knownCrawlerKeywords = []string{
+	"googlebot",
+	"bingbot",
+	"baiduspider",
+	"yandexbot",
+	"sogou",
+	"yahoo! slurp",
+	"duckduckbot",
+	"facebookexternalhit",
+	"linkedinbot",
+	"twitterbot",
+	"pinterest",
+	"slackbot",
+	"telegrambot",
+	"whatsapp",
+	"bot",
+	"spider",
+	"crawler",
+	"robot",
+}
+
+// isCrawlerUserAgent 判断给定 User-Agent 是否来自爬虫。
+// engine 与 EngineManager 共享此实现，避免两处逻辑不一致。
+func isCrawlerUserAgent(userAgent string) bool {
+	lowerUA := strings.ToLower(userAgent)
+	for _, keyword := range knownCrawlerKeywords {
+		if strings.Contains(lowerUA, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
 // Crawler 链接爬取器
 type Crawler struct {
 	siteName     string

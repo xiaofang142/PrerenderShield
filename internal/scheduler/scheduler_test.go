@@ -47,7 +47,9 @@ func TestScheduler_removeTask(t *testing.T) {
 	scheduler := NewScheduler(nil, nil, nil)
 
 	// 删除不存在的任务（应该不报错）
-	scheduler.removeTask("nonexistent")
+	scheduler.tasksMutex.Lock()
+	scheduler.removeTaskLocked("nonexistent")
+	scheduler.tasksMutex.Unlock()
 }
 
 // TestScheduler_TaskMap 测试任务 map 操作
@@ -148,7 +150,7 @@ func TestScheduler_Mutex(t *testing.T) {
 
 	// 测试 Lock/Unlock
 	scheduler.tasksMutex.Lock()
-	scheduler.tasks["test"] = cron.EntryID(1)
+	scheduler.tasks["test"] = []cron.EntryID{cron.EntryID(1)}
 	delete(scheduler.tasks, "test")
 	scheduler.tasksMutex.Unlock()
 
@@ -358,11 +360,13 @@ func TestScheduler_removeTask_Existing(t *testing.T) {
 
 	// 手动添加一个任务到 map
 	scheduler.tasksMutex.Lock()
-	scheduler.tasks["test-site"] = cron.EntryID(999)
+	scheduler.tasks["test-site"] = []cron.EntryID{cron.EntryID(999)}
 	scheduler.tasksMutex.Unlock()
 
-	// 删除任务
-	scheduler.removeTask("test-site")
+	// 删除任务（removeTaskLocked 契约要求调用方持锁）
+	scheduler.tasksMutex.Lock()
+	scheduler.removeTaskLocked("test-site")
+	scheduler.tasksMutex.Unlock()
 
 	// 验证任务已被删除
 	scheduler.tasksMutex.RLock()
@@ -407,7 +411,9 @@ func TestScheduler_createTask(t *testing.T) {
 		}
 	}()
 
-	scheduler.createTask("test-site", config)
+	scheduler.tasksMutex.Lock()
+	scheduler.createTaskLocked("test-site", config)
+	scheduler.tasksMutex.Unlock()
 }
 
 // TestScheduler_updateTask 测试 updateTask 方法
@@ -430,7 +436,9 @@ func TestScheduler_updateTask(t *testing.T) {
 		}
 	}()
 
-	scheduler.updateTask("test-site", config)
+	scheduler.tasksMutex.Lock()
+	scheduler.updateTaskLocked("test-site", config)
+	scheduler.tasksMutex.Unlock()
 }
 
 // TestScheduler_GetTaskStatus_Existing 测试 GetTaskStatus 对于存在的任务
@@ -440,7 +448,7 @@ func TestScheduler_GetTaskStatus_Existing(t *testing.T) {
 	// 添加一个任务
 	entryID, _ := scheduler.cron.AddFunc("0 */5 * * * *", func() {})
 	scheduler.tasksMutex.Lock()
-	scheduler.tasks["test-site"] = entryID
+	scheduler.tasks["test-site"] = []cron.EntryID{entryID}
 	scheduler.tasksMutex.Unlock()
 
 	// 测试获取任务状态
@@ -456,7 +464,7 @@ func TestScheduler_ListTasks_WithTasks(t *testing.T) {
 	// 添加一个任务
 	entryID, _ := scheduler.cron.AddFunc("0 */5 * * * *", func() {})
 	scheduler.tasksMutex.Lock()
-	scheduler.tasks["test-site"] = entryID
+	scheduler.tasks["test-site"] = []cron.EntryID{entryID}
 	scheduler.tasksMutex.Unlock()
 
 	// 测试列出任务
@@ -598,7 +606,9 @@ func TestScheduler_createTask_WithConfig(t *testing.T) {
 					t.Logf("createTask panicked: %v", r)
 				}
 			}()
-			scheduler.createTask("test-site", tt.config)
+			scheduler.tasksMutex.Lock()
+			scheduler.createTaskLocked("test-site", tt.config)
+			scheduler.tasksMutex.Unlock()
 		})
 	}
 }
@@ -637,7 +647,9 @@ func TestScheduler_updateTask_WithConfig(t *testing.T) {
 					t.Logf("updateTask panicked: %v", r)
 				}
 			}()
-			scheduler.updateTask("test-site", tt.config)
+			scheduler.tasksMutex.Lock()
+			scheduler.updateTaskLocked("test-site", tt.config)
+			scheduler.tasksMutex.Unlock()
 		})
 	}
 }
@@ -647,7 +659,9 @@ func TestScheduler_removeTask_NonExistent(t *testing.T) {
 	scheduler := NewScheduler(nil, nil, nil)
 
 	// 删除不存在的任务应该不报错
-	scheduler.removeTask("non-existent-site")
+	scheduler.tasksMutex.Lock()
+	scheduler.removeTaskLocked("non-existent-site")
+	scheduler.tasksMutex.Unlock()
 	// 测试通过
 }
 
@@ -657,7 +671,7 @@ func TestScheduler_GetTaskStatus_NonExistentEntry(t *testing.T) {
 
 	// 添加一个任务到 map，但不在 cron 中
 	scheduler.tasksMutex.Lock()
-	scheduler.tasks["test-site"] = cron.EntryID(999)
+	scheduler.tasks["test-site"] = []cron.EntryID{cron.EntryID(999)}
 	scheduler.tasksMutex.Unlock()
 
 	exists, status := scheduler.GetTaskStatus("test-site")
@@ -706,7 +720,7 @@ func TestScheduler_ConcurrentTaskAccess(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func(id int) {
 			scheduler.tasksMutex.Lock()
-			scheduler.tasks[fmt.Sprintf("site-%d", id)] = cron.EntryID(id)
+			scheduler.tasks[fmt.Sprintf("site-%d", id)] = []cron.EntryID{cron.EntryID(id)}
 			scheduler.tasksMutex.Unlock()
 			done <- true
 		}(i)
@@ -741,7 +755,8 @@ func TestScheduler_EmptyConfig(t *testing.T) {
 
 	// 使用空配置创建任务
 	config := config.PrerenderConfig{}
-	scheduler.createTask("test-site", config)
+	scheduler.tasksMutex.Lock()
+	scheduler.createTaskLocked("test-site", config)
 	// 测试通过，没有 panic
 }
 
@@ -774,7 +789,7 @@ func TestScheduler_MutexOperations(t *testing.T) {
 
 	// 测试 Lock/Unlock
 	scheduler.tasksMutex.Lock()
-	scheduler.tasks["test"] = cron.EntryID(1)
+	scheduler.tasks["test"] = []cron.EntryID{cron.EntryID(1)}
 	delete(scheduler.tasks, "test")
 	scheduler.tasksMutex.Unlock()
 }
@@ -786,14 +801,16 @@ func TestScheduler_entryToSiteMapping(t *testing.T) {
 	// 添加任务
 	entryID, _ := scheduler.cron.AddFunc("0 */5 * * * *", func() {})
 	scheduler.tasksMutex.Lock()
-	scheduler.tasks["test-site"] = entryID
+	scheduler.tasks["test-site"] = []cron.EntryID{entryID}
 	scheduler.tasksMutex.Unlock()
 
 	// 构建映射
 	scheduler.tasksMutex.RLock()
 	entryToSite := make(map[cron.EntryID]string)
-	for siteName, id := range scheduler.tasks {
-		entryToSite[id] = siteName
+	for siteName, ids := range scheduler.tasks {
+		for _, id := range ids {
+			entryToSite[id] = siteName
+		}
 	}
 	scheduler.tasksMutex.RUnlock()
 
