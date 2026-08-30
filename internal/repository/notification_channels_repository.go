@@ -47,9 +47,8 @@ func (r *NotificationChannelsRepository) Save(channels []NotificationChannelData
 	if r.client == nil {
 		return fmt.Errorf("notification channels repository: redis client not available")
 	}
-	data, err := json.Marshal(channels)
-	if err != nil {
-		return fmt.Errorf("serialize notification channels: %w", err)
-	}
+	// 死分支证明：NotificationChannelData 仅含 string/bool 字段，
+	// 均为 JSON 可序列化类型，json.Marshal 恒成功
+	data, _ := json.Marshal(channels)
 	return r.client.Set(notificationChannelsKey, string(data), 0)
 }

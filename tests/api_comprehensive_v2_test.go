@@ -29,7 +29,7 @@ func TestAPI_ComprehensiveV2(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// Setup Redis
-	redisClient, err := redis.NewClient("localhost:6379", "", 0)
+	redisClient, err := redis.NewClient("localhost:6379", "", 15) // DB15 隔离：集成测试绝不触碰运行环境 DB0
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
 	}

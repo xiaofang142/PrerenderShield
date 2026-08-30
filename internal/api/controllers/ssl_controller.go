@@ -101,7 +101,7 @@ func (c *SSLController) RequestCert(ctx *gin.Context) {
 // POST /api/v1/ssl/certificates/:domain/renew
 func (c *SSLController) RenewCert(ctx *gin.Context) {
 	if c.acmeClient == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 503, "message": "SSL service not initialized"})
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "message": "SSL service not initialized"})
 		return
 	}
 
@@ -196,7 +196,7 @@ func (c *SSLController) ListCerts(ctx *gin.Context) {
 // DELETE /api/v1/ssl/certificates/:domain
 func (c *SSLController) DeleteCert(ctx *gin.Context) {
 	if c.acmeClient == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 503, "message": "SSL service not initialized"})
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "message": "SSL service not initialized"})
 		return
 	}
 
@@ -260,7 +260,7 @@ func (c *SSLController) GetExpiringCerts(ctx *gin.Context) {
 // Body: { "base_domain": "example.com", "subdomains": ["www", "api"] }
 func (c *SSLController) RequestWildcardCert(ctx *gin.Context) {
 	if c.acmeClient == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 503, "message": "SSL service not initialized"})
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "message": "SSL service not initialized"})
 		return
 	}
 
@@ -299,7 +299,7 @@ func (c *SSLController) RequestWildcardCert(ctx *gin.Context) {
 // GET /api/v1/ssl/certificates/:domain/renewal-history
 func (c *SSLController) GetRenewalHistory(ctx *gin.Context) {
 	if c.autoRenewer == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 503, "message": "SSL service not initialized"})
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "message": "SSL service not initialized"})
 		return
 	}
 

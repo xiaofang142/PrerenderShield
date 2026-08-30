@@ -1,3 +1,18 @@
 {
-  "crawlerPage": {}
+  "crawlerPage": {
+    "urlStats": {
+      "tab": "渲染预算报表",
+      "title": "per-URL 渲染预算报表（近 7 天）",
+      "refresh": "刷新",
+      "empty": "暂无爬虫访问数据",
+      "url": "URL",
+      "requests": "请求数",
+      "renders": "实渲染",
+      "hitRate": "缓存命中率",
+      "avgRender": "平均耗时",
+      "wasted": "渲染耗时合计",
+      "lastStatus": "末次状态",
+      "lastSeen": "末次访问"
+    }
+  }
 }

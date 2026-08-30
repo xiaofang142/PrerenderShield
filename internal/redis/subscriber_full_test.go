@@ -15,7 +15,7 @@ func TestSubscriber_NewSubscriber(t *testing.T) {
 	assert.NotNil(t, sub.ctx)
 	assert.NotNil(t, sub.cancel)
 	assert.NotNil(t, sub.handlers)
-	assert.False(t, sub.isRunning)
+	assert.False(t, sub.isRunning.Load())
 }
 
 // TestSubscriber_AddHandler 测试添加事件处理函数
@@ -53,7 +53,7 @@ func TestSubscriber_AddHandler_MultipleChannels(t *testing.T) {
 // TestSubscriber_Start_AlreadyRunning 测试启动已运行的订阅者
 func TestSubscriber_Start_AlreadyRunning(t *testing.T) {
 	sub := NewSubscriber(nil)
-	sub.isRunning = true
+	sub.isRunning.Store(true)
 
 	err := sub.Start()
 	assert.Error(t, err)
@@ -82,7 +82,7 @@ func TestSubscriber_IsRunning(t *testing.T) {
 
 	assert.False(t, sub.IsRunning())
 
-	sub.isRunning = true
+	sub.isRunning.Store(true)
 	assert.True(t, sub.IsRunning())
 }
 
@@ -293,15 +293,15 @@ func TestSubscriber_isRunningFlag(t *testing.T) {
 	sub := NewSubscriber(nil)
 
 	// 初始为 false
-	assert.False(t, sub.isRunning)
+	assert.False(t, sub.isRunning.Load())
 
 	// 设置为 true
-	sub.isRunning = true
-	assert.True(t, sub.isRunning)
+	sub.isRunning.Store(true)
+	assert.True(t, sub.isRunning.Load())
 
 	// 设置为 false
-	sub.isRunning = false
-	assert.False(t, sub.isRunning)
+	sub.isRunning.Store(false)
+	assert.False(t, sub.isRunning.Load())
 }
 
 // TestSubscriber_NewSubscriber_MultipleInstances 测试创建多个实例

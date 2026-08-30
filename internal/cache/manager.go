@@ -1,10 +1,12 @@
 package cache
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"prerender-shield/internal/prerender/renderkey"
 	"prerender-shield/internal/redis"
 )
 
@@ -16,6 +18,17 @@ type CacheEntry struct {
 	Priority  int    `json:"priority"`
 	HitCount  int64  `json:"hit_count"`
 	LastHitAt int64  `json:"last_hit_at"`
+}
+
+// CacheEntrySummary 渲染缓存条目摘要（从页面信封解出，管理端列表用）
+type CacheEntrySummary struct {
+	URL       string `json:"url"`
+	Status    int    `json:"status"`
+	ExpiresAt int64  `json:"expires_at"`
+	CreatedAt int64  `json:"created_at"`
+	SizeBytes int    `json:"size_bytes"`
+	Fresh     bool   `json:"fresh"`
+	Device    string `json:"device"`
 }
 
 // manager 缓存管理器（纯 Redis）
@@ -67,6 +80,8 @@ type Manager interface {
 	SetWithPriority(siteID, key string, value []byte, expiration time.Duration, priority int) error
 	GetCacheEntry(siteID, key string) (*CacheEntry, error)
 	EvictLowPriority(siteID string, count int) error
+	// ListEntries 列出站点渲染缓存条目摘要（SCAN pattern 键，过滤 meta，解信封提取状态/过期/大小）
+	ListEntries(siteID string, limit int) ([]CacheEntrySummary, error)
 }
 
 func getCacheKey(siteID, key string) string {
@@ -241,4 +256,97 @@ func (m *manager) IncrementMiss(siteID string) error {
 	key := fmt.Sprintf("stats:miss:%s", siteID)
 	_, err := m.redisClient.Incr(key)
 	return err
+}
+
+// ListEntries 列出站点渲染缓存条目摘要。
+// 只列主键（过滤 :meta 后缀）；信封字段与读路径同源（JSON 信封解析），
+// 避免 meta 副键双源不一致。limit<=0 时取默认 200。
+func (m *manager) ListEntries(siteID string, limit int) ([]CacheEntrySummary, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	pattern := fmt.Sprintf("cache:%s:*", siteID)
+	keys, err := m.redisClient.Keys(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	entries := make([]CacheEntrySummary, 0, len(keys))
+	for _, k := range keys {
+		if strings.HasSuffix(k, ":meta") {
+			continue
+		}
+		if len(entries) >= limit {
+			break
+		}
+		// cache:<siteID>:<bizKey> → bizKey 即 renderkey 归一化 URL
+		bizKey := strings.TrimPrefix(k, "cache:"+siteID+":")
+		raw, err := m.redisClient.Get(k)
+		if err != nil || raw == "" {
+			continue
+		}
+		env, ok := unmarshalEnvelope([]byte(raw))
+		if !ok {
+			continue
+		}
+		created := int64(0)
+		if ttl, err := m.redisClient.TTL(k); err == nil && ttl > 0 {
+			created = now.Unix() - int64(ttl.Seconds())
+		}
+		entries = append(entries, CacheEntrySummary{
+			URL:       displayURL(bizKey),
+			Status:    env.Status,
+			ExpiresAt: env.ExpiresAt,
+			CreatedAt: created,
+			SizeBytes: len(raw),
+			Fresh:     env.fresh(now),
+			Device:    envelopeDevice(bizKey),
+		})
+	}
+	return entries, nil
+}
+
+// pageEnvelopeLite 页面信封的本地轻量解析（与 prerender.PageEnvelope 字段一致）
+type pageEnvelopeLite struct {
+	Status    int    `json:"s"`
+	HTML      string `json:"h"`
+	ExpiresAt int64  `json:"e"`
+}
+
+func (e pageEnvelopeLite) fresh(now time.Time) bool {
+	return e.ExpiresAt == 0 || now.Unix() < e.ExpiresAt
+}
+
+func unmarshalEnvelope(raw []byte) (pageEnvelopeLite, bool) {
+	var env pageEnvelopeLite
+	s := strings.TrimSpace(string(raw))
+	if !strings.HasPrefix(s, "{") {
+		// legacy 裸 HTML
+		return pageEnvelopeLite{Status: 200}, true
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return pageEnvelopeLite{}, false
+	}
+	if env.Status == 0 {
+		env.Status = 200
+	}
+	return env, true
+}
+
+// envelopeDevice 从业务键提取设备分桶后缀（@mobile/@desktop，无后缀=desktop 兼容旧键）
+func envelopeDevice(bizKey string) string {
+	if strings.HasSuffix(bizKey, "@mobile") {
+		return "mobile"
+	}
+	return "desktop"
+}
+
+// displayURL 业务键转展示 URL：renderkey.StripBizKey 去 prerender: 前缀与设备后缀；
+// 异常形态兜底原样返回（不因展示层转换丢失条目）。
+func displayURL(bizKey string) string {
+	if url, _ := renderkey.StripBizKey(bizKey); url != "" {
+		return url
+	}
+	return bizKey
 }

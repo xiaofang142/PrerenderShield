@@ -1,11 +1,14 @@
 package cache
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // MockRedisClient 模拟 Redis 客户端 (简化版本用于测试)
@@ -52,18 +55,16 @@ func (m *MockRedisClient) DelMultiple(keys []string) error {
 }
 
 func (m *MockRedisClient) Keys(pattern string) ([]string, error) {
-	// 简单实现，支持 cache:* 和 cache:site:* 模式
+	// 通用通配：* 可出现在任意位置（转义其余正则元字符），支持 cache:site:*:meta 中段通配
 	var keys []string
+	rePattern := "^" + regexp.QuoteMeta(pattern) + "$"
+	rePattern = strings.ReplaceAll(rePattern, regexp.QuoteMeta("*"), ".*")
+	re, err := regexp.Compile(rePattern)
+	if err != nil {
+		return nil, err
+	}
 	for key := range m.data {
-		if pattern == "cache:*" {
-			keys = append(keys, key)
-		} else if strings.HasSuffix(pattern, "*") {
-			// 处理 cache:site:* 这样的模式
-			prefix := strings.TrimSuffix(pattern, "*")
-			if strings.HasPrefix(key, prefix) {
-				keys = append(keys, key)
-			}
-		} else if key == pattern {
+		if re.MatchString(key) {
 			keys = append(keys, key)
 		}
 	}
@@ -76,9 +77,12 @@ func (m *MockRedisClient) ClearCache() error {
 }
 
 func (m *MockRedisClient) HashSetAll(key string, values map[string]interface{}) error {
+	// 物化 hash 主键：真实 Redis 中 hash 是独立键，Keys(pattern) 必须能扫到
+	if _, ok := m.data[key]; !ok {
+		m.data[key] = ""
+	}
 	for k, v := range values {
-		m.data[key+":"+k] = ""
-		_ = v
+		m.data[key+"::"+k] = fmt.Sprintf("%v", v)
 	}
 	return nil
 }
@@ -88,11 +92,15 @@ func (m *MockRedisClient) Incr(key string) (int64, error) {
 }
 
 func (m *MockRedisClient) HashSet(key, field string, value interface{}) error {
+	if _, ok := m.data[key]; !ok {
+		m.data[key] = ""
+	}
+	m.data[key+"::"+field] = fmt.Sprintf("%v", value)
 	return nil
 }
 
 func (m *MockRedisClient) HashGet(key, field string) (string, error) {
-	return "", nil
+	return m.data[key+"::"+field], nil
 }
 
 func (m *MockRedisClient) HashIncrBy(key, field string, incr int64) (int64, error) {
@@ -287,4 +295,138 @@ func TestNewManager(t *testing.T) {
 	manager := NewManager(mockRedis)
 
 	assert.NotNil(t, manager)
+}
+
+func TestCacheManager_ListEntries(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	manager := NewManager(mockRedis)
+
+	// 写入信封格式条目（"s"/"h"/"e"/"c" 字段）
+	env := `{"s":200,"h":"<html>page body</html>","e":9999999999,"c":1700000000}`
+	require.NoError(t, mockRedis.Set("cache:site1:prerender:host/path/@desktop", env, time.Hour))
+	// meta 键必须被跳过
+	require.NoError(t, mockRedis.Set("cache:site1:prerender:host/path/@desktop:meta", `{"priority":2}`, time.Hour))
+	// 类型错误信封跳过（非 JSON 形态会被当作 legacy 裸 HTML 兼容解析，不算非法）
+	require.NoError(t, mockRedis.Set("cache:site1:prerender:bad@desktop", `{"s":"wrong-type"}`, time.Hour))
+
+	entries, err := manager.ListEntries("site1", 10)
+	require.NoError(t, err)
+	if len(entries) != 1 {
+		t.Fatalf("want 1 valid entry (meta/invalid skipped), got %d: %+v", len(entries), entries)
+	}
+	e := entries[0]
+	if e.URL != "host/path/" {
+		t.Fatalf("display URL stripped: %q", e.URL)
+	}
+	if e.Status != 200 || e.Device != "desktop" || e.SizeBytes != len(env) || !e.Fresh {
+		t.Fatalf("entry fields wrong: %+v", e)
+	}
+}
+
+func TestCacheManager_ListEntries_Limit(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	manager := NewManager(mockRedis)
+	for i := 0; i < 5; i++ {
+		env := `{"s":200,"h":"x","e":9999999999}`
+		require.NoError(t, mockRedis.Set(fmt.Sprintf("cache:site1:prerender:p%d/@desktop", i), env, time.Hour))
+	}
+	entries, err := manager.ListEntries("site1", 3)
+	require.NoError(t, err)
+	if len(entries) != 3 {
+		t.Fatalf("limit broken: %d", len(entries))
+	}
+}
+
+func TestCacheManager_GetCacheEntry(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	manager := NewManager(mockRedis)
+	require.NoError(t, mockRedis.Set("cache:site1:key1", "value1", time.Hour))
+
+	entry, err := manager.GetCacheEntry("site1", "key1")
+	require.NoError(t, err)
+	if entry == nil || string(entry.Data) != "value1" {
+		t.Fatalf("GetCacheEntry broken: %+v", entry)
+	}
+	// 不存在
+	entry, err = manager.GetCacheEntry("site1", "nope")
+	require.NoError(t, err)
+	if entry != nil {
+		t.Fatalf("missing key must return nil entry, got %+v", entry)
+	}
+}
+
+func TestCacheManager_SetWithPriority_And_EvictLowPriority(t *testing.T) {
+	mockRedis := NewMockRedisClient()
+	manager := NewManager(mockRedis)
+
+	// priority: 1=低 2=中 3=高
+	require.NoError(t, manager.SetWithPriority("site1", "low", []byte("a"), time.Hour, 1))
+	require.NoError(t, manager.SetWithPriority("site1", "mid", []byte("b"), time.Hour, 2))
+	require.NoError(t, manager.SetWithPriority("site1", "high", []byte("c"), time.Hour, 3))
+
+	// meta 中记录 priority（供驱逐决策）
+	lowMeta := "cache:site1:low:meta"
+	require.NoError(t, mockRedis.HashSet(lowMeta, "priority", "1"))
+	midMeta := "cache:site1:mid:meta"
+	require.NoError(t, mockRedis.HashSet(midMeta, "priority", "2"))
+	highMeta := "cache:site1:high:meta"
+	require.NoError(t, mockRedis.HashSet(highMeta, "priority", "3"))
+
+	require.NoError(t, manager.EvictLowPriority("site1", 2))
+
+	// 低/中被驱逐（Get 对缺失键返回 nil 值），高保留
+	lowVal, _ := manager.Get("site1", "low")
+	if lowVal != nil {
+		t.Fatal("low priority must be evicted")
+	}
+	midVal, _ := manager.Get("site1", "mid")
+	if midVal != nil {
+		t.Fatal("mid priority must be evicted")
+	}
+	highVal, err := manager.Get("site1", "high")
+	require.NoError(t, err)
+	if string(highVal) != "c" {
+		t.Fatal("high priority must survive")
+	}
+}
+
+func TestUnmarshalEnvelope(t *testing.T) {
+	// 非 JSON 形态 = legacy 裸 HTML 兼容解析（Status 默认 200）
+	env, ok := unmarshalEnvelope([]byte("junk html"))
+	if !ok || env.Status != 200 {
+		t.Fatalf("legacy raw html must parse with status 200, got ok=%v %+v", ok, env)
+	}
+	// JSON 字段类型错误必须失败
+	if _, ok := unmarshalEnvelope([]byte(`{"s":"not-int"}`)); ok {
+		t.Fatal("wrong-type envelope must fail")
+	}
+	// 合法信封
+	env, ok = unmarshalEnvelope([]byte(`{"s":404,"h":"x","e":123}`))
+	if !ok || env.Status != 404 {
+		t.Fatalf("valid envelope broken: ok=%v %+v", ok, env)
+	}
+}
+
+func TestEnvelopeDevice(t *testing.T) {
+	if envelopeDevice("prerender:x/@mobile") != "mobile" {
+		t.Fatal("mobile bucket detect broken")
+	}
+	if envelopeDevice("prerender:x/@desktop") != "desktop" {
+		t.Fatal("desktop bucket detect broken")
+	}
+	if envelopeDevice("prerender:x") != "desktop" {
+		t.Fatal("legacy key defaults desktop")
+	}
+}
+
+func TestDisplayURL(t *testing.T) {
+	if got := displayURL("prerender:host/path/@desktop"); got != "host/path/" {
+		t.Fatalf("displayURL=%q", got)
+	}
+	if got := displayURL("prerender:host/path/@mobile"); got != "host/path/" {
+		t.Fatalf("displayURL mobile=%q", got)
+	}
+	if got := displayURL("weird-form"); got != "weird-form" {
+		t.Fatalf("fallback must return raw: %q", got)
+	}
 }

@@ -3,6 +3,7 @@ package prerender
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +42,24 @@ func (e *engine) CreatePreheatTask(siteID string, urls []string) (string, error)
 	go e.executePreheatTask(taskID)
 
 	return taskID, nil
+}
+
+// resolvePreheatURL 把队列中的 URL 补全为绝对地址：
+// 队列混合了 sitemap 全量 URL 与 crawler 的纯 route 形态（后者旧实现
+// 直接当绝对 URL 渲染必然失败或产出永不命中的死键）。
+func (e *engine) resolvePreheatURL(u string) string {
+	u = strings.TrimSpace(u)
+	if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+		return u
+	}
+	base := e.getPreheatBaseURL()
+	if base == "" {
+		return u // 无基址时保持原样，交由渲染失败路径标记 failed
+	}
+	if !strings.HasPrefix(u, "/") {
+		u = "/" + u
+	}
+	return base + u
 }
 
 // executePreheatTask 执行预热任务
@@ -122,27 +141,31 @@ func (e *engine) executePreheatTask(taskID string) {
 				return
 			}
 
-			// 渲染页面
-			html, err := e.Render(u, 30*time.Second)
+			// 统一渲染管线：与实时请求共享状态码捕获/质检/SEO注入/信封TTL
+			// （旧实现走 e.Render()+手工写缓存 24h 的独立路径，产出死键且 TTL 不接线）
+			target := e.resolvePreheatURL(u)
+			res, err := e.RenderAndCache(RenderRequest{
+				SiteID:    siteID,
+				URL:       target,
+				Opts:      RenderOptions{Timeout: 30 * time.Second, CacheTTL: e.preheatEffectiveTTL(target)},
+				UserAgent: "PrerenderShieldPreheat/1.0",
+			})
 			if err != nil {
 				e.redisClient.SetURLPreheatStatus(siteID, u, "failed")
 				mu.Lock()
 				failed++
 				mu.Unlock()
+			} else if res.Thin || res.Status >= 500 {
+				// 空壳页/服务端错误不入缓存，标记为失败避免污染预热统计口径
+				e.redisClient.SetURLPreheatStatus(siteID, u, "failed")
+				mu.Lock()
+				failed++
+				mu.Unlock()
 			} else {
-				// 存储渲染结果到缓存
-				cacheKey := fmt.Sprintf("prerender:%s", u)
-				if err := e.cacheManager.Set(siteID, cacheKey, html, 24*time.Hour); err != nil {
-					e.redisClient.SetURLPreheatStatus(siteID, u, "failed")
-					mu.Lock()
-					failed++
-					mu.Unlock()
-				} else {
-					e.redisClient.SetURLPreheatStatus(siteID, u, "success")
-					mu.Lock()
-					completed++
-					mu.Unlock()
-				}
+				e.redisClient.SetURLPreheatStatus(siteID, u, "success")
+				mu.Lock()
+				completed++
+				mu.Unlock()
 			}
 
 			// 原子化更新任务进度 (每 5 个 URL 或最后一个时写一次，避免 Redis 抖动)

@@ -87,17 +87,36 @@ func (h *Hub) Run() {
 			}
 
 		case message := <-h.broadcast:
-			h.mu.RLock()
-			for client := range h.clients {
-				select {
-				case client.send <- message:
-				default:
-					// 客户端发送缓冲区已满，关闭连接
-					close(client.send)
-					delete(h.clients, client)
+			// 解析频道：订阅了频道的客户端只收所订阅频道；未订阅任何频道的客户端收全部（兼容旧行为）
+			var raw Message
+			if err := json.Unmarshal(message, &raw); err == nil && raw.Channel != "" {
+				h.mu.RLock()
+				for client := range h.clients {
+					if len(client.channels) > 0 && !client.channels[raw.Channel] {
+						continue
+					}
+					select {
+					case client.send <- message:
+					default:
+						// 客户端发送缓冲区已满，关闭连接
+						close(client.send)
+						delete(h.clients, client)
+					}
 				}
+				h.mu.RUnlock()
+			} else {
+				// 无频道消息（如 system）：全员广播
+				h.mu.RLock()
+				for client := range h.clients {
+					select {
+					case client.send <- message:
+					default:
+						close(client.send)
+						delete(h.clients, client)
+					}
+				}
+				h.mu.RUnlock()
 			}
-			h.mu.RUnlock()
 		}
 	}
 }

@@ -38,6 +38,24 @@ type PushManager struct {
 	config      *config.Config
 	redisClient RedisClient
 	mutex       sync.Mutex
+	// configProvider 每次返回最新配置（copy-on-write 换指针场景下，启动注入的
+	// *Config 快照看不到会话内新建/修改的站点）。nil 时回退 config 字段。
+	configProvider func() *config.Config
+}
+
+// SetConfigProvider 注入每请求新鲜配置来源（controller_setup 装配）
+func (pm *PushManager) SetConfigProvider(fn func() *config.Config) {
+	pm.configProvider = fn
+}
+
+// currentConfig 返回当前有效配置（provider 优先，回退启动快照）
+func (pm *PushManager) currentConfig() *config.Config {
+	if pm.configProvider != nil {
+		if c := pm.configProvider(); c != nil {
+			return c
+		}
+	}
+	return pm.config
 }
 
 // NewPushManager 创建推送管理器实例
@@ -78,13 +96,13 @@ type PushLog struct {
 // TriggerPush 触发推送
 func (pm *PushManager) TriggerPush(siteID string) (string, error) {
 	// 检查配置是否为 nil
-	if pm.config == nil {
+	if pm.currentConfig() == nil {
 		return "", fmt.Errorf("config is nil")
 	}
 
 	// 获取站点配置
 	var siteConfig *config.SiteConfig
-	for _, site := range pm.config.Sites {
+	for _, site := range pm.currentConfig().Sites {
 		if site.ID == siteID {
 			siteConfig = &site
 			break
@@ -562,7 +580,7 @@ func (pm *PushManager) GetPushLogCount(siteID string) (int64, error) {
 
 // GetPushConfig 获取推送配置
 func (pm *PushManager) GetPushConfig(siteID string) (*config.PushConfig, error) {
-	for _, site := range pm.config.Sites {
+	for _, site := range pm.currentConfig().Sites {
 		if site.ID == siteID {
 			return &site.Prerender.Push, nil
 		}
@@ -575,9 +593,10 @@ func (pm *PushManager) UpdatePushConfig(siteID string, pushConfig *config.PushCo
 	pm.mutex.Lock()
 	defer pm.mutex.Unlock()
 
-	for i, site := range pm.config.Sites {
+	cfg := pm.currentConfig()
+	for i, site := range cfg.Sites {
 		if site.ID == siteID {
-			pm.config.Sites[i].Prerender.Push = *pushConfig
+			cfg.Sites[i].Prerender.Push = *pushConfig
 			return nil
 		}
 	}

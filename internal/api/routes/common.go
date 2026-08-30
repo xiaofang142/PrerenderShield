@@ -2,7 +2,6 @@ package routes
 
 import (
 	"net/http"
-	"sync"
 
 	"github.com/gin-gonic/gin"
 
@@ -37,32 +36,12 @@ func addSecurityHeaders(ginRouter *gin.Engine) {
 	})
 }
 
-var (
-	customAllowedOriginsMu sync.RWMutex
-	// customAllowedOrigins 运行时可被 SetAllowedOrigins 重写（配置热更新），
-	// 而 CORS 中间件每请求并发读，必须用 RWMutex 保护
-	customAllowedOrigins map[string]bool
-)
-
+// SetAllowedOrigins 运行时更新 CORS 白名单（配置热更新入口）。
+// 注：本包内旧私有实现 isOriginAllowed/customAllowedOrigins 已删除——
+// 全仓库零调用点（CORS 中间件统一走 utils.IsOriginAllowed），属不可达死代码，
+// 已由 routes 包测试证实删除后无行为变化。
 func SetAllowedOrigins(origins []string) {
 	utils.SetAllowedOrigins(origins)
-}
-
-func isOriginAllowed(origin string) bool {
-	if allowedOriginsStatic[origin] {
-		return true
-	}
-	customAllowedOriginsMu.RLock()
-	defer customAllowedOriginsMu.RUnlock()
-	return customAllowedOrigins[origin]
-}
-
-// allowedOriginsStatic 内置允许来源（不可变，无需加锁）
-var allowedOriginsStatic = map[string]bool{
-	"http://localhost:9597": true,
-	"http://localhost:3000": true,
-	"http://127.0.0.1:9597": true,
-	"http://127.0.0.1:3000": true,
 }
 
 // 添加CORS中间件

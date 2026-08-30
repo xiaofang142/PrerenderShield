@@ -46,7 +46,7 @@ func createMockBackendServer() *httptest.Server {
 
 func TestEndToEndFlow(t *testing.T) {
 	// 创建Redis客户端
-	redisClient, err := redis.NewClient("localhost:6379", "", 0)
+	redisClient, err := redis.NewClient("localhost:6379", "", 15) // DB15 隔离：集成测试绝不触碰运行环境 DB0
 	assert.NoError(t, err)
 	defer redisClient.Close()
 

@@ -1,6 +1,7 @@
 package licensing
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,4 +39,12 @@ func TestPolicyAllowsUnlimitedPrivateSourceDeployment(t *testing.T) {
 	})
 
 	assert.True(t, policy.AllowsAdditionalSite(1000))
+}
+
+func TestPolicyUpgradeMessage(t *testing.T) {
+	p := NewPolicy(config.CommercialConfig{})
+	msg := p.UpgradeMessage(1)
+	if !strings.Contains(msg, "1 site(s)") || !strings.Contains(msg, "99") || !strings.Contains(msg, "9999") {
+		t.Fatalf("upgrade message broken: %q", msg)
+	}
 }

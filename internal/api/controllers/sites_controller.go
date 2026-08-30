@@ -93,7 +93,7 @@ type SitesController struct {
 	monitor       MonitorInterface
 	crawlerLogMgr CrawlerLogManagerInterface
 	visitLogMgr   VisitLogManagerInterface
-	cfg           *config.Config
+	cfg           configRef
 
 	// Concrete type references for use in wrapper methods
 	concreteSiteServerMgr *siteserver.Manager
@@ -218,7 +218,7 @@ func NewSitesController(
 		monitor:       monitor,
 		crawlerLogMgr: crawlerLogMgr,
 		visitLogMgr:   visitLogMgr,
-		cfg:           cfg,
+		cfg:           configRef{snapshot: cfg},
 	}
 }
 
@@ -271,7 +271,7 @@ func NewSitesControllerWithConcreteDeps(
 		monitor:               m,
 		crawlerLogMgr:         clm,
 		visitLogMgr:           vlm,
-		cfg:                   cfg,
+		cfg:                   configRef{snapshot: cfg},
 		concreteSiteServerMgr: siteServerMgr,
 		concreteSiteHandler:   siteHandler,
 		concreteCrawlerLogMgr: crawlerLogMgr,
@@ -305,8 +305,8 @@ func (c *SitesController) GetSites(ctx *gin.Context) {
 	if c.configManager == nil {
 		// 如果没有 configManager，使用 cfg 中的 Sites
 		sites := []config.SiteConfig{}
-		if c.cfg != nil {
-			sites = c.cfg.Sites
+		if c.cfg.current() != nil {
+			sites = c.cfg.current().Sites
 		}
 		ctx.JSON(http.StatusOK, gin.H{
 			"code":    200,
@@ -330,8 +330,8 @@ func (c *SitesController) GetSite(ctx *gin.Context) {
 	var sites []config.SiteConfig
 	if c.configManager == nil {
 		sites = []config.SiteConfig{}
-		if c.cfg != nil {
-			sites = c.cfg.Sites
+		if c.cfg.current() != nil {
+			sites = c.cfg.current().Sites
 		}
 	} else {
 		currentConfig := c.configManager.GetConfig()
@@ -425,10 +425,10 @@ func (c *SitesController) AddSite(ctx *gin.Context) {
 	}
 
 	// 启动新站点的服务器实例
-	siteHandler := c.siteHandler.CreateSiteHandler(site, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
+	siteHandler := c.siteHandler.CreateSiteHandler(site, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.current().Dirs.StaticDir)
 
 	// 启动站点服务器
-	c.siteServerMgr.StartSiteServer(site, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
+	c.siteServerMgr.StartSiteServer(site, c.cfg.current().Server.Address, c.cfg.current().Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 	// 保存站点配置到Redis
 	c.persistSiteConfigToRedis(&site)
@@ -550,10 +550,10 @@ func (c *SitesController) UpdateSite(ctx *gin.Context) {
 	}
 
 	// 启动新的站点服务器
-	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
+	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.current().Dirs.StaticDir)
 
 	// 启动站点服务器
-	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
+	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.current().Server.Address, c.cfg.current().Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 	// 保存站点配置到Redis
 	c.persistSiteConfigToRedis(updatedSite)
@@ -613,7 +613,7 @@ func (c *SitesController) DeleteSite(ctx *gin.Context) {
 			}
 
 			// 删除站点的静态资源目录
-			staticDir := filepath.Join(c.cfg.Dirs.StaticDir, site.ID)
+			staticDir := filepath.Join(c.cfg.current().Dirs.StaticDir, site.ID)
 			if _, err := os.Stat(staticDir); err == nil {
 				// 目录存在，删除它
 				if err := os.RemoveAll(staticDir); err != nil {
@@ -684,8 +684,8 @@ func (c *SitesController) StartSite(ctx *gin.Context) {
 			}
 
 			// 创建站点处理器并启动服务器
-			siteHandler := c.siteHandler.CreateSiteHandler(site, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
-			c.siteServerMgr.StartSiteServer(site, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
+			siteHandler := c.siteHandler.CreateSiteHandler(site, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.current().Dirs.StaticDir)
+			c.siteServerMgr.StartSiteServer(site, c.cfg.current().Server.Address, c.cfg.current().Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 			logging.DefaultLogger.LogAdminAction(
 				"admin", ctx.ClientIP(), "site_start", "site",

@@ -5,6 +5,37 @@ All notable changes to Prerender Shield will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- 爬虫响应条件请求（304）：200 响应携带弱 ETag（W/"sha256前16hex"）与 Last-Modified；命中 If-None-Match / If-Modified-Since 返回 304 无 body（Googlebot 原生支持，prerender.io/Rendertron 均未实现的爬虫带宽优化）
+- 爬虫响应 gzip 压缩：渲染 HTML >1KB 且客户端 Accept-Encoding 含 gzip 时自动压缩（stdlib 实现，Vary: Accept-Encoding）
+- 缓存 TTL 分级规则 `ttl_rules`：URL pattern（子串/`*` 通配）→ 站点 CacheTTL → 引擎默认 24h，首中生效；实时/预热/重渲三通道统一接线；控制台 Prerender 页可视编辑（最多 10 条，60..2592000 秒）
+- per-URL 渲染预算报表：`GET /crawler/url-stats` + 控制台爬虫页新「渲染预算报表」Tab（请求数/实渲染次数/命中率/平均耗时/渲染耗时合计/末次状态）——定位"哪些 URL 在烧渲染算力"
+
+### Changed
+- 缓存设备分桶收敛为单桶：渲染器输出与 UA 无关，mobile/desktop 爬虫共用 @desktop 键（修复 mobile 爬虫永不命中预热缓存、双倍渲染的纯浪费）；存量 @mobile/无后缀旧键读取自动回退，随 TTL 自然过期（调研依据：Google 移动优先索引官方建议响应式站直发桌面 HTML）
+- 爬虫日志 Status 如实记录实际响应状态码（304 时记 304）
+- 缓存条目管理 API：`POST /preheat/invalidate`（单 URL 失效）、`POST /preheat/recache`（强制重渲替换）、`GET /preheat/entries`（条目列表）、`DELETE /preheat/entries`（单条删除）；修复 per-site clear-cache 实际全局误删的问题
+- 缓存键设备分桶：UA 判定 desktop/mobile 进入缓存键（`@mobile`/`@desktop` 后缀），移动版爬虫命中移动版 HTML；desktop 读取对存量无后缀旧键一次性回退兼容
+- 管理 API Token：系统设置页生成/吊销（sha256 哈希存储，原文仅展示一次），`Authorization: Bearer` 回退鉴权**仅限 `/api/v1/preheat/*`**，CI 发布钩子可自动化刷缓存
+- IndexNow key file 自动托管：站点处理器在 WAF 之前拦截 `GET /{key}.txt` 应答验证内容，并同步写入静态根目录，搜索引擎所有权验证零配置
+- 爬虫真实性验证（bot_verify，默认关闭）：Google 官方 rDNS 双向验证流程，结果（verified/unverified）写入爬虫日志 `verified` 字段，log-only 不拦截；singleflight 去重 + 磁盘 LRU 缓存（正 7d/负 1h，`PRERENDER_BOTVERIFY_CACHE` 可覆盖路径）
+- 渲染策略设置 UI（Prerender 页）：cache_ttl / timeout / max_concurrency / include_patterns / exclude_patterns / stale_while_revalidate / category_policy 四分类策略表单
+- 缓存条目 UI（Preheat 页）：条目表格（状态码/设备/新鲜度/TTL 剩余/大小）+ 单条失效/重渲操作 + URL 过滤
+- 官网 Features 新增「技术选型边界」小节（动态渲染 vs SSR/SSG 场景对照表，诚实引用 Google 官方建议）与 AEO AI 引擎支持卡片（中英双语）
+- 爬虫 UA 库新增 AI 引擎分类覆盖（gptbot/claudebot/perplexitybot/ccbot/applebot/bytespider/amazonbot 等此前已并入，本轮补全文档与官网叙事）
+
+### Changed
+- 渲染策略 PUT `/sites/:id/prerender` 为整段提交，控制台保存时合并未编辑字段避免清零
+- 系统配置保存改为整段合并提交（`system:config` 为全量替换语义，修复只传表单字段会丢失其余键的隐患）
+
+### Removed
+- 删除零引用死代码包：`internal/prerender/streaming`、`internal/prerender/incremental`、`internal/prerender/optimizer`
+
+### Fixed
+- prerender 包测试在多二进制并发时的 Chromium 进程帽争抢 flaky（TestMain 放开 `PRERENDER_PROCESS_CAP`），连续 3 轮全绿
+
 ## [3.0.0] - 2026-06-10
 
 ### Added

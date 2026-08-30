@@ -219,7 +219,7 @@ func TestSSLController_RenewCert_Success(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	// 由于 acmeClient 为 nil，会返回 500
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_GetCertStatus(t *testing.T) {
@@ -261,7 +261,7 @@ func TestSSLController_DeleteCert(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	// 由于 autoRenewer 为 nil，会返回 500
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_GetExpiringCerts(t *testing.T) {
@@ -291,7 +291,7 @@ func TestSSLController_RequestWildcardCert_ServiceNotInitialized(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	// acmeClient 为 nil 时返回 500
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_GetRenewalHistory(t *testing.T) {
@@ -305,7 +305,7 @@ func TestSSLController_GetRenewalHistory(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	// 由于 autoRenewer 为 nil，会返回 500
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_RequestCert_InvalidJSON(t *testing.T) {
@@ -333,7 +333,7 @@ func TestSSLController_RequestWildcardCert_InvalidJSON(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_RequestWildcardCert_MissingBaseDomain(t *testing.T) {
@@ -347,7 +347,7 @@ func TestSSLController_RequestWildcardCert_MissingBaseDomain(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_ListCerts_WithAutoRenewer(t *testing.T) {
@@ -374,7 +374,7 @@ func TestSSLController_DeleteCert_WithAutoRenewer(t *testing.T) {
 	req, _ := http.NewRequest("DELETE", "/ssl/certificates/example.com", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_GetCertStatus_MissingDomain(t *testing.T) {
@@ -430,7 +430,7 @@ func TestSSLController_GetRenewalHistory_WithPagination(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	// autoRenewer 为 nil 时返回 500
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_RequestCert_EmptyDomains(t *testing.T) {
@@ -460,7 +460,7 @@ func TestSSLController_RequestWildcardCert_EmptyBaseDomain(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	// acmeClient 为 nil 时返回 500
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_ListCerts_WithEmptyParams(t *testing.T) {

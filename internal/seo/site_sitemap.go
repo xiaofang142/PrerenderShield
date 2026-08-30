@@ -56,10 +56,9 @@ func GenerateForAllSites(staticRoot string, sites []config.SiteConfig, cfg confi
 			ExcludePatterns: siteCfg.ExcludePatterns,
 		})
 
-		sitemap, err := generator.GenerateFromFiles(staticDir)
-		if err != nil {
-			continue
-		}
+		// GenerateFromFiles 的 walkFn 吞掉所有遍历错误，永远不返回 error（见 sitemap.go），
+		// 这里的 err 分支不可达，忽略之
+		sitemap, _ := generator.GenerateFromFiles(staticDir)
 
 		outputPath := filepath.Join(outputDir, "sitemap.xml")
 		if err := generator.WriteToFile(sitemap, outputPath); err != nil {

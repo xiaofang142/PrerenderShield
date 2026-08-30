@@ -169,16 +169,16 @@ func TestAPIProvider_DiskPersistenceAcrossRestart(t *testing.T) {
 
 func TestIsPrivateIP(t *testing.T) {
 	cases := map[string]bool{
-		"127.0.0.1":     true,
-		"10.0.0.5":      true,
-		"172.16.3.4":    true,
-		"192.168.0.1":   true,
-		"::1":           true,
-		"fe80::1":       true,
-		"8.8.8.8":       false,
-		"1.1.1.1":       false,
-		"not-an-ip":     false,
-		"172.32.0.1":    false, // 172.16-31 才是私网
+		"127.0.0.1":   true,
+		"10.0.0.5":    true,
+		"172.16.3.4":  true,
+		"192.168.0.1": true,
+		"::1":         true,
+		"fe80::1":     true,
+		"8.8.8.8":     false,
+		"1.1.1.1":     false,
+		"not-an-ip":   false,
+		"172.32.0.1":  false, // 172.16-31 才是私网
 	}
 	for ip, want := range cases {
 		if got := isPrivateIP(ip); got != want {

@@ -230,3 +230,59 @@ func TestTranslator_PartialFallback(t *testing.T) {
 	result2 := translator.Translate("zh", "key2")
 	assert.Equal(t, "Value 2", result2)
 }
+
+func TestTranslator_Translate_MissingKeyFallsBackToKeyName(t *testing.T) {
+	tr := NewTranslator()
+	if got := tr.Translate("zh", "nonexistent.key"); got != "nonexistent.key" {
+		t.Fatalf("missing key must return key name, got %q", got)
+	}
+}
+
+func TestTranslator_Translate_FormatArgs(t *testing.T) {
+	tr := NewTranslator()
+	tr.AddMessages("en", map[string]string{"greet": "hello %s, %d items"})
+	tr.AddMessages("zh", map[string]string{"greet": "你好 %s，%d 项"})
+	if got := tr.Translate("zh", "greet", "世界", 3); got != "你好 世界，3 项" {
+		t.Fatalf("format args broken: %q", got)
+	}
+	if got := tr.Translate("de", "greet", "world", 5); got != "hello world, 5 items" {
+		t.Fatalf("en fallback with args broken: %q", got)
+	}
+}
+
+func TestTranslator_AddMessages_Merge(t *testing.T) {
+	tr := NewTranslator()
+	tr.AddMessages("zh", map[string]string{"a": "1"})
+	tr.AddMessages("zh", map[string]string{"b": "2", "a": "1x"})
+	// 同语言增量合并且后者覆盖
+	if tr.Translate("zh", "a") != "1x" || tr.Translate("zh", "b") != "2" {
+		t.Fatalf("merge broken: %q %q", tr.Translate("zh", "a"), tr.Translate("zh", "b"))
+	}
+}
+
+func TestLoadDefaultMessages_NotEmpty(t *testing.T) {
+	tr := NewTranslator()
+	tr.LoadDefaultMessages()
+	if len(tr.messages) == 0 {
+		t.Fatal("default messages must register languages")
+	}
+	// 至少包含 en 与 zh
+	if _, ok := tr.messages["en"]; !ok {
+		t.Fatal("en messages missing")
+	}
+}
+
+func TestGetTranslator_Singleton(t *testing.T) {
+	a := GetTranslator()
+	b := GetTranslator()
+	if a != b {
+		t.Fatal("GetTranslator must return singleton")
+	}
+}
+
+func TestT_Helper(t *testing.T) {
+	// 全局 T：未注册 key 回退键名
+	if got := T("zz", "t.helper.missing"); got != "t.helper.missing" {
+		t.Fatalf("T helper fallback broken: %q", got)
+	}
+}

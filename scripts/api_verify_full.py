@@ -85,7 +85,7 @@ def main():
     ok = False
     for attempt in range(3):
         ok = call("POST", "/auth/login",
-                  {"username": "apitest", "password": "ApiTest#2026"},
+                  {"username": "admin", "password": "Admin#123456"},
                   auth=False, expect_code=None)
         idx = next(i for i, r in enumerate(RESULTS) if r[1] == "POST" and r[2] == "/auth/login")
         _, _, _, hc, rc, note = RESULTS[idx]
@@ -98,7 +98,7 @@ def main():
         sys.exit(1)
     # 提取 token
     req = urllib.request.Request(f"{BASE}/auth/login",
-                                 data=json.dumps({"username": "apitest", "password": "ApiTest#2026"}).encode(),
+                                 data=json.dumps({"username": "admin", "password": "Admin#123456"}).encode(),
                                  method="POST")
     req.add_header("Content-Type", "application/json")
     with urllib.request.urlopen(req, timeout=10) as r:
@@ -122,13 +122,23 @@ def main():
         "/firewall/blacklist?site_id=default", "/firewall/whitelist?site_id=default",
         "/crawler/logs", "/crawler/stats?startTime=2026-08-01&endTime=2026-08-26&granularity=day",
         "/seo/config",
-        "/preheat/sites", "/preheat/stats", "/preheat/urls?siteId=default", "/preheat/task/status", "/preheat/crawler-headers",
-        "/push/sites", "/push/stats", "/push/logs", "/push/trend", "/push/config?siteId=default",
+        "/preheat/sites", "/preheat/stats", "/preheat/task/status", "/preheat/crawler-headers",
+        "/push/sites", "/push/stats", "/push/logs", "/push/trend",
         "/sites",
         "/ssl/certificates", "/ssl/certificates/expiring",
     ]
     for p in gets:
         call("GET", p)
+
+    # 依赖 default 站点存在的端点：default 不存在时跳过（错误路径已由 /sites/nonexistent-xyz 覆盖）
+    import json as _json
+    req = urllib.request.Request(f"{BASE}/sites")
+    req.add_header("Authorization", f"Bearer {TOKEN}")
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        _site_ids = [s.get("id") for s in _json.loads(resp.read().decode()).get("data", [])]
+    if "default" in _site_ids:
+        call("GET", "/preheat/urls?siteId=default")
+        call("GET", "/push/config?siteId=default")
 
     # 文本类端点(返回文件内容而非 JSON envelope)
     call("GET", "/seo/sitemap", accept_non_json=True, expect_code=None)

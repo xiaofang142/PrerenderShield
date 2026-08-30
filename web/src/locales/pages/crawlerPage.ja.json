@@ -1,3 +1,18 @@
 {
-  "crawlerPage": {}
+  "crawlerPage": {
+    "urlStats": {
+      "tab": "レンダリング予算",
+      "title": "URL 別レンダリング予算（過去 7 日）",
+      "refresh": "更新",
+      "empty": "クローラーのアクセスデータはまだありません",
+      "url": "URL",
+      "requests": "リクエスト数",
+      "renders": "実レンダリング",
+      "hitRate": "ヒット率",
+      "avgRender": "平均時間",
+      "wasted": "レンダリング合計",
+      "lastStatus": "最終ステータス",
+      "lastSeen": "最終アクセス"
+    }
+  }
 }

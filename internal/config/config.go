@@ -167,6 +167,8 @@ type Config struct {
 	SEO SEOConfig `yaml:"seo"`
 	// 商业授权配置
 	Commercial CommercialConfig `yaml:"commercial"`
+	// 管理 API Token 列表（sha256 hex 存储形态，原文不落盘；仅 /api/v1/preheat/ 端点可用）
+	APITokens []string `yaml:"api_tokens" json:"api_tokens"`
 	// 站点列表
 	Sites []SiteConfig `yaml:"sites"`
 }
@@ -281,6 +283,18 @@ type FirewallConfig struct {
 	ThreatIntel     ThreatIntelConfig  `yaml:"threat_intel" json:"threat_intel"`
 	Blacklist       []string           `yaml:"blacklist" json:"blacklist"`
 	Whitelist       []string           `yaml:"whitelist" json:"whitelist"`
+	// BotVerify 爬虫真实性验证（Google rDNS 双向验证，log-only：
+	// 结果写入爬虫日志 Verified 字段，不拦截不降权；默认关闭）
+	BotVerify BotVerifyConfig `yaml:"bot_verify" json:"bot_verify"`
+}
+
+// BotVerifyConfig 爬虫真实性验证配置
+type BotVerifyConfig struct {
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Mode log=仅打标（默认，零风险）；block=拦截"确认伪造"的搜索爬虫——
+	// 仅当 rDNS 得出确定性结果（PTR 缺失或解析到非官方域）时拒绝；
+	// DNS 传输故障/超时（unknown）一律放行，杜绝误杀（争议裁决记录见 tasks/disputes-c10.md）
+	Mode string `yaml:"mode" json:"mode"`
 }
 
 // CCProtectionConfig CC 防护配置
@@ -360,6 +374,26 @@ type PrerenderConfig struct {
 	Push              PushConfig    `yaml:"push" json:"push"`
 	CrawlerHeaders    []string      `yaml:"crawler_headers" json:"crawler_headers"`         // 爬虫协议头列表
 	UseDefaultHeaders bool          `yaml:"use_default_headers" json:"use_default_headers"` // 是否使用默认爬虫协议头
+
+	// IncludePatterns 渲染 URL 白名单（RequestURI 正则，空=全部可渲染）
+	IncludePatterns []string `yaml:"include_patterns" json:"include_patterns"`
+	// ExcludePatterns 渲染 URL 黑名单（优先于白名单），如后台登录页不做 Chromium 渲染
+	ExcludePatterns []string `yaml:"exclude_patterns" json:"exclude_patterns"`
+	// MaxConcurrency 站点级渲染并发预算；0=不限（沿用全局池自约束）
+	MaxConcurrency int `yaml:"max_concurrency" json:"max_concurrency"`
+	// StaleWhileRevalidate 软过期降级供数开关（nil 视为 true）：过期命中立即回旧值并异步重渲
+	StaleWhileRevalidate *bool `yaml:"stale_while_revalidate" json:"stale_while_revalidate"`
+	// CategoryPolicy 爬虫分类渲染策略：search/social/ai/generic -> render|cache_only|passthrough
+	CategoryPolicy map[string]string `yaml:"category_policy" json:"category_policy"`
+	// TTLRules 缓存 TTL 分级规则（有序，首中生效；无命中回退 CacheTTL，再回退引擎默认 24h）。
+	// Pattern 为 URL 子串匹配，含 * 时按通配符译为正则（对齐 prerender.io pattern 模型）。
+	TTLRules []TTLRule `yaml:"ttl_rules" json:"ttl_rules"`
+}
+
+// TTLRule 单条缓存 TTL 规则
+type TTLRule struct {
+	Pattern    string `yaml:"pattern" json:"pattern"`
+	TTLSeconds int    `yaml:"ttl_seconds" json:"ttl_seconds"`
 }
 
 // PreheatConfig 缓存预热配置

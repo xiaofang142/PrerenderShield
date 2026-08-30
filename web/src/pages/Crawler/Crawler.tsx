@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { Card, Row, Col, Statistic, Spin, Select, Table, Radio, Tabs } from 'antd'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { Card, Row, Col, Statistic, Spin, Select, Table, Radio, Tabs, Button } from 'antd'
+import { ReloadOutlined } from '@ant-design/icons'
 import { ArrowUpOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import BaseChart from '../../components/charts/BaseChart'
@@ -240,9 +241,46 @@ const Crawler: React.FC = () => {
     setPageSize(pageSize)
   }
 
+  // per-URL 渲染预算报表（T4）：识别消耗渲染算力的 URL
+  const [urlStats, setUrlStats] = useState<any[]>([])
+
+  const fetchUrlStats = useCallback(async () => {
+    const version = ++requestVersionRef.current
+    try {
+      const startTime = dayjs().subtract(7, 'day').format('YYYY-MM-DDTHH:mm:ssZ')
+      const endTime = dayjs().format('YYYY-MM-DDTHH:mm:ssZ')
+      const res = await crawlerApi.getUrlStats({
+        site: selectedSite === 'all' ? '' : selectedSite,
+        startTime,
+        endTime,
+        limit: 20
+      })
+      if (version !== requestVersionRef.current) return
+      if (res.code === 200 && res.data) {
+        setUrlStats(res.data.list || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch url stats:', error)
+    }
+  }, [selectedSite])
+
+  const urlStatColumns = [
+    { title: t('crawlerPage.urlStats.url'), dataIndex: 'route', key: 'route', ellipsis: true },
+    { title: t('crawlerPage.urlStats.requests'), dataIndex: 'requests', key: 'requests', width: 90 },
+    { title: t('crawlerPage.urlStats.renders'), dataIndex: 'renders', key: 'renders', width: 90 },
+    { title: t('crawlerPage.urlStats.hitRate'), dataIndex: 'hit_rate', key: 'hit_rate', width: 100, render: (v: number) => `${v}%` },
+    { title: t('crawlerPage.urlStats.avgRender'), dataIndex: 'avg_render_ms', key: 'avg_render_ms', width: 110, render: (v: number) => `${v}ms` },
+    { title: t('crawlerPage.urlStats.wasted'), dataIndex: 'wasted_seconds', key: 'wasted_seconds', width: 110, render: (v: number) => `${v}s` },
+    { title: t('crawlerPage.urlStats.lastStatus'), dataIndex: 'last_status', key: 'last_status', width: 100 },
+    {
+      title: t('crawlerPage.urlStats.lastSeen'), dataIndex: 'last_seen', key: 'last_seen', width: 170,
+      render: (v: string) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-')
+    }
+  ]
+
   // 更新所有数据
   const updateData = async () => {
-    await Promise.all([fetchLogs(), fetchStats()])
+    await Promise.all([fetchLogs(), fetchStats(), fetchUrlStats()])
   }
 
   useEffect(() => {
@@ -364,6 +402,26 @@ const Crawler: React.FC = () => {
                   showTotal: (total) => t('crawlerPage.totalRecords', { total })
                 }}
                 size="middle"
+              />
+            </Card>
+          </TabPane>
+          <TabPane tab={t('crawlerPage.urlStats.tab')} key="urlstats">
+            <Card
+              className="card"
+              title={t('crawlerPage.urlStats.title')}
+              extra={
+                <Button type="text" icon={<ReloadOutlined />} onClick={fetchUrlStats}>
+                  {t('crawlerPage.urlStats.refresh')}
+                </Button>
+              }
+            >
+              <Table
+                columns={urlStatColumns}
+                dataSource={urlStats}
+                rowKey="route"
+                pagination={false}
+                size="middle"
+                locale={{ emptyText: t('crawlerPage.urlStats.empty') }}
               />
             </Card>
           </TabPane>

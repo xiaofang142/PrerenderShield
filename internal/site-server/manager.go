@@ -155,6 +155,10 @@ func (m *Manager) startHTTPRedirectServer(site config.SiteConfig, serverAddress 
 
 // getSSLCertForSite gets SSL certificate for a site from SSL manager
 func (m *Manager) getSSLCertForSite(site config.SiteConfig) (*tls.Certificate, error) {
+	// 防御：无证书管理器直接报错（调用方已守卫，此处保证函数自身安全）
+	if m.sslManager == nil {
+		return nil, fmt.Errorf("ssl manager not configured")
+	}
 	// Try each domain
 	for _, domain := range site.Domains {
 		cert, err := m.sslManager.GetCertificate(domain)

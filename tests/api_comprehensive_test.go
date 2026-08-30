@@ -25,7 +25,7 @@ type apiResponse struct {
 
 func requireRedis(t *testing.T) *redis.Client {
 	t.Helper()
-	client, err := redis.NewClient("localhost:6379", "", 0)
+	client, err := redis.NewClient("localhost:6379", "", 15) // DB15 隔离：集成测试绝不触碰运行环境 DB0
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
 	}

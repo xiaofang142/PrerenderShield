@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-acme/lego/v4/certificate"
+
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/redis"
 )
@@ -24,7 +26,7 @@ type AutoRenewConfig struct {
 
 // AutoRenewer 自动续签器
 type AutoRenewer struct {
-	acmeClient  *ACMEClient
+	acmeClient  acmeRenewAPI
 	redisClient *redis.Client
 	config      AutoRenewConfig
 	cancel      context.CancelFunc
@@ -32,7 +34,23 @@ type AutoRenewer struct {
 }
 
 // NewAutoRenewer 创建自动续签器
-func NewAutoRenewer(acmeClient *ACMEClient, redisClient *redis.Client, config AutoRenewConfig) *AutoRenewer {
+// acmeRenewAPI 自动续签所需的最小 ACME 能力面（便于模拟测试续签决策循环）
+type acmeRenewAPI interface {
+	ListCertificates() ([]map[string]interface{}, error)
+	RenewCertificate(domain string) (*certificate.Resource, error)
+}
+
+func NewAutoRenewer(acmeClient acmeRenewAPI, redisClient *redis.Client, config AutoRenewConfig) *AutoRenewer {
+	// 零值配置防御：MaxRetries/RetryDelay 未设置时给安全默认（0 会导致续签永不尝试且 err.Error() panic）
+	if config.MaxRetries <= 0 {
+		config.MaxRetries = 3
+	}
+	if config.RetryDelay <= 0 {
+		config.RetryDelay = 30 * time.Second
+	}
+	if config.CheckInterval <= 0 {
+		config.CheckInterval = 24 * time.Hour
+	}
 	return &AutoRenewer{
 		acmeClient:  acmeClient,
 		redisClient: redisClient,
@@ -136,11 +154,14 @@ func (r *AutoRenewer) renewCertificate(domain string) {
 		time.Sleep(r.config.RetryDelay)
 	}
 
-	// 所有重试失败
-	logging.DefaultLogger.Error("Failed to renew certificate %s after %d attempts: %v", domain, r.config.MaxRetries, err)
-
-	// 保存失败记录到 Redis
-	r.saveRenewalRecord(domain, "failed", err.Error())
+	// 所有重试失败（MaxRetries<=0 时循环体未执行，err 为 nil——防御性守卫，
+	// 此前零值配置下续签路径必 panic）
+	if err != nil {
+		logging.DefaultLogger.Error("Failed to renew certificate %s after %d attempts: %v", domain, r.config.MaxRetries, err)
+		r.saveRenewalRecord(domain, "failed", err.Error())
+	} else {
+		logging.DefaultLogger.Error("Renewal for %s never attempted: MaxRetries=%d (config error)", domain, r.config.MaxRetries)
+	}
 
 	// 发送失败 webhook 通知
 	if r.config.WebhookURL != "" {

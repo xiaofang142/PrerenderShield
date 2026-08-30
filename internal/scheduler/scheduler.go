@@ -216,6 +216,16 @@ func (s *Scheduler) executePreheat(siteName string) {
 		return
 	}
 
+	// 注入预热通道 TTL 配置（分级规则首中 > 站点 CacheTTL > 引擎默认）
+	if cm := config.GetInstance(); cm != nil {
+		for _, site := range cm.GetConfig().Sites {
+			if site.ID == siteName {
+				engine.SetPreheatTTLConfig(site.Prerender.CacheTTL, site.Prerender.TTLRules)
+				break
+			}
+		}
+	}
+
 	// 调用引擎的创建预热任务方法
 	taskID, err := engine.CreatePreheatTask(siteName, urls)
 	if err != nil {

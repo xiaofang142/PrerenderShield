@@ -63,6 +63,20 @@
       "fetchConfigFailed": "設定の取得に失敗しました",
       "saveSuccess": "設定の保存に成功しました",
       "saveFailed": "保存に失敗しました"
+    },
+    "token": {
+      "title": "API Token 管理",
+      "help": "CI/リリースフックなどからキャッシュ管理 API（/api/v1/preheat/* のみ）を呼び出すためのトークン。ハッシュ保存、原文は生成時に一度だけ表示。",
+      "generate": "トークン生成",
+      "empty": "トークンはありません",
+      "generatedTitle": "トークン生成済み（一度のみ表示）",
+      "generatedWarning": "今すぐコピーして保存してください。再度表示できません：",
+      "copy": "コピー",
+      "revoke": "失効",
+      "revokeConfirm": "このトークンを失効させますか？該当する自動処理は直ちにアクセスできなくなります。",
+      "revokeSuccess": "トークンを失効させました",
+      "saveFailed": "トークンの保存に失敗しました",
+      "usage": "利用方法：Authorization: Bearer <token>、/api/v1/preheat/* のみアクセス可能。"
     }
   }
 }

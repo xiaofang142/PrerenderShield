@@ -14,7 +14,7 @@ import (
 
 // TestConfigAndRedisIntegration 测试配置管理和Redis客户端的集成
 func TestConfigAndRedisIntegration(t *testing.T) {
-	redisClient, err := redis.NewClient("localhost:6379", "", 0)
+	redisClient, err := redis.NewClient("localhost:6379", "", 15) // DB15 隔离：集成测试绝不触碰运行环境 DB0
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestConfigAndRedisIntegration(t *testing.T) {
 	assert.NotNil(t, cfg)
 
 	// 测试Redis客户端连接（使用配置文件中的地址）
-	redisClient, err = redis.NewClient(cfg.Cache.RedisURL, "", 0)
+	redisClient, err = redis.NewClient(cfg.Cache.RedisURL, "", 15) // DB15 隔离
 	assert.NoError(t, err)
 	assert.NotNil(t, redisClient)
 

@@ -27,6 +27,24 @@ type WebhookHandler struct {
 	mu         sync.Mutex
 	retryQueue []RetryItem
 	stats      *WebhookStats
+	// provider 非空时每次告警读取最新配置（控制台改动即时生效，免重启）
+	provider func() *WebhookConfig
+}
+
+// SetConfigProvider 注入动态配置来源
+func (h *WebhookHandler) SetConfigProvider(fn func() *WebhookConfig) { h.provider = fn }
+
+// currentConfig 当前生效配置（nil 接收者安全）
+func (h *WebhookHandler) currentConfig() *WebhookConfig {
+	if h == nil {
+		return nil
+	}
+	if h.provider != nil {
+		if c := h.provider(); c != nil {
+			return c
+		}
+	}
+	return h.config
 }
 
 // WebhookConfig Webhook 配置
@@ -76,6 +94,9 @@ func (h *WebhookHandler) Name() string {
 
 // Send 发送告警
 func (h *WebhookHandler) Send(ctx context.Context, alert *Alert) error {
+	if cfg := h.currentConfig(); cfg == nil || cfg.URL == "" {
+		return nil // 未配置 webhook：no-op
+	}
 	payload, contentType, err := h.buildPayload(alert)
 	if err != nil {
 		return err
@@ -150,7 +171,7 @@ func (h *WebhookHandler) sendWithRetry(ctx context.Context, payload []byte, cont
 	h.updateStatsSend()
 
 	var lastErr error
-	for i := 0; i <= h.config.MaxRetries; i++ {
+	for i := 0; i <= h.currentConfig().MaxRetries; i++ {
 		if err := h.send(ctx, payload, contentType); err == nil {
 			h.updateStatsSuccess()
 			return nil
@@ -159,32 +180,32 @@ func (h *WebhookHandler) sendWithRetry(ctx context.Context, payload []byte, cont
 			h.updateStatsFailure()
 		}
 
-		if i < h.config.MaxRetries {
+		if i < h.currentConfig().MaxRetries {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(h.config.RetryDelay):
+			case <-time.After(h.currentConfig().RetryDelay):
 			}
 		}
 	}
 
-	return fmt.Errorf("发送失败，已重试 %d 次：%w", h.config.MaxRetries, lastErr)
+	return fmt.Errorf("发送失败，已重试 %d 次：%w", h.currentConfig().MaxRetries, lastErr)
 }
 
 // send 发送请求
 func (h *WebhookHandler) send(ctx context.Context, payload []byte, contentType string) error {
-	req, err := http.NewRequestWithContext(ctx, h.config.Method, h.config.URL, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, h.currentConfig().Method, h.currentConfig().URL, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
 
 	req.Header.Set("Content-Type", contentType)
-	for k, v := range h.config.Headers {
+	for k, v := range h.currentConfig().Headers {
 		req.Header.Set(k, v)
 	}
 
 	// 添加签名（如果配置了密钥）
-	if h.config.Secret != "" {
+	if h.currentConfig().Secret != "" {
 		signature := h.signPayload(payload)
 		req.Header.Set("X-Signature", signature)
 	}
@@ -205,19 +226,19 @@ func (h *WebhookHandler) send(ctx context.Context, payload []byte, contentType s
 
 // signPayload 签名载荷
 func (h *WebhookHandler) signPayload(payload []byte) string {
-	mac := hmac.New(sha256.New, []byte(h.config.Secret))
+	mac := hmac.New(sha256.New, []byte(h.currentConfig().Secret))
 	mac.Write(payload)
 	return fmt.Sprintf("sha256=%x", mac.Sum(nil))
 }
 
 // isSlackWebhook 是否是 Slack webhook
 func (h *WebhookHandler) isSlackWebhook() bool {
-	return h.config.URL != "" && (len(h.config.URL) >= 19 && h.config.URL[:19] == "https://hooks.slack")
+	return h.currentConfig().URL != "" && (len(h.currentConfig().URL) >= 19 && h.currentConfig().URL[:19] == "https://hooks.slack")
 }
 
 // isDingtalkWebhook 是否是钉钉 webhook
 func (h *WebhookHandler) isDingtalkWebhook() bool {
-	return h.config.URL != "" && (len(h.config.URL) >= 25 && h.config.URL[:25] == "https://oapi.dingtalk.com")
+	return h.currentConfig().URL != "" && (len(h.currentConfig().URL) >= 25 && h.currentConfig().URL[:25] == "https://oapi.dingtalk.com")
 }
 
 // severityToColor 严重程度转颜色

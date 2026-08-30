@@ -16,7 +16,7 @@ import (
 
 // TestNewHandler 测试创建 Handler
 func TestNewHandler(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, nil)
+	h := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 	assert.NotNil(t, h)
 	assert.Nil(t, h.prerenderManager)
 	assert.Nil(t, h.wafRepo)
@@ -57,7 +57,7 @@ func TestGetLanguageFromRequest(t *testing.T) {
 
 // TestCreateSiteHandler_NilPrerenderManager 测试 PrerenderManager 为 nil 时的行为
 func TestCreateSiteHandler_NilPrerenderManager(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -89,7 +89,7 @@ func TestCreateSiteHandler_NilPrerenderManager(t *testing.T) {
 
 // TestCreateSiteHandler_ProxyMode 测试代理模式
 func TestCreateSiteHandler_ProxyMode(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -122,7 +122,7 @@ func TestCreateSiteHandler_ProxyMode(t *testing.T) {
 
 // TestCreateSiteHandler_ProxyMode_InvalidURL 测试代理模式无效 URL
 func TestCreateSiteHandler_ProxyMode_InvalidURL(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -152,7 +152,7 @@ func TestCreateSiteHandler_ProxyMode_InvalidURL(t *testing.T) {
 
 // TestCreateSiteHandler_StaticMode 测试静态模式
 func TestCreateSiteHandler_StaticMode(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -179,7 +179,7 @@ func TestCreateSiteHandler_StaticMode(t *testing.T) {
 
 // TestCreateSiteHandler_StaticMode_WithIndexHTML 测试静态模式有 index.html
 func TestCreateSiteHandler_StaticMode_WithIndexHTML(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -209,7 +209,7 @@ func TestCreateSiteHandler_StaticMode_WithIndexHTML(t *testing.T) {
 
 // TestCreateSiteHandler_StaticMode_StaticResource 测试静态资源
 func TestCreateSiteHandler_StaticMode_StaticResource(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -238,7 +238,7 @@ func TestCreateSiteHandler_StaticMode_StaticResource(t *testing.T) {
 
 // TestCreateSiteHandler_UnknownMode 测试未知模式
 func TestCreateSiteHandler_UnknownMode(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -265,7 +265,7 @@ func TestCreateSiteHandler_UnknownMode(t *testing.T) {
 
 // TestCreateSiteHandler_CrawlerRequest_NilPrerenderManager 测试爬虫请求时 PrerenderManager 为 nil
 func TestCreateSiteHandler_CrawlerRequest_NilPrerenderManager(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -296,7 +296,7 @@ func TestCreateSiteHandler_CrawlerRequest_NilPrerenderManager(t *testing.T) {
 
 // TestCreateSiteHandler_MonitorRecording 测试监控记录
 func TestCreateSiteHandler_MonitorRecording(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -331,7 +331,7 @@ func TestCreateSiteHandler_MonitorRecording(t *testing.T) {
 
 // TestCreateSiteHandler_WithQueryParams 测试带查询参数的请求
 func TestCreateSiteHandler_WithQueryParams(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -361,7 +361,7 @@ func TestCreateSiteHandler_WithQueryParams(t *testing.T) {
 
 // TestCreateSiteHandler_WithReferer 测试带 Referer 的请求
 func TestCreateSiteHandler_WithReferer(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -392,7 +392,7 @@ func TestCreateSiteHandler_WithReferer(t *testing.T) {
 
 // TestCreateSiteHandler_ConcurrentAccess 测试并发访问
 func TestCreateSiteHandler_ConcurrentAccess(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -433,7 +433,7 @@ func TestCreateSiteHandler_ConcurrentAccess(t *testing.T) {
 
 // TestCreateSiteHandler_DifferentUserAgents 测试不同 User-Agent
 func TestCreateSiteHandler_DifferentUserAgents(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -475,7 +475,7 @@ func TestCreateSiteHandler_DifferentUserAgents(t *testing.T) {
 
 // TestCreateSiteHandler_HTTPMethods 测试不同 HTTP 方法
 func TestCreateSiteHandler_HTTPMethods(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -511,7 +511,7 @@ func TestCreateSiteHandler_HTTPMethods(t *testing.T) {
 
 // TestCreateSiteHandler_EmptySiteConfig 测试空站点配置
 func TestCreateSiteHandler_EmptySiteConfig(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{}
 
@@ -532,7 +532,7 @@ func TestCreateSiteHandler_EmptySiteConfig(t *testing.T) {
 
 // TestCreateSiteHandler_RedisNotAvailable 测试 Redis 不可用时的行为
 func TestCreateSiteHandler_RedisNotAvailable(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",
@@ -566,7 +566,7 @@ func TestCreateSiteHandler_RedisNotAvailable(t *testing.T) {
 
 // TestCreateSiteHandler_WithTimeout 测试超时配置
 func TestCreateSiteHandler_WithTimeout(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 
 	testSite := config.SiteConfig{
 		ID:      "test-site",

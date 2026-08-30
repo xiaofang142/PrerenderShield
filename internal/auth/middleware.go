@@ -7,8 +7,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// JWTAuthMiddleware JWT认证中间件
-func JWTAuthMiddleware(jwtManager *JWTManager) gin.HandlerFunc {
+// apiTokenPathPrefix 管理 API Token 仅可用于该前缀下的端点（缓存自动化运维，如 CI 发布钩子）
+const apiTokenPathPrefix = "/api/v1/preheat/"
+
+// JWTAuthMiddleware JWT认证中间件。
+// apiTokenProvider 返回管理 API Token 的 sha256 hex 列表（nil/空返回值=禁用回退鉴权）：
+// JWT 校验失败时，若请求命中 /api/v1/preheat/ 前缀且 Bearer Token 命中任一哈希，则放行
+// 并标记 auth_via=api_token。WebSocket 组应显式传 nil 保持仅 JWT。
+func JWTAuthMiddleware(jwtManager *JWTManager, apiTokenProvider func() []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 获取Authorization头
 		authHeader := c.GetHeader("Authorization")
@@ -42,6 +48,14 @@ func JWTAuthMiddleware(jwtManager *JWTManager) gin.HandlerFunc {
 		// 验证令牌
 		claims, err := jwtManager.ValidateToken(parts[1])
 		if err != nil {
+			// 管理 API Token 回退：仅限 /preheat/ 运维端点，避免 Token 泄露放大为全 API 权限
+			if apiTokenProvider != nil &&
+				strings.HasPrefix(c.Request.URL.Path, apiTokenPathPrefix) &&
+				VerifyToken(parts[1], apiTokenProvider()) {
+				c.Set("auth_via", "api_token")
+				c.Next()
+				return
+			}
 			statusCode := http.StatusUnauthorized
 			if err == ErrExpiredToken {
 				statusCode = http.StatusUnauthorized

@@ -18,7 +18,8 @@
     "extract": "압축풀기",
     "batchDelete": "일괄 삭제",
     "deleteAll": "전체 삭제",
-    "ok": "확인"
+    "ok": "확인",
+    "copied": "복사됨"
   },
   "menu": {
     "overview": "개요",

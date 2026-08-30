@@ -209,7 +209,7 @@ func TestRegisterAllRoutes(t *testing.T) {
 
 	// 测试 RegisterAllRoutes（主要用于代码覆盖）
 	// 注意：由于依赖为 nil，实际请求会失败，但路由注册代码会被执行
-	RegisterAllRoutes(router, controllers, nil)
+	RegisterAllRoutes(router, controllers, nil, nil)
 
 	assert.NotNil(t, router)
 }

@@ -129,7 +129,24 @@ func (c *SitesController) GetSiteConfig(ctx *gin.Context) {
 	var configKey string
 	switch configType {
 	case "prerender":
-		configKey = id + "_prerender"
+		// prerender 配置权威来源 = 站点配置 struct（与 PUT /sites/:id/prerender 绑定形状一致）。
+		// 旧版 Redis <id>_prerender 扁平字符串图与 struct 不兼容（int 字段为字符串导致
+		// 前端整段提交 400、ttl_rules/include_patterns 等新字段不可见），不再作为读源。
+		for i := range c.cfg.current().Sites {
+			if c.cfg.current().Sites[i].ID == id {
+				ctx.JSON(http.StatusOK, gin.H{
+					"code":    200,
+					"message": "success",
+					"data":    c.cfg.current().Sites[i].Prerender,
+				})
+				return
+			}
+		}
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"code":    404,
+			"message": "Site config not found",
+		})
+		return
 	case "push":
 		configKey = id + "_push"
 	case "waf":
@@ -153,31 +170,30 @@ func (c *SitesController) GetSiteConfig(ctx *gin.Context) {
 
 	if len(config) == 0 {
 		// Redis 中无定制配置时，回退到站点静态配置中的对应部分，
-		// 避免新装环境 GET 配置直接 404（前端无需再自行兜底）
-		for i := range c.cfg.Sites {
-			if c.cfg.Sites[i].ID != id {
+		// 避免新装环境 GET 配置直接 404（前端无需再自行兜底）。
+		// 注：configType 为 push/waf 时 fallback 恒非 nil（struct/map 字面量），
+		// "fallback 为 nil → break" 分支不可达，已简化为直接返回
+		for i := range c.cfg.current().Sites {
+			if c.cfg.current().Sites[i].ID != id {
 				continue
 			}
-			site := c.cfg.Sites[i]
+			site := c.cfg.current().Sites[i]
 			var fallback interface{}
+			// 注：configType=="prerender" 在上方分支已提前返回（命中或 404），
+			// 永远不会进入本兜底 switch，case "prerender" 不可达，故移除
 			switch configType {
-			case "prerender":
-				fallback = site.Prerender
 			case "push":
 				fallback = site.Prerender.Push
 			case "waf":
 				// 与 saveWafConfigToRedis 保持相同字段形状，前端无需区分来源
 				fallback = c.buildWafConfigMap(&site)
 			}
-			if fallback != nil {
-				ctx.JSON(http.StatusOK, gin.H{
-					"code":    200,
-					"message": "success",
-					"data":    fallback,
-				})
-				return
-			}
-			break
+			ctx.JSON(http.StatusOK, gin.H{
+				"code":    200,
+				"message": "success",
+				"data":    fallback,
+			})
+			return
 		}
 		ctx.JSON(http.StatusNotFound, gin.H{
 			"code":    404,
@@ -255,8 +271,8 @@ func (c *SitesController) UpdateSitePrerenderConfig(ctx *gin.Context) {
 	if _, exists := c.siteServerMgr.GetSiteServer(oldSite.ID); exists {
 		c.siteServerMgr.StopSiteServer(oldSite.ID)
 	}
-	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
-	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
+	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.current().Dirs.StaticDir)
+	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.current().Server.Address, c.cfg.current().Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 	// 保存预渲染配置到Redis
 	c.savePrerenderConfigToRedis(updatedSite)
@@ -279,13 +295,18 @@ func (c *SitesController) UpdateSitePushConfig(ctx *gin.Context) {
 		})
 		return
 	}
+	status, message := c.updatePushConfigByID(id, pushUpdates)
+	ctx.JSON(status, gin.H{
+		"code":    status,
+		"message": message,
+	})
+}
 
+// updatePushConfigByID 推送配置持久化权威路径（/sites/:id/push 与 /push/config 共用）：
+// 更新站点配置 → SaveConfig 落盘 → 重启站点处理器（keyfile 拦截器与静态服务即时生效）→ Redis 冗余副本
+func (c *SitesController) updatePushConfigByID(id string, pushUpdates config.PushConfig) (int, string) {
 	if c.configManager == nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "Configuration manager not available",
-		})
-		return
+		return http.StatusInternalServerError, "Configuration manager not available"
 	}
 	currentConfig := c.configManager.GetConfig()
 	var updatedSite *config.SiteConfig
@@ -301,34 +322,24 @@ func (c *SitesController) UpdateSitePushConfig(ctx *gin.Context) {
 	}
 
 	if updatedSite == nil {
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"code":    404,
-			"message": "Site not found",
-		})
-		return
+		return http.StatusNotFound, "Site not found"
 	}
 
 	if err := c.configManager.SaveConfig(); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "Failed to save site configuration",
-		})
-		return
+		return http.StatusInternalServerError, "Failed to save site configuration"
 	}
 
-	if _, exists := c.siteServerMgr.GetSiteServer(oldSite.ID); exists {
-		c.siteServerMgr.StopSiteServer(oldSite.ID)
+	if c.siteServerMgr != nil && oldSite != nil {
+		if _, exists := c.siteServerMgr.GetSiteServer(oldSite.ID); exists {
+			c.siteServerMgr.StopSiteServer(oldSite.ID)
+		}
+		siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.current().Dirs.StaticDir)
+		c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.current().Server.Address, c.cfg.current().Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 	}
-	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
-	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 	c.savePushConfigToRedis(updatedSite)
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "Push configuration updated successfully",
-		"data":    updatedSite.Prerender.Push,
-	})
+	return http.StatusOK, "Push configuration updated successfully"
 }
 
 // UpdateSiteFirewallConfig 独立更新防火墙配置
@@ -382,8 +393,8 @@ func (c *SitesController) UpdateSiteFirewallConfig(ctx *gin.Context) {
 	if _, exists := c.siteServerMgr.GetSiteServer(oldSite.ID); exists {
 		c.siteServerMgr.StopSiteServer(oldSite.ID)
 	}
-	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.Dirs.StaticDir)
-	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.Server.Address, c.cfg.Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
+	siteHandler := c.siteHandler.CreateSiteHandler(*updatedSite, c.concreteCrawlerLogMgr, c.concreteVisitLogMgr, c.concreteMonitor, c.cfg.current().Dirs.StaticDir)
+	c.siteServerMgr.StartSiteServer(*updatedSite, c.cfg.current().Server.Address, c.cfg.current().Dirs.StaticDir, c.concreteCrawlerLogMgr, siteHandler)
 
 	c.saveWafConfigToRedis(updatedSite)
 

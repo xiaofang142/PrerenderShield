@@ -18,7 +18,8 @@
     "extract": "展開",
     "batchDelete": "一括削除",
     "deleteAll": "すべて削除",
-    "ok": "OK"
+    "ok": "OK",
+    "copied": "コピーしました"
   },
   "menu": {
     "overview": "概要",

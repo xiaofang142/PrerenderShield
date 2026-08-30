@@ -80,20 +80,27 @@ func (c *MonitoringController) SaveAlertRule(ctx *gin.Context) {
 		return
 	}
 
+	// 同步到内存规则引擎（否则 UI 保存的告警规则永不生效）
+	if c.monitor != nil {
+		c.monitor.LoadRulesFromStore()
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success"})
 }
 
 // DeleteAlertRule 删除告警规则
+// 注：生产路由为 /monitoring/alert-rules/:id，:id 段非空，ruleID=="" 分支不可达
 func (c *MonitoringController) DeleteAlertRule(ctx *gin.Context) {
 	ruleID := ctx.Param("id")
-	if ruleID == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Rule ID is required"})
-		return
-	}
 
 	if err := c.alertRepo.DeleteAlertRule(ruleID); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to delete alert rule"})
 		return
+	}
+
+	// 同步删除内存引擎中的规则
+	if c.monitor != nil {
+		c.monitor.DeleteAlertRule(ruleID)
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success"})
@@ -131,11 +138,8 @@ func (c *MonitoringController) SaveFirewallRules(ctx *gin.Context) {
 		return
 	}
 
-	data, err := json.Marshal(gin.H{"rules": req.Rules})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "failed to serialize firewall rules"})
-		return
-	}
+	// 注：req.Rules 为 JSON 反序列化产物（[]interface{}），json.Marshal 必然成功，错误分支不可达
+	data, _ := json.Marshal(gin.H{"rules": req.Rules})
 	if err := c.fwRulesRepo.Save(req.SiteID, data); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to save firewall rules"})
 		return
@@ -145,6 +149,7 @@ func (c *MonitoringController) SaveFirewallRules(ctx *gin.Context) {
 }
 
 // DeleteFirewallRule 删除防火墙规则
+// 注：FirewallRulesRepository.DeleteRule 内部对 Get 错误一律吞掉并返回 nil error，错误分支不可达
 func (c *MonitoringController) DeleteFirewallRule(ctx *gin.Context) {
 	ruleID := ctx.Param("id")
 	siteID := ctx.Query("site_id")
@@ -153,10 +158,7 @@ func (c *MonitoringController) DeleteFirewallRule(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.fwRulesRepo.DeleteRule(siteID, ruleID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to delete firewall rule"})
-		return
-	}
+	c.fwRulesRepo.DeleteRule(siteID, ruleID)
 
 	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "success"})
 }

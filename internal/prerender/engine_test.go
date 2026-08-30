@@ -12,8 +12,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"prerender-shield/internal/cache"
+	"prerender-shield/internal/prerender/renderkey"
 )
 
 // 定义测试用错误
@@ -158,6 +160,10 @@ func (m *mockCacheManager) GetCacheEntry(siteID, key string) (*cache.CacheEntry,
 
 func (m *mockCacheManager) EvictLowPriority(siteID string, count int) error {
 	return nil
+}
+
+func (m *mockCacheManager) ListEntries(siteID string, limit int) ([]cache.CacheEntrySummary, error) {
+	return nil, nil
 }
 
 // TestNewEngine 测试创建渲染引擎
@@ -641,4 +647,76 @@ func TestEngineManager_ListSites(t *testing.T) {
 	assert.Len(t, sites, 2)
 	assert.Contains(t, sites, "site1")
 	assert.Contains(t, sites, "site2")
+}
+
+// TestEngine_SingleBucketReadChain 设备分桶收敛后的单桶读回退链：
+// 渲染器输出与 UA 无关 → 统一写 @desktop；读链 @desktop → legacy 旧键 → 存量 @mobile（过渡）。
+func TestEngine_SingleBucketReadChain(t *testing.T) {
+	redisClient := newMockRedisClientForEngine()
+	cm := newMockCacheManager()
+	eng := NewEngine(redisClient, cm, 2)
+
+	url := "http://example.com/page"
+	env := PageEnvelope{Status: 200, HTML: "<html>ok</html>", ExpiresAt: time.Now().Add(time.Hour).Unix()}
+	mobileEnv := PageEnvelope{Status: 200, HTML: "<html>mobile</html>", ExpiresAt: time.Now().Add(time.Hour).Unix()}
+	norm := renderkey.Normalize(url)
+
+	// 任意 UA 均读 @desktop 桶（mobile/桌面爬虫同一份 HTML）
+	require.NoError(t, cm.Set("s1", renderkey.WithDeviceBucket(norm, "desktop"), marshalPageEnvelope(env), time.Hour))
+	require.NoError(t, cm.Set("s1", renderkey.WithDeviceBucket(norm, "mobile"), marshalPageEnvelope(mobileEnv), time.Hour))
+	got, ok := eng.GetCachedPage("s1", url, "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Safari/604.1")
+	require.True(t, ok)
+	assert.Equal(t, "<html>ok</html>", got.HTML, "single-bucket: mobile UA must read desktop bucket")
+	got, ok = eng.GetCachedPage("s1", url, "")
+	require.True(t, ok)
+	assert.Equal(t, "<html>ok</html>", got.HTML)
+
+	// 回退：仅 legacy 无后缀旧键时可读
+	require.NoError(t, cm.Delete("s1", renderkey.WithDeviceBucket(norm, "desktop")))
+	require.NoError(t, cm.Delete("s1", renderkey.WithDeviceBucket(norm, "mobile")))
+	require.NoError(t, cm.Set("s1", renderkey.BuildCacheKey(norm), marshalPageEnvelope(env), time.Hour))
+	got, ok = eng.GetCachedPage("s1", url, "Googlebot/2.1")
+	require.True(t, ok)
+	assert.Equal(t, "<html>ok</html>", got.HTML, "desktop miss must fall back to legacy key")
+
+	// 回退：仅存量 @mobile 键时可读（过渡期兼容）
+	require.NoError(t, cm.Delete("s1", renderkey.BuildCacheKey(norm)))
+	require.NoError(t, cm.Set("s1", renderkey.WithDeviceBucket(norm, "mobile"), marshalPageEnvelope(mobileEnv), time.Hour))
+	got, ok = eng.GetCachedPage("s1", url, "Mozilla/5.0 (Android 14; Pixel 8) Mobile")
+	require.True(t, ok)
+	assert.Equal(t, "<html>mobile</html>", got.HTML, "legacy @mobile key must be readable during transition")
+
+	// 全部未命中
+	require.NoError(t, cm.Delete("s1", renderkey.WithDeviceBucket(norm, "mobile")))
+	_, ok = eng.GetCachedPage("s1", url, "Googlebot/2.1")
+	assert.False(t, ok)
+}
+
+// TestEngine_InvalidatePageCoversAllBuckets 失效语义=全设备失效（desktop/mobile/旧键三形态）
+func TestEngine_InvalidatePageCoversAllBuckets(t *testing.T) {
+	redisClient := newMockRedisClientForEngine()
+	cm := newMockCacheManager()
+	eng := NewEngine(redisClient, cm, 2)
+
+	url := "http://example.com/page"
+	norm := renderkey.Normalize(url)
+	for _, key := range []string{
+		renderkey.WithDeviceBucket(norm, "desktop"),
+		renderkey.WithDeviceBucket(norm, "mobile"),
+		renderkey.BuildCacheKey(norm),
+	} {
+		require.NoError(t, cm.Set("s1", key, []byte("x"), time.Hour))
+	}
+
+	require.NoError(t, eng.InvalidatePage("s1", url))
+
+	for _, key := range []string{
+		renderkey.WithDeviceBucket(norm, "desktop"),
+		renderkey.WithDeviceBucket(norm, "mobile"),
+		renderkey.BuildCacheKey(norm),
+	} {
+		exists, err := cm.Exists("s1", key)
+		require.NoError(t, err)
+		assert.False(t, exists, "key %s must be deleted", key)
+	}
 }

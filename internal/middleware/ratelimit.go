@@ -71,7 +71,8 @@ func (r *RedisRateLimiter) Middleware() gin.HandlerFunc {
 			return
 		}
 
-		if count >= r.limit {
+		// 先自增后比较：count 已含本次请求，limit=N 表示允许 N 次（差一错误回归修复）
+		if count > r.limit {
 			banCtx := context.Background()
 			rdb.Set(banCtx, bannedKey, "1", r.banTime)
 			c.AbortWithStatusJSON(429, gin.H{

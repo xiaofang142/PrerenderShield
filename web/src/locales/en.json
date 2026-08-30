@@ -18,7 +18,8 @@
     "extract": "Extract",
     "batchDelete": "Batch Delete",
     "deleteAll": "Delete All",
-    "ok": "OK"
+    "ok": "OK",
+    "copied": "Copied"
   },
   "menu": {
     "overview": "Overview",

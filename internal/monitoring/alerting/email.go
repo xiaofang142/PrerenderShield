@@ -14,6 +14,21 @@ import (
 // EmailNotifier 邮件告警通知
 type EmailNotifier struct {
 	config EmailConfig
+	// provider 非空时每次告警读取最新配置（控制台改动即时生效，免重启）
+	provider func() *EmailConfig
+}
+
+// SetConfigProvider 注入动态配置来源
+func (n *EmailNotifier) SetConfigProvider(fn func() *EmailConfig) { n.provider = fn }
+
+// currentConfig 当前生效配置
+func (n *EmailNotifier) currentConfig() EmailConfig {
+	if n.provider != nil {
+		if c := n.provider(); c != nil {
+			return *c
+		}
+	}
+	return n.config
 }
 
 // NewEmailNotifier 创建邮件通知器
@@ -26,7 +41,8 @@ func (n *EmailNotifier) Name() string { return "email" }
 
 // Send 发送告警邮件（实现 AlertHandler 接口）
 func (n *EmailNotifier) Send(ctx context.Context, alert *Alert) error {
-	if !n.config.Enabled || len(n.config.To) == 0 {
+	cfg := n.currentConfig()
+	if !cfg.Enabled || len(cfg.To) == 0 {
 		return nil
 	}
 
@@ -66,15 +82,21 @@ func colorForSeverity(severity string) string {
 }
 
 func (n *EmailNotifier) sendSMTP(subject, body string) error {
-	addr := fmt.Sprintf("%s:%d", n.config.SMTPHost, n.config.SMTPPort)
-	auth := smtp.PlainAuth("", n.config.Username, n.config.Password, n.config.SMTPHost)
+	cfg := n.currentConfig()
+	addr := fmt.Sprintf("%s:%d", cfg.SMTPHost, cfg.SMTPPort)
+	// 未配置凭证时跳过 AUTH（中继服务器无需认证场景；此前空凭证仍发 AUTH 导致
+	// "server doesn't support AUTH" 拒发）
+	var auth smtp.Auth
+	if cfg.Username != "" {
+		auth = smtp.PlainAuth("", cfg.Username, cfg.Password, cfg.SMTPHost)
+	}
 
-	msg := buildMessage(n.config.From, n.config.To, subject, body)
+	msg := buildMessage(cfg.From, cfg.To, subject, body)
 
-	if n.config.UseTLS {
+	if cfg.UseTLS {
 		return n.sendTLS(addr, auth, msg)
 	}
-	return smtp.SendMail(addr, auth, n.config.From, n.config.To, msg)
+	return smtp.SendMail(addr, auth, cfg.From, cfg.To, msg)
 }
 
 func (n *EmailNotifier) sendTLS(addr string, auth smtp.Auth, msg []byte) error {

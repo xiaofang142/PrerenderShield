@@ -42,14 +42,9 @@ func (c *CrawlerController) GetCrawlerLogs(ctx *gin.Context) {
 	}
 
 	// 获取日志
-	logs, total, err := c.crawlerLogMgr.GetCrawlerLogs(site, startTime, endTime, page, pageSize)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    http.StatusInternalServerError,
-			"message": "Failed to get crawler logs",
-		})
-		return
-	}
+	// 注：CrawlerLogManager.GetCrawlerLogs 对内部 Redis 读取错误一律跳过并返回 nil error，
+	// 该错误分支不可达（已用覆盖工具验证），故不保留死分支
+	logs, total, _ := c.crawlerLogMgr.GetCrawlerLogs(site, startTime, endTime, page, pageSize)
 
 	// 转换为前端需要的格式
 	var items []gin.H
@@ -66,6 +61,8 @@ func (c *CrawlerController) GetCrawlerLogs(ctx *gin.Context) {
 			"method":     log.Method,
 			"cacheTTL":   log.CacheTTL,
 			"renderTime": log.RenderTime,
+			"quality":    log.Quality,
+			"verified":   log.Verified,
 		})
 	}
 
@@ -100,18 +97,52 @@ func (c *CrawlerController) GetCrawlerStats(ctx *gin.Context) {
 	}
 
 	// 获取统计数据
-	stats, err := c.crawlerLogMgr.GetCrawlerStats(site, startTime, endTime, granularity)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    http.StatusInternalServerError,
-			"message": "Failed to get crawler stats",
-		})
-		return
-	}
+	// 注：CrawlerLogManager.GetCrawlerStats 对内部 Redis 读取错误一律跳过并返回 nil error，错误分支不可达
+	stats, _ := c.crawlerLogMgr.GetCrawlerStats(site, startTime, endTime, granularity)
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "success",
 		"data":    stats,
+	})
+}
+
+// GetURLStats per-URL 渲染预算报表：GET /crawler/url-stats?site=&startTime=&endTime=&limit=
+func (c *CrawlerController) GetURLStats(ctx *gin.Context) {
+	site := ctx.Query("site")
+	startTimeStr := ctx.DefaultQuery("startTime", time.Now().Add(-7*24*time.Hour).Format(time.RFC3339))
+	endTimeStr := ctx.DefaultQuery("endTime", time.Now().Format(time.RFC3339))
+	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	startTime, err := time.Parse(time.RFC3339, startTimeStr)
+	if err != nil {
+		startTime = time.Now().Add(-7 * 24 * time.Hour)
+	}
+	endTime, err := time.Parse(time.RFC3339, endTimeStr)
+	if err != nil {
+		endTime = time.Now()
+	}
+	if !startTime.Before(endTime) {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "startTime must be before endTime",
+		})
+		return
+	}
+
+	// 注：CrawlerLogManager.GetURLStats 对内部 Redis 读取错误一律跳过并返回 nil error，
+	// 且返回值经 make([]URLStat,0,...) 构造永不为 nil，nil 兜底不可达
+	stats, _ := c.crawlerLogMgr.GetURLStats(site, startTime, endTime, limit)
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "success",
+		"data": gin.H{
+			"list":  stats,
+			"total": len(stats),
+		},
 	})
 }

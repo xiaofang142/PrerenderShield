@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -153,11 +154,34 @@ func (l *Logger) Error(format string, v ...interface{}) {
 	}
 }
 
+// fatalExit Fatal 的进程退出实现（默认 os.Exit），原子指针保证并发读写安全：
+// 端口冲突的 Fatal 在 goroutine 中异步触发，测试可能并发替换/恢复该实现。
+// 测试缝：注入 no-op 才能覆盖 Fatal 调用点而不终止测试进程；生产路径行为不变。
+var fatalExit atomic.Pointer[func(int)]
+
+func init() {
+	def := func(code int) { os.Exit(code) }
+	fatalExit.Store(&def)
+}
+
+// SetFatalExit 替换 Fatal 的退出实现（测试专用），返回恢复函数。
+func SetFatalExit(fn func(code int)) (restore func()) {
+	previous := fatalExit.Load()
+	if fn == nil {
+		def := func(code int) { os.Exit(code) }
+		fn = def
+	}
+	fatalExit.Store(&fn)
+	return func() { fatalExit.Store(previous) }
+}
+
 // Fatal 记录致命日志并退出程序
 func (l *Logger) Fatal(format string, v ...interface{}) {
 	if l.level <= FATAL {
 		l.fatalLogger.Printf(format, v...)
-		os.Exit(1)
+		if fn := fatalExit.Load(); fn != nil {
+			(*fn)(1)
+		}
 	}
 }
 

@@ -64,9 +64,8 @@ func (r *FirewallRulesRepository) DeleteRule(siteID, ruleID string) error {
 		out = append(out, rule)
 	}
 	data["rules"] = out
-	updated, err := json.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("serialize firewall rules: %w", err)
-	}
+	// 死分支证明：data 源自 Get 的 json.Unmarshal，值只能为 bool/float64/string/nil/
+	// 数组/对象（JSON 数字必为有限值，Unmarshal 拒绝 NaN/Inf/溢出），json.Marshal 恒成功
+	updated, _ := json.Marshal(data)
 	return r.Save(siteID, updated)
 }

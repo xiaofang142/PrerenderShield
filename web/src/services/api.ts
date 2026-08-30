@@ -209,6 +209,11 @@ export const prerenderApi = {
   getCrawlerHeaders: () => api.get('/preheat/crawler-headers'),
   clearCache: (siteId: string) => api.post('/preheat/clear-cache', { siteId }),
   getPreheatStats: (siteId?: string) => api.get('/preheat/stats', { params: siteId ? { siteId } : {} }),
+  // 缓存条目管理：单 URL 失效 / 强制重渲 / 列表 / 单条删除
+  invalidateCache: (siteId: string, url: string) => api.post('/preheat/invalidate', { siteId, url }),
+  recacheUrl: (siteId: string, url: string) => api.post('/preheat/recache', { siteId, url }),
+  listCacheEntries: (siteId: string, limit: number = 200) => api.get('/preheat/entries', { params: { siteId, limit } }),
+  deleteCacheEntry: (siteId: string, url: string) => api.delete('/preheat/entries', { params: { siteId, url } }),
 }
 
 // 路由 API
@@ -262,6 +267,7 @@ export const sitesApi = {
 export const crawlerApi = {
   getLogs: (params: { site?: string; startTime: string; endTime: string; page: number; pageSize: number }) => api.get('/crawler/logs', { params }),
   getStats: (params: { site?: string; startTime: string; endTime: string; granularity: string }) => api.get('/crawler/stats', { params }),
+  getUrlStats: (params: { site?: string; startTime: string; endTime: string; limit?: number }) => api.get('/crawler/url-stats', { params }),
 }
 
 // 推送 API

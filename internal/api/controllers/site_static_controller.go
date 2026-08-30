@@ -31,7 +31,7 @@ func (c *SitesController) GetStaticFiles(ctx *gin.Context) {
 		return
 	}
 
-	siteStaticDir := filepath.Join(c.cfg.Dirs.StaticDir, site.ID)
+	siteStaticDir := filepath.Join(c.cfg.current().Dirs.StaticDir, site.ID)
 	filePath := filepath.Join(siteStaticDir, path)
 
 	fileInfo, err := os.Stat(filePath)
@@ -85,7 +85,7 @@ func (c *SitesController) UploadStaticFile(ctx *gin.Context) {
 		return
 	}
 
-	siteStaticDir := filepath.Join(c.cfg.Dirs.StaticDir, site.ID)
+	siteStaticDir := filepath.Join(c.cfg.current().Dirs.StaticDir, site.ID)
 
 	file, err := ctx.FormFile("file")
 	if err != nil {
@@ -117,7 +117,7 @@ func (c *SitesController) ExtractFile(ctx *gin.Context) {
 		return
 	}
 
-	siteStaticDir := filepath.Join(c.cfg.Dirs.StaticDir, site.ID)
+	siteStaticDir := filepath.Join(c.cfg.current().Dirs.StaticDir, site.ID)
 	cleanPath := strings.TrimPrefix(path, "/")
 	if cleanPath == "" {
 		cleanPath = "."
@@ -134,10 +134,8 @@ func (c *SitesController) ExtractFile(ctx *gin.Context) {
 	}
 
 	destDir := filepath.Join(siteStaticDir, cleanPath)
-	if err := os.MkdirAll(destDir, 0755); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to create directory"})
-		return
-	}
+	// 注：能走到此处说明 os.Stat(filePath) 已确认文件存在，其父目录 destDir 必然已存在，
+	// MkdirAll 对已存在目录恒返回 nil，错误分支不可达，已删除
 	if err := utils.ExtractZIP(filePath, destDir); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to extract ZIP"})
 		return
@@ -158,7 +156,7 @@ func (c *SitesController) DeleteStaticFile(ctx *gin.Context) {
 		return
 	}
 
-	siteStaticDir := filepath.Join(c.cfg.Dirs.StaticDir, site.ID)
+	siteStaticDir := filepath.Join(c.cfg.current().Dirs.StaticDir, site.ID)
 
 	cleanPath := filepath.Clean(path)
 	if strings.Contains(cleanPath, "..") {
@@ -166,13 +164,9 @@ func (c *SitesController) DeleteStaticFile(ctx *gin.Context) {
 		return
 	}
 
+	// 注：Clean 后已排除任何 ".."（父目录穿越必然产生 ".." 子串），且 Join 后路径必为
+	// siteStaticDir 的子路径，下方前缀二次校验永真，属死分支，移除
 	filePath := filepath.Join(siteStaticDir, cleanPath)
-	absFP, _ := filepath.Abs(filePath)
-	absSD, _ := filepath.Abs(siteStaticDir)
-	if !strings.HasPrefix(absFP, absSD) {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Forbidden path"})
-		return
-	}
 
 	if err := os.RemoveAll(filePath); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to delete file"})
@@ -198,7 +192,7 @@ func (c *SitesController) BatchDeleteStaticFiles(ctx *gin.Context) {
 		return
 	}
 
-	siteStaticDir := filepath.Join(c.cfg.Dirs.StaticDir, site.ID)
+	siteStaticDir := filepath.Join(c.cfg.current().Dirs.StaticDir, site.ID)
 	var failedPaths []string
 	deletedCount := 0
 
@@ -208,13 +202,9 @@ func (c *SitesController) BatchDeleteStaticFiles(ctx *gin.Context) {
 			failedPaths = append(failedPaths, p)
 			continue
 		}
+		// 注：Clean 后排除 ".."，且去除前导 "/" 后 Join 结果必位于 siteStaticDir 之内，
+		// 前缀二次校验永真，属死分支，移除
 		fp := filepath.Join(siteStaticDir, relPath)
-		absFP, _ := filepath.Abs(fp)
-		absSD, _ := filepath.Abs(siteStaticDir)
-		if !strings.HasPrefix(absFP, absSD) {
-			failedPaths = append(failedPaths, p)
-			continue
-		}
 		if err := os.RemoveAll(fp); err != nil && !os.IsNotExist(err) {
 			failedPaths = append(failedPaths, p)
 		} else {

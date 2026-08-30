@@ -63,6 +63,20 @@
       "fetchConfigFailed": "获取配置失败",
       "saveSuccess": "配置保存成功",
       "saveFailed": "保存失败"
+    },
+    "token": {
+      "title": "API Token 管理",
+      "help": "用于 CI/发布钩子等自动化调用缓存管理接口（仅 /api/v1/preheat/* 端点可用，如单 URL 失效/重渲/触发预热）。哈希存储，原文仅生成时展示一次。",
+      "generate": "生成 Token",
+      "empty": "暂无 Token",
+      "generatedTitle": "Token 已生成（仅显示一次）",
+      "generatedWarning": "请立即复制保存，关闭后将无法再次查看：",
+      "copy": "复制",
+      "revoke": "吊销",
+      "revokeConfirm": "确定吊销此 Token？使用该 Token 的自动化将立即失去访问权限。",
+      "revokeSuccess": "Token 已吊销",
+      "saveFailed": "Token 保存失败",
+      "usage": "调用方式：Authorization: Bearer <token>，仅可访问 /api/v1/preheat/* 端点。"
     }
   }
 }

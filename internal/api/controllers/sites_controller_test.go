@@ -24,9 +24,10 @@ import (
 
 // MockConfigManager implements ConfigManagerInterface
 type MockConfigManager struct {
-	config     *config.Config
-	saveError  error
-	updateFunc func(*config.Config)
+	config      *config.Config
+	saveError   error
+	mutateError error
+	updateFunc  func(*config.Config)
 }
 
 func (m *MockConfigManager) GetConfig() *config.Config {
@@ -45,6 +46,9 @@ func (m *MockConfigManager) SaveConfig() error {
 }
 
 func (m *MockConfigManager) Mutate(mutate func(c *config.Config) (*config.Config, error)) error {
+	if m.mutateError != nil {
+		return m.mutateError
+	}
 	newCfg, err := mutate(m.config)
 	if err != nil {
 		return err

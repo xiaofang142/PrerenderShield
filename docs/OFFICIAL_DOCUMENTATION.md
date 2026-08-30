@@ -172,8 +172,25 @@ sites:
     prerender:
       enabled: true
       timeout: 30       # 渲染超时（秒）
+      cache_ttl: 86400  # 渲染缓存 TTL（秒）
+      max_concurrency: 4            # 站点渲染并发预算；0=不限（沿用全局池自约束）
+      stale_while_revalidate: true  # 软过期降级供数：过期立即回旧值+后台异步重渲（nil 视为 true）
+      include_patterns:             # 渲染 URL 白名单（RequestURI 正则，空=全部可渲染）
+        - "^/(page|post)/"
+      exclude_patterns:             # 渲染黑名单（优先于白名单）：后台/支付页等不烧 Chromium
+        - "^/admin"
+        - "^/api/"
+      category_policy:              # 爬虫分类渲染策略（search/social/ai/generic）
+        ai: "cache_only"            # render=实时渲染 / cache_only=仅回缓存 / passthrough=透传上游
+      ttl_rules:                    # 缓存 TTL 分级规则（有序首中生效，最多 10 条，60..2592000 秒）
+        - pattern: "/blog/"         # 子串匹配；含 * 按通配符（如 */docs/api/*）
+          ttl_seconds: 86400
+        - pattern: "*/docs/api/*"
+          ttl_seconds: 300
     firewall:
       enabled: true
+      bot_verify:                   # 爬虫真实性验证（log-only）
+        enabled: false              # Google rDNS 双向验证，结果写入爬虫日志 verified 字段
       geoip:
         enabled: true
         block_list: ["KP"]             # 封禁国家码列表（allow_list 为反向白名单模式）
@@ -184,6 +201,10 @@ sites:
 
 - 站点配置存于 Redis，控制台修改**即时生效，无需重启**
 - `mode: static` 时从 `static_dir/<site>/` 提供文件，并自动生成该站点的 sitemap
+- **缓存单桶存储**：渲染器输出与设备无关（响应式站点），桌面/移动爬虫共用同一份缓存（`@desktop` 键；存量的 `@mobile`/无后缀旧键读取时自动回退兼容）
+- **IndexNow key 文件自动托管**：配置 `indexnow_key` 后，`GET /{key}.txt` 由站点处理器直接应答（WAF 之前），同时写入静态根目录，搜索引擎验证所有权零配置
+- **条件请求（304）**：爬虫 200 响应携带弱 ETag 与 Last-Modified；Googlebot 带 `If-None-Match`/`If-Modified-Since` 重爬时直接返回 304（无 body），省带宽省流量
+- **gzip 压缩**：渲染 HTML >1KB 且客户端 `Accept-Encoding` 含 gzip 时自动压缩（`Vary: Accept-Encoding`）
 
 ## 管理控制台
 
@@ -260,10 +281,17 @@ Base URL：`http://<host>:9598/api/v1`，认证方式 `Authorization: Bearer <JW
 | 站点 | `GET/POST/PUT/DELETE /sites` | 站点 CRUD |
 | SEO | `/seo/sitemap` `/seo/robots`（GET 查询 + POST 生成） | sitemap 与 robots 管理 |
 | 预热 | `/preheat/trigger` `/preheat/stats` `/preheat/task/status` 等 | 触发/查询预热任务 |
+| 缓存条目 | `POST /preheat/invalidate` `POST /preheat/recache` `GET /preheat/entries` `DELETE /preheat/entries` | 单 URL 失效 / 强制重渲替换 / 条目列表 / 单条删除（支持管理 API Token） |
+| 爬虫分析 | `GET /crawler/url-stats?site=&startTime=&endTime=&limit=` | per-URL 渲染预算报表（请求数/实渲染次数/命中率/浪费秒数） |
 | SSL | `/ssl/*` | ACME 证书管理 |
 | 系统 | `GET/POST /system/config` `POST /system/backup` | 配置读取/动态更新/备份 |
 
 响应统一格式：成功 `{"code":0,"data":{...},"message":"ok"}`，失败 `{"code":4xx/5xx,"message":"..."}`。
+
+### 管理 API Token（自动化调用）
+
+系统设置 → API Token 生成（原文仅展示一次，仅保存 sha256 哈希；YAML 中 `api_tokens` 亦可预置哈希）。
+调用方式 `Authorization: Bearer pst_xxx`，**仅可访问 `/api/v1/preheat/*` 端点**（缓存失效/重渲/预热触发），适合 CI 发布钩子内容更新后自动刷缓存。
 
 ## FAQ
 

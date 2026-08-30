@@ -428,3 +428,127 @@ func TestPreheatController_GetPreheatStats_NonExistentSite(t *testing.T) {
 	// prerenderManager 为 nil 时返回 500
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func setupPreheatEntryRoutes(controller *PreheatController) *gin.Engine {
+	router := gin.New()
+	router.POST("/preheat/invalidate", controller.InvalidateCache)
+	router.POST("/preheat/recache", controller.RecacheURL)
+	router.GET("/preheat/entries", controller.ListCacheEntries)
+	router.DELETE("/preheat/entries", controller.DeleteCacheEntry)
+	return router
+}
+
+func TestPreheatController_InvalidateCache_InvalidRequest(t *testing.T) {
+	_, router := setupPreheatController()
+	router.POST("/preheat/invalidate", func(c *gin.Context) { c.Next() })
+	_ = router
+
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{{ID: "test-site-1", Name: "Test Site 1", Domains: []string{"localhost"}, Port: 8080}},
+	}
+	controller := NewPreheatController(nil, nil, nil, cfg)
+	router2 := setupPreheatEntryRoutes(controller)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/preheat/invalidate", bytes.NewBufferString("invalid json"))
+	req.Header.Set("Content-Type", "application/json")
+	router2.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestPreheatController_InvalidateCache_SiteNotFound(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{{ID: "test-site-1", Name: "Test Site 1", Domains: []string{"localhost"}, Port: 8080}},
+	}
+	controller := NewPreheatController(nil, nil, nil, cfg)
+	router := setupPreheatEntryRoutes(controller)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/preheat/invalidate",
+		bytes.NewBufferString(`{"siteId":"non-existent","url":"/page"}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestPreheatController_RecacheURL_SiteNotFound(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{{ID: "test-site-1", Name: "Test Site 1", Domains: []string{"localhost"}, Port: 8080}},
+	}
+	controller := NewPreheatController(nil, nil, nil, cfg)
+	router := setupPreheatEntryRoutes(controller)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/preheat/recache",
+		bytes.NewBufferString(`{"siteId":"non-existent","url":"/page"}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestPreheatController_ListCacheEntries_SiteNotFound(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{{ID: "test-site-1", Name: "Test Site 1", Domains: []string{"localhost"}, Port: 8080}},
+	}
+	controller := NewPreheatController(nil, nil, nil, cfg)
+	router := setupPreheatEntryRoutes(controller)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/preheat/entries?siteId=non-existent", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestPreheatController_ListCacheEntries_NilManager(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{{ID: "test-site-1", Name: "Test Site 1", Domains: []string{"localhost"}, Port: 8080}},
+	}
+	controller := NewPreheatController(nil, nil, nil, cfg)
+	router := setupPreheatEntryRoutes(controller)
+
+	// 站点存在但 prerenderManager 为 nil → findEngine 返回 ok=false → 404
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/preheat/entries?siteId=test-site-1", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestPreheatController_DeleteCacheEntry_MissingParams(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{{ID: "test-site-1", Name: "Test Site 1", Domains: []string{"localhost"}, Port: 8080}},
+	}
+	controller := NewPreheatController(nil, nil, nil, cfg)
+	router := setupPreheatEntryRoutes(controller)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("DELETE", "/preheat/entries", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestPreheatController_DeleteCacheEntry_SiteNotFound(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Sites: []config.SiteConfig{{ID: "test-site-1", Name: "Test Site 1", Domains: []string{"localhost"}, Port: 8080}},
+	}
+	controller := NewPreheatController(nil, nil, nil, cfg)
+	router := setupPreheatEntryRoutes(controller)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("DELETE", "/preheat/entries?siteId=non-existent&url=/page", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}

@@ -27,40 +27,71 @@ type CrawlerRedisClient interface {
 // 确保 redis.Client 实现 CrawlerRedisClient 接口
 var _ CrawlerRedisClient = (*redis.Client)(nil)
 
-// knownCrawlerKeywords 已知搜索引擎/社交爬虫的 UA 关键词。
+// knownCrawlerKeywords 已知搜索引擎/社交/AI 爬虫的 UA 关键词与分类。
 // 注意：刻意不包含 curl/wget/fetch 等 CLI/HTTP 库关键词，避免攻击者
 // 伪造 UA 即可触发资源密集型的 Chromium 渲染（DoS 攻击面）。
-var knownCrawlerKeywords = []string{
-	"googlebot",
-	"bingbot",
-	"baiduspider",
-	"yandexbot",
-	"sogou",
-	"yahoo! slurp",
-	"duckduckbot",
-	"facebookexternalhit",
-	"linkedinbot",
-	"twitterbot",
-	"pinterest",
-	"slackbot",
-	"telegrambot",
-	"whatsapp",
-	"bot",
-	"spider",
-	"crawler",
-	"robot",
+// 分类用于站点级渲染策略（site.Prerender.CategoryPolicy）：
+// search/social 默认可渲染；ai 类默认仅回缓存（防高频 AI 爬虫制造渲染洪水）。
+var knownCrawlerKeywords = []crawlerKeyword{
+	{"googlebot", CatSearch},
+	{"bingbot", CatSearch},
+	{"baiduspider", CatSearch},
+	{"yandexbot", CatSearch},
+	{"sogou", CatSearch},
+	{"yahoo! slurp", CatSearch},
+	{"duckduckbot", CatSearch},
+	{"facebookexternalhit", CatSocial},
+	{"linkedinbot", CatSocial},
+	{"twitterbot", CatSocial},
+	{"pinterest", CatSocial},
+	{"slackbot", CatSocial},
+	{"telegrambot", CatSocial},
+	{"whatsapp", CatSocial},
+	// 主流 AI 引擎/训练爬虫（AEO 场景：给它们完整 HTML 有利于被引用，
+	// 但频率极高，默认策略由站点配置决定，引擎内不强制渲染）
+	{"gptbot", CatAI},
+	{"claudebot", CatAI},
+	{"anthropic-ai", CatAI},
+	{"perplexitybot", CatAI},
+	{"ccbot", CatAI},
+	{"applebot", CatAI},
+	{"bytespider", CatAI},
+	{"amazonbot", CatAI},
+	// 泛化关键词置于末尾（兜底匹配，优先命中具体厂商）
+	{"bot", CatGeneric},
+	{"spider", CatGeneric},
+	{"crawler", CatGeneric},
+	{"robot", CatGeneric},
+}
+
+// 爬虫分类常量
+const (
+	CatSearch  = "search"
+	CatSocial  = "social"
+	CatAI      = "ai"
+	CatGeneric = "generic"
+)
+
+type crawlerKeyword struct {
+	keyword  string
+	category string
 }
 
 // isCrawlerUserAgent 判断给定 User-Agent 是否来自爬虫。
 // engine 与 EngineManager 共享此实现，避免两处逻辑不一致。
 func isCrawlerUserAgent(userAgent string) bool {
+	return ClassifyUserAgent(userAgent) != ""
+}
+
+// ClassifyUserAgent 返回 UA 所属爬虫分类（search/social/ai/generic）；非爬虫返回 ""。
+func ClassifyUserAgent(userAgent string) string {
 	lowerUA := strings.ToLower(userAgent)
-	for _, keyword := range knownCrawlerKeywords {
-		if strings.Contains(lowerUA, keyword) {
-			return true
+	for _, kw := range knownCrawlerKeywords {
+		if strings.Contains(lowerUA, kw.keyword) {
+			return kw.category
 		}
 	}
-	return false
+	return ""
 }
 
 // Crawler 链接爬取器

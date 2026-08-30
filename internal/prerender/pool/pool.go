@@ -27,6 +27,17 @@ type Instance struct {
 	mu           sync.RWMutex
 }
 
+// MarkUnhealthy 标记实例不健康（渲染失败后由引擎调用）：
+// Release 时对不健康实例走回收路径，绝不复用。
+// 关键正确性：chromedp 分配超时（如系统高负载下 DevTools wsURL 读取超过 20s）
+// 后该实例上下文已污染——浏览器进程悬而未决；若回池复用，下一次 Run 会在
+// 同一 context 上二次 Allocate，触发 chromedp 内部 close of closed channel panic。
+func (i *Instance) MarkUnhealthy() {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.IsHealthy = false
+}
+
 // Config 实例池配置
 type Config struct {
 	MinInstances        int           // 最小实例数

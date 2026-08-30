@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Card, Row, Col, Statistic, Button, Modal, Input, message, Table, Select } from 'antd'
-import { CodeOutlined, PlayCircleOutlined, FireOutlined, ReloadOutlined } from '@ant-design/icons'
-import { prerenderApi } from '../../services/api'
+import { Card, Row, Col, Statistic, Button, Modal, Input, message, Table, Select, Form, InputNumber, Switch, Divider, Space } from 'antd'
+import { CodeOutlined, PlayCircleOutlined, FireOutlined, ReloadOutlined, SaveOutlined, SettingOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
+import { prerenderApi, sitesApi, extractErrorMessage } from '../../services/api'
 import { useSites } from '../../hooks/useSites'
 import { useTranslation } from 'react-i18next'
 
 const { Search } = Input
 const { Option } = Select
+
+// 爬虫分类与其渲染策略选项（空=站点默认 render）
+const CATEGORY_KEYS = ['search', 'social', 'ai', 'generic'] as const
+const CATEGORY_POLICY_OPTIONS = ['render', 'cache_only', 'passthrough'] as const
 
 const Prerender: React.FC = () => {
   const { t } = useTranslation()
@@ -32,8 +36,14 @@ const Prerender: React.FC = () => {
   const [renderLoading, setRenderLoading] = useState(false)
   const [preheatLoading, setPreheatLoading] = useState(false)
   const [renderHistory, setRenderHistory] = useState<any[]>([])
+  // 渲染策略设置表单
+  const [policyForm] = Form.useForm()
+  const [sitePrerenderConfig, setSitePrerenderConfig] = useState<any>(null)
+  const [configLoading, setConfigLoading] = useState(false)
+  const [configSaving, setConfigSaving] = useState(false)
   // 竞态防护：站点快速切换时，旧请求的响应不再写入 state
   const requestVersionRef = useRef(0)
+  const configVersionRef = useRef(0)
 
   // 表格列配置
   const columns = [
@@ -100,8 +110,79 @@ const Prerender: React.FC = () => {
   useEffect(() => {
     if (selectedSite) {
       fetchStatus()
+      fetchSiteConfig()
     }
   }, [selectedSite])
+
+  // 渲染策略配置：读取站点完整 prerender 配置（PUT 为整段提交，需保留未编辑字段）
+  const fetchSiteConfig = async () => {
+    if (!selectedSite) return
+    const version = ++configVersionRef.current
+    try {
+      setConfigLoading(true)
+      const res = await sitesApi.getSiteConfig(selectedSite, 'prerender')
+      if (version !== configVersionRef.current) return
+      if (res.code === 200 && res.data) {
+        const cfg = res.data
+        setSitePrerenderConfig(cfg)
+        const policy = cfg.category_policy || {}
+        policyForm.setFieldsValue({
+          cache_ttl: cfg.cache_ttl,
+          timeout: cfg.timeout,
+          max_concurrency: cfg.max_concurrency || 0,
+          include_patterns: cfg.include_patterns || [],
+          exclude_patterns: cfg.exclude_patterns || [],
+          stale_while_revalidate: cfg.stale_while_revalidate === undefined ? true : !!cfg.stale_while_revalidate,
+          ttl_rules: cfg.ttl_rules || [],
+          policy_search: policy.search || '',
+          policy_social: policy.social || '',
+          policy_ai: policy.ai || '',
+          policy_generic: policy.generic || '',
+        })
+      }
+    } catch (error) {
+      console.error('Failed to fetch site prerender config:', error)
+      message.error(extractErrorMessage(error))
+    } finally {
+      if (version === configVersionRef.current) setConfigLoading(false)
+    }
+  }
+
+  // 保存渲染策略（整段提交完整 PrerenderConfig，避免后端整段绑定清零未编辑字段）
+  const handleSaveConfig = async (values: any) => {
+    if (!selectedSite || !sitePrerenderConfig) return
+    const merged: any = { ...sitePrerenderConfig }
+    merged.cache_ttl = values.cache_ttl
+    merged.timeout = values.timeout
+    merged.max_concurrency = values.max_concurrency || 0
+    merged.include_patterns = values.include_patterns || []
+    merged.exclude_patterns = values.exclude_patterns || []
+    merged.stale_while_revalidate = values.stale_while_revalidate
+    merged.ttl_rules = (values.ttl_rules || []).filter((r: any) => r && r.pattern && r.ttl_seconds)
+    const policy: Record<string, string> = {}
+    for (const key of CATEGORY_KEYS) {
+      const v = values[`policy_${key}`]
+      if (v) policy[key] = v
+    }
+    merged.category_policy = policy
+
+    try {
+      setConfigSaving(true)
+      const res = await sitesApi.updatePrerenderConfig(selectedSite, merged)
+      if (res.code === 200) {
+        message.success(t('prerender.configSaveSuccess'))
+        fetchSiteConfig()
+        fetchStatus()
+      } else {
+        message.error(res.message || t('prerender.configSaveFailed'))
+      }
+    } catch (error) {
+      console.error('Failed to save prerender config:', error)
+      message.error(extractErrorMessage(error))
+    } finally {
+      setConfigSaving(false)
+    }
+  }
 
   // 手动触发渲染
   const handleRender = async () => {
@@ -233,6 +314,120 @@ const Prerender: React.FC = () => {
             />
           </Col>
         </Row>
+      </Card>
+
+      {/* 渲染策略设置 */}
+      <Card
+        className="card"
+        title={<Space><SettingOutlined />{t('prerender.policyTitle')}</Space>}
+        style={{ marginBottom: 16 }}
+      >
+        <Form
+          form={policyForm}
+          layout="vertical"
+          onFinish={handleSaveConfig}
+          disabled={configLoading}
+        >
+          <Divider orientation="left" plain>{t('prerender.policyBasic')}</Divider>
+          <Row gutter={24}>
+            <Col span={6}>
+              <Form.Item name="cache_ttl" label={t('prerender.policyCacheTTL')} help={t('prerender.policyCacheTTLHelp')} rules={[{ required: true, message: t('prerender.policyRequired') }]}>
+                <InputNumber min={0} max={604800} addonAfter="s" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="timeout" label={t('prerender.policyTimeout')} help={t('prerender.policyTimeoutHelp')} rules={[{ required: true, message: t('prerender.policyRequired') }]}>
+                <InputNumber min={1} max={300} addonAfter="s" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="max_concurrency" label={t('prerender.policyMaxConcurrency')} help={t('prerender.policyMaxConcurrencyHelp')}>
+                <InputNumber min={0} max={100} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="stale_while_revalidate" label={t('prerender.policyStale')} valuePropName="checked" help={t('prerender.policyStaleHelp')}>
+                <Switch />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Divider orientation="left" plain>{t('prerender.policyPatterns')}</Divider>
+          <Row gutter={24}>
+            <Col span={12}>
+              <Form.Item name="include_patterns" label={t('prerender.policyInclude')} help={t('prerender.policyIncludeHelp')}>
+                <Select mode="tags" open={false} tokenSeparators={[',']} placeholder={t('prerender.policyPatternsPlaceholder')} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="exclude_patterns" label={t('prerender.policyExclude')} help={t('prerender.policyExcludeHelp')}>
+                <Select mode="tags" open={false} tokenSeparators={[',']} placeholder={t('prerender.policyPatternsPlaceholder')} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Divider orientation="left" plain>{t('prerender.policyTtlRules')}</Divider>
+          <Form.List name="ttl_rules">
+            {(fields, { add, remove }) => (
+              <>
+                {fields.map(({ key, name, ...restField }) => (
+                  <Row gutter={16} key={key} align="middle">
+                    <Col span={14}>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'pattern']}
+                        label={name === 0 ? t('prerender.policyTtlPattern') : ''}
+                        rules={[{ required: true, message: t('prerender.policyTtlPatternRequired') }]}
+                      >
+                        <Input placeholder={t('prerender.policyTtlPatternPlaceholder')} maxLength={200} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={7}>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'ttl_seconds']}
+                        label={name === 0 ? t('prerender.policyTtlSeconds') : ''}
+                        rules={[{ required: true, message: t('prerender.policyTtlSecondsRequired') }]}
+                      >
+                        <InputNumber min={60} max={2592000} addonAfter="s" style={{ width: '100%' }} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={3}>
+                      <Button type="text" danger icon={<DeleteOutlined />} onClick={() => remove(name)} />
+                    </Col>
+                  </Row>
+                ))}
+                <Form.Item>
+                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ pattern: '', ttl_seconds: 3600 })}>
+                    {t('prerender.policyTtlAdd')}
+                  </Button>
+                  <span style={{ marginLeft: 12, color: 'var(--text-tertiary, #999)', fontSize: 12 }}>{t('prerender.policyTtlHelp')}</span>
+                </Form.Item>
+              </>
+            )}
+          </Form.List>
+
+          <Divider orientation="left" plain>{t('prerender.policyCategory')}</Divider>
+          <Row gutter={24}>
+            {CATEGORY_KEYS.map((key) => (
+              <Col span={6} key={key}>
+                <Form.Item name={`policy_${key}`} label={t(`prerender.category_${key}`)}>
+                  <Select allowClear placeholder={t('prerender.policyCategoryDefault')}>
+                    {CATEGORY_POLICY_OPTIONS.map((opt) => (
+                      <Option key={opt} value={opt}>{t(`prerender.policy_${opt}`)}</Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+            ))}
+          </Row>
+
+          <Form.Item>
+            <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={configSaving}>
+              {t('prerender.policySave')}
+            </Button>
+          </Form.Item>
+        </Form>
       </Card>
 
       {/* 操作按钮 */}

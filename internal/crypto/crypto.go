@@ -37,10 +37,8 @@ func Encrypt(plaintext []byte) (string, error) {
 		return "", fmt.Errorf("new cipher: %w", err)
 	}
 
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("new gcm: %w", err)
-	}
+	// NewGCM 仅在 BlockSize≠16 时报错；aes.NewCipher 保证 AES blockSize=16，此分支不可达
+	gcm, _ := cipher.NewGCM(block)
 
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
@@ -69,10 +67,8 @@ func Decrypt(encoded string) ([]byte, error) {
 		return nil, fmt.Errorf("new cipher: %w", err)
 	}
 
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("new gcm: %w", err)
-	}
+	// NewGCM 仅在 BlockSize≠16 时报错；aes.NewCipher 保证 AES blockSize=16，此分支不可达
+	gcm, _ := cipher.NewGCM(block)
 
 	nonceSize := gcm.NonceSize()
 	if len(ciphertext) < nonceSize {

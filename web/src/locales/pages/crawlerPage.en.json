@@ -1,3 +1,18 @@
 {
-  "crawlerPage": {}
+  "crawlerPage": {
+    "urlStats": {
+      "tab": "Render Budget",
+      "title": "Per-URL Render Budget (last 7 days)",
+      "refresh": "Refresh",
+      "empty": "No crawler access data yet",
+      "url": "URL",
+      "requests": "Requests",
+      "renders": "Renders",
+      "hitRate": "Hit Rate",
+      "avgRender": "Avg Time",
+      "wasted": "Render Time Total",
+      "lastStatus": "Last Status",
+      "lastSeen": "Last Seen"
+    }
+  }
 }

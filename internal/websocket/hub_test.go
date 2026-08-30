@@ -123,3 +123,96 @@ func TestHub_StopClosesAllClients(t *testing.T) {
 		t.Fatalf("clients should be cleared after Stop, got %d", hub.GetClientCount())
 	}
 }
+
+func TestHub_ChannelFiltering(t *testing.T) {
+	hub, cleanup := startTestHub(t)
+	defer cleanup()
+
+	// 订阅 alerts 的客户端 + 订阅 monitoring（其他频道）的客户端
+	sub := newTestClient("sub")
+	sub.channels["alerts"] = true
+	hub.RegisterClient(sub)
+	other := newTestClient("other")
+	other.channels["monitoring"] = true
+	hub.RegisterClient(other)
+	time.Sleep(50 * time.Millisecond)
+
+	hub.BroadcastToChannel("alerts", "alert", map[string]string{"x": "1"})
+
+	select {
+	case raw := <-sub.send:
+		var msg Message
+		if err := json.Unmarshal(raw, &msg); err != nil {
+			t.Fatal(err)
+		}
+		if msg.Channel != "alerts" {
+			t.Fatalf("channel mismatch: %+v", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("subscribed client must receive")
+	}
+
+	// 订阅其他频道的客户端不得收到 alerts（频道过滤修复回归）
+	select {
+	case raw := <-other.send:
+		t.Fatalf("cross-channel client must not receive: %s", raw)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+func TestHub_BroadcastMonitorAndWAF(t *testing.T) {
+	hub, cleanup := startTestHub(t)
+	defer cleanup()
+
+	mon := newTestClient("mon")
+	mon.channels["monitoring"] = true
+	waf := newTestClient("waf")
+	waf.channels["waf"] = true
+	hub.RegisterClient(mon)
+	hub.RegisterClient(waf)
+	time.Sleep(50 * time.Millisecond)
+
+	hub.BroadcastMonitor(map[string]float64{"cpu": 1.5})
+	hub.BroadcastWAFEvent(map[string]string{"ip": "1.2.3.4"})
+	hub.BroadcastSystem("sysmsg")
+
+	received := 0
+	deadline := time.After(2 * time.Second)
+	for received < 2 {
+		select {
+		case <-mon.send:
+			received++
+		case <-waf.send:
+			received++
+		case <-deadline:
+			t.Fatalf("expected 2 channel deliveries, got %d", received)
+		}
+	}
+}
+
+func TestHub_SlowClientEvicted(t *testing.T) {
+	hub, cleanup := startTestHub(t)
+	defer cleanup()
+
+	// 慢客户端：send 缓冲塞满且无人消费
+	slow := newTestClient("slow")
+	hub.RegisterClient(slow)
+	fast := newTestClient("fast")
+	fast.channels["alerts"] = true
+	hub.RegisterClient(fast)
+	time.Sleep(50 * time.Millisecond)
+
+	// 灌满慢客户端缓冲（client send buffer 大小见 client.go；这里循环灌大量消息）
+	for i := 0; i < 10000; i++ {
+		hub.BroadcastAlert(map[string]int{"n": i})
+	}
+
+	// 慢客户端最终被事件循环剔除（缓冲满即关闭+删除），不再计入客户端数
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && hub.GetClientCount() > 1 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if hub.GetClientCount() > 1 {
+		t.Fatalf("slow client must be evicted, remaining=%d", hub.GetClientCount())
+	}
+}

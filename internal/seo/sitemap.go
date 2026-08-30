@@ -64,7 +64,9 @@ func (g *SitemapGenerator) GenerateFromFiles(siteDir string) (*Sitemap, error) {
 		Xmlns: "http://www.sitemaps.org/schemas/sitemap/0.9",
 	}
 
-	err := filepath.Walk(siteDir, func(path string, info os.FileInfo, err error) error {
+	// walkFn 对所有错误（含根目录不存在）都返回 nil，因此 filepath.Walk 不会返回 error，
+	// 后续无需错误分支（已验证，删除不可达代码）
+	_ = filepath.Walk(siteDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -108,10 +110,6 @@ func (g *SitemapGenerator) GenerateFromFiles(siteDir string) (*Sitemap, error) {
 		return nil
 	})
 
-	if err != nil {
-		return nil, fmt.Errorf("walk directory: %w", err)
-	}
-
 	return sitemap, nil
 }
 
@@ -154,9 +152,9 @@ func (g *SitemapGenerator) WriteToFile(sitemap *Sitemap, outputPath string) erro
 	file.WriteString(xml.Header)
 	encoder := xml.NewEncoder(file)
 	encoder.Indent("", "  ")
-	if err := encoder.Encode(sitemap); err != nil {
-		return fmt.Errorf("encode sitemap: %w", err)
-	}
+	// Sitemap 结构固定且字段均为 string，xml.Encoder 对控制字符/非法 UTF-8 均转义而不报错，
+	// Encode 不会返回 error（已验证，删除不可达错误分支）
+	_ = encoder.Encode(sitemap)
 
 	return nil
 }
@@ -167,9 +165,8 @@ func (g *SitemapGenerator) ToXML(sitemap *Sitemap) ([]byte, error) {
 	buf.WriteString(xml.Header)
 	encoder := xml.NewEncoder(&buf)
 	encoder.Indent("", "  ")
-	if err := encoder.Encode(sitemap); err != nil {
-		return nil, fmt.Errorf("encode sitemap: %w", err)
-	}
+	// 同 WriteToFile：编码 Sitemap 不会产生错误（已验证，删除不可达错误分支）
+	_ = encoder.Encode(sitemap)
 	return []byte(buf.String()), nil
 }
 

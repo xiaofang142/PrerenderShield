@@ -142,6 +142,8 @@ type Monitor struct {
 	metricsGetter alerting.MetricsFunc                    // 指标获取函数
 	onAlert       func(alert *AlertStatus, status string) // 告警回调（如 WebSocket 广播）
 	alertRepo     *repository.AlertRepository             // 告警历史持久化（SetRedisClient 时初始化）
+	// notificationSource 动态通知配置来源（bootstrap 注入，控制台改动即时生效免重启）
+	notificationSource func() (*alerting.WebhookConfig, *alerting.EmailConfig)
 }
 
 // AlertStatus 告警状态
@@ -245,6 +247,43 @@ func (m *Monitor) LoadAlertRules(filename string) error {
 // AddAlertHandler 添加告警处理器
 func (m *Monitor) AddAlertHandler(handler alerting.AlertHandler) {
 	m.ruleEngine.AddHandler(handler)
+}
+
+// SetNotificationSource 注入动态通知配置来源（每次告警触发时读取最新配置）
+func (m *Monitor) SetNotificationSource(fn func() (*alerting.WebhookConfig, *alerting.EmailConfig)) {
+	m.notificationSource = fn
+}
+
+// LoadRulesFromStore 从 Redis 规则库同步告警规则到内存引擎（启动时 + API 保存后调用）。
+// 修复：控制台保存的规则此前只写 Redis，规则引擎从不读取 → UI 配置的告警永不触发。
+func (m *Monitor) LoadRulesFromStore() {
+	if m.alertRepo == nil {
+		return
+	}
+	for _, r := range m.alertRepo.GetAlertRules() {
+		m.ruleEngine.AddRule(alertRuleDataToEngine(r))
+	}
+}
+
+// alertRuleDataToEngine AlertRuleData（Redis 形态）→ alerting.Rule（引擎形态）
+func alertRuleDataToEngine(r repository.AlertRuleData) *alerting.Rule {
+	op := map[string]string{">": "gt", "<": "lt", "==": "eq", ">=": "ge", "<=": "le"}[r.Operator]
+	if op == "" {
+		op = "gt"
+	}
+	cooldown := time.Duration(r.Cooldown) * time.Second
+	if cooldown <= 0 {
+		cooldown = 5 * time.Minute
+	}
+	return &alerting.Rule{
+		ID:          r.ID,
+		Name:        r.Name,
+		Description: r.Description,
+		Enabled:     r.Enabled,
+		Condition:   &alerting.Condition{Metric: r.Metric, Operator: op, Threshold: r.Threshold},
+		Severity:    r.Severity,
+		Cooldown:    cooldown,
+	}
 }
 
 // SetOnAlertCallback 设置告警回调（在告警通知发出时同步调用，如 WebSocket 广播）
@@ -736,36 +775,57 @@ func (m *Monitor) Start() error {
 		}()
 	}
 
-	// 启动定时任务，定期检查告警
-	if m.config.Alerting.Enabled {
+	// 启动规则引擎（常启：UI 配置的规则/渠道需要引擎在场才能生效；
+	// 无规则无渠道时评估为空转、处理器 no-op，成本可忽略。文件 alerting.enabled
+	// 开关在 provider 模式下已无实际意义——历史缺陷：该开关为 false 时 UI 规则永不评估）
+	{
 		// 设置默认规则
 		m.setupDefaultRules()
 
-		// 添加处理器
-		if m.config.Alerting.Notification.Webhook.Enabled {
-			webhookConfig := &alerting.WebhookConfig{
-				URL:        m.config.Alerting.Notification.Webhook.URL,
-				Method:     "POST",
-				Timeout:    10 * time.Second,
-				MaxRetries: 3,
-				RetryDelay: 5 * time.Second,
-				Secret:     m.config.Alerting.Notification.Webhook.Secret,
-			}
-			m.AddAlertHandler(alerting.NewWebhookHandler(webhookConfig))
+		// 添加处理器（provider 模式：每次告警读取最新配置；无配置时处理器 no-op，
+		// 因此注册不再依赖文件配置开关——UI 渠道/系统配置改动即时生效）
+		webhookConfig := &alerting.WebhookConfig{
+			URL:        m.config.Alerting.Notification.Webhook.URL,
+			Method:     "POST",
+			Timeout:    10 * time.Second,
+			MaxRetries: 3,
+			RetryDelay: 5 * time.Second,
+			Secret:     m.config.Alerting.Notification.Webhook.Secret,
 		}
+		wh := alerting.NewWebhookHandler(webhookConfig)
+		if m.notificationSource != nil {
+			wh.SetConfigProvider(func() *alerting.WebhookConfig {
+				if wc, _ := m.notificationSource(); wc != nil {
+					return wc
+				}
+				return nil
+			})
+		}
+		m.AddAlertHandler(wh)
 
-		if m.config.Alerting.Notification.Email.Enabled {
-			emailConfig := &alerting.EmailConfig{
-				SMTPHost: m.config.Alerting.Notification.Email.SMTPHost,
-				SMTPPort: m.config.Alerting.Notification.Email.SMTPPort,
-				Username: m.config.Alerting.Notification.Email.Username,
-				Password: m.config.Alerting.Notification.Email.Password,
-				From:     m.config.Alerting.Notification.Email.From,
-				To:       m.config.Alerting.Notification.Email.To,
-				UseTLS:   true,
-			}
-			m.AddAlertHandler(alerting.NewEmailHandler(emailConfig))
+		emailConfig := &alerting.EmailConfig{
+			SMTPHost: m.config.Alerting.Notification.Email.SMTPHost,
+			SMTPPort: m.config.Alerting.Notification.Email.SMTPPort,
+			Username: m.config.Alerting.Notification.Email.Username,
+			Password: m.config.Alerting.Notification.Email.Password,
+			From:     m.config.Alerting.Notification.Email.From,
+			To:       m.config.Alerting.Notification.Email.To,
+			UseTLS:   true,
 		}
+		eh := alerting.NewEmailHandler(emailConfig)
+		if m.notificationSource != nil {
+			if notifier, ok := eh.(interface {
+				SetConfigProvider(func() *alerting.EmailConfig)
+			}); ok {
+				notifier.SetConfigProvider(func() *alerting.EmailConfig {
+					if _, ec := m.notificationSource(); ec != nil {
+						return ec
+					}
+					return nil
+				})
+			}
+		}
+		m.AddAlertHandler(eh)
 
 		// 启动规则引擎
 		m.ruleEngine.Start(m.metricsGetter)

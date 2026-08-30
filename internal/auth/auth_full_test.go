@@ -80,7 +80,7 @@ func TestJWTAuthMiddleware(t *testing.T) {
 		ExpireTime: time.Hour,
 	}
 	manager := NewJWTManager(config, nil)
-	middleware := JWTAuthMiddleware(manager)
+	middleware := JWTAuthMiddleware(manager, nil)
 
 	// 测试没有 Authorization 头
 	t.Run("NoAuthHeader", func(t *testing.T) {
@@ -144,7 +144,7 @@ func TestJWTAuthMiddleware_ExpiredToken(t *testing.T) {
 		ExpireTime: time.Second,
 	}
 	manager := NewJWTManager(config, nil)
-	middleware := JWTAuthMiddleware(manager)
+	middleware := JWTAuthMiddleware(manager, nil)
 
 	// 生成令牌并等待过期
 	token, _ := manager.GenerateToken("user-1", "testuser")

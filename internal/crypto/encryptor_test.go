@@ -1,6 +1,9 @@
 package crypto
 
 import (
+	"crypto/rand"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -134,3 +137,72 @@ func TestEncryptor_DifferentKeys(t *testing.T) {
 	_, err := encryptor1.Decrypt(encrypted2)
 	assert.Error(t, err)
 }
+
+// EncryptField/DecryptField 全分支：空值直通 + 加密往返
+func TestEncryptor_FieldEmptyAndRoundtrip(t *testing.T) {
+	e, _ := NewEncryptor("another-secret-key-32")
+	if got, err := e.EncryptField("f", ""); err != nil || got != "" {
+		t.Fatalf("empty field must passthrough: %q %v", got, err)
+	}
+	if got, err := e.DecryptField("f", ""); err != nil || got != "" {
+		t.Fatalf("empty decrypt must passthrough: %q %v", got, err)
+	}
+	enc, err := e.EncryptField("f", "v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec, err := e.DecryptField("f", enc)
+	if err != nil || dec != "v" {
+		t.Fatalf("roundtrip broken: %q %v", dec, err)
+	}
+	// 坏密文 → 错误
+	if _, err := e.DecryptField("f", "not-encrypted-data!"); err == nil {
+		t.Fatal("garbage must error")
+	}
+}
+
+// NewEncryptor 密钥长度边界：过短哈希扩展 / 过长截断 / 24 字节
+func TestNewEncryptor_KeyLengthBranches(t *testing.T) {
+	for _, k := range []string{"short", strings.Repeat("x", 40), strings.Repeat("y", 24), strings.Repeat("z", 16)} {
+		if _, err := NewEncryptor(k); err != nil {
+			t.Fatalf("key len %d rejected: %v", len(k), err)
+		}
+	}
+}
+
+// SensitiveConfig Import/Export 往返 + NewSensitiveConfig 空密钥
+func TestSensitiveConfig_ImportExport(t *testing.T) {
+	c1, err := NewSensitiveConfig("secret-key-0123456789ab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c1.Set("k", "v"); err != nil {
+		t.Fatal(err)
+	}
+	exported := c1.Export()
+
+	c2, err := NewSensitiveConfig("secret-key-0123456789ab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c2.Import(exported)
+	got, err := c2.Get("k")
+	if err != nil || got != "v" {
+		t.Fatalf("import/export roundtrip broken: %q %v", got, err)
+	}
+}
+
+// nonce 失败注入（encryptor.Encrypt 路径）
+func TestEncryptor_NonceFailure(t *testing.T) {
+	e, _ := NewEncryptor("nonce-fail-key-123")
+	orig := rand.Reader
+	rand.Reader = cryptoFailingRand{}
+	t.Cleanup(func() { rand.Reader = orig })
+	if _, err := e.Encrypt("x"); err == nil {
+		t.Fatal("nonce failure must error")
+	}
+}
+
+type cryptoFailingRand struct{}
+
+func (cryptoFailingRand) Read(p []byte) (int, error) { return 0, errors.New("rand failure") }

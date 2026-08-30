@@ -63,6 +63,20 @@
       "fetchConfigFailed": "Failed to fetch configuration",
       "saveSuccess": "Configuration saved successfully",
       "saveFailed": "Save failed"
+    },
+    "token": {
+      "title": "API Token Management",
+      "help": "For CI/release hooks to call cache management endpoints (only /api/v1/preheat/* allowed, e.g. single-URL invalidate / re-render / trigger preheat). Hashed storage; raw token shown once at creation.",
+      "generate": "Generate Token",
+      "empty": "No tokens",
+      "generatedTitle": "Token Generated (shown once)",
+      "generatedWarning": "Copy and store it now — it cannot be viewed again:",
+      "copy": "Copy",
+      "revoke": "Revoke",
+      "revokeConfirm": "Revoke this token? Automations using it lose access immediately.",
+      "revokeSuccess": "Token revoked",
+      "saveFailed": "Failed to save token",
+      "usage": "Usage: Authorization: Bearer <token>, /api/v1/preheat/* endpoints only."
     }
   }
 }

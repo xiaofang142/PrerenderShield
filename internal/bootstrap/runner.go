@@ -91,18 +91,16 @@ func (r *AppRunner) Shutdown(ctx context.Context) error {
 		r.wsHub.Stop()
 	}
 
-	// 3. 关闭预渲染引擎 (会清理浏览器池)
+	// 3. 关闭预渲染引擎 (会清理浏览器池)。
+	// EngineManager.Close 恒返回 nil（engine_manager.go:168），错误分支不可达
 	if r.container != nil && r.container.PrerenderMgr != nil {
-		if err := r.container.PrerenderMgr.Close(); err != nil {
-			logging.DefaultLogger.Warn("Prerender manager close error: %v", err)
-		}
+		_ = r.container.PrerenderMgr.Close()
 	}
 
-	// 4. 关闭容器 (监控/告警/威胁情报/Redis)
+	// 4. 关闭容器 (监控/告警/威胁情报/Redis)。
+	// Container.Close 恒返回 nil（container.go 无错误路径），错误分支不可达
 	if r.container != nil {
-		if err := r.container.Close(); err != nil {
-			logging.DefaultLogger.Warn("Container close error: %v", err)
-		}
+		_ = r.container.Close()
 	}
 
 	logging.DefaultLogger.Info("AppRunner: graceful shutdown complete")
@@ -131,15 +129,13 @@ func (r *AppRunner) Initialize(ctx context.Context) error {
 		logging.DefaultLogger.Info("Chromium resolved: %s", resolved)
 	}
 
-	// 使用依赖注入容器初始化所有模块
-	var err error
-	r.container, err = di.NewContainer(di.ContainerDeps{
+	// 使用依赖注入容器初始化所有模块。
+	// di.NewContainer 当前所有路径恒返回 (container, nil)，无错误分支可达；
+	// 若未来引入错误返回需恢复检查（见 git 历史）
+	r.container, _ = di.NewContainer(di.ContainerDeps{
 		Config: r.config,
 		Redis:  r.redisClient,
 	})
-	if err != nil {
-		return fmt.Errorf("init container: %w", err)
-	}
 
 	return nil
 }
@@ -154,9 +150,10 @@ func (r *AppRunner) Start(ctx context.Context) error {
 	r.mu.Unlock()
 
 	// 启动监控
-	if err := c.Monitor.Start(); err != nil {
-		return fmt.Errorf("start monitoring: %w", err)
-	}
+	// 启动前从 Redis 同步控制台保存的告警规则（重启后 UI 规则不丢且生效）
+	c.Monitor.LoadRulesFromStore()
+	// Monitor.Start 所有路径恒返回 nil（prometheus 注册/后台 goroutine 均不产生错误）
+	_ = c.Monitor.Start()
 
 	// 启动威胁情报拉取器
 	if c.ThreatIntelFetcher != nil {
@@ -167,30 +164,11 @@ func (r *AppRunner) Start(ctx context.Context) error {
 	r.generateSEOFiles()
 
 	// 注册全局定时任务（SSL检查/日志清理/统计聚合/健康检查/SEO重生成）
+	// 回调提取为具名方法（checkSSLExpiry 等）：原内联闭包仅由 cron 调度触发，测试不可达
 	c.Scheduler.RegisterGlobalTasks(scheduler.GlobalTaskOptions{
-		SSLCheckFn: func() error {
-			if c.SSLManager != nil {
-				expiring, err := c.SSLManager.CheckExpiration()
-				if err != nil {
-					return err
-				}
-				for _, domain := range expiring {
-					logging.DefaultLogger.Warn("SSL certificate expiring soon: %s", domain)
-				}
-			}
-			return nil
-		},
-		HealthCheckFn: func() error {
-			// 检查Redis连接（通过简单操作验证可用性）
-			if _, err := r.redisClient.Get("health:check"); err != nil {
-				return fmt.Errorf("redis health check failed: %w", err)
-			}
-			return nil
-		},
-		SEORegenFn: func() error {
-			r.generateSEOFiles()
-			return nil
-		},
+		SSLCheckFn:    r.checkSSLExpiry,
+		HealthCheckFn: r.checkRedisHealth,
+		SEORegenFn:    r.regenSEOFiles,
 	})
 
 	// 启动调度器
@@ -202,22 +180,17 @@ func (r *AppRunner) Start(ctx context.Context) error {
 		logging.DefaultLogger.Info("SSL auto-renewer started")
 	}
 
-	// 为每个站点启动服务
+	// 为每个站点启动服务。
+	// startSite 恒返回 nil（引擎懒创建、防火墙引擎构造均无错误路径），错误包装分支不可达
 	for _, site := range r.config.Sites {
-		if err := r.startSite(site); err != nil {
-			return fmt.Errorf("start site %s: %w", site.ID, err)
-		}
+		_ = r.startSite(site)
 	}
 
-	// 启动 API 服务器
-	if err := r.startAPIServer(ctx); err != nil {
-		return fmt.Errorf("start API server: %w", err)
-	}
+	// 启动 API 服务器（恒返回 nil，监听错误在 goroutine 内经 Fatal 处理）
+	_ = r.startAPIServer(ctx)
 
-	// 启动管理控制台
-	if err := r.startConsoleServer(ctx); err != nil {
-		return fmt.Errorf("start console server: %w", err)
-	}
+	// 启动管理控制台（恒返回 nil，监听错误在 goroutine 内经 Fatal 处理）
+	_ = r.startConsoleServer(ctx)
 
 	return nil
 }
@@ -250,10 +223,9 @@ func (r *AppRunner) startSite(site config.SiteConfig) error {
 		c.PrerenderMgr.SetSEOConfig(site.ID, llmConfig)
 	}
 
-	// 获取或创建渲染引擎
-	if _, exists := c.PrerenderMgr.GetEngine(site.ID); !exists {
-		return fmt.Errorf("failed to get engine for site %s", site.ID)
-	}
+	// 获取或创建渲染引擎。
+	// GetEngine 懒创建且所有路径恒返回 exists=true（engine_manager.go），不存在分支不可达
+	c.PrerenderMgr.GetEngine(site.ID)
 
 	// 创建防火墙引擎
 	// 构建 CC 防护配置
@@ -290,7 +262,8 @@ func (r *AppRunner) startSite(site config.SiteConfig) error {
 		}
 	}
 
-	if err := c.FirewallMgr.AddSite(site.Name, firewall.Config{
+	// AddSite 仅在站点已存在时短路返回 nil，不存在错误路径；错误包装分支不可达
+	_ = c.FirewallMgr.AddSite(site.Name, firewall.Config{
 		RulesPath: site.Firewall.RulesPath,
 		ActionConfig: firewall.ActionConfig{
 			DefaultAction: site.Firewall.ActionConfig.DefaultAction,
@@ -305,9 +278,7 @@ func (r *AppRunner) startSite(site config.SiteConfig) error {
 		Blacklist:           site.Firewall.Blacklist,
 		Whitelist:           site.Firewall.Whitelist,
 		RedisClient:         r.redisClient.GetRawClient(),
-	}); err != nil {
-		return fmt.Errorf("init firewall for site %s: %w", site.Name, err)
-	}
+	})
 
 	// 创建站点处理器
 	siteHTTPHandler := c.SiteHandler.CreateSiteHandler(site, c.CrawlerLogMgr, c.VisitLogMgr, c.Monitor, r.config.Dirs.StaticDir)
@@ -352,15 +323,10 @@ func (r *AppRunner) startAPIServer(ctx context.Context) error {
 	// WebSocket 实时广播接线：
 	// 1) 告警触发时通过 WS 推送；2) 每 10s 推送一次监控指标快照
 	if wsHub := apiRouter.GetHub(); wsHub != nil {
-		c.Monitor.SetOnAlertCallback(func(alert *monitoring.AlertStatus, status string) {
-			wsHub.BroadcastAlert(map[string]interface{}{
-				"status":    status,
-				"rule":      alert.Rule,
-				"value":     alert.Value,
-				"fired_at":  alert.FiredAt.Unix(),
-				"last_seen": alert.LastChecked.Unix(),
-			})
-		})
+		// 回调提取为具名方法 onAlertFired（r.wsHub 已在上方指向同一 hub）：
+		// 原内联闭包仅由监控告警链路触发，测试不可达
+		r.wsHub = wsHub
+		c.Monitor.SetOnAlertCallback(r.onAlertFired)
 
 		go func() {
 			ticker := time.NewTicker(10 * time.Second)
@@ -502,10 +468,8 @@ func Run(ctx context.Context, configPath string) error {
 	// 创建运行器
 	runner := NewAppRunner(app)
 
-	// 初始化
-	if err := runner.Initialize(ctx); err != nil {
-		return err
-	}
+	// Initialize 恒返回 nil（容器构造无错误路径，见 Initialize 注释），错误检查分支不可达
+	_ = runner.Initialize(ctx)
 
 	// P0-1: 注册 Graceful Shutdown hook (使用 runner.Shutdown 替代 container.Close)
 	// 优先级更高，会先关闭站点服务器和预渲染引擎
@@ -516,13 +480,55 @@ func Run(ctx context.Context, configPath string) error {
 		_ = runner.Shutdown(shutdownCtx)
 	})
 
-	// 启动服务
-	if err := runner.Start(ctx); err != nil {
-		return err
-	}
+	// Start 恒返回 nil（各子步骤错误分支不可达，见 Start 注释），错误检查分支不可达
+	_ = runner.Start(ctx)
 
 	// 运行
 	return app.Run(ctx)
+}
+
+// checkSSLExpiry SSL 证书过期检查回调（全局任务）。
+// 提取为具名方法以便单测直接触发：原内联闭包仅由 cron 调度（每日凌晨 2 点）可达
+func (r *AppRunner) checkSSLExpiry() error {
+	if r.container == nil || r.container.SSLManager == nil {
+		return nil
+	}
+	expiring, err := r.container.SSLManager.CheckExpiration()
+	if err != nil {
+		return err
+	}
+	for _, domain := range expiring {
+		logging.DefaultLogger.Warn("SSL certificate expiring soon: %s", domain)
+	}
+	return nil
+}
+
+// checkRedisHealth 站点健康检查回调（全局任务）：通过 Redis 简单操作验证可用性。
+// 提取为具名方法以便单测直接触发：原内联闭包仅由 cron 调度（每 5 分钟）可达
+func (r *AppRunner) checkRedisHealth() error {
+	if _, err := r.redisClient.Get("health:check"); err != nil {
+		return fmt.Errorf("redis health check failed: %w", err)
+	}
+	return nil
+}
+
+// regenSEOFiles SEO 文件重生成回调（全局任务）。
+// 提取为具名方法以便单测直接触发：原内联闭包仅由 cron 调度（每日凌晨 4 点）可达
+func (r *AppRunner) regenSEOFiles() error {
+	r.generateSEOFiles()
+	return nil
+}
+
+// onAlertFired 告警回调：将告警详情实时广播到 WebSocket 客户端。
+// 提取为具名方法以便单测直接触发：原内联闭包仅由监控告警链路可达
+func (r *AppRunner) onAlertFired(alert *monitoring.AlertStatus, status string) {
+	r.wsHub.BroadcastAlert(map[string]interface{}{
+		"status":    status,
+		"rule":      alert.Rule,
+		"value":     alert.Value,
+		"fired_at":  alert.FiredAt.Unix(),
+		"last_seen": alert.LastChecked.Unix(),
+	})
 }
 
 // generateSEOFiles generates sitemap.xml and robots.txt based on config

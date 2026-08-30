@@ -14,7 +14,7 @@ func TestNewSubscriber(t *testing.T) {
 	subscriber := NewSubscriber(nil)
 	assert.NotNil(t, subscriber)
 	assert.NotNil(t, subscriber.handlers)
-	assert.False(t, subscriber.isRunning)
+	assert.False(t, subscriber.isRunning.Load())
 }
 
 // TestAddHandler 测试添加事件处理函数
@@ -50,7 +50,7 @@ func TestIsRunning(t *testing.T) {
 	assert.False(t, subscriber.IsRunning())
 
 	// 手动设置状态（实际由 Start 方法设置）
-	subscriber.isRunning = true
+	subscriber.isRunning.Store(true)
 	assert.True(t, subscriber.IsRunning())
 }
 
@@ -59,7 +59,7 @@ func TestStop(t *testing.T) {
 	subscriber := NewSubscriber(nil)
 
 	// 停止之前
-	assert.False(t, subscriber.isRunning)
+	assert.False(t, subscriber.isRunning.Load())
 
 	// 调用 Stop
 	subscriber.Stop()
@@ -75,18 +75,17 @@ func TestSubscriber_Struct(t *testing.T) {
 	defer cancel()
 
 	subscriber := &Subscriber{
-		client:    nil,
-		ctx:       ctx,
-		cancel:    cancel,
-		handlers:  make(map[string]func(string, string)),
-		isRunning: false,
+		client:   nil,
+		ctx:      ctx,
+		cancel:   cancel,
+		handlers: make(map[string]func(string, string)),
 	}
 
 	assert.Nil(t, subscriber.client)
 	assert.NotNil(t, subscriber.ctx)
 	assert.NotNil(t, subscriber.cancel)
 	assert.NotNil(t, subscriber.handlers)
-	assert.False(t, subscriber.isRunning)
+	assert.False(t, subscriber.isRunning.Load())
 }
 
 // TestHandlerFunction 测试处理函数的调用
@@ -219,7 +218,7 @@ func TestSubscriberState(t *testing.T) {
 	assert.False(t, subscriber.IsRunning())
 
 	// 模拟启动
-	subscriber.isRunning = true
+	subscriber.isRunning.Store(true)
 	assert.True(t, subscriber.IsRunning())
 
 	// 模拟停止（通过 cancel）

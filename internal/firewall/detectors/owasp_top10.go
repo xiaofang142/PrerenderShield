@@ -103,7 +103,7 @@ func (d *OWASPTop10Detector) compileRules() {
 	// OWASP Top 10 2021 规则 - 内置默认规则
 	owaspRules := []types.Rule{
 		// A01: Broken Access Control
-		{ID: "owasp-a01", Name: "Path Traversal", Category: "owasp_top10", Pattern: `\.\\./|%2e%2e%2f|%2e%2e/|\\.\\./|%2e%2e\\`, Severity: "high"},
+		{ID: "owasp-a01", Name: "Path Traversal", Category: "owasp_top10", Pattern: `\.\./|\.\.\\|%2e%2e%2f|%2e%2e/|%2e%2e\\|%2e%2e%5c`, Severity: "high"},
 		{ID: "owasp-a01-2", Name: "Admin Access Attempt", Category: "owasp_top10", Pattern: `(/admin|/administrator|/wp-admin|/phpmyadmin|/manager)`, Severity: "medium"},
 
 		// A02: Cryptographic Failures

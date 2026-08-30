@@ -30,7 +30,7 @@ func TestOverviewController_GetOverview(t *testing.T) {
 	crawlerLogMgr := logging.NewCrawlerLogManager("")
 
 	controller := &OverviewController{
-		cfg:           cfg,
+		cfg:           configRef{snapshot: cfg},
 		monitor:       monitor,
 		visitLogMgr:   visitLogMgr,
 		crawlerLogMgr: crawlerLogMgr,
@@ -93,7 +93,7 @@ func TestOverviewController_GetOverview_EmptySites(t *testing.T) {
 	visitLogMgr := logging.NewVisitLogManager("")
 
 	controller := &OverviewController{
-		cfg:         cfg,
+		cfg:         configRef{snapshot: cfg},
 		monitor:     monitor,
 		visitLogMgr: visitLogMgr,
 	}
@@ -131,7 +131,7 @@ func TestOverviewController_GetOverview_NilWafRepo(t *testing.T) {
 	visitLogMgr := logging.NewVisitLogManager("")
 
 	controller := &OverviewController{
-		cfg:         cfg,
+		cfg:         configRef{snapshot: cfg},
 		monitor:     monitor,
 		visitLogMgr: visitLogMgr,
 		wafStatsSvc: nil,
@@ -164,7 +164,7 @@ func TestNewOverviewController(t *testing.T) {
 	controller := NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, wafStatsSvc, nil)
 
 	assert.NotNil(t, controller)
-	assert.Equal(t, cfg, controller.cfg)
+	assert.Equal(t, cfg, controller.cfg.snapshot)
 	assert.Equal(t, monitor, controller.monitor)
 	assert.Equal(t, visitLogMgr, controller.visitLogMgr)
 	assert.Equal(t, crawlerLogMgr, controller.crawlerLogMgr)

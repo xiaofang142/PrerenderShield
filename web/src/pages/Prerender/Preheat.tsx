@@ -1,11 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Card, Row, Col, Statistic, Button, Select, Space, message, Table } from 'antd'
-import { ReloadOutlined, FireOutlined, PlayCircleOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
+import { Card, Row, Col, Statistic, Button, Select, Space, message, Table, Tag, Popconfirm, Input } from 'antd'
+import { ReloadOutlined, FireOutlined, PlayCircleOutlined, DeleteOutlined, SearchOutlined, SyncOutlined, StopOutlined } from '@ant-design/icons'
 import { useSites } from '../../hooks/useSites'
 import { prerenderApi } from '../../services/api'
 import { useTranslation } from 'react-i18next'
 
 const { Option } = Select
+
+interface CacheEntry {
+  url: string
+  status: number
+  expires_at: number
+  created_at: number
+  size_bytes: number
+  fresh: boolean
+  device: string
+}
 
 const Preheat: React.FC = () => {
   const { t } = useTranslation()
@@ -30,8 +40,17 @@ const Preheat: React.FC = () => {
   const [total, setTotal] = useState(0)
   const [isPreheating, setIsPreheating] = useState(false)
   const [isClearingCache, setIsClearingCache] = useState(false)
+  // 缓存条目状态
+  const [entries, setEntries] = useState<CacheEntry[]>([])
+  const [entriesLoading, setEntriesLoading] = useState(false)
+  const [entryFilter, setEntryFilter] = useState('')
+  // 缓存条目关键字过滤（内存态，避免误删数据）
+  const filteredEntries = entryFilter
+    ? entries.filter((e) => e.url.toLowerCase().includes(entryFilter.toLowerCase()))
+    : entries
   // 竞态防护：站点快速切换时，旧请求的响应不再写入 state
   const requestVersionRef = useRef(0)
+  const entriesVersionRef = useRef(0)
 
   // 表格列配置
   const columns = [
@@ -61,6 +80,84 @@ const Preheat: React.FC = () => {
         const date = new Date(parseInt(time) * 1000)
         return date.toLocaleString()
       }
+    },
+  ]
+
+  // 缓存条目列配置
+  const formatExpiry = (expiresAt: number) => {
+    if (!expiresAt) return '-'
+    const remain = expiresAt - Math.floor(Date.now() / 1000)
+    if (remain <= 0) return t('preheat.expired')
+    if (remain < 3600) return t('preheat.remainMinutes', { n: Math.ceil(remain / 60) })
+    if (remain < 86400) return t('preheat.remainHours', { n: Math.ceil(remain / 3600) })
+    return t('preheat.remainDays', { n: Math.ceil(remain / 86400) })
+  }
+
+  const entryColumns = [
+    {
+      title: 'URL',
+      dataIndex: 'url',
+      key: 'url',
+      ellipsis: true,
+    },
+    {
+      title: t('preheat.entryStatus'),
+      dataIndex: 'status',
+      key: 'status',
+      width: 90,
+      render: (status: number) => {
+        const color = status >= 500 ? '#f5222d' : status >= 400 ? '#faad14' : '#52c41a'
+        return <Tag color={color}>{status}</Tag>
+      },
+    },
+    {
+      title: t('preheat.entryDevice'),
+      dataIndex: 'device',
+      key: 'device',
+      width: 90,
+      render: (device: string) => device === 'mobile' ? <Tag color="purple">{device}</Tag> : <Tag>{device || 'desktop'}</Tag>,
+    },
+    {
+      title: t('preheat.entryFresh'),
+      dataIndex: 'fresh',
+      key: 'fresh',
+      width: 100,
+      render: (fresh: boolean) => fresh
+        ? <Tag color="green">{t('preheat.fresh')}</Tag>
+        : <Tag color="orange">{t('preheat.stale')}</Tag>,
+    },
+    {
+      title: t('preheat.entryExpiry'),
+      key: 'expiry',
+      width: 110,
+      render: (_: any, record: CacheEntry) => formatExpiry(record.expires_at),
+    },
+    {
+      title: t('preheat.entrySize'),
+      dataIndex: 'size_bytes',
+      key: 'size_bytes',
+      width: 100,
+      render: (size: number) => {
+        if (!size) return '-'
+        if (size < 1024) return `${size} B`
+        if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+        return `${(size / (1024 * 1024)).toFixed(1)} MB`
+      },
+    },
+    {
+      title: t('common.actions'),
+      key: 'actions',
+      width: 160,
+      render: (_: any, record: CacheEntry) => (
+        <Space>
+          <Popconfirm title={t('preheat.invalidateConfirm')} onConfirm={() => handleInvalidateEntry(record.url)} okText={t('common.ok')} cancelText={t('common.cancel')}>
+            <Button type="link" size="small" icon={<StopOutlined />}>{t('preheat.invalidate')}</Button>
+          </Popconfirm>
+          <Button type="link" size="small" icon={<SyncOutlined />} onClick={() => handleRecacheEntry(record.url)}>
+            {t('preheat.recache')}
+          </Button>
+        </Space>
+      ),
     },
   ]
 
@@ -120,6 +217,7 @@ const Preheat: React.FC = () => {
     if (selectedSiteId) {
       fetchStats()
       fetchUrls()
+      fetchEntries()
     }
   }, [selectedSiteId])
 
@@ -127,6 +225,7 @@ const Preheat: React.FC = () => {
   const handleRefreshStats = () => {
     fetchStats()
     fetchUrls(currentPage, pageSize)
+    fetchEntries()
     message.success(t('preheat.refreshed'))
   }
 
@@ -176,6 +275,61 @@ const Preheat: React.FC = () => {
   }
 
 
+
+  // 缓存条目列表
+  const fetchEntries = async (siteId?: string) => {
+    const sid = siteId || selectedSiteId
+    if (!sid) return
+    const version = ++entriesVersionRef.current
+    try {
+      setEntriesLoading(true)
+      const res = await prerenderApi.listCacheEntries(sid, 200)
+      if (version !== entriesVersionRef.current) return
+      if (res.code === 200) {
+        setEntries(res.data.list || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch cache entries:', error)
+      message.error(t('preheat.fetchEntriesFailed'))
+    } finally {
+      if (version === entriesVersionRef.current) setEntriesLoading(false)
+    }
+  }
+
+  // 单 URL 缓存失效
+  const handleInvalidateEntry = async (url: string) => {
+    if (!selectedSiteId) return
+    try {
+      const res = await prerenderApi.invalidateCache(selectedSiteId, url)
+      if (res.code === 200) {
+        message.success(t('preheat.invalidateSuccess'))
+        fetchEntries()
+        fetchStats()
+      }
+    } catch (error) {
+      console.error('Failed to invalidate cache:', error)
+      message.error(t('preheat.invalidateFailed'))
+    }
+  }
+
+  // 单 URL 强制重渲并替换缓存
+  const handleRecacheEntry = async (url: string) => {
+    if (!selectedSiteId) return
+    try {
+      setEntriesLoading(true)
+      const res = await prerenderApi.recacheUrl(selectedSiteId, url)
+      if (res.code === 200) {
+        message.success(t('preheat.recacheSuccess', { status: res.data?.status ?? '-' }))
+        fetchEntries()
+        fetchStats()
+      }
+    } catch (error) {
+      console.error('Failed to recache:', error)
+      message.error(t('preheat.recacheFailed'))
+    } finally {
+      setEntriesLoading(false)
+    }
+  }
 
   // 处理分页变化
   const handlePageChange = (page: number, size: number) => {
@@ -270,7 +424,7 @@ const Preheat: React.FC = () => {
       </Card>
       
       {/* URL列表 */}
-      <Card className="card" title={t('preheat.urlListTitle')}>
+      <Card className="card" title={t('preheat.urlListTitle')} style={{ marginBottom: 16 }}>
         <Table
           columns={columns}
           dataSource={urlList}
@@ -285,6 +439,35 @@ const Preheat: React.FC = () => {
             pageSizeOptions: ['20', '50', '100'],
             showTotal: (total) => t('preheat.totalRecords', { total }),
           }}
+        />
+      </Card>
+
+      {/* 缓存条目管理 */}
+      <Card
+        className="card"
+        title={t('preheat.entriesTitle')}
+        extra={
+          <Space>
+            <Input.Search
+              allowClear
+              placeholder={t('preheat.entriesFilterPlaceholder')}
+              style={{ width: 240 }}
+              onSearch={(v) => setEntryFilter(v)}
+              onChange={(e) => { if (!e.target.value) setEntryFilter('') }}
+            />
+            <Button icon={<ReloadOutlined />} onClick={() => fetchEntries()} loading={entriesLoading}>
+              {t('preheat.entriesRefresh')}
+            </Button>
+          </Space>
+        }
+      >
+        <Table
+          columns={entryColumns}
+          dataSource={filteredEntries}
+          rowKey="url"
+          loading={entriesLoading}
+          pagination={{ pageSize: 10, showTotal: (total) => t('preheat.totalRecords', { total }) }}
+          locale={{ emptyText: t('preheat.entriesEmpty') }}
         />
       </Card>
     </div>

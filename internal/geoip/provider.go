@@ -1,10 +1,10 @@
 package geoip
 
 import (
-	"net"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -335,10 +335,8 @@ func (p *APIProvider) Flush() error {
 		return nil
 	}
 
-	raw, err := json.MarshalIndent(&file, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal geoip cache: %w", err)
-	}
+	// json.MarshalIndent 对纯 string 字段结构永不报错（仅 chan/func/cycle 会错）——分支不可达
+	raw, _ := json.MarshalIndent(&file, "", "  ")
 	if err := os.MkdirAll(filepath.Dir(p.diskPath), 0o755); err != nil {
 		return fmt.Errorf("create cache dir: %w", err)
 	}

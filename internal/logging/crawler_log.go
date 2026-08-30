@@ -36,6 +36,11 @@ type CrawlerLog struct {
 	Latitude    float64 `json:"latitude,omitempty"`
 	Longitude   float64 `json:"longitude,omitempty"`
 	Washed      bool    `json:"washed"` // 是否已清洗
+
+	// Quality 内容质检结果（""=正常，"thin"=空壳页未入缓存）
+	Quality string `json:"quality,omitempty"`
+	// Verified 爬虫真实性验证结果（""=未启用验证，"verified"=rDNS/CIDR 确认，"unverified"=未通过）
+	Verified string `json:"verified,omitempty"`
 }
 
 // CrawlerLogManager 爬虫日志管理器
@@ -814,4 +819,120 @@ func GetClientIP(r *http.Request) string {
 	}
 
 	return ip
+}
+
+// URLStat 单 URL 渲染预算聚合（T4 渲染预算报表）
+type URLStat struct {
+	Route         string    `json:"route"`
+	Requests      int64     `json:"requests"`
+	Renders       int64     `json:"renders"` // 实际渲染次数（未命中缓存）
+	CacheHits     int64     `json:"cache_hits"`
+	HitRate       float64   `json:"hit_rate"`       // 百分比，两位小数
+	AvgRenderMs   float64   `json:"avg_render_ms"`  // 渲染请求平均耗时毫秒
+	WastedSeconds float64   `json:"wasted_seconds"` // 渲染总耗时秒（预算消耗）
+	LastStatus    int       `json:"last_status"`
+	LastSeen      time.Time `json:"last_seen"`
+}
+
+// GetURLStats 按路由聚合爬虫请求：识别消耗渲染预算的 URL（Renders/WastedSeconds 排序输入）。
+// 复用 GetCrawlerStats 的按日 ZRangeByScore 扫描模式；limit 截断在聚合后按 Renders+Requests 排序取前 N。
+func (clm *CrawlerLogManager) GetURLStats(site string, startTime, endTime time.Time, limit int) ([]URLStat, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	keyPrefix := "crawler_logs:all:"
+	if site != "" {
+		keyPrefix = fmt.Sprintf("crawler_logs:%s:", site)
+	}
+
+	days := int(endTime.Sub(startTime).Hours()/24) + 1
+	if days < 1 {
+		days = 1
+	}
+	if days > 31 {
+		days = 31
+	}
+
+	type agg struct {
+		requests    int64
+		renders     int64
+		cacheHits   int64
+		renderSumMs float64
+		lastStatus  int
+		lastSeen    time.Time
+	}
+	byRoute := make(map[string]*agg)
+
+	startScore := float64(startTime.UnixNano())
+	endScore := float64(endTime.UnixNano())
+	for i := 0; i < days; i++ {
+		date := startTime.AddDate(0, 0, i)
+		key := keyPrefix + date.Format("2006-01-02")
+		logJSONs, err := clm.redisClient.ZRangeByScore(clm.ctx, key, &redis.ZRangeBy{
+			Min: fmt.Sprintf("%f", startScore),
+			Max: fmt.Sprintf("%f", endScore),
+		}).Result()
+		if err != nil {
+			continue
+		}
+		for _, logJSON := range logJSONs {
+			var log CrawlerLog
+			if err := json.Unmarshal([]byte(logJSON), &log); err != nil {
+				continue
+			}
+			route := log.Route
+			if route == "" {
+				route = "/"
+			}
+			a := byRoute[route]
+			if a == nil {
+				a = &agg{}
+				byRoute[route] = a
+			}
+			a.requests++
+			if log.HitCache {
+				a.cacheHits++
+			} else {
+				a.renders++
+				a.renderSumMs += log.RenderTime * 1000
+			}
+			a.lastStatus = log.Status
+			if log.Time.After(a.lastSeen) {
+				a.lastSeen = log.Time
+			}
+		}
+	}
+
+	stats := make([]URLStat, 0, len(byRoute))
+	for route, a := range byRoute {
+		st := URLStat{
+			Route:      route,
+			Requests:   a.requests,
+			Renders:    a.renders,
+			CacheHits:  a.cacheHits,
+			LastStatus: a.lastStatus,
+			LastSeen:   a.lastSeen,
+		}
+		st.WastedSeconds = float64(int(a.renderSumMs*100)/100) / 1000 // 渲染总耗时秒，两位小数
+		if a.requests > 0 {
+			st.HitRate = float64(int(float64(a.cacheHits)/float64(a.requests)*10000)) / 100
+		}
+		if a.renders > 0 {
+			st.AvgRenderMs = float64(int(a.renderSumMs/float64(a.renders)*100)) / 100
+		}
+		st.WastedSeconds = float64(int(a.renderSumMs)) / 1000
+		stats = append(stats, st)
+	}
+
+	// 渲染次数降序 → 请求数降序，取前 limit
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].Renders != stats[j].Renders {
+			return stats[i].Renders > stats[j].Renders
+		}
+		return stats[i].Requests > stats[j].Requests
+	})
+	if len(stats) > limit {
+		stats = stats[:limit]
+	}
+	return stats, nil
 }

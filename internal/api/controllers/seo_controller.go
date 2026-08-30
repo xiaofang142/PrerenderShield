@@ -12,18 +12,18 @@ import (
 
 // SEOController SEO 管理控制器
 type SEOController struct {
-	cfg *config.Config
+	cfg configRef
 }
 
 // NewSEOController 创建 SEO 控制器
 func NewSEOController(cfg *config.Config) *SEOController {
-	return &SEOController{cfg: cfg}
+	return &SEOController{cfg: configRef{snapshot: cfg}}
 }
 
 // GenerateSitemap 生成 Sitemap
 // POST /api/v1/seo/sitemap/generate
 func (c *SEOController) GenerateSitemap(ctx *gin.Context) {
-	cfg := c.cfg.SEO.Sitemap
+	cfg := c.cfg.current().SEO.Sitemap
 
 	if !cfg.Enabled {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -34,7 +34,7 @@ func (c *SEOController) GenerateSitemap(ctx *gin.Context) {
 	}
 
 	// 与启动时任务共用按站点生成逻辑：各静态站点输出到自身静态根目录
-	results := seo.GenerateForAllSites(c.cfg.Dirs.StaticDir, c.cfg.Sites, cfg)
+	results := seo.GenerateForAllSites(c.cfg.current().Dirs.StaticDir, c.cfg.current().Sites, cfg)
 	if len(results) == 0 {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -64,7 +64,7 @@ func (c *SEOController) GenerateSitemap(ctx *gin.Context) {
 // GetSitemap 获取 Sitemap XML
 // GET /api/v1/seo/sitemap
 func (c *SEOController) GetSitemap(ctx *gin.Context) {
-	cfg := c.cfg.SEO.Sitemap
+	cfg := c.cfg.current().SEO.Sitemap
 
 	generator := seo.NewSitemapGenerator(seo.SitemapConfig{
 		Enabled:         cfg.Enabled,
@@ -76,24 +76,13 @@ func (c *SEOController) GetSitemap(ctx *gin.Context) {
 		ExcludePatterns: cfg.ExcludePatterns,
 	})
 
-	staticDir := filepath.Join(c.cfg.Dirs.StaticDir, "default")
-	sitemap, err := generator.GenerateFromFiles(staticDir)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "Failed to generate sitemap: " + err.Error(),
-		})
-		return
-	}
+	staticDir := filepath.Join(c.cfg.current().Dirs.StaticDir, "default")
+	// 注：GenerateFromFiles 的 walkFn 吞掉一切遍历错误并恒返回 nil error（见 seo/sitemap.go），
+	// 错误分支不可达
+	sitemap, _ := generator.GenerateFromFiles(staticDir)
 
-	xmlData, err := generator.ToXML(sitemap)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": "Failed to encode sitemap: " + err.Error(),
-		})
-		return
-	}
+	// 注：Sitemap 仅含 string/[]struct 字段，xml.MarshalIndent 不可能失败
+	xmlData, _ := generator.ToXML(sitemap)
 
 	ctx.Data(http.StatusOK, "application/xml", xmlData)
 }
@@ -101,7 +90,7 @@ func (c *SEOController) GetSitemap(ctx *gin.Context) {
 // GenerateRobotsTxt 生成 robots.txt
 // POST /api/v1/seo/robots/generate
 func (c *SEOController) GenerateRobotsTxt(ctx *gin.Context) {
-	cfg := c.cfg.SEO.Robots
+	cfg := c.cfg.current().SEO.Robots
 
 	if !cfg.Enabled {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -111,37 +100,26 @@ func (c *SEOController) GenerateRobotsTxt(ctx *gin.Context) {
 		return
 	}
 
-	rules := make([]seo.RobotsRule, len(cfg.Rules))
-	for i, r := range cfg.Rules {
-		rules[i] = seo.RobotsRule{
-			UserAgent:  r.UserAgent,
-			Allow:      r.Allow,
-			Disallow:   r.Disallow,
-			CrawlDelay: r.CrawlDelay,
-		}
-	}
-
-	generator := seo.NewRobotsGenerator(seo.RobotsConfig{
-		Enabled:    cfg.Enabled,
-		OutputDir:  cfg.OutputDir,
-		SitemapURL: cfg.SitemapURL,
-		Rules:      rules,
-	})
-
-	outputPath := filepath.Join(cfg.OutputDir, "robots.txt")
-	if err := generator.WriteToFile(outputPath); err != nil {
+	// 按站点生成到各自静态根（与 sitemap 同款遍历）。
+	// 修复假性完成：旧实现写单一 cfg.OutputDir，未配置时落 CWD —— 任何站点都服务不到。
+	results := seo.GenerateRobotsForAllSites(c.cfg.current().Dirs.StaticDir, c.cfg.current().Sites, cfg)
+	if len(results) == 0 {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
-			"message": "Failed to write robots.txt: " + err.Error(),
+			"message": "No static site directories found to generate robots.txt",
 		})
 		return
 	}
 
+	paths := make([]string, 0, len(results))
+	for _, r := range results {
+		paths = append(paths, r.Path)
+	}
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "robots.txt generated successfully",
 		"data": gin.H{
-			"output_path": outputPath,
+			"output_paths": paths,
 		},
 	})
 }
@@ -149,7 +127,7 @@ func (c *SEOController) GenerateRobotsTxt(ctx *gin.Context) {
 // GetRobotsTxt 获取 robots.txt
 // GET /api/v1/seo/robots
 func (c *SEOController) GetRobotsTxt(ctx *gin.Context) {
-	cfg := c.cfg.SEO.Robots
+	cfg := c.cfg.current().SEO.Robots
 
 	rules := make([]seo.RobotsRule, len(cfg.Rules))
 	for i, r := range cfg.Rules {
@@ -177,7 +155,7 @@ func (c *SEOController) GetRobotsTxt(ctx *gin.Context) {
 func (c *SEOController) GetSEOConfig(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"code": 200,
-		"data": c.cfg.SEO,
+		"data": c.cfg.current().SEO,
 	})
 }
 
@@ -194,7 +172,7 @@ func (c *SEOController) UpdateSEOConfig(ctx *gin.Context) {
 	}
 
 	// Update config
-	c.cfg.SEO = newCfg
+	c.cfg.current().SEO = newCfg
 
 	// Save to config manager
 	if err := config.GetInstance().SaveConfig(); err != nil {

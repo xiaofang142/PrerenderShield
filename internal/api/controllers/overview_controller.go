@@ -17,7 +17,7 @@ import (
 
 // OverviewController 概览控制器
 type OverviewController struct {
-	cfg           *config.Config
+	cfg           configRef
 	monitor       *monitoring.Monitor
 	visitLogMgr   *logging.VisitLogManager
 	crawlerLogMgr *logging.CrawlerLogManager
@@ -28,7 +28,7 @@ type OverviewController struct {
 // NewOverviewController 创建概览控制器实例
 func NewOverviewController(cfg *config.Config, monitor *monitoring.Monitor, visitLogMgr *logging.VisitLogManager, crawlerLogMgr *logging.CrawlerLogManager, wafStatsSvc *repository.WafRepository, sslMgr ssl.Manager) *OverviewController {
 	return &OverviewController{
-		cfg:           cfg,
+		cfg:           configRef{snapshot: cfg},
 		monitor:       monitor,
 		visitLogMgr:   visitLogMgr,
 		crawlerLogMgr: crawlerLogMgr,
@@ -42,7 +42,7 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	// 计算总防火墙和渲染预热启用状态
 	firewallEnabled := false
 	prerenderEnabled := false
-	for _, site := range c.cfg.Sites {
+	for _, site := range c.cfg.current().Sites {
 		if site.Firewall.Enabled {
 			firewallEnabled = true
 		}
@@ -72,7 +72,7 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	}
 
 	// 获取站点统计数据
-	activeSites := len(c.cfg.Sites)
+	activeSites := len(c.cfg.current().Sites)
 
 	// 从 SSL 管理器获取实际证书数量
 	sslCertificates := 0
@@ -103,18 +103,13 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 		}
 
 		// 合并流量趋势数据
+		// 注：VisitLogManager.GetTrafficTrend 仅返回 6 个固定采样点（HGetAll 失败时为空切片），
+		// CrawlerLogManager.GetTrafficTrend 同样固定 6 点，两者长度只可能相等或其一为空，
+		// "长度不等且均非空"的兜底合并分支不可达，已删除
 		if len(trafficData) == len(crawlerTrafficData) {
 			for i := range trafficData {
 				trafficData[i].CrawlerRequests = crawlerTrafficData[i].CrawlerRequests
 				trafficData[i].BlockedRequests = crawlerTrafficData[i].BlockedRequests
-			}
-		} else if len(trafficData) > 0 && len(crawlerTrafficData) > 0 {
-			// 如果长度不匹配，使用第一个数据作为参考
-			for i := range trafficData {
-				if i < len(crawlerTrafficData) {
-					trafficData[i].CrawlerRequests = crawlerTrafficData[i].CrawlerRequests
-					trafficData[i].BlockedRequests = crawlerTrafficData[i].BlockedRequests
-				}
 			}
 		}
 	}
@@ -160,18 +155,11 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 			"totalRequests":   totalRequests,
 			"crawlerRequests": crawlerTotal,
 			"blockedRequests": blockedTotal,
-			"cacheHitRate": func() float64 {
-				if v, ok := stats["cacheHitRate"].(float64); ok {
-					return float64(int(v*100)) / 100
-				}
-				return 0
-			}(),
-			"activeBrowsers": func() int {
-				if v, ok := stats["activeBrowsers"].(float64); ok {
-					return int(v)
-				}
-				return 0
-			}(),
+			// 注：Monitor.GetStats 恒以 float64 返回 cacheHitRate/activeBrowsers（见
+			// internal/monitoring/monitor.go 返回 map 字面量），类型断言必然成功，
+			// 原 "return 0" 兜底不可达，已删除
+			"cacheHitRate":     float64(int(stats["cacheHitRate"].(float64)*100)) / 100,
+			"activeBrowsers":   int(stats["activeBrowsers"].(float64)),
 			"activeSites":      activeSites,
 			"sslCertificates":  sslCertificates,
 			"firewallEnabled":  firewallEnabled,

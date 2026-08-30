@@ -760,38 +760,23 @@ func (c *Client) GetSiteStats(siteID string) (map[string]string, error) {
 	return c.HashGetAll(key)
 }
 
-// GetCacheCount 获取缓存数量
+// GetCacheCount 获取缓存数量（SCAN 增量遍历，避免 KEYS 阻塞 Redis）
 func (c *Client) GetCacheCount() (int64, error) {
-	if err := c.checkCircuitBreaker(); err != nil {
-		return 0, err
-	}
-	count, err := c.client.Keys(c.ctx, "cache:*").Result()
+	keys, err := c.Keys("cache:*")
 	if err != nil {
-		c.recordFailure()
 		return 0, err
 	}
-	c.recordSuccess()
-	return int64(len(count)), nil
+	return int64(len(keys)), nil
 }
 
-// ClearCache 清理缓存
+// ClearCache 清理全部渲染缓存（SCAN 增量遍历）
 func (c *Client) ClearCache() error {
-	if err := c.checkCircuitBreaker(); err != nil {
-		return err
-	}
-	keys, err := c.client.Keys(c.ctx, "cache:*").Result()
+	keys, err := c.Keys("cache:*")
 	if err != nil {
-		c.recordFailure()
 		return err
 	}
-	c.recordSuccess()
 	if len(keys) > 0 {
-		err := c.client.Del(c.ctx, keys...).Err()
-		if err != nil {
-			c.recordFailure()
-			return err
-		}
-		c.recordSuccess()
+		return c.DelMultiple(keys)
 	}
 	return nil
 }
@@ -990,9 +975,8 @@ func (c *Client) DeleteSiteData(siteID string) error {
 		fmt.Sprintf("task:preheat:%s:*", siteID),
 	}
 	for _, pattern := range keys {
-		siteKeys, err := c.client.Keys(c.ctx, pattern).Result()
+		siteKeys, err := c.Keys(pattern)
 		if err != nil {
-			c.recordFailure()
 			return err
 		}
 		if len(siteKeys) > 0 {

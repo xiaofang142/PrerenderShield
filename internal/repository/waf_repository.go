@@ -126,10 +126,9 @@ func (r *WafRepository) saveWafConfig(config *models.WafConfig) error {
 	ctx := r.client.Context()
 	key := fmt.Sprintf("waf:config:%s", config.SiteID)
 
-	data, err := json.Marshal(config)
-	if err != nil {
-		return err
-	}
+	// 死分支证明：WafConfig 仅含 string/int/bool/time.Time 及其切片，
+	// 均为 JSON 可序列化类型（无 float/chan/func/循环引用），json.Marshal 恒成功
+	data, _ := json.Marshal(config)
 
 	return r.client.Set(ctx, key, data, 0)
 }
@@ -359,10 +358,9 @@ func (r *WafRepository) CreateAccessLog(log *models.AccessLog) error {
 	ctx := r.client.Context()
 	key := fmt.Sprintf("waf:logs:%s", log.SiteID)
 
-	data, err := json.Marshal(log)
-	if err != nil {
-		return err
-	}
+	// 死分支证明：AccessLog 仅含 string/int/bool/time.Time，
+	// 均为 JSON 可序列化类型，json.Marshal 恒成功
+	data, _ := json.Marshal(log)
 
 	// LPUSH to add to the beginning of the list
 	if err := r.client.LPush(ctx, key, data); err != nil {

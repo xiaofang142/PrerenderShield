@@ -755,3 +755,102 @@ func TestBuildRuleIndexes(t *testing.T) {
 	assert.Len(t, router.regexRules, 1)
 	assert.Equal(t, "rule3", router.regexRules[0].ID)
 }
+
+func TestCanonicalHost(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"Example.COM", "example.com"},
+		{"example.com:8080", "example.com"},
+		{"  example.com  ", "example.com"},
+		{"[::1]:8080", "[::1]"}, // IPv6 带端口：冒号在 ] 后
+		{"[::1]", "[::1]"},      // IPv6 裸地址：最后一个冒号在 [] 内不剥
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := canonicalHost(c.in); got != c.want {
+			t.Errorf("canonicalHost(%q)=%q want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// RegexMatcher 全分支：域名四种形态 × 路径三种形态 + 非法正则
+func TestRegexMatcher_AllBranches(t *testing.T) {
+	rm := &RegexMatcher{}
+	mkReq := func(host, path string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, "http://"+host+path, nil)
+		return req
+	}
+
+	domainCases := []struct {
+		domain string
+		host   string
+		want   bool
+	}{
+		{"*", "any.example", true},               // 通配
+		{"*.example.com", "a.example.com", true}, // 后缀
+		{"*.example.com", "other.com", false},    // 后缀不匹配
+		{"example.*", "example.org", true},       // 前缀
+		{"example.*", "other.org", false},        // 前缀不匹配
+		{"exact.com", "exact.com", true},         // 精确
+		{"exact.com", "other.com", false},        // 精确不匹配
+	}
+	for _, c := range domainCases {
+		got := rm.Match(mkReq(c.host, "/x"), &RouteRule{Domain: c.domain, Pattern: "/x"})
+		if got != c.want {
+			t.Errorf("domain=%q host=%q: %v want %v", c.domain, c.host, got, c.want)
+		}
+	}
+
+	pathCases := []struct {
+		pattern string
+		path    string
+		want    bool
+	}{
+		{"=/exact", "/exact", true}, // 精确路径
+		{"=/exact", "/other", false},
+		{"/pre*", "/prefix/x", true}, // 前缀
+		{"/pre*", "/other", false},
+		{`^/re/\d+$`, "/re/123", true}, // 正则
+		{`^/re/\d+$`, "/re/abc", false},
+		{`[invalid`, "/x", false}, // 非法正则 → false
+	}
+	for _, c := range pathCases {
+		got := rm.Match(mkReq("h.com", c.path), &RouteRule{Pattern: c.pattern})
+		if got != c.want {
+			t.Errorf("pattern=%q path=%q: %v want %v", c.pattern, c.path, got, c.want)
+		}
+	}
+}
+
+// MatchRoute 全分支：缓存命中/精确未命中继续前缀/前缀未命中继续正则/全未命中 nil
+func TestRouter_MatchRoute_FullFlow(t *testing.T) {
+	r := NewRouter(Config{Cache: NewMemoryCache(), Handlers: map[string]HandlerFunc{}})
+	_ = r.AddRule(&RouteRule{ID: "r1", Domain: "*", Pattern: "/prefix/*", Action: "a1"})
+	_ = r.AddRule(&RouteRule{ID: "r2", Domain: "spec.host", Pattern: `^/re\d+$`, Action: "a2"})
+
+	// 精确 miss → 前缀命中
+	req := httptest.NewRequest(http.MethodGet, "http://any.host/prefix/x", nil)
+	if got := r.MatchRoute(req); got == nil || got.ID != "r1" {
+		t.Fatalf("prefix flow broken: %+v", got)
+	}
+	// 精确 miss → 前缀 miss → 正则命中
+	req = httptest.NewRequest(http.MethodGet, "http://spec.host/re42", nil)
+	if got := r.MatchRoute(req); got == nil || got.ID != "r2" {
+		t.Fatalf("regex flow broken: %+v", got)
+	}
+	// 全 miss → nil
+	req = httptest.NewRequest(http.MethodGet, "http://any.host/nowhere", nil)
+	if got := r.MatchRoute(req); got != nil {
+		t.Fatalf("no-match must be nil, got %+v", got)
+	}
+	// 缓存命中路径（重复请求同一键）
+	req = httptest.NewRequest(http.MethodGet, "http://any.host/prefix/x", nil)
+	if got := r.MatchRoute(req); got == nil || got.ID != "r1" {
+		t.Fatalf("cache hit flow broken: %+v", got)
+	}
+	// exact 规则 Match=false 时继续后续匹配（exact 有但 matcher 拒绝）
+	_ = r.AddRule(&RouteRule{ID: "r3", Domain: "spec.host", Pattern: "/locked", Action: "a3"})
+	req = httptest.NewRequest(http.MethodGet, "http://any.host/locked", nil)
+	if got := r.MatchRoute(req); got != nil {
+		t.Fatalf("exact with mismatched domain must fall through, got %+v", got)
+	}
+}

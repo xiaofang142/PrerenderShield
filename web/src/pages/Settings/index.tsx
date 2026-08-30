@@ -1,14 +1,21 @@
-import React, { useState, useEffect } from 'react'
-import { Card, Form, InputNumber, Button, Space, message, Row, Col, Divider, Tabs, Tag, Statistic, Popconfirm, Table } from 'antd'
-import { 
-  SaveOutlined, 
-  ReloadOutlined, 
+import React, { useState, useEffect, useRef } from 'react'
+import { Card, Form, InputNumber, Button, Space, message, Row, Col, Divider, Tabs, Tag, Statistic, Popconfirm, Table, Modal, Typography, List } from 'antd'
+import {
+  SaveOutlined,
+  ReloadOutlined,
   SettingOutlined,
   CloudServerOutlined,
   ToolOutlined,
+  KeyOutlined,
+  PlusOutlined,
+  DeleteOutlined,
+  CopyOutlined,
 } from '@ant-design/icons'
 import { systemApi } from '../../services/api'
 import { useTranslation } from 'react-i18next'
+
+// 后端只读保护键：整段提交时必须剥离，否则 SaveSystemConfig 直接拒绝
+const BLOCKED_CONFIG_KEYS = ['jwt_secret', 'redis_url', 'admin_password']
 
 const SettingsPage: React.FC = () => {
   const { t } = useTranslation()
@@ -22,6 +29,12 @@ const SettingsPage: React.FC = () => {
   const [backups, setBackups] = useState<any[]>([])
   const [backupsLoading, setBackupsLoading] = useState(false)
   const [backupLoading, setBackupLoading] = useState(false)
+  // API Token 管理（sha256 哈希存储；原文仅生成时展示一次）
+  const [apiTokens, setApiTokens] = useState<string[]>([])
+  const [tokenSaving, setTokenSaving] = useState(false)
+  const [generatedRaw, setGeneratedRaw] = useState('')
+  // 最近一次 GET 的完整 system:config（保存时整段合并提交，避免整段替换丢字段）
+  const configRef = useRef<Record<string, any>>({})
 
   const fetchBackups = async () => {
     try {
@@ -74,7 +87,15 @@ const SettingsPage: React.FC = () => {
       setLoading(true)
       const res = await systemApi.getConfig()
       if (res.code === 200) {
+        configRef.current = { ...(res.data || {}) }
         form.setFieldsValue(res.data)
+        // api_tokens 存储为 JSON 数组字符串
+        try {
+          const raw = (res.data || {}).api_tokens
+          setApiTokens(raw ? JSON.parse(raw) : [])
+        } catch {
+          setApiTokens([])
+        }
       }
     } catch (error) {
       console.error('Failed to fetch config:', error)
@@ -116,12 +137,17 @@ const SettingsPage: React.FC = () => {
     fetchBackups()
   }, [])
 
-  // 保存配置
+  // 保存配置（整段合并：system:config 为全量替换语义，只传表单字段会清掉其余键）
   const handleSave = async (values: any) => {
     try {
       setSaving(true)
-      const res = await systemApi.updateConfig(values)
+      const merged: Record<string, any> = { ...configRef.current, ...values }
+      for (const key of BLOCKED_CONFIG_KEYS) {
+        delete merged[key]
+      }
+      const res = await systemApi.updateConfig(merged)
       if (res.code === 200) {
+        configRef.current = merged
         message.success(t('settings.messages.saveSuccess'))
       } else {
         message.error(res.message || t('settings.messages.saveFailed'))
@@ -131,6 +157,56 @@ const SettingsPage: React.FC = () => {
       message.error(t('settings.messages.saveFailed'))
     } finally {
       setSaving(false)
+    }
+  }
+
+  // ─── API Token 管理（仅 /preheat/* 端点可用；sha256 哈希存储，原文不落盘）───
+  const saveTokens = async (tokens: string[]) => {
+    try {
+      setTokenSaving(true)
+      const merged: Record<string, any> = { ...configRef.current }
+      for (const key of BLOCKED_CONFIG_KEYS) {
+        delete merged[key]
+      }
+      merged.api_tokens = JSON.stringify(tokens)
+      const res = await systemApi.updateConfig(merged)
+      if (res.code === 200) {
+        configRef.current = merged
+        setApiTokens(tokens)
+        return true
+      }
+      message.error(res.message || t('settings.token.saveFailed'))
+      return false
+    } catch (error) {
+      console.error('Failed to save api tokens:', error)
+      message.error(t('settings.token.saveFailed'))
+      return false
+    } finally {
+      setTokenSaving(false)
+    }
+  }
+
+  const sha256Hex = async (text: string): Promise<string> => {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('')
+  }
+
+  const handleGenerateToken = async () => {
+    // 原文仅存于浏览器变量：pst_ + 32 字节随机 hex
+    const bytes = new Uint8Array(32)
+    crypto.getRandomValues(bytes)
+    const raw = 'pst_' + Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')
+    const hash = await sha256Hex(raw)
+    const ok = await saveTokens([...apiTokens, hash])
+    if (ok) {
+      setGeneratedRaw(raw)
+    }
+  }
+
+  const handleRevokeToken = async (hash: string) => {
+    const ok = await saveTokens(apiTokens.filter((h) => h !== hash))
+    if (ok) {
+      message.success(t('settings.token.revokeSuccess'))
     }
   }
 
@@ -196,6 +272,34 @@ const SettingsPage: React.FC = () => {
                     <Button icon={<ReloadOutlined />} onClick={fetchConfig} loading={loading}>{t('common.reset')}</Button>
                   </Space>
                 </Form.Item>
+
+                <Divider orientation="left">{t('settings.token.title')}</Divider>
+                <p style={{ color: '#666', marginTop: 0 }}>{t('settings.token.help')}</p>
+                <Space style={{ marginBottom: 16 }}>
+                  <Button type="primary" icon={<PlusOutlined />} onClick={handleGenerateToken} loading={tokenSaving}>
+                    {t('settings.token.generate')}
+                  </Button>
+                </Space>
+                <List
+                  size="small"
+                  bordered
+                  dataSource={apiTokens}
+                  locale={{ emptyText: t('settings.token.empty') }}
+                  renderItem={(hash: string) => (
+                    <List.Item
+                      actions={[
+                        <Popconfirm key="revoke" title={t('settings.token.revokeConfirm')} onConfirm={() => handleRevokeToken(hash)} okText={t('common.ok')} cancelText={t('common.cancel')}>
+                          <Button type="link" size="small" danger icon={<DeleteOutlined />}>{t('settings.token.revoke')}</Button>
+                        </Popconfirm>,
+                      ]}
+                    >
+                      <Space>
+                        <KeyOutlined />
+                        <Typography.Text code copyable={{ text: hash }}>{hash.slice(0, 16)}…{hash.slice(-8)}</Typography.Text>
+                      </Space>
+                    </List.Item>
+                  )}
+                />
               </Form>
             </Card>
           ),
@@ -290,6 +394,25 @@ const SettingsPage: React.FC = () => {
           ),
         },
       ]} />
+
+      {/* Token 原文一次性展示（关闭后无法再查看，仅哈希已保存） */}
+      <Modal
+        title={t('settings.token.generatedTitle')}
+        open={!!generatedRaw}
+        onCancel={() => setGeneratedRaw('')}
+        footer={[
+          <Button key="copy" icon={<CopyOutlined />} onClick={() => { navigator.clipboard?.writeText(generatedRaw); message.success(t('common.copied')) }}>
+            {t('settings.token.copy')}
+          </Button>,
+          <Button key="ok" type="primary" onClick={() => setGeneratedRaw('')}>{t('common.ok')}</Button>,
+        ]}
+      >
+        <p>{t('settings.token.generatedWarning')}</p>
+        <Typography.Paragraph code copyable={{ text: generatedRaw }} style={{ wordBreak: 'break-all' }}>
+          {generatedRaw}
+        </Typography.Paragraph>
+        <p style={{ color: '#666', fontSize: 12 }}>{t('settings.token.usage')}</p>
+      </Modal>
     </div>
   )
 }

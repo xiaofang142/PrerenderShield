@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"encoding/json"
+
 	"github.com/gin-gonic/gin"
 
 	"prerender-shield/internal/audit"
@@ -122,12 +124,28 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 		ginRouter.Use(middleware.ManagementRateLimit(mgmtRateLimiter))
 	}
 
+	// 管理 API Token 提供器：静态 YAML 配置 + Redis system:config 动态管理（Settings 页生成/吊销）合并
+	apiTokenProvider := func() []string {
+		hashes := append([]string{}, r.cfg.APITokens...)
+		if r.redisClient != nil {
+			if sc, err := r.redisClient.GetSystemConfig(); err == nil {
+				if raw := sc["api_tokens"]; raw != "" {
+					var dynamic []string
+					if json.Unmarshal([]byte(raw), &dynamic) == nil {
+						hashes = append(hashes, dynamic...)
+					}
+				}
+			}
+		}
+		return hashes
+	}
+
 	// 注册路由
-	RegisterAllRoutes(ginRouter, controllers, r.jwtManager)
+	RegisterAllRoutes(ginRouter, controllers, r.jwtManager, apiTokenProvider)
 
 	// 注册 WebSocket 路由（需要 JWT 认证）
 	wsGroup := ginRouter.Group("/ws")
-	wsGroup.Use(auth.JWTAuthMiddleware(r.jwtManager))
+	wsGroup.Use(auth.JWTAuthMiddleware(r.jwtManager, nil))
 	{
 		wsGroup.GET("/realtime", websocket.HandleWebSocket(r.wsHub, structuredLogger))
 	}

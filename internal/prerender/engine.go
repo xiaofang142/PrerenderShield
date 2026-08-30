@@ -4,17 +4,22 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
 	"prerender-shield/internal/cache"
+	"prerender-shield/internal/config"
 	"prerender-shield/internal/prerender/pool"
+	"prerender-shield/internal/prerender/renderkey"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/seo"
 	"prerender-shield/internal/utils"
@@ -42,7 +47,23 @@ type RenderOptions struct {
 	Cookies        []Cookie
 	Proxy          string
 	BlockResources bool
+	// CacheTTL 渲染结果的业务有效期（秒）；0 表示使用引擎默认 24h。
+	// 接线自 site.Prerender.CacheTTL（历史版本此配置未接线，写入端硬编码 24h）。
+	CacheTTL int
+	// MaxConcurrency 站点级渲染并发预算（同站点同时在渲的页面上限），0 表示默认。
+	MaxConcurrency int
 }
+
+// RenderRequest 统一渲染管线的入参（实时路径与预热路径共用）
+type RenderRequest struct {
+	SiteID    string
+	URL       string
+	Opts      RenderOptions
+	UserAgent string
+}
+
+// ErrSiteBusy 站点并发预算耗尽（避免单站饿死全局浏览器池）
+var ErrSiteBusy = errors.New("site concurrency budget exhausted")
 
 // Cookie Cookie结构
 type Cookie struct {
@@ -63,6 +84,10 @@ type RenderResult struct {
 	Error      string
 	RenderTime float64
 	URL        string
+	// Status 主文档真实状态码（含 render:status_code 覆盖后的最终值）
+	Status int
+	// Thin 空壳质检未通过（已注入 noindex，且未写入缓存）
+	Thin bool
 }
 
 // RenderWithCacheResult 带缓存的渲染结果
@@ -82,6 +107,18 @@ type Engine interface {
 	CleanupPreheatTasks() error
 	IsCrawlerRequest(userAgent string) bool
 	RenderWithContext(c *gin.Context, url string, opts RenderOptions, userAgent string) (RenderWithCacheResult, error)
+	// RenderAndCache 统一渲染管线：状态码捕获+质量门+SEO注入+信封缓存（预热与实时共用）
+	RenderAndCache(req RenderRequest) (RenderResult, error)
+	// GetCachedPage 读取任意年龄的信封（新鲜度由调用方用 env.Fresh 判断）
+	GetCachedPage(siteID, url, userAgent string) (PageEnvelope, bool)
+	// InvalidatePage 删除单 URL 缓存
+	InvalidatePage(siteID, url string) error
+	// ListCacheEntries 列出站点渲染缓存条目摘要（管理端缓存条目列表用）
+	ListCacheEntries(siteID string, limit int) ([]cache.CacheEntrySummary, error)
+	// SetDefaultCacheTTL 设置站点级默认业务 TTL（秒），opts.CacheTTL 未传时的兜底。
+	SetDefaultCacheTTL(seconds int)
+	// SetPreheatTTLConfig 设置预热通道的站点 TTL 与分级规则（预热任务创建方注入）
+	SetPreheatTTLConfig(siteTTL int, rules []config.TTLRule)
 	GetPoolSize() int
 	Close() error
 }
@@ -95,6 +132,22 @@ type engine struct {
 	browserPool        *pool.Pool
 	ownsPool           bool // 是否拥有浏览器池的生命周期（共享池为 false）
 	seoInjector        *SEOInjector
+
+	// siteBudgets 站点级渲染并发预算（站点ID -> 信号量 chan）
+	siteBudgets sync.Map
+
+	// defaultCacheTTL 站点默认业务 TTL（秒）；站点配置 CacheTTL 接线（预热通道用）
+	defaultCacheTTL int64
+
+	// preheatTTL 站点级 CacheTTL 与分级规则（预热任务创建方注入，preheatTTLRulesMu 保护）
+	preheatSiteTTL    int
+	preheatTTLRules   []config.TTLRule
+	preheatTTLRulesMu sync.RWMutex
+
+	// preheatBaseURL 站点公开基址（scheme://host），用于把 sitemap/crawler 来源的
+	// route 形态 URL 补全为绝对地址（修复死键/渲染失败）
+	preheatBaseURL string
+	preheatBaseMu  sync.RWMutex
 }
 
 // NewEngine 创建新的渲染引擎
@@ -255,98 +308,307 @@ func (e *engine) IsCrawlerRequest(userAgent string) bool {
 	return isCrawlerUserAgent(userAgent)
 }
 
-// RenderWithContext 渲染页面（带 gin.Context 参数的版本）
+// RenderWithContext 渲染页面（带 gin.Context 参数的版本）。
+// 语义：命中缓存直接回；未命中走统一管线渲染并写缓存。降级供数（软过期兜底）
+// 由上层 handler 编排，此方法保持旧行为供既有调用方使用。
 func (e *engine) RenderWithContext(c *gin.Context, url string, opts RenderOptions, userAgent string) (RenderWithCacheResult, error) {
-	// #52: 先检查缓存，避免每次请求都启动 Chrome 渲染
-	cacheKey := fmt.Sprintf("prerender:%s", url)
-	siteID := ""
+	siteID := "default"
 	if c != nil {
 		siteID = c.GetString("site_id")
-	}
-	if siteID == "" {
-		siteID = "default"
+		if siteID == "" {
+			siteID = "default"
+		}
 	}
 
-	if cached, err := e.cacheManager.Get(siteID, cacheKey); err == nil && len(cached) > 0 {
+	// 单桶读（设备分桶收敛，见 RenderAndCache 写入注释）+ 存量回退链：
+	// @desktop → 无后缀旧键 → 存量 @mobile（一次性过渡，@mobile 键随 TTL 自然过期）
+	if raw, err := e.cacheManager.Get(siteID, e.cacheKey(url, "desktop")); err == nil && len(raw) > 0 {
+		env, _ := unmarshalPageEnvelope(raw)
 		return RenderWithCacheResult{
 			Result: RenderResult{
-				HTML:    string(cached),
+				HTML:    env.HTML,
 				Success: true,
 				URL:     url,
 			},
 			HitCache: true,
 		}, nil
 	}
-
-	// 从池获取实例
-	instance, err := e.browserPool.AcquireWithTimeout(opts.Timeout)
-	if err != nil {
-		return RenderWithCacheResult{
-			Result: RenderResult{
-				HTML:    "",
-				Success: false,
-				Error:   err.Error(),
-			},
-			HitCache: false,
-		}, fmt.Errorf("failed to acquire browser instance: %w", err)
+	for _, fallbackKey := range []string{e.legacyCacheKey(url), e.cacheKey(url, "mobile")} {
+		if raw, err := e.cacheManager.Get(siteID, fallbackKey); err == nil && len(raw) > 0 {
+			env, _ := unmarshalPageEnvelope(raw)
+			return RenderWithCacheResult{
+				Result: RenderResult{
+					HTML:    env.HTML,
+					Success: true,
+					URL:     url,
+				},
+				HitCache: true,
+			}, nil
+		}
 	}
-	defer e.browserPool.Release(instance)
 
-	// 创建带超时的上下文
-	ctx, cancel := context.WithTimeout(instance.ChromeCtx, opts.Timeout)
-	defer cancel()
-
-	// #51: 计算渲染时间
-	renderStart := time.Now()
-
-	// P0-8: 智能等待 - 使用 Activity Tracker 正确实现网络空闲检测
-	// 跟踪活跃请求数，当活跃数 = 0 且持续 idleMs 时 resolve
-	// 硬上限 hardCapMs 防止无限等待
-	var html string
-	err = chromedp.Run(ctx,
-		chromedp.Navigate(url),
-		chromedp.WaitVisible("body"),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			return chromedp.Evaluate(smartWaitJS(500, 30000), nil).Do(ctx)
-		}),
-		chromedp.OuterHTML("html", &html),
-	)
-
-	renderTime := time.Since(renderStart).Seconds()
-
+	req := RenderRequest{SiteID: siteID, URL: url, Opts: opts, UserAgent: userAgent}
+	res, err := e.RenderAndCache(req)
 	if err != nil {
 		return RenderWithCacheResult{
 			Result: RenderResult{
-				HTML:       "",
+				HTML:       res.HTML,
 				Success:    false,
-				Error:      err.Error(),
-				RenderTime: renderTime,
+				Error:      res.Error,
+				RenderTime: res.RenderTime,
+				URL:        url,
 			},
 			HitCache: false,
-		}, fmt.Errorf("failed to render page: %w", err)
+		}, err
+	}
+	return RenderWithCacheResult{Result: res, HitCache: false}, nil
+}
+
+// RenderAndCache 统一渲染管线（实时与预热共用唯一写入路径）：
+// 站点并发预算 → Chromium 渲染（网络事件捕获主文档状态码 + smartWaitJS 智能等待）
+// → render:status_code 自声明覆盖 → SEO 注入 → 空壳质检（最多重试1次）
+// → 信封缓存写入（仅 Success 且状态<500 且非空壳；TTL 接线 site 配置，存储期含降级窗口）。
+func (e *engine) RenderAndCache(req RenderRequest) (RenderResult, error) {
+	budget := e.budgetFor(req.SiteID, req.Opts.MaxConcurrency)
+	if budget != nil {
+		select {
+		case budget <- struct{}{}:
+			defer func() { <-budget }()
+		default:
+			return RenderResult{Success: false, Error: ErrSiteBusy.Error(), URL: req.URL}, ErrSiteBusy
+		}
 	}
 
-	// 注入 SEO 优化（Meta 标签 / 结构化数据 / canonical）
-	// 仅对实时渲染的结果注入；缓存命中时已包含 SEO 标签，无需重复处理
+	timeout := req.Opts.Timeout
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+
+	start := time.Now()
+	const maxAttempts = 2
+	html := ""
+	docStatus := 200
+	thin := false
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		h, st, err := e.chromedpRender(req.URL, timeout)
+		if err != nil {
+			if attempt == 1 && isEmptyShell(h) {
+				// 导航成功但产出空壳且报错（如等待超时），再试一次
+				continue
+			}
+			return RenderResult{
+				Success:    false,
+				Error:      fmt.Sprintf("failed to render page: %v", err),
+				RenderTime: time.Since(start).Seconds(),
+				URL:        req.URL,
+			}, fmt.Errorf("failed to render page: %w", err)
+		}
+		html, docStatus = h, st
+		if !isEmptyShell(html) {
+			break
+		}
+		if attempt == maxAttempts {
+			thin = true
+		}
+	}
+	renderTime := time.Since(start).Seconds()
+
+	// 主文档真实状态码优先；render:status_code 页面自声明可覆盖（3xx/4xx/5xx 才有意义）
+	if docStatus < 200 || docStatus > 599 {
+		docStatus = 200
+	}
+	if decl := extractDeclaredStatus(html); decl >= 300 && decl != docStatus {
+		docStatus = decl
+	}
+
+	// SEO 注入仅在最终产物上进行一次
 	if e.seoInjector != nil {
-		if optimized, seoErr := e.seoInjector.InjectSEOTags([]byte(html), url); seoErr == nil {
+		if optimized, seoErr := e.seoInjector.InjectSEOTags([]byte(html), req.URL); seoErr == nil {
 			html = string(optimized)
 		}
 	}
 
-	// 缓存渲染结果
-	_ = e.cacheManager.Set(siteID, cacheKey, []byte(html), 24*time.Hour)
+	// 空壳终态：注入 noindex 后照常响应，但绝不入缓存（坏缓存比无缓存更毒）
+	if thin {
+		html = injectNoindexMeta(html)
+	}
 
-	return RenderWithCacheResult{
-		Result: RenderResult{
-			HTML:       html,
-			Success:    true,
-			Error:      "",
-			RenderTime: renderTime,
-			URL:        url,
-		},
-		HitCache: false,
+	cacheable := !thin && docStatus < 500
+	if cacheable {
+		ttlSecs := req.Opts.CacheTTL
+		if ttlSecs <= 0 && e.defaultCacheTTL > 0 {
+			ttlSecs = int(e.defaultCacheTTL)
+		}
+		ttl := time.Duration(ttlSecs) * time.Second
+		if ttl <= 0 {
+			ttl = 24 * time.Hour
+		}
+		env := PageEnvelope{Status: docStatus, HTML: html, ExpiresAt: time.Now().Add(ttl).Unix(), CreatedAt: time.Now().Unix()}
+		// 单桶写入：当前渲染器输出与 UA 无关（无移动视口仿真），设备分桶只会产出
+		// 逐字节相同的副本并使 mobile 爬虫永不命中预热缓存（调研：响应式站发桌面
+		// HTML 为 Google 官方推荐）。DeviceBucket 保留供未来自适应渲染使用。
+		_ = e.cacheManager.Set(req.SiteID, e.cacheKey(req.URL, "desktop"), marshalPageEnvelope(env), staleRetention(ttl))
+	}
+
+	return RenderResult{
+		HTML:       html,
+		Success:    true,
+		RenderTime: renderTime,
+		URL:        req.URL,
+		Status:     docStatus,
+		Thin:       thin,
 	}, nil
+}
+
+// chromedpRender 单次浏览器渲染，返回 HTML 与主文档 HTTP 状态码。
+func (e *engine) chromedpRender(target string, timeout time.Duration) (string, int, error) {
+	instance, err := e.browserPool.AcquireWithTimeout(timeout)
+	if err != nil {
+		return "", 0, fmt.Errorf("acquire browser: %w", err)
+	}
+	defer e.browserPool.Release(instance)
+
+	ctx, cancel := context.WithTimeout(instance.ChromeCtx, timeout)
+	defer cancel()
+
+	var html string
+	var docStatus int64
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		if rs, ok := ev.(*network.EventResponseReceived); ok &&
+			rs.Type == network.ResourceTypeDocument && rs.Response.Status >= 200 {
+			if docStatus == 0 || int(rs.Response.Status) != int(docStatus) {
+				docStatus = rs.Response.Status
+			}
+		}
+	})
+	err = chromedp.Run(ctx,
+		network.Enable(),
+		chromedp.Navigate(target),
+		chromedp.WaitVisible("body"),
+		chromedp.ActionFunc(func(c context.Context) error {
+			return chromedp.Evaluate(smartWaitJS(500, 30000), nil).Do(c)
+		}),
+		chromedp.OuterHTML("html", &html),
+	)
+	if err != nil {
+		// 渲染失败即标记不健康：Release 走回收路径，污染实例绝不回池复用
+		// （防 chromedp 分配超时后同 context 二次 Allocate 的上游 double-close panic）
+		instance.MarkUnhealthy()
+		return html, int(docStatus), err
+	}
+	if docStatus == 0 {
+		docStatus = 200
+	}
+	return html, int(docStatus), nil
+}
+
+// budgetFor 获取站点并发预算信号量；上限<=0 表示不限制（返回 nil），沿用全局池自约束。
+func (e *engine) budgetFor(siteID string, maxConcurrency int) chan struct{} {
+	size := maxConcurrency
+	if size <= 0 {
+		return nil
+	}
+	if b, ok := e.siteBudgets.Load(siteID); ok {
+		return b.(chan struct{})
+	}
+	b := make(chan struct{}, size)
+	actual, loaded := e.siteBudgets.LoadOrStore(siteID, b)
+	if loaded {
+		return actual.(chan struct{})
+	}
+	return b
+}
+
+// cacheKey 归一化后的渲染缓存业务键（含设备分桶后缀 @mobile/@desktop）
+func (e *engine) cacheKey(u, device string) string {
+	return renderkey.WithDeviceBucket(renderkey.Normalize(u), device)
+}
+
+// legacyCacheKey 存量无分桶后缀旧键（设备分桶上线前的键形态，读侧一次性回退兼容）
+func (e *engine) legacyCacheKey(u string) string {
+	return renderkey.BuildCacheKey(renderkey.Normalize(u))
+}
+
+// GetCachedPage 读取任意年龄的信封；不存在返回 ok=false。
+// 单桶读 + 存量回退链：@desktop → 无后缀旧键 → 存量 @mobile（一次性过渡）。
+func (e *engine) GetCachedPage(siteID, u, userAgent string) (PageEnvelope, bool) {
+	for _, key := range []string{e.cacheKey(u, "desktop"), e.legacyCacheKey(u), e.cacheKey(u, "mobile")} {
+		raw, err := e.cacheManager.Get(siteID, key)
+		if err != nil || len(raw) == 0 {
+			continue
+		}
+		env, _ := unmarshalPageEnvelope(raw)
+		return env, true
+	}
+	return PageEnvelope{}, false
+}
+
+// InvalidatePage 删除单 URL 的渲染缓存（覆盖 mobile/desktop 两分桶及存量无后缀旧键，
+// 失效语义=全设备失效，避免管理端只删到一半设备桶造成脏读）
+func (e *engine) InvalidatePage(siteID, u string) error {
+	// NormalizeFlexible：管理端回传归一化展示形态（host:port/path）时
+	// Normalize 会把 host 误判为 scheme 删除错键，故按形态分流
+	norm := renderkey.NormalizeFlexible(u)
+	var firstErr error
+	for _, key := range []string{
+		renderkey.WithDeviceBucket(norm, "desktop"),
+		renderkey.WithDeviceBucket(norm, "mobile"),
+		e.legacyCacheKey(u),
+	} {
+		if err := e.cacheManager.Delete(siteID, key); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// ListCacheEntries 列出站点渲染缓存条目摘要（委托 cacheManager）
+func (e *engine) ListCacheEntries(siteID string, limit int) ([]cache.CacheEntrySummary, error) {
+	return e.cacheManager.ListEntries(siteID, limit)
+}
+
+// SetDefaultCacheTTL 设置站点默认业务 TTL（秒）
+func (e *engine) SetDefaultCacheTTL(seconds int) {
+	if seconds > 0 {
+		e.defaultCacheTTL = int64(seconds)
+	}
+}
+
+// SetPreheatTTLConfig 设置预热通道站点 TTL 与分级规则
+func (e *engine) SetPreheatTTLConfig(siteTTL int, rules []config.TTLRule) {
+	e.preheatTTLRulesMu.Lock()
+	defer e.preheatTTLRulesMu.Unlock()
+	e.preheatSiteTTL = siteTTL
+	e.preheatTTLRules = rules
+}
+
+// preheatEffectiveTTL 预热 URL 有效 TTL：规则首中 > 站点 TTL > defaultCacheTTL（0 时引擎再兜底 24h）
+func (e *engine) preheatEffectiveTTL(rawURL string) int {
+	e.preheatTTLRulesMu.RLock()
+	defer e.preheatTTLRulesMu.RUnlock()
+	for _, rule := range e.preheatTTLRules {
+		if rule.Matches(rawURL) {
+			return rule.TTLSeconds
+		}
+	}
+	if e.preheatSiteTTL > 0 {
+		return e.preheatSiteTTL
+	}
+	return int(e.defaultCacheTTL)
+}
+
+// SetPreheatBaseURL 设置站点公开基址，供预热任务把相对路径补全为绝对 URL
+func (e *engine) SetPreheatBaseURL(base string) {
+	e.preheatBaseMu.Lock()
+	e.preheatBaseURL = base
+	e.preheatBaseMu.Unlock()
+}
+
+func (e *engine) getPreheatBaseURL() string {
+	e.preheatBaseMu.RLock()
+	defer e.preheatBaseMu.RUnlock()
+	return e.preheatBaseURL
 }
 
 // GetPoolSize 获取浏览器池当前实例数

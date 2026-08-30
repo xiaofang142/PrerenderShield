@@ -537,9 +537,9 @@ func TestWebhookHandler_SendWithRetry_Success(t *testing.T) {
 		Details:   map[string]interface{}{},
 	}
 
-	// 由于没有配置 URL，这个调用会失败
+	// 未配置 URL：no-op 直接返回 nil（无渠道配置时静默跳过，不报错不入重试队列）
 	err := handler.Send(ctx, alert)
-	assert.NotNil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestWebhookHandler_UpdateStats(t *testing.T) {

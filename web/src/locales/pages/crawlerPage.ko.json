@@ -1,3 +1,18 @@
 {
-  "crawlerPage": {}
+  "crawlerPage": {
+    "urlStats": {
+      "tab": "렌더링 예산",
+      "title": "URL별 렌더링 예산 (최근 7일)",
+      "refresh": "새로고침",
+      "empty": "크롤러 접근 데이터가 없습니다",
+      "url": "URL",
+      "requests": "요청 수",
+      "renders": "실렌더링",
+      "hitRate": "히트율",
+      "avgRender": "평균 시간",
+      "wasted": "렌더링 총시간",
+      "lastStatus": "마지막 상태",
+      "lastSeen": "마지막 접근"
+    }
+  }
 }

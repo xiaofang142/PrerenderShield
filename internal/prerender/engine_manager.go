@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"prerender-shield/internal/cache"
+	"prerender-shield/internal/prerender/pool"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/seo"
-	"prerender-shield/internal/prerender/pool"
 )
 
 // 确保 redis.Client 实现 RedisClient 接口
@@ -132,6 +132,13 @@ func (m *EngineManager) GetEngine(siteID string) (Engine, bool) {
 	m.engines[siteID] = engine
 
 	return engine, true
+}
+
+// RegisterEngine 注册外部提供的引擎实现（测试注入假引擎；生产路径走 GetEngine 懒创建）
+func (m *EngineManager) RegisterEngine(siteID string, engine Engine) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.engines[siteID] = engine
 }
 
 // RemoveEngine 移除并关闭指定站点的渲染引擎

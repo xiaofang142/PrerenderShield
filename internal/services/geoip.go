@@ -262,15 +262,9 @@ func (s *GeoIPService) GetLocation(ip string) (*GeoLocation, error) {
 		if serverLoc != nil {
 			return serverLoc, nil
 		}
-		// 如果连本机位置都没有，只能返回默认Local
-		if err != nil {
-			return nil, err
-		}
-		return &GeoLocation{
-			Country:     "Local",
-			CountryCode: "Local",
-			City:        "Local",
-		}, nil
+		// queryAPIWithFallback 成功时 location 必非 nil，失败时 err 必非 nil，
+		// 走到这里必然 err != nil（原「返回默认 Local」分支不可达，已删除）
+		return nil, err
 	}
 
 	// 写入缓存

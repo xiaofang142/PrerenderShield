@@ -86,19 +86,28 @@ func NewACMEClient(config ACMEConfig) (*ACMEClient, error) {
 	legoConfig := &lego.Config{
 		CADirURL:  directoryURL,
 		UserAgent: "PrerenderShield/1.0",
+		// lego 要求显式 HTTPClient 与 User（nil 直接报错）——历史缺陷：两者
+		// 均未设置时 NewACMEClient 恒失败，整个 SSL 功能被静默禁用
+		HTTPClient: &http.Client{Timeout: 30 * time.Second},
+		User:       account,
 	}
 	legoConfig.Certificate.KeyType = certcrypto.RSA2048
 
 	// 测试环境插桩: Pebble 等本地 ACME 服务使用自签 HTTPS，需跳过校验
 	if os.Getenv("ACME_TLS_INSECURE") == "1" {
 		hc := legoConfig.HTTPClient
-		tr, _ := hc.Transport.(*http.Transport)
-		cloned := tr.Clone()
-		if cloned.TLSClientConfig == nil {
-			cloned.TLSClientConfig = &tls.Config{}
+		// Transport 可能为 nil（默认 HTTPClient 未自定义）——此前直接 Clone(nil) panic
+		tr, ok := hc.Transport.(*http.Transport)
+		if !ok || tr == nil {
+			tr = http.DefaultTransport.(*http.Transport).Clone()
+		} else {
+			tr = tr.Clone()
 		}
-		cloned.TLSClientConfig.InsecureSkipVerify = true
-		hc.Transport = cloned
+		if tr.TLSClientConfig == nil {
+			tr.TLSClientConfig = &tls.Config{}
+		}
+		tr.TLSClientConfig.InsecureSkipVerify = true
+		hc.Transport = tr
 		logging.DefaultLogger.Warn("ACME_TLS_INSECURE enabled — only for local test CAs")
 	}
 

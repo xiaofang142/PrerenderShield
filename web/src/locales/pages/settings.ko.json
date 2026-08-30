@@ -63,6 +63,20 @@
       "fetchConfigFailed": "설정 조회 실패",
       "saveSuccess": "설정 저장 성공",
       "saveFailed": "저장 실패"
+    },
+    "token": {
+      "title": "API Token 관리",
+      "help": "CI/배포 훅 등에서 캐시 관리 API( /api/v1/preheat/* 만 허용)를 호출하기 위한 토큰. 해시 저장, 원문은 생성 시 한 번만 표시.",
+      "generate": "토큰 생성",
+      "empty": "토큰 없음",
+      "generatedTitle": "토큰 생성됨 (한 번만 표시)",
+      "generatedWarning": "지금 바로 복사하여 저장하세요. 다시 볼 수 없습니다:",
+      "copy": "복사",
+      "revoke": "폐기",
+      "revokeConfirm": "이 토큰을 폐기하시겠습니까? 해당 자동화는 즉시 접근이 차단됩니다.",
+      "revokeSuccess": "토큰이 폐기되었습니다",
+      "saveFailed": "토큰 저장 실패",
+      "usage": "사용법: Authorization: Bearer <token>, /api/v1/preheat/* 엔드포인트만 가능."
     }
   }
 }

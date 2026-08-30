@@ -5,6 +5,7 @@ package threatintel
 import (
 	"bufio"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -345,15 +346,19 @@ func (f *Fetcher) parseText(r io.Reader) ([]string, error) {
 		}
 
 		if isCIDR(raw) {
-			// Store CIDR for efficient matching
+			// Store CIDR for efficient matching（CIDR 必须整体保留，剥端口会破坏网段语义）
 			if _, _, err := net.ParseCIDR(raw); err == nil {
 				cidrs[raw] = true
 			}
-		} else if isValidIP(raw) {
-			ips[raw] = true
-			count++
-			if count >= f.config.MaxIPs {
-				break
+		} else {
+			// 剥离 "1.2.3.4:80" 形态端口（extractIP 此前为死代码，现接线）
+			raw = extractIP(raw)
+			if isValidIP(raw) {
+				ips[raw] = true
+				count++
+				if count >= f.config.MaxIPs {
+					break
+				}
 			}
 		}
 	}
@@ -368,15 +373,36 @@ func (f *Fetcher) parseText(r io.Reader) ([]string, error) {
 }
 
 func (f *Fetcher) parseJSON(r io.Reader, ipField string) ([]string, error) {
-	// Simple JSON array or object parsing
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
 	ips := make(map[string]bool)
-	text := string(data)
-	// Extract IPs using regex from JSON content
-	for _, word := range strings.Fields(text) {
+	var walk func(v interface{})
+	walk = func(v interface{}) {
+		switch x := v.(type) {
+		case string:
+			if isValidIP(strings.TrimSpace(x)) {
+				ips[strings.TrimSpace(x)] = true
+			}
+		case []interface{}:
+			for _, item := range x {
+				walk(item)
+			}
+		case map[string]interface{}:
+			for _, item := range x {
+				walk(item)
+			}
+		}
+	}
+	// 真解码：数组/对象/嵌套任意形态均可提取字符串值中的合法 IP
+	var parsed interface{}
+	if err := json.Unmarshal(data, &parsed); err == nil {
+		walk(parsed)
+		return mapKeys(ips), nil
+	}
+	// 非法 JSON 兜底：沿用词法扫描
+	for _, word := range strings.Fields(string(data)) {
 		word = strings.Trim(word, `"[],{}`)
 		if isValidIP(word) {
 			ips[word] = true
@@ -452,7 +478,8 @@ func isValidIP(ip string) bool {
 			}
 		}
 	}
-	return true
+	// 字节范围终验：防止 999.1.1.1 类伪 IP 入库（此前仅查位数不查范围）
+	return net.ParseIP(ip) != nil
 }
 
 func extractIP(line string) string {

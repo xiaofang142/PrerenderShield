@@ -1,12 +1,11 @@
 package di
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"prerender-shield/internal/audit"
@@ -17,6 +16,7 @@ import (
 	"prerender-shield/internal/logging"
 	"prerender-shield/internal/middleware"
 	"prerender-shield/internal/monitoring"
+	"prerender-shield/internal/monitoring/alerting"
 	"prerender-shield/internal/prerender"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/repository"
@@ -72,7 +72,7 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 	// 初始化认证模块
 	userManager := auth.NewUserManager(cfg.Dirs.DataDir, redisClient)
 	jwtManager := auth.NewJWTManager(&auth.JWTConfig{
-		SecretKey:  getSecretKey(cfg),
+		SecretKey:  getSecretKey(),
 		ExpireTime: 24 * time.Hour,
 	}, redisClient)
 
@@ -98,6 +98,23 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 		PrometheusAddress: cfg.Monitoring.PrometheusAddress,
 		Alerting: monitoring.AlertConfig{
 			Enabled: cfg.Monitoring.Alerting.Enabled,
+			// 通知配置装配（历史缺陷：该字段恒零值 → Start 永不注册 webhook/email 处理器 → 通知从未发出）
+			Notification: monitoring.NotificationConfig{
+				Webhook: monitoring.WebhookConfig{
+					Enabled: cfg.Monitoring.Alerting.Notifications.Webhook.Enabled,
+					URL:     cfg.Monitoring.Alerting.Notifications.Webhook.URL,
+					Secret:  cfg.Monitoring.Alerting.Notifications.Webhook.Secret,
+				},
+				Email: monitoring.EmailConfig{
+					Enabled:  cfg.Monitoring.Alerting.Notifications.Email.Enabled,
+					SMTPHost: cfg.Monitoring.Alerting.Notifications.Email.SMTPHost,
+					SMTPPort: cfg.Monitoring.Alerting.Notifications.Email.SMTPPort,
+					Username: cfg.Monitoring.Alerting.Notifications.Email.Username,
+					Password: cfg.Monitoring.Alerting.Notifications.Email.Password,
+					From:     cfg.Monitoring.Alerting.Notifications.Email.From,
+					To:       cfg.Monitoring.Alerting.Notifications.Email.To,
+				},
+			},
 		},
 		MetricsPersistence: monitoring.MetricsPersistenceConfig{
 			Enabled:           cfg.Monitoring.MetricsPersistence.Enabled,
@@ -123,6 +140,14 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 
 	// 设置 Redis 客户端用于监控数据持久化
 	monitor.SetRedisClient(redisClient)
+
+	// 动态通知配置：每次告警触发时读取最新配置（控制台改动即时生效，免重启）。
+	// 来源优先级：UI 通知渠道（monitoring:notification-channels）→ 系统配置 alerting.notifications（兜底）。
+	notifyRepo := repository.NewNotificationChannelsRepository(redisClient)
+	monitor.SetNotificationSource(buildNotificationSource(notifyRepo, cfg.Monitoring.Alerting.Notifications))
+
+	// 同步 Redis 中控制台保存的告警规则到内存引擎（重启后 UI 规则不丢且生效）
+	monitor.LoadRulesFromStore()
 
 	// 初始化健康检查
 	healthChecker := monitoring.NewHealthChecker(redisClient)
@@ -193,7 +218,7 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 
 	// 初始化站点处理器（传入批量日志写入器）
 	wafLogWriter := middleware.NewWafLogWriter(wafRepo, 50, 5*time.Second)
-	siteHandler := sitehandler.NewHandler(prerenderMgr, wafRepo, redisClient, geoIPService, firewallMgr, wafLogWriter)
+	siteHandler := sitehandler.NewHandler(prerenderMgr, wafRepo, redisClient, geoIPService, firewallMgr, wafLogWriter, monitor)
 
 	// 初始化调度器
 	schedulerInstance := scheduler.NewScheduler(prerenderMgr, redisClient, cfg)
@@ -244,21 +269,17 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 
 // getSecretKey 获取 JWT 密钥
 // 优先从环境变量 JWT_SECRET 读取，不存在则自动生成随机密钥
-func getSecretKey(cfg *config.Config) string {
+func getSecretKey() string {
 	// 1. 优先从环境变量读取
 	if secret := os.Getenv("JWT_SECRET"); secret != "" {
 		return secret
 	}
 
-	// 2. 自动生成随机密钥（单机部署足够安全）
+	// 2. 自动生成随机密钥（单机部署足够安全）。
+	// crypto/rand.Read 自 Go 1.24 起由标准库文档保证 "never returns an error"（恒填满 b），
+	// 原错误回退分支不可达，已移除（如需恢复参见 git 历史）
 	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		logging.DefaultLogger.Error("Failed to generate random JWT secret: %v", err)
-		// 极端情况回退：基于版本+时间生成
-		h := hmac.New(sha256.New, []byte(cfg.App.Version+"-"+time.Now().String()))
-		h.Write([]byte("prerender-shield-jwt-secret"))
-		return hex.EncodeToString(h.Sum(nil))
-	}
+	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
@@ -340,5 +361,54 @@ func buildThreatIntelConfig(cfg config.ThreatIntelConfig) threatintel.Config {
 		GlobalKey:   cfg.GlobalKey,
 		MaxIPs:      cfg.MaxIPs,
 		Concurrency: cfg.Concurrency,
+	}
+}
+
+// buildNotificationSource 构造通知配置解析闭包（渠道优先 + 文件字段级合并）。
+// 提取为具名函数以便直接单测（原内联闭包在 NewContainer 中不可达）。
+func buildNotificationSource(notifyRepo *repository.NotificationChannelsRepository, fileNotify config.NotificationsConfig) func() (*alerting.WebhookConfig, *alerting.EmailConfig) {
+	return func() (*alerting.WebhookConfig, *alerting.EmailConfig) {
+		var wc *alerting.WebhookConfig
+		var ec *alerting.EmailConfig
+		for _, ch := range notifyRepo.Get() {
+			if !ch.Enabled {
+				continue
+			}
+			switch ch.Type {
+			case "webhook":
+				if wc == nil && ch.URL != "" {
+					wc = &alerting.WebhookConfig{URL: ch.URL, Method: "POST", Timeout: 10 * time.Second, MaxRetries: 3, RetryDelay: 5 * time.Second}
+				}
+			case "email":
+				// 渠道 schema 仅含 URL：支持 host[:port] 形态；收件人不可表达 →
+				// 仅当文件配置提供 To 时可用（schema 局限记录于 tasks/disputes-c10.md）
+				if ec == nil && ch.URL != "" {
+					host, port := ch.URL, 25
+					if i := strings.LastIndex(ch.URL, ":"); i > 0 {
+						host = ch.URL[:i]
+						if p, err := strconv.Atoi(ch.URL[i+1:]); err == nil {
+							port = p
+						}
+					}
+					ec = &alerting.EmailConfig{Enabled: true, SMTPHost: host, SMTPPort: port, From: "alert@shield.local", UseTLS: false}
+				}
+			}
+		}
+		// 文件配置兜底 + 字段级合并：UI email 渠道 schema 无收件人字段，
+		// 仅提供 host/port；To 从文件配置补齐（有值优先文件，避免空 To 早退）。
+		// 原字段级合并的 From 分支不可达已移除：渠道 email 恒置 From="alert@shield.local"，
+		// 文件兜底路径对 ec 整体赋值 fileEC，两处均不可能产生空 From
+		if wc == nil && fileNotify.Webhook.Enabled {
+			wc = &alerting.WebhookConfig{URL: fileNotify.Webhook.URL, Method: "POST", Timeout: 10 * time.Second, MaxRetries: 3, RetryDelay: 5 * time.Second, Secret: fileNotify.Webhook.Secret}
+		}
+		if fileNotify.Email.Enabled {
+			fileEC := &alerting.EmailConfig{Enabled: true, SMTPHost: fileNotify.Email.SMTPHost, SMTPPort: fileNotify.Email.SMTPPort, Username: fileNotify.Email.Username, Password: fileNotify.Email.Password, From: fileNotify.Email.From, To: fileNotify.Email.To, UseTLS: true}
+			if ec == nil {
+				ec = fileEC
+			} else if len(ec.To) == 0 {
+				ec.To = fileEC.To
+			}
+		}
+		return wc, ec
 	}
 }

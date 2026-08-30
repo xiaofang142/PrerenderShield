@@ -558,3 +558,71 @@ func TestCrawlerLogManager_Integration(t *testing.T) {
 	trend := manager.GetTrafficTrend(startTime, endTime)
 	assert.NotNil(t, trend)
 }
+
+// TestGetURLStats 测试 per-URL 渲染预算聚合（T4）
+func TestGetURLStats(t *testing.T) {
+	client := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
+	defer client.Close()
+
+	ctx := context.Background()
+	site := "test-urlstats.com"
+	dateStr := time.Now().Format("2006-01-02")
+	siteKey := "crawler_logs:" + site + ":" + dateStr
+	client.Del(ctx, siteKey)
+
+	manager := &CrawlerLogManager{redisClient: client, ctx: ctx}
+
+	now := time.Now()
+	writeLog := func(seq int, route string, hitCache bool, renderSec float64, status int) {
+		log := CrawlerLog{
+			Site: site, Route: route, Time: now.Add(time.Duration(seq) * time.Millisecond), Status: status, Method: "GET",
+			HitCache: hitCache, RenderTime: renderSec, UA: "Googlebot/2.1",
+		}
+		data, _ := json.Marshal(log)
+		client.ZAdd(ctx, siteKey, &redis.Z{Score: float64(log.Time.UnixNano()), Member: data})
+	}
+	// /blog/a: 3 次请求 2 次渲染 (1.0s+2.0s) 1 次命中
+	writeLog(1, "/blog/a", false, 1.0, 200)
+	writeLog(2, "/blog/a", false, 2.0, 200)
+	writeLog(3, "/blog/a", true, 0, 200)
+	// /about: 2 次请求全命中
+	writeLog(4, "/about", true, 0, 200)
+	writeLog(5, "/about", true, 0, 200)
+	// /404: 1 次渲染失败态
+	writeLog(6, "/404", false, 0.5, 404)
+	time.Sleep(100 * time.Millisecond)
+
+	stats, err := manager.GetURLStats(site, now.AddDate(0, 0, -1), now.AddDate(0, 0, 1), 10)
+	assert.NoError(t, err)
+	assert.Len(t, stats, 3)
+
+	byRoute := map[string]URLStat{}
+	for _, s := range stats {
+		byRoute[s.Route] = s
+	}
+
+	a := byRoute["/blog/a"]
+	assert.Equal(t, int64(3), a.Requests)
+	assert.Equal(t, int64(2), a.Renders)
+	assert.Equal(t, int64(1), a.CacheHits)
+	assert.InDelta(t, 33.33, a.HitRate, 0.01)
+	assert.InDelta(t, 1500, a.AvgRenderMs, 0.01)
+	assert.InDelta(t, 3.0, a.WastedSeconds, 0.001)
+
+	ab := byRoute["/about"]
+	assert.Equal(t, int64(2), ab.Requests)
+	assert.InDelta(t, 100.0, ab.HitRate, 0.01)
+	assert.Equal(t, 0.0, ab.WastedSeconds)
+
+	// 排序：Renders 降序，/blog/a (2) 与 /404 (1) 在前
+	assert.Equal(t, "/blog/a", stats[0].Route)
+	assert.Equal(t, int64(1), stats[1].Renders)
+
+	// limit 截断
+	stats2, _ := manager.GetURLStats(site, now.AddDate(0, 0, -1), now.AddDate(0, 0, 1), 2)
+	assert.Len(t, stats2, 2)
+
+	client.Del(ctx, siteKey)
+}

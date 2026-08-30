@@ -3,6 +3,8 @@ package controllers
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -17,22 +19,26 @@ import (
 type PushController struct {
 	pushManager *push.PushManager
 	redisClient *redis.Client
-	cfg         *config.Config
+	cfg         configRef
+	sites       *SitesController // 推送配置持久化权威路径（SaveConfig+重启处理器），controller_setup 注入
 }
+
+// SetSitesController 注入站点控制器（推送配置落盘与处理器重启复用其权威路径）
+func (c *PushController) SetSitesController(sc *SitesController) { c.sites = sc }
 
 // NewPushController 创建推送控制器实例
 func NewPushController(pushManager *push.PushManager, redisClient *redis.Client, cfg *config.Config) *PushController {
 	return &PushController{
 		pushManager: pushManager,
 		redisClient: redisClient,
-		cfg:         cfg,
+		cfg:         configRef{snapshot: cfg},
 	}
 }
 
 // GetSites 获取站点列表
 func (c *PushController) GetSites(ctx *gin.Context) {
 	// 检查必要的依赖项是否可用
-	if c.cfg == nil {
+	if c.cfg.current() == nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
 			"message": "配置信息不可用",
@@ -40,13 +46,14 @@ func (c *PushController) GetSites(ctx *gin.Context) {
 		return
 	}
 
-	// 检查站点列表是否可用
-	if c.cfg.Sites == nil {
-		c.cfg.Sites = []config.SiteConfig{}
+	// 检查站点列表是否可用（空列表局部兜底，不写回共享配置对象避免竞争）
+	sitesList := c.cfg.current().Sites
+	if sitesList == nil {
+		sitesList = []config.SiteConfig{}
 	}
 
 	var sites []gin.H
-	for _, site := range c.cfg.Sites {
+	for _, site := range sitesList {
 		// 检查站点域名是否可用
 		domain := ""
 		if len(site.Domains) > 0 {
@@ -71,7 +78,7 @@ func (c *PushController) GetSites(ctx *gin.Context) {
 // GetPushStats 获取推送统计数据
 func (c *PushController) GetPushStats(ctx *gin.Context) {
 	// 检查必要的依赖项是否可用
-	if c.cfg == nil {
+	if c.cfg.current() == nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
 			"message": "配置信息不可用",
@@ -87,9 +94,10 @@ func (c *PushController) GetPushStats(ctx *gin.Context) {
 		return
 	}
 
-	// 检查站点列表是否可用
-	if c.cfg.Sites == nil {
-		c.cfg.Sites = []config.SiteConfig{}
+	// 检查站点列表是否可用（空列表局部兜底，不写回共享配置对象避免竞争）
+	sitesList := c.cfg.current().Sites
+	if sitesList == nil {
+		sitesList = []config.SiteConfig{}
 	}
 
 	siteID := ctx.Query("siteId")
@@ -97,7 +105,7 @@ func (c *PushController) GetPushStats(ctx *gin.Context) {
 	if siteID == "" {
 		// 获取所有站点的统计数据
 		var allStats []gin.H
-		for _, site := range c.cfg.Sites {
+		for _, site := range sitesList {
 			stats, err := c.pushManager.GetPushStats(site.ID)
 			if err != nil {
 				// 记录错误但不中断处理
@@ -250,21 +258,40 @@ func (c *PushController) GetPushConfig(ctx *gin.Context) {
 		return
 	}
 
-	// 获取推送配置
-	config, err := c.pushManager.GetPushConfig(siteID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    http.StatusInternalServerError,
-			"message": "Failed to get push config",
-		})
-		return
+	// 站点存在性校验：不存在的站点返回 404 而非 500（与 /sites/:id 错误语义一致）
+	if siteID != "" {
+		siteExists := false
+		if c.cfg.current() != nil {
+			for _, site := range c.cfg.current().Sites {
+				if site.ID == siteID {
+					siteExists = true
+					break
+				}
+			}
+		}
+		if !siteExists {
+			ctx.JSON(http.StatusNotFound, gin.H{
+				"code":    http.StatusNotFound,
+				"message": "Site not found",
+			})
+			return
+		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "success",
-		"data":    config,
-	})
+	// 权威读：站点配置中的推送段（pushManager 持有启动快照，对本会话新建站点会误报 site not found → 500）
+	// 注：能走到这里说明上方存在性校验已确认站点存在于同一 cfg.current()，循环必然命中并返回，
+	// 末尾兜底 404 不可达，故移除死分支
+	for _, site := range c.cfg.current().Sites {
+		if site.ID == siteID {
+			pushCfg := site.Prerender.Push
+			ctx.JSON(http.StatusOK, gin.H{
+				"code":    200,
+				"message": "success",
+				"data":    &pushCfg,
+			})
+			return
+		}
+	}
 }
 
 // UpdatePushConfig 更新推送配置
@@ -290,17 +317,71 @@ func (c *PushController) UpdatePushConfig(ctx *gin.Context) {
 		return
 	}
 
-	// 更新推送配置
-	if err := c.pushManager.UpdatePushConfig(req.SiteId, &req.Config); err != nil {
+	// 修复：必须在 updatePushConfigByID 改写共享配置之前读取旧 key，
+	// 否则 oldKey 恒等于 newKey，旧 key 文件清理成为死逻辑
+	oldKey := ""
+	if cfgSnap := c.cfg.current(); cfgSnap != nil {
+		for _, site := range cfgSnap.Sites {
+			if site.ID == req.SiteId {
+				oldKey = site.Prerender.Push.IndexNowKey
+				break
+			}
+		}
+	}
+
+	// 同步 PushManager 内存态（供推送任务读配置；对本会话新建站点会因启动快照缺失失败，忽略）
+	if c.pushManager != nil {
+		_ = c.pushManager.UpdatePushConfig(req.SiteId, &req.Config)
+	}
+
+	// 权威持久化：SaveConfig 落盘 + 重启站点处理器（keyfile 拦截器即时生效）+ Redis 副本
+	if c.sites == nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": "Failed to update push config",
+			"message": "Sites controller not available",
 		})
 		return
 	}
+	status, message := c.sites.updatePushConfigByID(req.SiteId, req.Config)
+	if status != http.StatusOK {
+		ctx.JSON(status, gin.H{
+			"code":    status,
+			"message": message,
+		})
+		return
+	}
+
+	// IndexNow key file 同步落盘到站点静态根（冗余便利副本；
+	// 权威来源是 site-handler 对 /{key}.txt 的拦截应答，写失败不影响配置生效）
+	c.syncIndexNowKeyFile(req.SiteId, oldKey, req.Config.IndexNowKey)
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "Push config updated successfully",
 	})
+}
+
+// syncIndexNowKeyFile 将 IndexNow key 文件写入站点静态目录；
+// oldKey != newKey 时清理旧文件（含 key 清空场景）。
+func (c *PushController) syncIndexNowKeyFile(siteID, oldKey, newKey string) {
+	if c.cfg.current() == nil || c.cfg.current().Dirs.StaticDir == "" {
+		return
+	}
+	siteRoot := filepath.Join(c.cfg.current().Dirs.StaticDir, siteID)
+
+	// 清理旧 key 文件（key 变更或清空时）
+	if oldKey != "" && oldKey != newKey {
+		_ = os.Remove(filepath.Join(siteRoot, oldKey+".txt"))
+	}
+
+	if newKey == "" {
+		return
+	}
+	if err := os.MkdirAll(siteRoot, 0o755); err != nil {
+		logging.DefaultLogger.Info("indexnow keyfile mkdir failed for site %s: %v", siteID, err)
+		return
+	}
+	if err := os.WriteFile(filepath.Join(siteRoot, newKey+".txt"), []byte(newKey), 0o644); err != nil {
+		logging.DefaultLogger.Info("indexnow keyfile write failed for site %s: %v", siteID, err)
+	}
 }

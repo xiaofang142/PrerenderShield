@@ -51,6 +51,7 @@ func SetupControllers(
 ) *Controllers {
 	// 创建推送管理器
 	pushManager := push.NewPushManager(cfg, redisClient)
+	pushManager.SetConfigProvider(func() *config.Config { return configManager.GetConfig() })
 
 	// 创建 SSL 管理器和 ACME 客户端
 	sslConfig := ssl.ACMEConfig{
@@ -114,7 +115,10 @@ func SetupControllers(
 	}
 
 	// 创建控制器实例
-	return &Controllers{
+	// configProvider：每请求返回最新配置。Mutate 为 copy-on-write 换指针，
+	// 若控制器持有启动快照，站点增删改后其视图将永久陈旧（缺陷：clear-cache 报 Site not found）。
+	configProvider := func() *config.Config { return configManager.GetConfig() }
+	controllersSet := &Controllers{
 		AuthController:       controllers.NewAuthController(userManager, jwtManager, auditLogger, twoFactorAuth),
 		OverviewController:   controllers.NewOverviewController(cfg, monitor, visitLogMgr, crawlerLogMgr, wafRepo, sslMgr),
 		MonitoringController: controllers.NewMonitoringController(monitor, redisClient),
@@ -122,9 +126,19 @@ func SetupControllers(
 		CrawlerController:    controllers.NewCrawlerController(crawlerLogMgr),
 		PreheatController:    controllers.NewPreheatController(prerenderManager, redisClient, scheduler, cfg),
 		PushController:       controllers.NewPushController(pushManager, redisClient, cfg),
-		SitesController:      controllers.NewSitesController(configManager, siteServerMgr, siteHandler, redisClient, monitor, crawlerLogMgr, visitLogMgr, cfg),
-		SystemController:     controllers.NewSystemController(redisClient),
-		SSLController:        sslController,
-		SEOController:        controllers.NewSEOController(cfg),
+		// WithConcreteDeps：同时设置 concreteCrawlerLogMgr 等具体依赖——
+		// 站点增改后经 CreateSiteHandler 重建的处理器靠它记录爬虫/访问日志；
+		// 旧 NewSitesController 不设具体依赖，控制台建站的站点日志永远为空（实测发现的缺陷）
+		SitesController:  controllers.NewSitesControllerWithConcreteDeps(configManager, siteServerMgr, siteHandler, redisClient, monitor, crawlerLogMgr, visitLogMgr, cfg),
+		SystemController: controllers.NewSystemController(redisClient),
+		SSLController:    sslController,
+		SEOController:    controllers.NewSEOController(cfg),
 	}
+	controllersSet.OverviewController.SetConfigProvider(configProvider)
+	controllersSet.PreheatController.SetConfigProvider(configProvider)
+	controllersSet.PushController.SetConfigProvider(configProvider)
+	controllersSet.PushController.SetSitesController(controllersSet.SitesController)
+	controllersSet.SitesController.SetConfigProvider(configProvider)
+	controllersSet.SEOController.SetConfigProvider(configProvider)
+	return controllersSet
 }

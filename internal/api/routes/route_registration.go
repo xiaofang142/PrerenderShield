@@ -7,7 +7,7 @@ import (
 )
 
 // RegisterAllRoutes 注册所有 API 路由
-func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManager *auth.JWTManager) {
+func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManager *auth.JWTManager, apiTokenProvider func() []string) {
 	// 注册 API 路由
 	apiGroup := ginRouter.Group("/api/v1")
 	{
@@ -38,7 +38,7 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 
 			// 需要 JWT 验证的 API
 			sslGroupProtected := sslGroup.Group("")
-			sslGroupProtected.Use(auth.JWTAuthMiddleware(jwtManager))
+			sslGroupProtected.Use(auth.JWTAuthMiddleware(jwtManager, nil))
 			{
 				// 申请证书
 				sslGroupProtected.POST("/certificates", controllers.SSLController.RequestCert)
@@ -55,7 +55,7 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 
 		// 需要 JWT 验证的 API 组
 		protectedGroup := apiGroup.Group("")
-		protectedGroup.Use(auth.JWTAuthMiddleware(jwtManager))
+		protectedGroup.Use(auth.JWTAuthMiddleware(jwtManager, apiTokenProvider))
 		{
 			// 系统配置 API
 			protectedGroup.GET("/system/config", controllers.SystemController.GetSystemConfig)
@@ -112,6 +112,7 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 			// 爬虫日志 API
 			protectedGroup.GET("/crawler/logs", controllers.CrawlerController.GetCrawlerLogs)
 			protectedGroup.GET("/crawler/stats", controllers.CrawlerController.GetCrawlerStats)
+			protectedGroup.GET("/crawler/url-stats", controllers.CrawlerController.GetURLStats)
 
 			// SEO API
 			seoGroup := protectedGroup.Group("/seo")
@@ -132,6 +133,12 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 			protectedGroup.GET("/preheat/task/status", controllers.PreheatController.GetPreheatTaskStatus)
 			protectedGroup.GET("/preheat/crawler-headers", controllers.PreheatController.GetCrawlerHeaders)
 			protectedGroup.POST("/preheat/clear-cache", controllers.PreheatController.ClearCache)
+
+			// 缓存条目管理 API（单 URL 失效/重渲/列表/删除）
+			protectedGroup.POST("/preheat/invalidate", controllers.PreheatController.InvalidateCache)
+			protectedGroup.POST("/preheat/recache", controllers.PreheatController.RecacheURL)
+			protectedGroup.GET("/preheat/entries", controllers.PreheatController.ListCacheEntries)
+			protectedGroup.DELETE("/preheat/entries", controllers.PreheatController.DeleteCacheEntry)
 
 			// 推送 API
 			protectedGroup.GET("/push/sites", controllers.PushController.GetSites)

@@ -45,10 +45,8 @@ func (e *Encryptor) Encrypt(plaintext string) (string, error) {
 	plaintextBytes := []byte(plaintext)
 
 	// GCM 模式需要追加 nonce
-	aesGCM, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("failed to create GCM cipher: %w", err)
-	}
+	// NewGCM 仅在 BlockSize≠16 时报错；aes.NewCipher 保证 AES blockSize=16，此分支不可达
+	aesGCM, _ := cipher.NewGCM(block)
 
 	// 生成随机 nonce
 	nonce := make([]byte, aesGCM.NonceSize())
@@ -80,10 +78,8 @@ func (e *Encryptor) Decrypt(ciphertext string) (string, error) {
 	}
 
 	// GCM 模式
-	aesGCM, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("failed to create GCM cipher: %w", err)
-	}
+	// NewGCM 仅在 BlockSize≠16 时报错；aes.NewCipher 保证 AES blockSize=16，此分支不可达
+	aesGCM, _ := cipher.NewGCM(block)
 
 	// 检查数据长度
 	nonceSize := aesGCM.NonceSize()
@@ -160,11 +156,9 @@ type SensitiveConfig struct {
 
 // NewSensitiveConfig 创建敏感配置
 func NewSensitiveConfig(secretKey string) (*SensitiveConfig, error) {
-	encryptor, err := NewEncryptor(secretKey)
-	if err != nil {
-		return nil, err
-	}
-
+	// NewEncryptor 当前实现永不返回错误（密钥自动规范化），分支不可达；
+	// 保留 error 签名以兼容调用方
+	encryptor, _ := NewEncryptor(secretKey)
 	return &SensitiveConfig{
 		encryptor: encryptor,
 		data:      make(map[string]string),

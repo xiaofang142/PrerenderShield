@@ -214,10 +214,9 @@ func (o *LLMOptimizer) callLLM(prompt string) (string, error) {
 		Temperature: o.config.Temperature,
 	}
 
-	body, err := json.Marshal(req)
-	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
-	}
+	// chatRequest 仅含 string/int/float64 基础类型字段，json.Marshal 不会失败
+	// （已验证，删除不可达错误分支）
+	body, _ := json.Marshal(req)
 
 	var lastErr error
 	for attempt := 0; attempt <= o.config.MaxRetries; attempt++ {

@@ -9,8 +9,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"prerender-shield/internal/cache"
 	"prerender-shield/internal/config"
 	"prerender-shield/internal/prerender"
+	"prerender-shield/internal/prerender/renderkey"
 	"prerender-shield/internal/redis"
 	"prerender-shield/internal/scheduler"
 )
@@ -20,7 +22,7 @@ type PreheatController struct {
 	prerenderManager *prerender.EngineManager
 	redisClient      *redis.Client
 	scheduler        *scheduler.Scheduler
-	cfg              *config.Config
+	cfg              configRef
 }
 
 // NewPreheatController 创建预热控制器实例
@@ -34,7 +36,7 @@ func NewPreheatController(
 		prerenderManager: prerenderManager,
 		redisClient:      redisClient,
 		scheduler:        scheduler,
-		cfg:              cfg,
+		cfg:              configRef{snapshot: cfg},
 	}
 }
 
@@ -82,32 +84,42 @@ func (c *PreheatController) getCacheTotalSize(cacheCount int64) int64 {
 
 // collectSiteStats 收集单个站点的预热统计数据
 // cacheCount/totalCacheSize 为全局量，由调用方预计算一次传入，避免 N 站点循环重复查询 Redis
-func (c *PreheatController) collectSiteStats(siteID, siteName string, cacheCount, totalCacheSize int64) gin.H {
+func (c *PreheatController) collectSiteStats(site config.SiteConfig, cacheCount, totalCacheSize int64) gin.H {
 	urlCount := int64(0)
 	browserPoolSize := int64(0)
 
 	if c.redisClient != nil {
-		urlCount, _ = c.redisClient.GetURLCount(siteID)
+		urlCount, _ = c.redisClient.GetURLCount(site.ID)
 	}
 
-	if engine, exists := c.prerenderManager.GetEngine(siteID); exists {
+	if engine, exists := c.prerenderManager.GetEngine(site.ID); exists {
 		browserPoolSize = int64(engine.GetPoolSize())
 	}
 
+	// 站点渲染状态字段（/prerender 页状态卡消费；缺失导致页面 status.preheat.enabled 读取 undefined 崩溃）
 	return gin.H{
-		"siteId":          siteID,
-		"siteName":        siteName,
+		"siteId":          site.ID,
+		"siteName":        site.Name,
 		"urlCount":        urlCount,
 		"cacheCount":      cacheCount,
 		"totalCacheSize":  totalCacheSize,
 		"browserPoolSize": browserPoolSize,
+		"enabled":         site.Prerender.Enabled,
+		"poolSize":        site.Prerender.PoolSize,
+		"timeout":         site.Prerender.Timeout,
+		"cacheTTL":        site.Prerender.CacheTTL,
+		"preheat": gin.H{
+			"enabled":    site.Prerender.Preheat.Enabled,
+			"sitemapURL": site.Prerender.Preheat.SitemapURL,
+			"schedule":   site.Prerender.Preheat.Schedule,
+		},
 	}
 }
 
 // GetPreheatSites 获取静态网站列表
 func (c *PreheatController) GetPreheatSites(ctx *gin.Context) {
 	// 检查必要的依赖项是否可用
-	if c.cfg == nil {
+	if c.cfg.current() == nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
 			"message": "配置信息不可用",
@@ -115,14 +127,15 @@ func (c *PreheatController) GetPreheatSites(ctx *gin.Context) {
 		return
 	}
 
-	// 检查站点列表是否可用
-	if c.cfg.Sites == nil {
-		c.cfg.Sites = []config.SiteConfig{}
+	// 检查站点列表是否可用（空列表局部兜底，不写回共享配置对象避免竞争）
+	sitesList := c.cfg.current().Sites
+	if sitesList == nil {
+		sitesList = []config.SiteConfig{}
 	}
 
 	// 获取配置中的所有站点
 	var sites []gin.H
-	for _, site := range c.cfg.Sites {
+	for _, site := range sitesList {
 		// 为每个站点构建完整的域名
 		var domain string
 		if len(site.Domains) > 0 {
@@ -154,7 +167,7 @@ func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 	siteId := ctx.Query("siteId")
 
 	// 检查必要的依赖项是否可用
-	if c.cfg == nil {
+	if c.cfg.current() == nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
 			"message": "配置信息不可用",
@@ -170,9 +183,10 @@ func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 		return
 	}
 
-	// 检查站点列表是否可用
-	if c.cfg.Sites == nil {
-		c.cfg.Sites = []config.SiteConfig{}
+	// 检查站点列表是否可用（空列表局部兜底，不写回共享配置对象避免竞争）
+	sitesList := c.cfg.current().Sites
+	if sitesList == nil {
+		sitesList = []config.SiteConfig{}
 	}
 
 	if siteId == "" {
@@ -184,9 +198,9 @@ func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 		}
 
 		// 获取所有站点的统计数据
-		allStats := make([]gin.H, 0, len(c.cfg.Sites))
-		for _, site := range c.cfg.Sites {
-			allStats = append(allStats, c.collectSiteStats(site.ID, site.Name, globalCacheCount, globalCacheSize))
+		allStats := make([]gin.H, 0, len(sitesList))
+		for _, site := range sitesList {
+			allStats = append(allStats, c.collectSiteStats(site, globalCacheCount, globalCacheSize))
 		}
 
 		ctx.JSON(http.StatusOK, gin.H{
@@ -200,7 +214,7 @@ func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 	// 获取指定站点的统计数据
 	// 首先根据siteId查找对应的站点配置
 	var siteConfig *config.SiteConfig
-	for _, site := range c.cfg.Sites {
+	for _, site := range c.cfg.current().Sites {
 		if site.ID == siteId {
 			siteConfig = &site
 			break
@@ -221,7 +235,7 @@ func (c *PreheatController) GetPreheatStats(ctx *gin.Context) {
 		singleCacheCount, _ = c.redisClient.GetCacheCount()
 		singleCacheSize = c.getCacheTotalSize(singleCacheCount)
 	}
-	stats := c.collectSiteStats(siteId, siteConfig.Name, singleCacheCount, singleCacheSize)
+	stats := c.collectSiteStats(*siteConfig, singleCacheCount, singleCacheSize)
 	delete(stats, "siteName") // 保持单站点响应结构与历史版本一致
 
 	ctx.JSON(http.StatusOK, gin.H{
@@ -248,7 +262,7 @@ func (c *PreheatController) TriggerPreheat(ctx *gin.Context) {
 
 	// 获取站点配置
 	var siteConfig *config.SiteConfig
-	for _, site := range c.cfg.Sites {
+	for _, site := range c.cfg.current().Sites {
 		if site.ID == req.SiteId {
 			siteConfig = &site
 			break
@@ -264,14 +278,9 @@ func (c *PreheatController) TriggerPreheat(ctx *gin.Context) {
 	}
 
 	// 获取站点的预渲染引擎
-	engine, exists := c.prerenderManager.GetEngine(req.SiteId)
-	if !exists {
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"code":    http.StatusNotFound,
-			"message": fmt.Sprintf("Site with ID '%s' not found", req.SiteId),
-		})
-		return
-	}
+	// 注：EngineManager.GetEngine 对未注册站点会懒创建引擎并恒返回 exists=true，
+	// 该错误分支不可达（引擎级失败由后续 CreatePreheatTask 报错承担）
+	engine, _ := c.prerenderManager.GetEngine(req.SiteId)
 
 	// 从Redis获取站点的URL列表
 	urls, err := c.redisClient.GetURLs(req.SiteId)
@@ -282,6 +291,9 @@ func (c *PreheatController) TriggerPreheat(ctx *gin.Context) {
 		})
 		return
 	}
+
+	// 注入预热通道 TTL 配置（分级规则首中 > 站点 CacheTTL > 引擎默认）
+	engine.SetPreheatTTLConfig(siteConfig.Prerender.CacheTTL, siteConfig.Prerender.TTLRules)
 
 	// 调用引擎的创建预热任务方法
 	taskID, err := engine.CreatePreheatTask(req.SiteId, urls)
@@ -318,7 +330,7 @@ func (c *PreheatController) GetPreheatUrls(ctx *gin.Context) {
 
 	// 获取站点配置
 	var siteConfig *config.SiteConfig
-	for _, site := range c.cfg.Sites {
+	for _, site := range c.cfg.current().Sites {
 		if site.ID == siteId {
 			siteConfig = &site
 			break
@@ -483,8 +495,8 @@ func (c *PreheatController) GetCrawlerHeaders(ctx *gin.Context) {
 	var headers []string
 
 	// 从配置中读取爬虫头列表
-	if c.cfg != nil && len(c.cfg.Sites) > 0 {
-		for _, site := range c.cfg.Sites {
+	if c.cfg.current() != nil && len(c.cfg.current().Sites) > 0 {
+		for _, site := range c.cfg.current().Sites {
 			if len(site.Prerender.CrawlerHeaders) > 0 {
 				headers = site.Prerender.CrawlerHeaders
 				break
@@ -529,7 +541,7 @@ func (c *PreheatController) ClearCache(ctx *gin.Context) {
 
 	// 获取站点配置
 	var siteConfig *config.SiteConfig
-	for _, site := range c.cfg.Sites {
+	for _, site := range c.cfg.current().Sites {
 		if site.ID == req.SiteId {
 			siteConfig = &site
 			break
@@ -553,24 +565,254 @@ func (c *PreheatController) ClearCache(ctx *gin.Context) {
 		return
 	}
 
-	// 先获取要清除的缓存数量
-	clearedCount, _ := c.redisClient.GetCacheCount()
-
-	// 调用Redis客户端的ClearCache方法清除缓存
-	err := c.redisClient.ClearCache()
+	// G3-1 修复：站点级精确清理（cache:<siteId>:*），不再误删全部站点缓存
+	keys, err := c.redisClient.Keys(fmt.Sprintf("cache:%s:*", req.SiteId))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": fmt.Sprintf("清除缓存失败: %v", err),
+			"message": fmt.Sprintf("扫描缓存键失败: %v", err),
+		})
+		return
+	}
+
+	if len(keys) > 0 {
+		if err := c.redisClient.DelMultiple(keys); err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"code":    http.StatusInternalServerError,
+				"message": fmt.Sprintf("清除缓存失败: %v", err),
+			})
+			return
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": fmt.Sprintf("站点 %s 缓存清除成功", req.SiteId),
+		"data": gin.H{
+			"clearedCount": len(keys),
+		},
+	})
+}
+
+// findEngine 按站点 ID 查找配置与引擎（缓存管理端点共用）
+func (c *PreheatController) findEngine(siteID string) (*config.SiteConfig, prerender.Engine, bool) {
+	var siteConfig *config.SiteConfig
+	for _, site := range c.cfg.current().Sites {
+		if site.ID == siteID {
+			siteConfig = &site
+			break
+		}
+	}
+	if siteConfig == nil {
+		return nil, nil, false
+	}
+	if c.prerenderManager == nil {
+		return siteConfig, nil, false
+	}
+	// 注：GetEngine 懒创建并恒返回 exists=true，无需检查第二个返回值
+	engine, _ := c.prerenderManager.GetEngine(siteID)
+	return siteConfig, engine, true
+}
+
+// InvalidateCache 单 URL 缓存失效：POST /preheat/invalidate {siteId,url}
+func (c *PreheatController) InvalidateCache(ctx *gin.Context) {
+	var req struct {
+		SiteId string `json:"siteId" binding:"required"`
+		URL    string `json:"url" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "Invalid request",
+		})
+		return
+	}
+
+	siteConfig, engine, ok := c.findEngine(req.SiteId)
+	if siteConfig == nil {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"code":    http.StatusNotFound,
+			"message": fmt.Sprintf("Site with ID '%s' not found", req.SiteId),
+		})
+		return
+	}
+	if !ok {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"code":    http.StatusNotFound,
+			"message": fmt.Sprintf("Site with ID '%s' engine not found", req.SiteId),
+		})
+		return
+	}
+
+	// 走 renderkey 归一化，保证与缓存写入键一致
+	if err := engine.InvalidatePage(req.SiteId, req.URL); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": fmt.Sprintf("失效缓存失败: %v", err),
 		})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"code":    200,
-		"message": "缓存清除成功",
+		"message": "success",
 		"data": gin.H{
-			"clearedCount": clearedCount,
+			"siteId": req.SiteId,
+			"url":    req.URL,
 		},
+	})
+}
+
+// RecacheURL 单 URL 强制重渲并替换缓存：POST /preheat/recache {siteId,url}
+// 同步返回结果（单 URL 渲染秒级，无需异步任务轮询）。
+func (c *PreheatController) RecacheURL(ctx *gin.Context) {
+	var req struct {
+		SiteId string `json:"siteId" binding:"required"`
+		URL    string `json:"url" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "Invalid request",
+		})
+		return
+	}
+
+	siteConfig, engine, ok := c.findEngine(req.SiteId)
+	if siteConfig == nil {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"code":    http.StatusNotFound,
+			"message": fmt.Sprintf("Site with ID '%s' not found", req.SiteId),
+		})
+		return
+	}
+	if !ok {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"code":    http.StatusNotFound,
+			"message": fmt.Sprintf("Site with ID '%s' engine not found", req.SiteId),
+		})
+		return
+	}
+
+	// 先失效再重渲，保证替换语义
+	if err := engine.InvalidatePage(req.SiteId, req.URL); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": fmt.Sprintf("失效旧缓存失败: %v", err),
+		})
+		return
+	}
+
+	// entries 列表回传的是归一化形态（host:port/path，无 scheme），
+	// 渲染需要可导航的绝对 URL，按形态补全
+	renderURL := renderkey.ToAbsolute(req.URL, "http")
+
+	opts := prerender.RenderOptions{}
+	if siteConfig.Prerender.Timeout > 0 {
+		opts.Timeout = time.Duration(siteConfig.Prerender.Timeout) * time.Second
+	}
+	opts.CacheTTL = siteConfig.EffectiveCacheTTL(renderURL)
+	opts.MaxConcurrency = siteConfig.Prerender.MaxConcurrency
+
+	res, err := engine.RenderAndCache(prerender.RenderRequest{
+		SiteID: req.SiteId,
+		URL:    renderURL,
+		Opts:   opts,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": fmt.Sprintf("重渲失败: %v", err),
+			"data": gin.H{
+				"url":   req.URL,
+				"error": res.Error,
+			},
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "success",
+		"data": gin.H{
+			"url":        req.URL,
+			"status":     res.Status,
+			"renderTime": res.RenderTime,
+			"thin":       res.Thin,
+		},
+	})
+}
+
+// ListCacheEntries 列出站点缓存条目：GET /preheat/entries?siteId=&limit=
+func (c *PreheatController) ListCacheEntries(ctx *gin.Context) {
+	siteId := ctx.Query("siteId")
+	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "200"))
+	if limit <= 0 || limit > 1000 {
+		limit = 200
+	}
+
+	if _, _, ok := c.findEngine(siteId); !ok {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"code":    http.StatusNotFound,
+			"message": fmt.Sprintf("Site with ID '%s' not found", siteId),
+		})
+		return
+	}
+
+	engine, _ := c.prerenderManager.GetEngine(siteId)
+	entries, err := engine.ListCacheEntries(siteId, limit)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": fmt.Sprintf("列出缓存条目失败: %v", err),
+		})
+		return
+	}
+	if entries == nil {
+		entries = []cache.CacheEntrySummary{}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "success",
+		"data": gin.H{
+			"list":  entries,
+			"total": len(entries),
+		},
+	})
+}
+
+// DeleteCacheEntry 删除单条缓存条目：DELETE /preheat/entries?siteId=&url=
+func (c *PreheatController) DeleteCacheEntry(ctx *gin.Context) {
+	siteId := ctx.Query("siteId")
+	urlParam := ctx.Query("url")
+	if siteId == "" || urlParam == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "siteId and url are required",
+		})
+		return
+	}
+
+	if _, engine, ok := c.findEngine(siteId); !ok || engine == nil {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"code":    http.StatusNotFound,
+			"message": fmt.Sprintf("Site with ID '%s' not found", siteId),
+		})
+		return
+	}
+
+	engine, _ := c.prerenderManager.GetEngine(siteId)
+	if err := engine.InvalidatePage(siteId, urlParam); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": fmt.Sprintf("删除缓存条目失败: %v", err),
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "success",
 	})
 }
