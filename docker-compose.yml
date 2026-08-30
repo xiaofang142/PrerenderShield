@@ -1,0 +1,58 @@
+# PrerenderShield 单机编排：app + redis
+# 用法：docker compose up -d --build
+# 详见 docs/DOCKER.md
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: prerender-shield:latest
+    container_name: prerender-shield-app
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "9597:9597"   # 管理控制台
+      - "9598:9598"   # REST API
+    volumes:
+      - ./data:/app/data              # 数据目录（账号、站点配置等，Redis 之外落盘的部分）
+      - ./configs:/app/configs:ro     # 配置目录（如需自定义，见 DOCKER.md）
+      - ./static:/app/static          # 静态资源/预渲染产物
+    environment:
+      - TZ=Asia/Shanghai
+      - GIN_MODE=release
+      # 由环境变量覆盖 config 中 localhost:6379，指向 compose 内的 redis 服务
+      - REDIS_URL=redis://redis:6379/0
+      # Chromium 内存预算：容器内存 <4GB 时建议调低
+      - PRERENDER_MAX_INSTANCES=3
+      - PRERENDER_MIN_INSTANCES=1
+      - PRERENDER_WORKER_COUNT=3
+      # 生产必设（见 docs/ENV_VARS.md）
+      # - JWT_SECRET=change-me-to-a-long-random-string
+      # - PRERENDER_MASTER_KEY=change-me-too
+    shm_size: 256m          # Chromium 需要较大 /dev/shm
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9598/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: prerender-shield-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis-data:/data      # AOF 持久化：账号/站点配置存于 Redis，务必持久化
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  redis-data:
+    name: prerender-shield-redis-data

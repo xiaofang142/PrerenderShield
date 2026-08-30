@@ -20,9 +20,10 @@
 
 ## 📌 产品规划与商业模式
 
-面向国际化和中小项目场景的功能清单、模块边界、持续审计机制、收费方式和适用客户论证，请查看：
+面向国际化中小项目场景的功能边界、模块清单、竞品对比与收费方式分析，请查看：
 
-- [Prerender Shield 国际化中小项目功能与商业模式论证](INTERNATIONAL_SMB_PRODUCT_BUSINESS_PLAN.md)
+- [竞品研究与商业模式分析（2026）](docs/competitive-research-2026.md)
+- [功能清单与实现状态](docs/feature-inventory.md)
 
 ## 🚀 一键安装
 
@@ -378,19 +379,19 @@ chmod +x start.sh
 
 ```
 prerender-shield/                # 项目根目录/运行目录
-├── bin/                        # 构建产物目录
-│   ├── linux-amd64/            # Linux x86_64 平台
-│   │   ├── api                 # 二进制文件
-│   │   ├── static/             # 静态资源目录
-│   │   └── config/             # 配置文件目录
-│   └── ...                     # 其他平台
+├── bin/                        # 构建产物目录（build.sh 构建当前平台）
+│   ├── api                     # 二进制文件
+│   ├── web/                    # 前端构建产物（管理控制台）
+│   └── static/                 # 静态资源目录
 ├── static/                     # 静态资源目录
-├── config/                     # 配置文件目录
-├── data/                       # 数据目录
-│   ├── rules/                  # 防火墙规则目录
-│   ├── certs/                  # 证书目录
-│   └── logs/                   # 日志目录
-└── web/                        # 前端目录
+├── certs/                      # 证书目录
+├── configs/                    # 配置文件目录
+│   ├── config.example.yml      # 配置文件模板
+│   └── alert-rules.example.json # 告警规则示例
+├── data/                       # 数据目录（运行时生成）
+│   ├── prerender-shield.pid    # 进程PID文件
+│   └── prerender-shield.log    # 日志文件
+└── web/                        # 前端源码目录
     └── dist/                   # 前端构建产物
 ```
 
@@ -398,22 +399,21 @@ prerender-shield/                # 项目根目录/运行目录
 
 ```
 prerender-shield/               # 项目根目录
-├── bin/                        # 构建产物目录（多平台二进制文件）
-│   ├── linux-amd64/            # Linux x86_64 平台
-│   │   └── api                 # 二进制文件
-│   ├── linux-arm64/            # Linux ARM64 平台
-│   ├── darwin-amd64/           # macOS x86_64 平台
-│   ├── darwin-arm64/           # macOS ARM64 平台
-│   ├── windows-amd64/          # Windows x86_64 平台
-│   └── windows-arm64/          # Windows ARM64 平台
+├── bin/                        # 构建产物目录（build.sh 输出当前平台：bin/api + bin/web）
 ├── cmd/                        # Go 命令行入口目录
-│   └── api/                    # API 服务入口
-│       └── main.go             # 主程序入口
+│   ├── api/                    # API 服务入口（main.go）
+│   └── chromeprobe/            # Chromium 探测工具
 ├── configs/                    # 配置文件模板目录
 │   └── config.example.yml      # 配置文件模板
 ├── data/                       # 数据目录（运行时生成）
 │   ├── prerender-shield.pid    # 进程PID文件
 │   └── prerender-shield.log    # 日志文件
+├── docker/                     # Docker 相关（备选编排与入口脚本）
+│   ├── Dockerfile              # 多阶段构建镜像
+│   └── docker-compose.yml      # 带 Nginx 的可选编排
+├── Dockerfile                  # 根级多阶段构建镜像（配合根级 compose）
+├── docker-compose.yml          # app + redis 双服务编排
+├── docs/                       # 项目文档（见文末「文档索引」）
 ├── web/                        # 前端代码目录
 │   ├── dist/                   # 构建后的前端文件（部署时使用）
 │   ├── src/                    # 前端源代码
@@ -422,6 +422,9 @@ prerender-shield/               # 项目根目录
 ├── build.sh                    # 构建脚本（开发者使用）
 ├── install.sh                  # 安装脚本（用户使用）
 ├── start.sh                    # 启动脚本（用户使用）
+├── INSTALL.md                  # 安装指南（四种方式）
+├── CONTRIBUTING.md             # 贡献指南
+├── SECURITY.md                 # 安全漏洞报告
 ├── go.mod                      # Go模块依赖配置
 └── README.md                   # 项目说明文档
 ```
@@ -634,24 +637,75 @@ npm run dev
 
 **Prerender Shield** - 让前后端分离网站既安全又 SEO 友好！
 
-**最后更新**：2026年6月10日  
+**最后更新**：2026年8月31日  
 **版本**：v3.0.0  
 **许可证**：MIT License  
 **项目状态**：生产就绪，欢迎试用和贡献
 
 ---
 
-### 📚 文档导航
+## 社区
+
+欢迎参与 Prerender Shield 社区！参与前请阅读 [贡献指南](CONTRIBUTING.md) 与 [行为准则](CODE_OF_CONDUCT.md)。
+
+### 🛠 参与贡献
+
+- **代码贡献**：Fork → 分支 → PR，流程、提交规范（`feat:`/`fix:`/`docs:` 等）与测试覆盖率政策见 [CONTRIBUTING.md](CONTRIBUTING.md)
+- **报告缺陷**：使用 [Bug 报告模板](.github/ISSUE_TEMPLATE/bug_report.md)；**安全漏洞请勿公开提交**，走 [SECURITY.md](SECURITY.md) 的私密渠道
+- **功能建议**：使用 [功能建议模板](.github/ISSUE_TEMPLATE/feature_request.md)
+- **文档/翻译/部署模板**：欢迎直接提 PR 改进 `docs/`
+
+### 📣 交流渠道
+
+- **GitHub Discussions**：[功能讨论](https://github.com/xiaofang142/PrerenderShield/discussions)
+- **Gitee Issues**：[问题反馈](https://gitee.com/xhpmayun/prerender-shield/issues)
+- **微信**：xiao142000 ｜ **QQ 群**：973280483
+- **邮箱**：myloveisphp@126.com（安全问题请标注 `[SECURITY]` 并加密）
+
+---
+
+## 文档索引
+
+### 🚀 上手与安装
+
+| 文档 | 说明 |
+|------|------|
+| [安装指南](INSTALL.md) | 一键脚本 / 官方二进制 / 源码构建 / Docker 四种安装方式、首跑向导、systemd、升级与卸载 |
+| [快速上手](docs/QUICK_START_GUIDE.md) | 从安装到添加第一个站点的完整操作流 |
+| [Docker 部署](docs/DOCKER.md) | 多阶段镜像构建、compose 编排、数据持久化与运维命令 |
+
+### ⚙️ 配置与运维
+
+| 文档 | 说明 |
+|------|------|
+| [配置参考](docs/CONFIG_REFERENCE.md) | 全部 YAML 配置键的类型/默认值/说明（全局 + 站点级） |
+| [环境变量](docs/ENV_VARS.md) | 25 个环境变量完整文档 |
+| [运维手册](docs/OPERATIONS_MANUAL.md) | 部署拓扑、日常操作、升级备份、监控告警、安全加固 |
+| [故障排查手册](docs/TROUBLESHOOTING_GUIDE.md) | 按症状索引的处置手册与诊断命令集 |
+| [监控与告警](docs/MONITORING_AND_ALERTING.md) | Prometheus 指标与告警规则配置 |
+| [无头浏览器运维](docs/HEADLESS_BROWSER_OPS.md) | Chromium 依赖、探测与故障处理 |
+
+### 📖 深入理解
 
 | 文档 | 说明 |
 |------|------|
 | [官方文档](docs/OFFICIAL_DOCUMENTATION.md) | 产品手册：概念、功能、安装、配置、API 概览、FAQ |
-| [运维手册](docs/OPERATIONS_MANUAL.md) | 部署拓扑、日常操作、升级备份、监控告警、安全加固 |
-| [故障排查手册](docs/TROUBLESHOOTING_GUIDE.md) | 按症状索引的处置手册与诊断命令集 |
-| [架构清单](docs/architecture-inventory.md) | 完整模块架构、依赖关系、分层全景 |
-| [功能清单](docs/feature-inventory.md) | 96项功能实现状态、代码位置、覆盖 |
-| [业务流](docs/business-flow.md) | 六大核心业务流程、配置流、权限模型 |
-| [环境变量](docs/ENV_VARS.md) | 13个环境变量完整文档 |
-| [架构图](docs/ARCHITECTURE_DIAGRAMS.md) | 17张Mermaid架构图覆盖全部功能模块 |
+| [技术原理](docs/TECHNICAL_PRINCIPLES.md) | 渲染引擎、WAF 规则引擎、缓存体系实现原理 |
 | [API 清单](docs/API.md) | 全部 REST 端点、认证方式与错误码约定 |
+| [架构图](docs/ARCHITECTURE_DIAGRAMS.md) | 17 张 Mermaid 架构图覆盖全部功能模块 |
+| [架构清单](docs/architecture-inventory.md) | 完整模块架构、依赖关系、分层全景 |
+| [功能清单](docs/feature-inventory.md) | 96 项功能实现状态、代码位置、覆盖 |
+| [业务流](docs/business-flow.md) | 六大核心业务流程、配置流、权限模型 |
+| [技术问答](docs/TECHNICAL_QA.md) | 高频技术问题解答 |
 | [CHANGELOG](CHANGELOG.md) | 版本历史与变更记录 |
+
+### 🤝 社区与治理
+
+| 文件 | 说明 |
+|------|------|
+| [贡献指南](CONTRIBUTING.md) | 开发环境搭建、分支与提交规范、测试覆盖率政策、PR 流程 |
+| [行为准则](CODE_OF_CONDUCT.md) | Contributor Covenant 简版 |
+| [安全策略](SECURITY.md) | 漏洞报告渠道、支持版本、响应时限 |
+| [Issue 模板](.github/ISSUE_TEMPLATE/) | Bug 报告与功能建议表单 |
+| [CI 流水线](.github/workflows/ci.yml) | Go 测试/lint、前端测试/E2E、镜像构建 |
+| [Release 流水线](.github/workflows/release.yml) | tag 触发四平台交叉编译与 GitHub Release 发布 |
