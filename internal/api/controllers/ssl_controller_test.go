@@ -176,6 +176,7 @@ func TestNewSSLController(t *testing.T) {
 	assert.Nil(t, controller.autoRenewer)
 }
 
+// R15-BUG-1: 未配置 ACME 时应返回 503（明确失败）而非 200 假成功
 func TestSSLController_RequestCert_ServiceNotInitialized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	controller := NewSSLController(nil, nil)
@@ -188,8 +189,8 @@ func TestSSLController_RequestCert_ServiceNotInitialized(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	// acmeClient 为 nil 时返回 200
-	assert.Equal(t, http.StatusOK, w.Code)
+	// acmeClient 为 nil 时返回 503
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_RequestCert_MissingDomains(t *testing.T) {
@@ -204,8 +205,8 @@ func TestSSLController_RequestCert_MissingDomains(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	// acmeClient 为 nil 时提前返回 200，不走 validation
-	assert.Equal(t, http.StatusOK, w.Code)
+	// acmeClient 为 nil 时提前返回 503，不走 validation
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_RenewCert_Success(t *testing.T) {
@@ -319,7 +320,7 @@ func TestSSLController_RequestCert_InvalidJSON(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_RequestWildcardCert_InvalidJSON(t *testing.T) {
@@ -445,7 +446,7 @@ func TestSSLController_RequestCert_EmptyDomains(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	// acmeClient 为 nil 时返回 200
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestSSLController_RequestWildcardCert_EmptyBaseDomain(t *testing.T) {

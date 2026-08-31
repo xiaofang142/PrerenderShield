@@ -60,9 +60,12 @@ func NewSSLController(acmeClient acmeClientInterface, autoRenewer autoRenewerInt
 // Body: { "domains": ["example.com", "www.example.com"] }
 func (c *SSLController) RequestCert(ctx *gin.Context) {
 	if c.acmeClient == nil {
-		ctx.JSON(http.StatusOK, gin.H{
-			"code":    200,
-			"message": "SSL service not configured",
+		// R15-BUG-1：此前返回 code=200"SSL service not configured"——前端把假成功
+		// 当真成功提示"申请成功"，用户点击后无任何实际效果。改为 503 语义，
+		// 前端据此提示未启用 SSL（全局 ssl.enabled 未开 / ACME 未装配）。
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{
+			"code":    503,
+			"message": "SSL service not configured: enable ssl.enabled and ACME settings first",
 		})
 		return
 	}
