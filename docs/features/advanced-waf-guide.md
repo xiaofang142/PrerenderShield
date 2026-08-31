@@ -76,7 +76,7 @@ redis-cli keys 'cc:count:*'
 redis-cli keys 'cc:ban:*'
 ```
 
-> 注意：`cc:count`/`cc:ban` 键无 TTL 兜底会残留，建议配合 Redis 定期清理或接受其自然过期（计数键有 window TTL，封禁键有 ban_time TTL）。
+> 键会**自然过期**：计数键按 `window` 秒（首次计数时设置），封禁键按 `ban_time` 秒，无需额外清理。用 `keys` 仅能观测到「当前窗口内」的活跃计数，历史键过期后会自动消失。
 
 ---
 
@@ -132,7 +132,12 @@ sites:
 
 ### 多站点 + 全局入库说明
 
-威胁情报是**全局数据源**：任一站点的源会被 `MergeConfig` 汇总进全局 Fetcher，重复的源只拉取一次。但**检测开关在站点级**——`firewall.threat_intel.enabled: true` 的站点才会去查黑名单。
+威胁情报是**全局数据源**：容器会把所有启用站点的 `sources` 并集进单个全局 Fetcher（`di/container.go` 的 `NewFetcher` + `MergeConfig`，重复源只拉取一次），由 `runner` 启动统一调度拉取。但：
+
+- **检测开关在站点级**——只有 `firewall.threat_intel.enabled: true` 的站点才会查询黑名单。
+- **`global_key` 需全局一致才有效**：Fetcher 只会把 IP 写入**首个启用站点**的 `global_key`，而每个站点的检测器读取**自己站点的** `global_key`。若给不同站点配了不同的 `global_key`，拉取只写到第一个 key，其余站点将无法命中。多站点建议沿用默认值（或显式统一）。
+
+> 每源还会写入独立集合 `threatintel:source:<sanitized_name>`（如 `threatintel:source:blocklist_de_all`），可用于单独观测各源入库量。
 
 ### 验证
 
@@ -181,10 +186,10 @@ sites:
 
 ### 验证
 
-- 模式 `log`：发起 `curl -A "Googlebot"`，到「爬虫日志」查看该记录的 `verified` 字段（`true`/`false`/`unknown`）。
-- 模式 `block`：对伪造 UA 应返回 403；对真实 Google 反解应放行。
-- 注意：仅对**搜索类爬虫**（googlebot 等，严格匹配 `googlebot.com`/`google.com`/`googleusercontent.com` 反解后缀）验证；DNS 反解需要服务器网络可达 Google 的 PTR DNS。
-- 验证结果带磁盘缓存 `data/botverify_cache.json`（可用 `PRERENDER_BOTVERIFY_CACHE` 覆盖）：首次未缓存时异步回填，请求路径零阻塞；DNS 故障为 fail-open（返回 `unknown` 且不缓存，杜绝误杀）。
+- 模式 `log`：发起 `curl -A "Googlebot"`，到「爬虫日志」查看该记录的 `verified` 字段，取值为 `verified` / `unverified` / **空**(DNS 不确定时 fail-open 不打标)。
+- 模式 `block`：对**确定性伪造**（`unverified` 且自称为搜索爬虫）返回 403；`verified`/`unknown` 一律放行（疑罪从无，杜绝误杀）。
+- 注意：仅对**搜索类爬虫**（googlebot 等，反解后缀严格匹配 `googlebot.com`/`google.com`/`googleusercontent.com`）验证；DNS 反解需服务器网络可达 Google 的 PTR DNS。
+- 验证结果带磁盘缓存 `data/botverify_cache.json`（可用 `PRERENDER_BOTVERIFY_CACHE` 覆盖）：首次未缓存时异步回填，请求路径零阻塞；DNS 故障为 fail-open（返回未知且不缓存，绝不误杀）。
 
 ---
 

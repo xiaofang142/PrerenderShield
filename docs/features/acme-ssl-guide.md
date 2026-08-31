@@ -43,9 +43,12 @@ sites:
 
 ### 验证
 
+证书是**写入 `dirs.certs_dir` 目录的 PEM 文件**（`<域名>.crt` / `<域名>.key` / `<域名>.issuer.crt`），Redis 仅存续期状态标记（`ssl:renewal:<域名>`，非证书本体）：
+
 ```bash
-redis-cli --scan --pattern 'ssl:*'      # 看证书是否签发落地
-curl -I https://你的域名/                # 证书有效即 200/301
+ls -l ./certs/<你的域名>.key ./certs/<你的域名>.crt   # 证书文件已落地
+openssl x509 -in ./certs/<你的域名>.crt -noout -subject -dates  # 查看有效期
+curl -I https://你的域名/                                # 证书有效即 200/301
 ```
 
 > 要点：域名 A 记录须指向本机、80 端口对外可达、`production: true` 才签发能被浏览器信任的正式证书（`false` 仅为 let's encrypt staging 联调，浏览器会报警）。
@@ -88,9 +91,9 @@ DNS 提供商凭证需具备创建/删除 **TXT 记录**的权限（ACME 通过�
 ### 验证
 
 ```bash
-redis-cli --scan --pattern 'ssl:*' | head
-# 或查看日志 "Wildcard certificate obtained for: example.com"
-openssl x509 -in <证书路径> -noout -subject -ext subjectAltName   # 应含 *.example.com
+ls -l ./certs/*.key ./certs/*.crt                     # 通配符证书已落地
+openssl x509 -in ./certs/<你的域名>.crt -noout -subject -ext subjectAltName   # 应含 *.example.com
+# 日志确认：Wildcard certificate obtained for: example.com
 ```
 
 ---

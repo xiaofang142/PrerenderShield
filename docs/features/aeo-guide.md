@@ -69,7 +69,7 @@ sites:
 | AI 爬虫识别号 | `IsAICrawler` / `KnownAICrawlers` | 已实现，未在请求路径调用 |
 | 纯净答案提取 | `ExtractAnswer`（剥 nav/广告/script，输出 summary/bullet/qa） | 已实现，未接入 |
 | AEO 结果结构 | `AEResult{ IsAICrawler, ExtractedAnswer, StructuredData }` | 已实现 |
-| 结构化数据增强 | `EnableStructuredData` | 见 `structured_data.go`（Meta 注入管线已启用其生成） |
+| 结构化数据增强 | `OptimizeStructuredData` / `detectPageType`（Article/Product/FAQ/Breadcrumb…） | 已实现，但注入器当前仅输出固定 `WebPage` schema，未调用此按类型生成路径 |
 
 > 若你需要这些能力真正生效（对 AI 爬虫返回去噪后的纯净正文），建议在 `internal/prerender/seo_injector.go` 的响应出口注入 `ExtractAnswer`，或关注后期版本。
 
@@ -80,7 +80,7 @@ sites:
 即使答案提取未接线，`ai: render` 已带来实际收益：
 
 1. **SSR 而非 SPA 空壳**：AI 爬虫通常不执行 JS，实时渲染保证它拿到完整 HTML（而 `passthrough` 会给它原始 SPA 空壳，AI 无法理解）。
-2. **结构化数据（JSON-LD）**：`seo.llm` / `structured_data.go` 可生成 Schema.org JSON-LD，明确告知 AI 页面是 FAQ / Product / Article，机器可直接消费，AEO 收益显著。
+2. **结构化数据（JSON-LD）**：渲染管线当前注入的是通用 `WebPage` JSON-LD（`seo_injector.go` 固定 schema）。`structured_data.go` 虽支持按页面类型生成 Article / Product / FAQ / Breadcrumb 等更精准的 schema，但**该按类型生成路径尚未接入注入器**（属演进项）。即便如此，通用 `WebPage` JSON-LD 已能帮助 AI 爬虫理解页面性质。
 3. **新鲜度**：搜索结果可能引用过期快照；`ai: render` 保证 AI 爬虫每次拿最新内容。
 
 ---
