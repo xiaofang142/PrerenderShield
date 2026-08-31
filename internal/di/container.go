@@ -79,6 +79,11 @@ func NewContainer(deps ContainerDeps) (*Container, error) {
 	// 初始化防火墙
 	firewallMgr := firewall.NewEngineManager()
 
+	// 修复（R11-BUG-3）：ConfigManager 的 Redis 客户端此前从未注入，
+	// 导致 Mutate 的站点配置 Redis 副本同步静默跳过、SaveSitesToRedis/LoadSitesFromRedis
+	// 恒报 "redis client is not set"——"站点配置存 Redis" 链路整体休眠。
+	config.GetInstance().SetRedisClient(redisClient)
+
 	// 初始化缓存
 	cacheMgr := cache.NewManager(redisClient)
 

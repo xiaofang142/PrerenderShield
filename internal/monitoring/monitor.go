@@ -867,11 +867,41 @@ func (m *Monitor) Start() error {
 		}
 		m.AddAlertHandler(eh)
 
+		// 修复（R11-BUG-4）：告警历史此前只有从未被调度的 legacy CheckAlerts 链路才会写入，
+		// UI/文件规则经规则引擎触发后通知可发出但 Alert History 恒空。此处将历史持久化
+		// 挂接为引擎 handler，与触发同链路（引擎已含冷却去重）。
+		if m.alertRepo != nil {
+			m.AddAlertHandler(&alertHistoryHandler{repo: m.alertRepo})
+		}
+
 		// 启动规则引擎
 		m.ruleEngine.Start(m.metricsGetter)
 	}
 
 	m.isRunning = true
+	return nil
+}
+
+// alertHistoryHandler 将引擎触发的告警写入历史存储（R11-BUG-4 修复组件）。
+// 复用 AlertRepository 的键名/格式/裁剪逻辑，保证与 legacy 链路记录形态一致。
+type alertHistoryHandler struct {
+	repo *repository.AlertRepository
+}
+
+func (h *alertHistoryHandler) Name() string { return "history" }
+
+func (h *alertHistoryHandler) Send(_ context.Context, alert *alerting.Alert) error {
+	now := time.Now()
+	h.repo.AppendAlertHistory(repository.AlertRecord{
+		ID:        fmt.Sprintf("alert_%d", now.UnixNano()),
+		Level:     alert.Severity,
+		Rule:      alert.RuleName,
+		Message:   alert.Message,
+		Value:     alert.Value,
+		Threshold: alert.Details["threshold"].(float64),
+		Status:    "firing",
+		Timestamp: now,
+	})
 	return nil
 }
 
