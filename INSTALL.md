@@ -34,10 +34,10 @@ curl -fsSL https://prerender.websitetool.cn/install.sh | bash
 
 1. **检测系统**：识别 OS 与架构（amd64/arm64），安装目录固定为 `~/prerender-shield`
 2. **自动选择安装方式**：有 Docker → Docker 部署；有 Go + Node → 源码构建；否则 → 预编译二进制
-3. **安装依赖**：检测并安装 Chromium（可用 `CHROME_PATH` 指定已有浏览器路径）与 Redis
+3. **安装依赖**：检测并安装 Chromium 与 Redis（Chromium 未检测到时提示设置 `CHROME_PATH`，程序运行时会读取该变量定位浏览器）
 4. **生成配置**：写入 `~/prerender-shield/config.yml`（API `:9598` / 控制台 `:9597`）
 5. **启动服务**：Linux 下注册并启动 `systemd` 服务 `prerender-shield`（配置复制到 `/etc/prerender-shield/config.yml`）；macOS 下 `nohup` 后台运行并记录 PID
-6. **健康检查**：轮询 `GET http://localhost:9598/api/v1/health`
+6. **健康检查**：通过 `GET http://localhost:9598/api/v1/health` 确认服务就绪（Docker 模式轮询重试最多 30 秒）
 
 <details>
 <summary>离线/内网服务器：分步执行</summary>
@@ -135,8 +135,8 @@ sudo firewall-cmd --permanent --add-port={9597,9598}/tcp && sudo firewall-cmd --
 ### 5.3 验证安装
 
 ```bash
-curl http://localhost:9598/api/v1/health    # {"status":"ok",...}
-curl http://localhost:9598/api/v1/version   # {"version":"3.0.0",...}
+curl http://localhost:9598/api/v1/health    # {"code":200,"data":{"status":"running",...}}
+curl http://localhost:9598/api/v1/version   # {"code":200,"data":{"version":"3.0.0",...}}
 ```
 
 ---

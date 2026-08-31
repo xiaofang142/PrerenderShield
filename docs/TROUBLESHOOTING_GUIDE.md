@@ -22,7 +22,7 @@
 ```bash
 # 1. 服务活着吗？
 ./start.sh status
-curl -fsS http://127.0.0.1:9598/api/v1/health   # code=0 存活
+curl -fsS http://127.0.0.1:9598/api/v1/health   # code=200 存活
 
 # 2. Redis 通吗？
 redis-cli ping                                   # PONG 即通
@@ -78,7 +78,7 @@ grep -i redis data/prerender-shield.log | tail -10
 常见原因：
 
 1. **未启动**：`systemctl start redis` 或 `redis-server --daemonize yes`
-2. **连接串错误**：核对 `cache.redis_url` 与 `REDIS_URL` 环境变量（后者优先）
+2. **连接串错误**：核对 `cache.redis_url` 与 `CACHE_REDIS_URL` 环境变量（后者覆盖前者；`REDIS_HOST/PORT/PASSWORD/DB` 组合亦可。`REDIS_URL` 仅 Docker 入口脚本生效）
 3. **密码/绑定问题**：Redis 开了 `requirepass` 但配置未带密码；或 bind 了内网 IP 而应用在另一台机器
 4. **数据丢失导致站点消失**：Redis 无持久化被重启清空 → 恢复 RDB/AOF；生产必须 `appendonly yes`
 
@@ -149,7 +149,7 @@ grep "chromium process cap" data/prerender-shield.log           # 触顶记录
 ### 规则不生效
 
 1. 站点 `firewall.enabled: true` 已开启
-2. 规则引擎支持热加载——控制台保存即生效；若走 API 更新，确认返回 code=0
+2. 规则引擎支持热加载——控制台保存即生效；若走 API 更新，确认返回 code=200
 3. 规则语法错误会在日志中有加载告警
 
 ### GeoIP 判定异常（误封/漏放）
@@ -207,10 +207,10 @@ curl http://127.0.0.1:9598/api/v1/health
 
 | 症状 | 诊断 | 处置 |
 |------|------|------|
-| 高内存 | `top`；实例数 × ~500MB 对照 | 降 `PRERENDER_MAX_INSTANCES`；定期 restart 释放 |
+| 高内存 | `top`；实例数 × ~500MB 对照 | 降 `PRERENDER_MAX_INSTANCES`；实例按使用计数自动退役（MaxUseCount），若怀疑泄漏抓 heap profile 并提 Issue |
 | 高 CPU | 区分渲染进程与应用进程 | 限并发、优化复杂页面、预热错峰 |
 | 响应慢 | 缓存命中率？源站延迟？ | 提高预热覆盖；检查源站健康 |
-| Redis 慢 | `redis-cli --latency`；连接池饱和告警 | 调大 `redis_pool.max_active`；独立 Redis 主机 |
+| Redis 慢 | `redis-cli --latency`；日志观察 `redis pool` 相关 WARN | 调大 `redis_pool.max_active`；独立 Redis 主机 |
 
 基线参考：平均响应 < 500ms，P95 < 2s，CPU < 80%，内存 < 85%。
 

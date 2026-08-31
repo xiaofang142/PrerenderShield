@@ -71,7 +71,7 @@ curl -fsSL https://prerender.websitetool.cn/install.sh | bash
 ### 🏗️ **技术架构**
 - **后端**：Go 1.25+（高性能、高并发、内存安全）
 - **前端**：React 18 + TypeScript + Ant Design（现代化管理界面）
-- **渲染引擎**：Headless Chromium + Puppeteer（标准浏览器渲染）
+- **渲染引擎**：Headless Chromium + chromedp（Go 原生 CDP 驱动，标准浏览器渲染）
 - **缓存系统**：Redis（高性能内存数据库）
 - **部署方式**：原生部署（一键脚本安装）
 
@@ -176,7 +176,7 @@ Prerender Shield 在市场上具有独特的定位，填补了现有产品的功
 | **Cloudflare + Prerender.io** | 5000元+ | 中（云服务配置） | 中（云服务管理） |
 
 #### 3. 技术优势突出
-- **智能路由算法**：避免无效渲染，节省 30%+ 计算资源
+- **智能路由算法**：爬虫请求才进入渲染，避免无效渲染，节省计算资源
 - **资源优化设计**：Chromium 实例复用，降低内存消耗
 - **实时配置更新**：Redis 驱动的动态配置，支持热重载
 - **现代化技术栈**：Go + React + TypeScript，易于二次开发
@@ -187,6 +187,9 @@ Prerender Shield 在市场上具有独特的定位，填补了现有产品的功
 - **中文友好**：完整中文文档和界面，降低使用门槛
 
 ### ⚡ **性能对比**
+
+> 下表为设计目标参考值（非实测基准数据），实际表现因环境、配置与内容复杂度而异。
+
 | 指标 | Prerender Shield | Rendertron | Prerender.io |
 |------|-----------------|------------|--------------|
 | **首次渲染延迟** | 300-500ms | 500-800ms | 200-400ms |
@@ -248,7 +251,7 @@ Prerender Shield 采用三阶段部署模式：**开发者构建 → 用户安�
 
 ```bash
 # 1. 克隆代码仓库
-git clone https://github.com/yourusername/prerender-shield.git
+git clone https://github.com/xiaofang142/PrerenderShield.git
 cd prerender-shield
 
 # 2. 给构建脚本添加执行权限
@@ -259,10 +262,10 @@ chmod +x build.sh
 ```
 
 **build.sh 脚本功能说明**：
-- ✅ 检查Go和Node.js环境
+- ✅ 依赖 Go 与 Node.js 环境（未安装时构建失败）
 - ✅ 配置Go模块镜像加速
 - ✅ 自动获取当前平台信息
-- ✅ 构建前端（安装依赖、交互式设置API地址、构建）
+- ✅ 构建前端（安装依赖、构建；可通过 `--api-host` 参数或 `VITE_API_BASE_URL` 环境变量设置 API 地址）
 - ✅ 安装Go依赖
 - ✅ 构建当前平台的二进制文件（路径：bin/api）
 - ✅ 将前端代码从web/dist拷贝到bin/web
@@ -288,7 +291,7 @@ chmod +x install.sh
 - ✅ 检测操作系统和架构
 - ✅ 自动选择安装方式（Docker / 源码构建 / 预编译二进制）
 - ✅ 检查并安装 Redis（如未安装）
-- ✅ 检查并安装 Chromium 无头浏览器（渲染引擎核心依赖，可通过 `CHROME_PATH` 环境变量指定路径）
+- ✅ 检查并安装 Chromium 无头浏览器（渲染引擎核心依赖；未检测到时提示设置 `CHROME_PATH`，程序运行时会读取该变量定位浏览器）
 - ✅ 生成默认配置并注册 systemd 服务（Linux）或后台启动（macOS）
 - ✅ 执行安装后的健康检查
 
@@ -301,7 +304,7 @@ chmod +x install.sh
 sudo systemctl start prerender-shield
 
 # 或使用启动脚本
-./start.sh
+./start.sh start
 ```
 
 > 注意：`api` 二进制本身不支持 start/restart/stop 子命令；停止服务请使用
@@ -320,8 +323,8 @@ chmod +x start.sh
 
 | 脚本名称 | 角色 | 主要功能 | 执行环境 |
 |----------|------|----------|----------|
-| **build.sh** | 开发者构建脚本 | 构建前端和后端，生成多平台二进制文件 | 开发环境 |
-| **install.sh** | 用户安装脚本 | 依赖安装和配置，从预编译包安装应用 | 生产环境 |
+| **build.sh** | 开发者构建脚本 | 构建前端和后端，生成当前平台二进制文件（交叉编译多平台由 CI release 流水线完成） | 开发环境 |
+| **install.sh** | 用户安装脚本 | 自动选择 Docker / 源码构建 / 预编译二进制安装，装依赖、生成配置 | 生产环境 |
 | **start.sh** | 用户启动脚本 | 启动、停止、重启应用，执行健康检查 | 生产环境 |
 
 ### 🔍 **验证安装**
@@ -341,11 +344,11 @@ chmod +x start.sh
    ```bash
    # 健康检查接口
    curl http://localhost:9598/api/v1/health
-   # 预期返回：{"status":"ok","timestamp":"..."}
+   # 预期返回：{"code":200,"data":{"status":"running","service":"prerender-shield","timestamp":...}}
    
    # 版本信息接口
    curl http://localhost:9598/api/v1/version
-   # 预期返回：{"version":"3.0.0",...}
+   # 预期返回：{"code":200,"data":{"version":"3.0.0","official_url":...,"name":"prerender-shield"}}
    ```
 
 ### 🚀 **服务管理**
@@ -381,8 +384,7 @@ chmod +x start.sh
 prerender-shield/                # 项目根目录/运行目录
 ├── bin/                        # 构建产物目录（build.sh 构建当前平台）
 │   ├── api                     # 二进制文件
-│   ├── web/                    # 前端构建产物（管理控制台）
-│   └── static/                 # 静态资源目录
+│   └── web/                    # 前端构建产物（管理控制台）
 ├── static/                     # 静态资源目录
 ├── certs/                      # 证书目录
 ├── configs/                    # 配置文件目录
@@ -404,7 +406,8 @@ prerender-shield/               # 项目根目录
 │   ├── api/                    # API 服务入口（main.go）
 │   └── chromeprobe/            # Chromium 探测工具
 ├── configs/                    # 配置文件模板目录
-│   └── config.example.yml      # 配置文件模板
+│   ├── config.example.yml      # 配置文件模板
+│   └── alert-rules.example.json # 告警规则示例
 ├── data/                       # 数据目录（运行时生成）
 │   ├── prerender-shield.pid    # 进程PID文件
 │   └── prerender-shield.log    # 日志文件
@@ -435,9 +438,9 @@ prerender-shield/               # 项目根目录
 
 | 配置文件 | 路径 | 说明 |
 |---------|------|------|
-| 主配置文件 | `./config/config.yml` | 包含所有核心配置 |
+| 主配置文件 | `./config.yml`（安装目录，install.sh 生成；systemd 部署为 `/etc/prerender-shield/config.yml`） | 包含所有核心配置 |
 | 站点配置 | 存储在 Redis 中 | 动态站点配置，支持热更新 |
-| 系统环境变量 | `/etc/default/prerender-shield` | 系统服务环境变量 |
+| 系统服务环境变量 | `/etc/default/prerender-shield`（EnvironmentFile，可选配置） | systemd 服务的敏感环境变量建议放此处 |
 
 ### 🔧 **配置示例**
 
@@ -450,10 +453,10 @@ server:
 
 # 目录配置
 dirs:
-  data_dir: /var/lib/prerender-shield
+  data_dir: ./data
   static_dir: ./static
-  admin_static_dir: ./web/dist
-  certs_dir: /var/lib/prerender-shield/certs
+  admin_static_dir: ./web
+  certs_dir: ./certs
 
 # 缓存配置
 cache:
@@ -486,7 +489,7 @@ Docker 部署请为 redis 服务挂载持久卷并追加 `--appendonly yes` 启�
 Prerender Shield 支持动态配置更新，无需重启服务即可生效：
 
 1. **通过管理界面更新**：登录管理控制台，在系统配置页面进行修改
-2. **通过API更新**：使用 `PUT /api/v1/system/config` 接口更新配置
+2. **通过API更新**：使用 `POST /api/v1/system/config` 接口更新配置
 3. **通过配置文件更新**：直接修改配置文件，系统会自动检测并加载
 
 ## 6. 开发与贡献
@@ -560,7 +563,7 @@ npm run dev
 1. 检查服务状态：`./start.sh status`
 2. 检查端口是否被占用：`netstat -tuln | grep 9597`
 3. 检查防火墙设置：`sudo ufw status`（Ubuntu）或 `sudo firewall-cmd --list-ports`（CentOS）
-4. 检查日志：查看应用日志文件（默认在 ./logs/ 目录下）
+4. 检查日志：查看应用日志文件（默认在 ./data/ 目录下，即 ./data/prerender-shield.log）
 
 ### ❓ **Redis 连接失败？**
 
@@ -568,14 +571,14 @@ npm run dev
 1. 检查 Redis 服务状态：`sudo systemctl status redis-server` 或 `redis-cli ping`
 2. 检查 Redis 配置：`sudo cat /etc/redis/redis.conf | grep -i bind`
 3. 确保 Redis 允许远程连接（如果需要）
-4. 检查配置文件中的 Redis URL：`grep redis_url ./config/config.yml`
+4. 检查配置文件中的 Redis URL：`grep redis_url ./config.yml`
 
 ### ❓ **API 服务无法访问？**
 
 **解决方案**：
 1. 检查服务状态：`sudo systemctl status prerender-shield`
 2. 检查端口是否被占用：`netstat -tuln | grep 9598`
-3. 检查 API 日志：`tail -f /var/log/prerender-shield/app.log`
+3. 检查 API 日志：`journalctl -u prerender-shield -f`（systemd）或 `tail -f ~/prerender-shield/data/prerender-shield.log`
 
 ## 8. 联系我们
 
@@ -674,12 +677,22 @@ npm run dev
 | [快速上手](docs/QUICK_START_GUIDE.md) | 从安装到添加第一个站点的完整操作流 |
 | [Docker 部署](docs/DOCKER.md) | 多阶段镜像构建、compose 编排、数据持久化与运维命令 |
 
+### 🎯 功能使用指南
+
+| 文档 | 说明 |
+|------|------|
+| [功能文档索引](docs/features/README.md) | 功能文档导航（使用者指南 + 内部实现分屏） |
+| [高级 WAF 防御](docs/features/advanced-waf-guide.md) | CC 攻击防护、威胁情报订阅、爬虫真实性验证、GeoIP 兜底链 |
+| [SSL / ACME 证书](docs/features/acme-ssl-guide.md) | HTTP-01 / DNS-01 通配符 / 手动导入、自动续期 |
+| [LLM SEO 优化器](docs/features/seo-llm-guide.md) | 接 OpenAI/智谱/DeepSeek/Ollama 优化标题/描述/关键词/结构化数据 |
+| [AEO · AI 搜索优化](docs/features/aeo-guide.md) | 识别 AI 爬虫、供给纯净答案、category_policy 策略 |
+
 ### ⚙️ 配置与运维
 
 | 文档 | 说明 |
 |------|------|
 | [配置参考](docs/CONFIG_REFERENCE.md) | 全部 YAML 配置键的类型/默认值/说明（全局 + 站点级） |
-| [环境变量](docs/ENV_VARS.md) | 25 个环境变量完整文档 |
+| [环境变量](docs/ENV_VARS.md) | 41 个环境变量完整文档 |
 | [运维手册](docs/OPERATIONS_MANUAL.md) | 部署拓扑、日常操作、升级备份、监控告警、安全加固 |
 | [故障排查手册](docs/TROUBLESHOOTING_GUIDE.md) | 按症状索引的处置手册与诊断命令集 |
 | [监控与告警](docs/MONITORING_AND_ALERTING.md) | Prometheus 指标与告警规则配置 |
@@ -692,7 +705,7 @@ npm run dev
 | [官方文档](docs/OFFICIAL_DOCUMENTATION.md) | 产品手册：概念、功能、安装、配置、API 概览、FAQ |
 | [技术原理](docs/TECHNICAL_PRINCIPLES.md) | 渲染引擎、WAF 规则引擎、缓存体系实现原理 |
 | [API 清单](docs/API.md) | 全部 REST 端点、认证方式与错误码约定 |
-| [架构图](docs/ARCHITECTURE_DIAGRAMS.md) | 17 张 Mermaid 架构图覆盖全部功能模块 |
+| [架构图](docs/ARCHITECTURE_DIAGRAMS.md) | 18 张 Mermaid 架构图覆盖全部功能模块 |
 | [架构清单](docs/architecture-inventory.md) | 完整模块架构、依赖关系、分层全景 |
 | [功能清单](docs/feature-inventory.md) | 96 项功能实现状态、代码位置、覆盖 |
 | [业务流](docs/business-flow.md) | 六大核心业务流程、配置流、权限模型 |

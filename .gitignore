@@ -115,7 +115,7 @@ coverage.html
 
 # 前端测试目录
 web/src/**/__tests__/**/*.test.tsx.snap
-docs/
+docs/__pycache__/
 
 # 本地构建产物与系统文件
 /api

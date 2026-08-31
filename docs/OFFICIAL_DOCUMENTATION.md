@@ -74,18 +74,22 @@ Prerender Shield 是一款企业级 Web 应用中间件，一体化解决**前�
 ### 预渲染 & SEO
 
 - **Headless Chromium 渲染引擎**：实例池复用、并发控制、可配置超时、使用计数回收
-- **爬虫识别**：User-Agent 特征匹配，当前覆盖 Googlebot / Bingbot / Baiduspider / Sogouspider / Yandexbot
+- **爬虫识别**：User-Agent 特征匹配，分 search/social/ai/generic 四类。search 类覆盖 Googlebot / Bingbot / Baiduspider / YandexBot / Sogou / Yahoo! Slurp / DuckDuckBot；social 类覆盖 Facebook / LinkedIn / Twitter / Pinterest / Slack / Telegram / WhatsApp；ai 类覆盖 GPTBot / ClaudeBot / PerplexityBot / CCBot / Applebot / Bytespider / AmazonBot 等；其余 `bot/spider/crawler/robot` 关键词归入 generic 兜底（刻意不含 curl/wget 等 CLI 工具，防伪造 UA 触发渲染 DoS）
 - **渲染预热**：sitemap.xml 自动解析批量预热（URL 去重）、API 触发预热、定时任务
 - **SEO 增强**：per-site sitemap.xml/sitemap.txt 生成、robots.txt 生成、IndexNow 主动推送（Bing/Yandex/Naver/Seznam，需配置 key）
-- **实验性**：LLM SEO 内容优化器（`seo.llm` 配置段，默认关闭；需自行提供 LLM API）
+- **实验性**：LLM SEO 内容优化器（`seo.llm` 配置段，默认关闭；需自行提供 LLM API）——接 OpenAI/智谱/DeepSeek/Ollama 见 [LLM SEO 优化器使用指南](features/seo-llm-guide.md)
+- **AEO（AI 搜索引擎优化）**：识别 GPTBot/ClaudeBot/PerplexityBot 等 AI 爬虫并供给纯净答案——见 [AEO · AI 搜索引擎优化指南](features/aeo-guide.md)
 
 ### 安全防护 (WAF)
 
 - **OWASP Top 10**：SQLi/NoSQLi/命令注入、XSS（存储/反射/DOM）、CSRF、不安全反序列化、敏感数据泄露
 - **自定义规则引擎**：规则热加载，控制台可视化编辑
 - **GeoIP 地域管控**：本地 MaxMind MMDB（推荐）→ 外部 API 兜底（ip-api/ipinfo/ipapi-co）→ **磁盘持久缓存兜底**（`data/geoip_cache.json`，7 天内旧结果防误杀）
-- **CC 攻击防护**：频率阈值自动封禁（`detectors/cc_protection.go`）
-- **威胁情报**：恶意 IP 库定期拉取（`internal/threatintel`）
+- **CC 攻击防护**：多维限流 + 自动封禁（`detectors/cc_protection.go`）
+- **威胁情报**：免费恶意 IP 库定期拉取（`internal/threatintel`）
+- **爬虫真实性验证**：Google rDNS 双向验证（`bot_verify`）
+
+> 以上高级防护逐项的**启用/配置/验证/坑点**见 [高级 WAF 防御使用指南](features/advanced-waf-guide.md)。
 
 ### 运维能力
 
@@ -147,7 +151,7 @@ cp configs/config.example.yml config/config.yml   # 按需修改
 
 ```bash
 ./start.sh start
-curl http://localhost:9598/api/v1/health      # {"code":0,...} 即健康
+curl http://localhost:9598/api/v1/health      # {"code":200,...} 即健康
 open http://localhost:9597                    # 打开控制台
 ```
 
@@ -189,8 +193,11 @@ sites:
           ttl_seconds: 300
     firewall:
       enabled: true
-      bot_verify:                   # 爬虫真实性验证（log-only）
-        enabled: false              # Google rDNS 双向验证，结果写入爬虫日志 verified 字段
+      bot_verify:                   # 爬虫真实性验证（Google rDNS 双向验证）
+        enabled: false              # 默认关闭
+        mode: "log"                 # log=仅打标（结果写入爬虫日志 verified 字段，零风险）
+                                    # block=拦截"确认伪造"的搜索爬虫（403）；
+                                    # DNS 超时/故障（unknown）一律放行，杜绝误杀
       geoip:
         enabled: true
         block_list: ["KP"]             # 封禁国家码列表（allow_list 为反向白名单模式）
@@ -216,10 +223,10 @@ sites:
 | 站点管理 | 站点 CRUD、域名/端口/模式、预热入口 |
 | WAF / 防火墙 | 规则编辑（热加载）、GeoIP 名单、CC 阈值 |
 | 日志 | 访问日志/爬虫日志检索，含 GeoIP 归属地 |
-| SSL | ACME 自动证书申请与续期 |
+| SSL | ACME 自动证书申请与续期（HTTP-01 / DNS-01 通配符 / 手动导入）——见 [SSL/ACME 证书管理使用指南](features/acme-ssl-guide.md) |
 | 系统设置 | 缓存、监控、商业授权 |
 
-实时通道：`ws://<host>:9597/ws?token=<JWT>`（控制台已内置反向代理与鉴权）。
+实时通道：`ws://<host>:9597/ws/realtime?token=<JWT>`（控制台反向代理 `/ws/` 到管理 API；直连管理 API 亦可：`ws://<host>:9598/ws/realtime?token=<JWT>`）。
 
 ## 配置参考
 
@@ -239,7 +246,7 @@ dirs:
   admin_static_dir: ./web
 
 cache:
-  type: redis               # 渲染缓存基于 Redis
+  type: redis               # 渲染缓存固定基于 Redis（type 字段当前未参与分支，保留兼容）
   redis_url: "localhost:6379"
   memory_size: 1000         # 预留参数（当前未参与缓存链路）
   redis_pool:
@@ -265,7 +272,7 @@ monitoring:
 | `PRERENDER_MIN_INSTANCES` / `MAX_INSTANCES` | 2 / 10 | Chromium 池水位 |
 | `PRERENDER_CHROMIUM_PATH` / `CHROME_PATH` | 自动探测 | 显式指定浏览器路径 |
 | `PRERENDER_GEOIP_CACHE` | `data/geoip_cache.json` | GeoIP 磁盘缓存路径 |
-| `REDIS_URL` | 取配置 | 覆盖 Redis 连接串 |
+| `CACHE_REDIS_URL` | 取配置 | 覆盖 Redis 连接串（直装环境；亦可用 `REDIS_HOST/PORT/PASSWORD/DB` 组合。`REDIS_URL` 仅 Docker 入口脚本用于改写 config.yml） |
 | `SERVER_API_PORT` / `SERVER_CONSOLE_PORT` | 取配置 | 端口覆盖 |
 | `MONITORING_PROMETHEUS_ADDRESS` | `:9090` | Prometheus 地址 |
 
@@ -286,7 +293,7 @@ Base URL：`http://<host>:9598/api/v1`，认证方式 `Authorization: Bearer <JW
 | SSL | `/ssl/*` | ACME 证书管理 |
 | 系统 | `GET/POST /system/config` `POST /system/backup` | 配置读取/动态更新/备份 |
 
-响应统一格式：成功 `{"code":0,"data":{...},"message":"ok"}`，失败 `{"code":4xx/5xx,"message":"..."}`。
+响应统一格式：成功 `{"code":200,"data":{...},"message":"success"}`，失败 `{"code":4xx/5xx,"message":"..."}`。
 
 ### 管理 API Token（自动化调用）
 

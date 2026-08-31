@@ -54,7 +54,7 @@
 **健康检查**：
 
 ```bash
-curl -fsS http://127.0.0.1:9598/api/v1/health    # code=0 即存活
+curl -fsS http://127.0.0.1:9598/api/v1/health    # code=200 即存活
 curl -fsS http://127.0.0.1:9598/api/v1/version   # 版本信息
 ```
 
@@ -114,11 +114,11 @@ tail -50 data/prerender-shield.log   # 确认无 ERROR 刷屏、Chromium 自检�
 ### Prometheus 指标
 
 - 地址：`monitoring.prometheus_address`（默认 `:9090/metrics`）
-- 关键指标：渲染请求 QPS/耗时、Chromium 实例数与使用计数、WAF 拦截数、Redis 连接池水位
+- 关键指标：渲染请求 QPS/耗时（`prerender_requests_total` / `prerender_response_time_seconds` / `prerender_avg_render_time_seconds`）、Chromium 实例数（`prerender_active_browsers`）、WAF 拦截（`prerender_blocked_requests_total` / `prerender_waf_block_rate`）、缓存命中率与渲染成功率（`prerender_cache_hit_rate` / `prerender_render_success_rate`）
 
 ### WebSocket 实时流（内部消费）
 
-- `/ws?token=<JWT>`：告警事件实时推送 + 每 10s 指标广播（控制台 Dashboard 已接入）
+- `/ws/realtime?token=<JWT>`：告警事件实时推送 + 每 10s 指标广播（控制台 Dashboard 已接入；控制台 `/ws/` 前缀反向代理至管理 API）
 
 ### 示例告警规则
 
@@ -159,7 +159,7 @@ grep "GeoIP" data/prerender-shield.log                  # GeoIP 数据源状态
 | 内存/Chromium 实例 | ~300–500MB | `js-flags` 已限制 V8 堆 512MB；小内存机器用 `PRERENDER_MAX_INSTANCES=2~3` |
 | 实例数公式 | max ≥ 峰值并发爬虫渲染数 | min 为常驻热实例，保证首请求低延迟 |
 | Chromium 进程硬上限 | `MaxInstances*8+16` | 每实例派生约 8 个 OS 进程；可用 `PRERENDER_PROCESS_CAP` 覆盖（一般不需要） |
-| Redis 内存 | 缓存条目 × 平均页大小 | `cache.memory_size` 控制 L1；站点配置体积极小 |
+| Redis 内存 | 缓存条目 × 平均页大小 | 渲染缓存为纯 Redis 存储（无本地 L1；`cache.memory_size` 为预留参数未参与链路） |
 | 磁盘 | 日志 + 证书 + Redis 持久化文件 | 预留 20GB SSD |
 
 扩容路径：垂直加内存提高实例数 → 水平多实例（每台独立 Redis 或共享）→ 前置 LB 按域名分流。
