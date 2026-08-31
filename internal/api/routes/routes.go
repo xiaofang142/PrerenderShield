@@ -2,6 +2,7 @@ package routes
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 
@@ -17,6 +18,7 @@ import (
 	"prerender-shield/internal/scheduler"
 	sitehandler "prerender-shield/internal/site-handler"
 	siteserver "prerender-shield/internal/site-server"
+	"prerender-shield/internal/utils"
 	"prerender-shield/internal/websocket"
 )
 
@@ -84,6 +86,14 @@ func (r *Router) RegisterRoutes(ginRouter *gin.Engine) {
 
 	// 添加安全头中间件
 	addSecurityHeaders(ginRouter)
+
+	// R14-BUG-3 修复：CORS/WS 白名单此前硬编码 9597/3000，与可配置的 console_port
+	// 脱节——隔离实例(19597)等自定义端口部署时浏览器 Origin 一律被拒，WebSocket
+	// 握手 "origin not allowed"。按本进程实际端口动态注入允许来源。
+	utils.AddDynamicOrigin(fmt.Sprintf("http://localhost:%d", r.cfg.Server.ConsolePort))
+	utils.AddDynamicOrigin(fmt.Sprintf("http://127.0.0.1:%d", r.cfg.Server.ConsolePort))
+	utils.AddDynamicOrigin(fmt.Sprintf("http://localhost:%d", r.cfg.Server.APIPort))
+	utils.AddDynamicOrigin(fmt.Sprintf("http://127.0.0.1:%d", r.cfg.Server.APIPort))
 
 	// 添加CORS中间件
 	addCorsMiddleware(ginRouter)

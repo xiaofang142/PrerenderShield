@@ -66,6 +66,7 @@ type RedisClientInterface interface {
 	SetSiteStats(siteID string, stats map[string]interface{}) error
 	GetSiteStats(key string) (map[string]string, error)
 	DeleteSiteData(siteID string) error
+	ClearSiteCache(siteID string) error
 	AddURL(siteID, url string) error
 }
 
@@ -166,6 +167,10 @@ func (w *redisClientWrapper) GetSiteStats(key string) (map[string]string, error)
 
 func (w *redisClientWrapper) DeleteSiteData(siteID string) error {
 	return w.client.DeleteSiteData(siteID)
+}
+
+func (w *redisClientWrapper) ClearSiteCache(siteID string) error {
+	return w.client.ClearSiteCache(siteID)
 }
 
 func (w *redisClientWrapper) AddURL(siteID, url string) error {
@@ -373,6 +378,16 @@ func (c *SitesController) AddSite(ctx *gin.Context) {
 		return
 	}
 
+	// R14-BUG-1 修复：站点名会流入 sitemap XML、控制台与日志。拒绝 HTML/控制字符，
+	// 防止存储型 XSS 与注入面（名称只允许可见安全字符，长度上限 64）。
+	if len(site.Name) > 64 || strings.ContainsAny(site.Name, "<>&\"'`\n\r\t") {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "Invalid site name: must be <=64 chars and contain no HTML/control characters",
+		})
+		return
+	}
+
 	// 验证域名格式
 	if err := validateDomains(site.Domains); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -478,6 +493,15 @@ func (c *SitesController) UpdateSite(ctx *gin.Context) {
 		return
 	}
 
+	// R14-BUG-1：更新路径同样拒绝 HTML/控制字符站点名（与 AddSite 一致）
+	if siteUpdates.Name == "" || len(siteUpdates.Name) > 64 || strings.ContainsAny(siteUpdates.Name, "<>&\"'`\n\r\t") {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "Invalid site name: must be non-empty, <=64 chars, no HTML/control characters",
+		})
+		return
+	}
+
 	// 从配置管理器获取当前配置
 	if c.configManager == nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -557,6 +581,10 @@ func (c *SitesController) UpdateSite(ctx *gin.Context) {
 
 	// 保存站点配置到Redis
 	c.persistSiteConfigToRedis(updatedSite)
+
+	// 站点服务配置变更（代理目标/预渲染开关/模式等）后失效爬虫渲染缓存，
+	// 避免爬虫命中旧配置下的陈旧渲染内容（若变更未测到则不产生额外副作用）。
+	c.clearSiteRenderCache(updatedSite)
 
 	// 记录系统日志
 	logging.DefaultLogger.LogAdminAction(

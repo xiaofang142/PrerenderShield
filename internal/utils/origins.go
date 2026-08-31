@@ -28,6 +28,21 @@ func SetAllowedOrigins(origins []string) {
 	customOriginsMu.Unlock()
 }
 
+// AddDynamicOrigin 增量追加运行时来源（R14-BUG-3）：
+// 进程实际监听的 console/api 端口可配置，启动时按端口注入，
+// 避免白名单硬编码端口与真实部署端口脱节。
+func AddDynamicOrigin(origin string) {
+	if origin == "" {
+		return
+	}
+	customOriginsMu.Lock()
+	defer customOriginsMu.Unlock()
+	if customOrigins == nil {
+		customOrigins = make(map[string]bool)
+	}
+	customOrigins[origin] = true
+}
+
 // IsOriginAllowed 校验请求来源是否在白名单内。
 // HTTP CORS 中间件与 WebSocket 握手共用同一份名单，保证策略一致。
 func IsOriginAllowed(origin string) bool {

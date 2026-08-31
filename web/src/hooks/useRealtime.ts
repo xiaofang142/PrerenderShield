@@ -37,6 +37,15 @@ export function useRealtime(onMessage: (msg: RealtimeMessage) => void, enabled =
 
       ws.onopen = () => {
         retries = 0
+        // R14-BUG-2 修复：服务端按频道过滤（未订阅的 channel 帧被丢弃），
+        // 连接后必须显式订阅本 hook 消费的频道，否则 Dashboard 永远收不到
+        // 10s 指标广播与告警实时推送。
+        try {
+          ws?.send(JSON.stringify({ action: 'subscribe', channel: 'monitoring' }))
+          ws?.send(JSON.stringify({ action: 'subscribe', channel: 'alerts' }))
+        } catch {
+          // 发送失败不影响连接，下个帧周期重试
+        }
       }
 
       ws.onmessage = (ev: MessageEvent) => {
