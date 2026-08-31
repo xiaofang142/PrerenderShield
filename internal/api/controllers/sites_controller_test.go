@@ -112,11 +112,12 @@ func (m *MockSiteHandler) CreateSiteHandler(site config.SiteConfig, crawlerLogMg
 
 // MockRedisClient implements RedisClientInterface
 type MockRedisClient struct {
-	setSiteStatsFunc   func(siteID string, stats map[string]interface{}) error
-	getSiteStatsFunc   func(key string) (map[string]string, error)
-	deleteSiteDataFunc func(siteID string) error
-	addURLFunc         func(siteID, url string) error
-	storedStats        map[string]map[string]interface{}
+	setSiteStatsFunc    func(siteID string, stats map[string]interface{}) error
+	getSiteStatsFunc    func(key string) (map[string]string, error)
+	deleteSiteDataFunc  func(siteID string) error
+	clearSiteCacheFunc  func(siteID string) error
+	addURLFunc          func(siteID, url string) error
+	storedStats         map[string]map[string]interface{}
 }
 
 func (m *MockRedisClient) SetSiteStats(siteID string, stats map[string]interface{}) error {
@@ -140,6 +141,13 @@ func (m *MockRedisClient) GetSiteStats(key string) (map[string]string, error) {
 func (m *MockRedisClient) DeleteSiteData(siteID string) error {
 	if m.deleteSiteDataFunc != nil {
 		return m.deleteSiteDataFunc(siteID)
+	}
+	return nil
+}
+
+func (m *MockRedisClient) ClearSiteCache(siteID string) error {
+	if m.clearSiteCacheFunc != nil {
+		return m.clearSiteCacheFunc(siteID)
 	}
 	return nil
 }
@@ -439,8 +447,8 @@ func TestSitesController_UpdateSite_MissingName(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	// 没有 configManager 时返回 500
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	// R14-BUG-1: 缺 name 现由新校验先拦 → 400（名称必填并入名称合法性校验）
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestSitesController_DeleteSite_NoConfigManager(t *testing.T) {
