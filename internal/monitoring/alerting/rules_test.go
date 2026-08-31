@@ -296,6 +296,73 @@ func TestRuleEngine_LoadRulesFromFile_InvalidJSON(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
+// TestRuleEngine_LoadRulesFromFile_ExampleTemplate 回归测试（Issue #2）：
+// configs/alert-rules.example.json 采用包装对象 {"rules": [...]} 与字符串时长（"1m"/"5m"）。
+// 该模板必须能被 LoadRulesFromFile 实际解析并生成可用的告警规则。
+func TestRuleEngine_LoadRulesFromFile_ExampleTemplate(t *testing.T) {
+	engine := NewRuleEngine()
+
+	// 定位仓库内的示例模板（相对本包目录 internal/monitoring/alerting 上溯至仓库根）
+	examplePath := "../../../configs/alert-rules.example.json"
+	_, err := os.Stat(examplePath)
+	if err != nil {
+		t.Skip("示例模板不存在，跳过")
+	}
+
+	err = engine.LoadRulesFromFile(examplePath)
+	assert.Nil(t, err)
+
+	rules := engine.GetRules()
+	assert.Greater(t, len(rules), 0)
+
+	// 校验首个规则解析出正确的时长语义
+	var cpu *Rule
+	for _, r := range rules {
+		if r.ID == "cpu_high" {
+			cpu = r
+			break
+		}
+	}
+	if cpu != nil && cpu.Condition != nil {
+		assert.Equal(t, "cpuUsage", cpu.Condition.Metric)
+		assert.Equal(t, time.Minute, cpu.Condition.Duration)
+		assert.Equal(t, 5*time.Minute, cpu.Cooldown)
+	}
+}
+
+// TestRuleEngine_LoadRulesFromFile_BareArray 兼容裸规则数组（启动配置 default 加载路径）
+func TestRuleEngine_LoadRulesFromFile_BareArray(t *testing.T) {
+	engine := NewRuleEngine()
+
+	tmpFile := "/tmp/test_rules_bare.json"
+	payload := `[{"id":"cpu_high","name":"CPU","enabled":true,"condition":{"metric":"cpuUsage","operator":"gt","threshold":90,"duration":60000000000},"severity":"warning","handlers":["webhook"],"cooldown":300000000000}]`
+	assert.Nil(t, os.WriteFile(tmpFile, []byte(payload), 0644))
+	defer os.Remove(tmpFile)
+
+	err := engine.LoadRulesFromFile(tmpFile)
+	assert.Nil(t, err)
+	assert.Len(t, engine.GetRules(), 1)
+	r := engine.GetRules()[0]
+	assert.Equal(t, time.Minute, r.Condition.Duration)
+	assert.Equal(t, 5*time.Minute, r.Cooldown)
+}
+
+// TestRuleEngine_LoadRulesFromFile_StringDuration 回归测试：字符串时长（"2m"）应被解析为 time.Duration
+func TestRuleEngine_LoadRulesFromFile_StringDuration(t *testing.T) {
+	engine := NewRuleEngine()
+
+	tmpFile := "/tmp/test_rules_str_dur.json"
+	payload := `[{"id":"r1","name":"R1","enabled":true,"condition":{"metric":"cpuUsage","operator":"gt","threshold":90,"duration":"2m"},"severity":"warning","cooldown":"10m"}]`
+	assert.Nil(t, os.WriteFile(tmpFile, []byte(payload), 0644))
+	defer os.Remove(tmpFile)
+
+	err := engine.LoadRulesFromFile(tmpFile)
+	assert.Nil(t, err)
+	r := engine.GetRules()[0]
+	assert.Equal(t, 2*time.Minute, r.Condition.Duration)
+	assert.Equal(t, 10*time.Minute, r.Cooldown)
+}
+
 func TestRuleEngine_SaveRulesToFile(t *testing.T) {
 	engine := NewRuleEngine()
 	engine.AddRule(&Rule{ID: "rule1", Name: "Rule 1"})

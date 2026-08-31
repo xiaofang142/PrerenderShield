@@ -1,6 +1,7 @@
 package monitoring
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -235,6 +236,43 @@ func TestMonitor_GetStats(t *testing.T) {
 	assert.Contains(t, stats, "cacheHitRate")
 	assert.Contains(t, stats, "cpuUsage")
 	assert.Contains(t, stats, "memoryUsage")
+}
+
+// TestMonitor_MetricsGetter_Aliases 验证 metricsGetter 能将内置/文档别名指标名解析为 GetStats 规范键。
+// 回归测试（Issue #1）：DefaultRules 用 system_cpu_usage 等，metricsGetter 键为 cpuUsage 等，
+// 解析不一致会导致内置告警规则永不触发。
+func TestMonitor_MetricsGetter_Aliases(t *testing.T) {
+	m := NewMonitor(Config{Enabled: true})
+	m.SetRenderQueueSize(55)
+	m.SetActiveBrowsers(12)
+	ctx := context.Background()
+
+	cases := map[string]string{
+		"system_cpu_usage":    "cpuUsage",
+		"system_memory_usage": "memoryUsage",
+		"system_disk_usage":   "diskUsage",
+		"threats_per_minute":  "blockedRequests",
+		"render_queue_size":   "renderQueueSize",
+	}
+	for alias, canonical := range cases {
+		v, err := m.metricsGetter(ctx, alias)
+		assert.NoError(t, err, "alias %s 应可解析", alias)
+		// 仅对稳定指标断言与规范键结果一致（cpu/mem 为实时系统指标，两次采样可能不同）
+		if alias == "threats_per_minute" || alias == "render_queue_size" {
+			cv, err := m.metricsGetter(ctx, canonical)
+			assert.NoError(t, err, "canonical %s 应可解析", canonical)
+			assert.Equal(t, cv, v, "alias %s 应与 %s 结果一致", alias, canonical)
+		}
+	}
+
+	// render_queue_size 应反映 SetRenderQueueSize 喂入的值
+	v, err := m.metricsGetter(ctx, "render_queue_size")
+	assert.NoError(t, err)
+	assert.Equal(t, 55.0, v)
+
+	// 未知指标应报错（不影响到正常路径）
+	_, err = m.metricsGetter(ctx, "no_such_metric")
+	assert.Error(t, err)
 }
 
 // TestAlertRule_Struct 测试 AlertRule 结构体

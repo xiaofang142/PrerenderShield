@@ -229,6 +229,9 @@ func NewMonitor(config Config) *Monitor {
 	// 设置指标获取函数
 	m.metricsGetter = func(ctx context.Context, metric string) (float64, error) {
 		stats := m.GetStats()
+		if canonical, ok := metricAliases[metric]; ok {
+			metric = canonical
+		}
 		if value, ok := stats[metric]; ok {
 			if floatValue, ok := value.(float64); ok {
 				return floatValue, nil
@@ -237,6 +240,18 @@ func NewMonitor(config Config) *Monitor {
 		return 0, fmt.Errorf("metric %s not found", metric)
 	}
 	return m
+}
+
+// resolveMetricKey 将告警规则/文档中可能出现的别名指标名解析为 GetStats 返回的规范键。
+// 修复：内置 DefaultRules 使用 system_cpu_usage 等指标名，而 metricsGetter 只查 GetStats
+//（键为 cpuUsage 等），导致内置规则因 "metric not found" 永远不触发。此处在引擎查询层
+// 统一做一次别名归一，使规则/示例 JSON 两种命名风格都能命中真实指标。
+var metricAliases = map[string]string{
+	"system_cpu_usage":    "cpuUsage",
+	"system_memory_usage": "memoryUsage",
+	"system_disk_usage":   "diskUsage",
+	"threats_per_minute":  "blockedRequests",
+	"render_queue_size":   "renderQueueSize",
 }
 
 // LoadAlertRules 从文件加载告警规则
@@ -752,21 +767,46 @@ func (m *Monitor) Start() error {
 		http.ListenAndServe(addr, nil)
 	}()
 
-	// 启动定时任务，定期保存监控数据到Redis
-	if m.redisClient != nil {
+	// 启动定时任务：持久化/聚合/清理监控数据到 Redis。
+	// 修复：此前硬编码 5 分钟且永续运行，metrics_persistence.{enabled,interval,aggregate_enabled,
+	// aggregate_interval,retention_hours} 均为暴露但未接线的预留字段；聚合与清理函数虽已实现却从未调度。
+	if m.redisClient != nil && m.config.MetricsPersistence.Enabled {
 		m.wg.Add(1)
 		go func() {
 			defer m.wg.Done()
 
-			ticker := time.NewTicker(5 * time.Minute)
-			defer ticker.Stop()
+			persistInterval := m.config.MetricsPersistence.Interval
+			if persistInterval <= 0 {
+				persistInterval = 5 * time.Minute
+			}
+			aggregateInterval := m.config.MetricsPersistence.AggregateInterval
+			if aggregateInterval <= 0 {
+				aggregateInterval = time.Hour
+			}
+			cleanupInterval := time.Hour
+
+			persist := time.NewTicker(persistInterval)
+			defer persist.Stop()
+			aggregate := time.NewTicker(aggregateInterval)
+			defer aggregate.Stop()
+			cleanup := time.NewTicker(cleanupInterval)
+			defer cleanup.Stop()
 
 			for {
 				select {
-				case <-ticker.C:
-					err := m.SaveMetricsToRedis()
-					if err != nil {
+				case <-persist.C:
+					if err := m.SaveMetricsToRedis(); err != nil {
 						logging.DefaultLogger.Info("Failed to save metrics to Redis: %v\n", err)
+					}
+				case <-aggregate.C:
+					if m.config.MetricsPersistence.AggregateEnabled {
+						if err := m.AggregateMetricsToRedis(); err != nil {
+							logging.DefaultLogger.Info("Failed to aggregate metrics to Redis: %v\n", err)
+						}
+					}
+				case <-cleanup.C:
+					if err := m.CleanupExpiredMetrics(); err != nil {
+						logging.DefaultLogger.Info("Failed to cleanup expired metrics: %v\n", err)
 					}
 				case <-m.stopCh:
 					return
@@ -954,6 +994,13 @@ func (m *Monitor) SetActiveBrowsers(count int) {
 	statsStore.mu.Unlock()
 }
 
+// SetRenderQueueSize 设置渲染队列积压数量（供渲染引擎喂入，默认 0）
+func (m *Monitor) SetRenderQueueSize(count int) {
+	statsStore.mu.Lock()
+	statsStore.renderQueueSize = count
+	statsStore.mu.Unlock()
+}
+
 // RecordRenderTime 记录渲染时间
 func (m *Monitor) RecordRenderTime(duration time.Duration) {
 	renderTime.Observe(duration.Seconds())
@@ -973,6 +1020,8 @@ var statsStore = struct {
 	memoryUsage       float64
 	diskUsage         float64
 	requestsPerSecond float64
+	// 渲染队列
+	renderQueueSize int
 	// 时间跟踪
 	firstRequestTime time.Time
 	lastRequestTime  time.Time
@@ -988,6 +1037,7 @@ var statsStore = struct {
 	memoryUsage:       0,
 	diskUsage:         0,
 	requestsPerSecond: 0,
+	renderQueueSize:   0,
 }
 
 // formatFloat 格式化浮点数，保留两位小数
@@ -1057,6 +1107,7 @@ func (m *Monitor) GetStats() map[string]interface{} {
 		"cacheMisses":     float64(statsStore.cacheMisses),
 		"cacheHitRate":    cacheHitRate,
 		"activeBrowsers":  float64(statsStore.activeBrowsers),
+		"renderQueueSize": float64(statsStore.renderQueueSize),
 		// 添加系统指标
 		"cpuUsage":           cpuUsage,
 		"memoryUsage":        memoryUsage,

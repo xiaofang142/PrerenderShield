@@ -54,6 +54,6 @@ go test ./...
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `REDIS_URL` | `redis://redis:6379/0` | Redis 连接地址 |
+| `CACHE_REDIS_URL` | `redis://redis:6379/0` | Redis 连接地址（程序读取的变量名；`REDIS_URL` 仅入口脚本改写 config.yml 用，程序不读） |
 | `GIN_MODE` | `release` | Gin 框架模式 |
 | `TZ` | `Asia/Shanghai` | 时区 |

@@ -24,7 +24,7 @@ services:
       - TZ=Asia/Shanghai
       - GIN_MODE=release
       # 由环境变量覆盖 config 中 localhost:6379，指向 compose 内的 redis 服务
-      - REDIS_URL=redis://redis:6379/0
+      - CACHE_REDIS_URL=redis://redis:6379/0
       # Chromium 内存预算：容器内存 <4GB 时建议调低
       - PRERENDER_MAX_INSTANCES=3
       - PRERENDER_MIN_INSTANCES=1

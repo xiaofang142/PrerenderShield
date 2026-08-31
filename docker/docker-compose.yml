@@ -39,7 +39,7 @@ services:
     environment:
       - GIN_MODE=release
       - TZ=Asia/Shanghai
-      - REDIS_URL=redis://redis:6379/0
+      - CACHE_REDIS_URL=redis://redis:6379/0
       - PRERENDER_MAX_INSTANCES=3
       - PRERENDER_MIN_INSTANCES=1
       - PRERENDER_WORKER_COUNT=3

@@ -1,6 +1,7 @@
 package alerting
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -225,6 +226,63 @@ func (e *RuleEngine) evaluateCondition(cond *Condition, value float64) bool {
 	}
 }
 
+// durationValue 兼容两种 JSON 时长编码：Go time.Duration 数值（纳秒）或人类可读字符串（如 "5m"、"1h30s"）。
+// 修复：configs/alert-rules.example.json 以字符串时长（"1m"/"5m"）书写，而具名 Rule.Cooldown/Condition.Duration
+// 通过 time.Duration 反序列化只接受整数纳秒，导致模板不可被 LoadRulesFromFile 解析。
+type durationValue time.Duration
+
+func (d *durationValue) UnmarshalJSON(b []byte) error {
+	bs := bytes.TrimSpace(b)
+	if len(bs) == 0 || bytes.Equal(bs, []byte("null")) || bytes.Equal(bs, []byte(`""`)) {
+		return nil
+	}
+	// 字符串形式（如 "1m"、"5m"）
+	if bs[0] == '"' {
+		var s string
+		if err := json.Unmarshal(bs, &s); err != nil {
+			return err
+		}
+		if s == "" {
+			return nil
+		}
+		dur, err := time.ParseDuration(s)
+		if err != nil {
+			return fmt.Errorf("invalid duration %q: %w", string(bs), err)
+		}
+		*d = durationValue(dur)
+		return nil
+	}
+	// 数值形式（纳秒）
+	var ns int64
+	if err := json.Unmarshal(bs, &ns); err != nil {
+		return fmt.Errorf("invalid duration %q", string(bs))
+	}
+	*d = durationValue(ns)
+	return nil
+}
+
+func (d durationValue) Duration() time.Duration { return time.Duration(d) }
+
+// ruleFile / conditionFile 为 LoadRulesFromFile 的中间结构体，
+// 将 Cooldown/Duration 用 durationValue 承载，加载后再转换为逻辑 Rule。
+type ruleFile struct {
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Enabled     bool           `json:"enabled"`
+	Condition   *conditionFile `json:"condition"`
+	Severity    string         `json:"severity"`
+	Handlers    []string       `json:"handlers"`
+	Cooldown    durationValue  `json:"cooldown"`
+}
+
+type conditionFile struct {
+	Metric    string        `json:"metric"`
+	Operator  string        `json:"operator"`
+	Threshold float64       `json:"threshold"`
+	Duration  durationValue `json:"duration"`
+}
+
 // LoadRulesFromFile 从文件加载规则
 func (e *RuleEngine) LoadRulesFromFile(filename string) error {
 	data, err := os.ReadFile(filename)
@@ -232,22 +290,37 @@ func (e *RuleEngine) LoadRulesFromFile(filename string) error {
 		return err
 	}
 
-	var rules []Rule
-	if err := json.Unmarshal(data, &rules); err != nil {
-		return err
+	var files []ruleFile
+	// 兼容两种顶层格式：裸规则数组 [...] 或包装对象 {"rules": [...], "notifications": {...}}
+	var wrapper struct {
+		Rules []ruleFile `json:"rules"`
+	}
+	if err := json.Unmarshal(data, &wrapper); err == nil && wrapper.Rules != nil {
+		files = wrapper.Rules
+	} else {
+		if err := json.Unmarshal(data, &files); err != nil {
+			return err
+		}
 	}
 
-	for i := range rules {
-		// Create a new rule on the heap to avoid copying lock
+	for i := range files {
+		f := files[i]
 		rule := &Rule{
-			ID:          rules[i].ID,
-			Name:        rules[i].Name,
-			Description: rules[i].Description,
-			Enabled:     rules[i].Enabled,
-			Condition:   rules[i].Condition,
-			Severity:    rules[i].Severity,
-			Handlers:    rules[i].Handlers,
-			Cooldown:    rules[i].Cooldown,
+			ID:          f.ID,
+			Name:        f.Name,
+			Description: f.Description,
+			Enabled:     f.Enabled,
+			Severity:    f.Severity,
+			Handlers:    f.Handlers,
+			Cooldown:    f.Cooldown.Duration(),
+		}
+		if f.Condition != nil {
+			rule.Condition = &Condition{
+				Metric:    f.Condition.Metric,
+				Operator:  f.Condition.Operator,
+				Threshold: f.Condition.Threshold,
+				Duration:  f.Condition.Duration.Duration(),
+			}
 		}
 		e.AddRule(rule)
 	}

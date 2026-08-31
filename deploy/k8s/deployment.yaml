@@ -26,7 +26,7 @@ spec:
         env:
         - name: GIN_MODE
           value: "release"
-        - name: REDIS_URL
+        - name: CACHE_REDIS_URL
           valueFrom:
             configMapKeyRef:
               name: prerender-shield-config
