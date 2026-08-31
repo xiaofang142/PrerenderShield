@@ -25,7 +25,16 @@ import (
 // WafMiddleware implements the Web Application Firewall logic
 func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, redisClient *pkgredis.Client, geoIP services.GeoIPResolver, wafEngine *firewall.Engine, logWriter *WafLogWriter) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !site.Firewall.Enabled {
+		// 门禁读取权威源（R12-BUG-2 修复）：WAF Settings UI（PUT /sites/:id/waf）保存到
+		// wafRepo，而这里此前只读启动内存快照 site.Firewall.Enabled——两套存储互不相通，
+		// UI 开启 WAF 后实际流量永不防护。改为每次请求实时读 repo；repo 异常时回退内存值。
+		enabled := site.Firewall.Enabled
+		if wafRepo != nil {
+			if wafCfg, err := wafRepo.GetWafConfigBySiteID(site.ID); err == nil && wafCfg != nil {
+				enabled = wafCfg.Enabled
+			}
+		}
+		if !enabled {
 			c.Next()
 			return
 		}
@@ -146,7 +155,9 @@ func WafMiddleware(site config.SiteConfig, wafRepo *repository.WafRepository, re
 		}
 
 		// 5. OWASP Content Detection - 内容威胁检测
-		if wafEngine != nil {
+		// R12-BUG-5 修复②：渲染引擎的回环导航（内部标记）跳过 WAF，
+		// 避免渲染器抓自家页面被自家拦截产生 403 渲染产物。
+		if wafEngine != nil && c.GetHeader("X-Prerender-Internal") == "" {
 			result, err := wafEngine.CheckRequest(c.Request)
 			if err == nil && result != nil && !result.Allow {
 				for _, t := range result.Threats {

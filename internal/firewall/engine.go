@@ -637,6 +637,13 @@ func NewEngine(siteName string, config Config) (*Engine, error) {
 		}
 	}
 
+	// 站点自定义规则检测器（R12-BUG-1 修复）：控制台保存的规则此前无任何引擎组件消费，
+	// 属假性完成。挂入检测器链后按 5s 缓存热读 firewall:rules:<siteID>，实现规则热加载。
+	// siteName 即站点 ID（site-handler 以 site.ID 构建引擎）。
+	if config.RedisClient != nil {
+		e.coreDetectors = append(e.coreDetectors, detectors.NewCustomRuleDetector(siteName, &goRedisAdapter{client: config.RedisClient}))
+	}
+
 	// 初始化 AI 威胁检测器（如果启用）
 	if config.AIConfig != nil && config.AIConfig.Enabled {
 		aiConfig := &ai.Config{
@@ -911,10 +918,16 @@ func (e *Engine) generateRequestCacheKey(req *http.Request) string {
 	bodyHash := e.calculateBodyHash(req)
 
 	// 构造待签名内容 (使用 NUL 分隔符避免拼接碰撞)
+	// R12-BUG-4 修复：缓存键此前不含请求头（User-Agent 等）。同 IP 同 URL 不同 UA 的
+	// 请求共享同一条判定缓存（TTL 5s），导致「sqlmap 被拦后紧接着的正常浏览器/爬虫 UA
+	// 在缓存窗口内同样被 403」的串味误杀。补入 UA 与关键头哈希。
 	payload := strings.Join([]string{
 		req.Method,
 		normalizedURL,
 		clientIP,
+		req.Header.Get("User-Agent"),
+		req.Header.Get("Accept"),
+		req.Header.Get("Content-Type"),
 		bodyHash,
 	}, "\x00")
 

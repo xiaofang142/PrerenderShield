@@ -167,49 +167,41 @@ func TestInjectionDetector_Detect_CommandInjection_Encoded(t *testing.T) {
 
 // ============ 测试 LDAP 注入检测 ============
 
-// TestInjectionDetector_Detect_LDAPInjection_Parentheses 测试括号 LDAP 注入
-func TestInjectionDetector_Detect_LDAPInjection_Parentheses(t *testing.T) {
+// TestInjectionDetector_Detect_LDAPInjection_EscapeEscape 测试 LDAP filter 逃逸组合注入
+// 语义修正（R12-BUG-3）：普通 LDAP 查询 (uid=admin) 不应告警，真正要拦的是
+// 注入的元字符组合 —— `*)(...)`、`)(|(...`、`)(!(` 等 filter 逻辑逃逸。
+func TestInjectionDetector_Detect_LDAPInjection_EscapeEscape(t *testing.T) {
 	detector := NewInjectionDetector(nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/search?filter=(uid=admin)", nil)
-	threats, err := detector.Detect(req)
-
-	assert.NoError(t, err)
-	// LDAP 规则检测括号
-	assert.NotEmpty(t, threats)
+	cases := []string{
+		"/search?filter=*)(uid=*))(|(uid=*", // 经典全量逃逸
+		"/search?filter=admin)(|(objectClass=*",
+		"/search?filter=)(!(cn=a))",
+	}
+	for _, uri := range cases {
+		req := httptest.NewRequest(http.MethodGet, uri, nil)
+		threats, err := detector.Detect(req)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, threats, "should catch: %s", uri)
+	}
 }
 
-// TestInjectionDetector_Detect_LDAPInjection_Ampersand 测试&LDAP 注入
-func TestInjectionDetector_Detect_LDAPInjection_Ampersand(t *testing.T) {
+// TestInjectionDetector_Detect_LDAPInjection_NormalQueries 正常 LDAP 查询不应误报
+func TestInjectionDetector_Detect_LDAPInjection_NormalQueries(t *testing.T) {
 	detector := NewInjectionDetector(nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/search?filter=uid=admin&object=user", nil)
-	threats, err := detector.Detect(req)
-
-	assert.NoError(t, err)
-	assert.NotEmpty(t, threats)
-}
-
-// TestInjectionDetector_Detect_LDAPInjection_Pipe 测试管道 LDAP 注入
-func TestInjectionDetector_Detect_LDAPInjection_Pipe(t *testing.T) {
-	detector := NewInjectionDetector(nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/search?filter=uid=admin|object=user", nil)
-	threats, err := detector.Detect(req)
-
-	assert.NoError(t, err)
-	assert.NotEmpty(t, threats)
-}
-
-// TestInjectionDetector_Detect_LDAPInjection_Asterisk 测试星号 LDAP 注入
-func TestInjectionDetector_Detect_LDAPInjection_Asterisk(t *testing.T) {
-	detector := NewInjectionDetector(nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/search?filter=(uid=*)", nil)
-	threats, err := detector.Detect(req)
-
-	assert.NoError(t, err)
-	assert.NotEmpty(t, threats)
+	cases := []string{
+		"/search?filter=(uid=admin)",
+		"/search?filter=uid=admin&object=user",
+		"/search?filter=uid=admin|object=user",
+		"/search?filter=(uid=*)",
+	}
+	for _, uri := range cases {
+		req := httptest.NewRequest(http.MethodGet, uri, nil)
+		threats, err := detector.Detect(req)
+		assert.NoError(t, err)
+		assert.Empty(t, threats, "normal LDAP query should pass: %s", uri)
+	}
 }
 
 // ============ 测试请求头注入检测 ============

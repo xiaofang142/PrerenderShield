@@ -434,7 +434,10 @@ func (e *engine) RenderAndCache(req RenderRequest) (RenderResult, error) {
 		html = injectNoindexMeta(html)
 	}
 
-	cacheable := !thin && docStatus < 500
+	// R12-BUG-5 修复：缓存只收 2xx。此前 docStatus<500 即缓存——WAF 拦截的 403 页、
+	// 上游 404/403 页面渲染结果会以完整 HTML 结构通过空壳质量门进入缓存，导致后续
+	// 真实爬虫持续命中"被拦截页"的投毒缓存（实测：403 响应被缓存后爬虫回放）。
+	cacheable := !thin && docStatus >= 200 && docStatus < 300
 	if cacheable {
 		ttlSecs := req.Opts.CacheTTL
 		if ttlSecs <= 0 && e.defaultCacheTTL > 0 {
@@ -484,6 +487,13 @@ func (e *engine) chromedpRender(target string, timeout time.Duration) (string, i
 	})
 	err = chromedp.Run(ctx,
 		network.Enable(),
+		chromedp.ActionFunc(func(c context.Context) error {
+			// R12-BUG-5 修复②：渲染回环导航标记为内部请求，WafMiddleware 对其放行，
+			// 否则 WAF 开启的站点中渲染器抓自家页面会被自家 403 页污染（并进一步写缓存）。
+			return network.SetExtraHTTPHeaders(map[string]interface{}{
+				"X-Prerender-Internal": "1",
+			}).Do(c)
+		}),
 		chromedp.Navigate(target),
 		chromedp.WaitVisible("body"),
 		chromedp.ActionFunc(func(c context.Context) error {

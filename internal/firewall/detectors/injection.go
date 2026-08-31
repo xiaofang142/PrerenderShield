@@ -36,10 +36,13 @@ func NewInjectionDetector(ruleProvider RuleProvider) *InjectionDetector {
 // compileRules 预编译规则
 func (d *InjectionDetector) compileRules() {
 	// 默认的注入攻击规则
+	// R12-BUG-3 修复：旧模式为字符级匹配（单字符 ; | & > 即命中），导致主流浏览器
+	// User-Agent（Mozilla/5.0 (Macintosh; ...) 等含分号）在 header 检测中被整批 403 误杀。
+	// 现改为命令注入组合特征（分隔符+危险命令 / 命令替换 / 敏感路径）。
 	defaultRules := []types.Rule{
-		{ID: "injection-001", Name: "SQL Injection", Category: "injection", Pattern: `'|"|OR\s+1=1|UNION|SELECT\s+\*`, Severity: "high"},
-		{ID: "injection-002", Name: "Command Injection", Category: "injection", Pattern: `;|\||&|>|<%3B|<%7C|<%26|<%3E`, Severity: "high"},
-		{ID: "injection-003", Name: "LDAP Injection", Category: "injection", Pattern: `\(|\)|&|\||!|=|\*|\\|/`, Severity: "medium"},
+		{ID: "injection-001", Name: "SQL Injection", Category: "injection", Pattern: `((\x27|\x22)\s*(or|and)\s*(\x27|\x22)?[\w\x27\x22]*\s*=\s*[\w"\x27])|((\x27|\x22)(or|and)(\x27|\x22)\d+(\x27|\x22)=(\x27|\x22)\d)|(\bor\s+\d+\s*=\s*\d)|(union\s+(all\s+)?select)|(--\s*$)|(;\s*drop\s+table)|((\x27|\x22)\s*;)|(select\s+.+\s+from\s+)`, Severity: "high"},
+		{ID: "injection-002", Name: "Command Injection", Category: "injection", Pattern: `((\||;|&)\s*(rm|cat|ls|id|pwd|wget|curl|nc|ncat|bash|sh|zsh|ksh|chmod|chown|chgrp|kill|killall|python\d?|perl|php|ruby|lua|whoami|uname|ping|nslookup|dig|grep|egrep|awk|sed|find|touch|mv|cp|dd|echo|env|sleep|head|tail|wc|sort|uniq|xargs|systemctl|service|apt|apt-get|yum|dnf|mkfs|shutdown|reboot|halt|crontab|ssh|scp|ftp|telnet|make|gcc|git)\b)|(\$\([^)]*\))|(\x60[^\x60]*\x60)|(/etc/(passwd|shadow))|(/bin/(ba)?sh)|(\b[\w./-]{1,32}>\s*/?(etc/|tmp/|home/|var/|\w+\.(sh|py|php))|\b(sh|bash|zsh|ksh)\s*<)|(%3B|%7C|%26)`, Severity: "high"},
+		{ID: "injection-003", Name: "LDAP Injection", Category: "injection", Pattern: `(\*\)\(\w+=)|(\)\(\s*(&|\||!)\()|(\x2A\)\x28)`, Severity: "medium"},
 	}
 
 	allRules := append(d.rules, defaultRules...)
