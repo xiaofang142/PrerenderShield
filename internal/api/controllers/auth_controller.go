@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -89,6 +90,30 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	forceChange := false
 	if !c.userManager.IsFirstRun() {
 		forceChange = c.userManager.IsDefaultPassword(user.ID)
+	}
+
+	// R16-BUG-1 修复：2FA 启用时登录必须完成第二因子验证。
+	// 此前密码通过即发正式 JWT，2FA 形同虚设。现签发短时 tmp_token
+	//（仅可调 /auth/2fa/verify），验证通过后才发正式 JWT。
+	if c.twoFactorAuth != nil {
+		if enabled, err := c.twoFactorAuth.Is2FAEnabled(user.ID); err == nil && enabled {
+			nonce, err := c.twoFactorAuth.LoginChallenge(user.ID, user.Username, 5*time.Minute)
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to start 2FA challenge"})
+				return
+			}
+			tmpToken, err := c.jwtManager.Generate2FAToken(user.ID, user.Username, nonce)
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to generate 2FA token"})
+				return
+			}
+			ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "2FA required", "data": gin.H{
+				"require_2fa": true,
+				"tmp_token":   tmpToken,
+				"username":    user.Username,
+			}})
+			return
+		}
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "Login successful", "data": gin.H{"token": token, "username": user.Username, "force_change_password": forceChange}})
@@ -214,4 +239,42 @@ func (c *AuthController) ChangePassword(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "Password changed successfully"})
+}
+
+// VerifyLogin2FA 登录第二因子验证（R16-BUG-1）：公开端点。
+// 校验 tmp_token（签名+5min TTL+2fa- 前缀，不查会话），消耗登录挑战 nonce（防重放），
+// 校验 TOTP 后签发正式 JWT。
+func (c *AuthController) VerifyLogin2FA(ctx *gin.Context) {
+	var req struct {
+		Code string `json:"code" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "Verification code is required"})
+		return
+	}
+	authHeader := ctx.GetHeader("Authorization")
+	if len(authHeader) <= 7 || authHeader[:7] != "Bearer " {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "Unauthorized"})
+		return
+	}
+	uid, uname, nonce, err := c.jwtManager.Validate2FAToken(authHeader[7:])
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "Invalid or expired 2FA challenge"})
+		return
+	}
+	// 防重放：挑战 nonce 必须仍在且匹配，验证后立即删除
+	if err := c.twoFactorAuth.CheckLoginNonce(uid, nonce); err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "Login challenge expired or already used"})
+		return
+	}
+	if err := c.twoFactorAuth.Verify2FA(uid, req.Code); err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "Invalid verification code"})
+		return
+	}
+	token, err := c.jwtManager.GenerateToken(uid, uname)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "Failed to generate token"})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"code": 200, "message": "Login successful", "data": gin.H{"token": token, "username": uname}})
 }

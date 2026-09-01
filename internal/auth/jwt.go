@@ -3,8 +3,10 @@ package auth
 import (
 	"errors"
 	"fmt"
-	"prerender-shield/internal/redis"
+	"strings"
 	"time"
+
+	"prerender-shield/internal/redis"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -48,6 +50,25 @@ func NewJWTManager(config *JWTConfig, redisClient *redis.Client) *JWTManager {
 }
 
 // GenerateToken 生成JWT令牌
+// Generate2FAToken 签发 2FA 登录挑战临时令牌（R16-BUG-1）：
+// 仅用于调用 /auth/2fa/verify 完成第二因子；短 TTL 且不建会话。
+func (m *JWTManager) Generate2FAToken(userID, username, nonce string) (string, error) {
+	claims := &Claims{
+		UserID:    userID,
+		Username:  username,
+		SessionID: "2fa-" + nonce,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			Issuer:    "prerender-shield",
+			Subject:   userID,
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(m.config.SecretKey))
+}
+
 func (m *JWTManager) GenerateToken(userID, username string) (string, error) {
 	// 生成唯一的SessionID
 	sessionID := uuid.New().String()
@@ -150,4 +171,25 @@ func (m *JWTManager) RevokeToken(tokenString string) error {
 		return m.redisClient.DeleteSession(claims.SessionID)
 	}
 	return nil
+}
+
+// Validate2FAToken 校验登录挑战临时令牌（R16-BUG-1）：
+// 只验签名与有效期，不查 Redis 会话（tmp_token 从不建会话）。
+// 返回 userID/username/nonce。
+func (m *JWTManager) Validate2FAToken(tokenString string) (userID, username, nonce string, err error) {
+	claims := &Claims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, ErrInvalidToken
+		}
+		return []byte(m.config.SecretKey), nil
+	})
+	if err != nil || !token.Valid {
+		return "", "", "", ErrInvalidToken
+	}
+	if !strings.HasPrefix(claims.SessionID, "2fa-") {
+		return "", "", "", ErrInvalidToken
+	}
+	nonce = strings.TrimPrefix(claims.SessionID, "2fa-")
+	return claims.UserID, claims.Username, nonce, nil
 }

@@ -260,3 +260,33 @@ func VerifyTOTPCode(secret, code string) bool {
 		Algorithm: otp.AlgorithmSHA1,
 	})
 }
+
+// LoginChallenge 登录期 2FA 挑战（R16-BUG-1 修复）：
+// 密码认证通过后若 2FA 已启用，签发短时 tmp_token（仅可调 /2fa/login/verify），
+// 验证通过后才发正式 JWT。tmp_token 复用 JWT 形态但带 2fa_pending claim。
+func (t *TwoFactorAuth) LoginChallenge(userID, username string, ttl time.Duration) (string, error) {
+	if t.redisClient == nil {
+		return "", fmt.Errorf("redis client is nil")
+	}
+	nonce := fmt.Sprintf("%d", time.Now().UnixNano())
+	key := fmt.Sprintf("2fa:login:%s", userID)
+	if err := t.redisClient.Set(key, nonce, ttl); err != nil {
+		return "", fmt.Errorf("failed to store login challenge: %w", err)
+	}
+	// nonce 经由 JWT payload 携带由 jwtManager 生成（controller 侧），此处只返回 nonce 供比对
+	return nonce, nil
+}
+
+// CheckLoginNonce 校验登录挑战 nonce 匹配（防重放：验证后立即删除）
+func (t *TwoFactorAuth) CheckLoginNonce(userID, nonce string) error {
+	if t.redisClient == nil {
+		return fmt.Errorf("redis client is nil")
+	}
+	key := fmt.Sprintf("2fa:login:%s", userID)
+	stored, _ := t.redisClient.Get(key)
+	if stored == "" || subtle.ConstantTimeCompare([]byte(stored), []byte(nonce)) != 1 {
+		return fmt.Errorf("login challenge expired or invalid")
+	}
+	t.redisClient.Del(key)
+	return nil
+}

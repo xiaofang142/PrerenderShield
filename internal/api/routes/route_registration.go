@@ -74,6 +74,8 @@ func RegisterAllRoutes(ginRouter *gin.Engine, controllers *Controllers, jwtManag
 			protectedGroup.POST("/2fa/enable", controllers.AuthController.Enable2FA)
 			protectedGroup.POST("/2fa/confirm", controllers.AuthController.Confirm2FA)
 			protectedGroup.POST("/2fa/disable", controllers.AuthController.Disable2FA)
+			// R16-BUG-1：登录第二因子验证 — 公开端点，tmp_token 专用校验在控制器内做
+			apiGroup.POST("/2fa/verify", controllers.AuthController.VerifyLogin2FA)
 
 			// 概览 API
 			protectedGroup.GET("/overview", controllers.OverviewController.GetOverview)
