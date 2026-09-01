@@ -64,10 +64,15 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	}
 
 	// 如果 WAF stats 可用，优先使用 DB 中的数据
+	// R17-F1：blockedRequests 同源统一——此前 totalRequests 取 waf 全局计数而
+	// blockedRequests 却取爬虫日志的 403/429 聚合（时间窗/口径均不同），同一概念
+	// 在 Overview 与 WAF Log 面板显示不同数字。统一取权威拦截计数 waf:stats:global。
+	var wafBlocked int64
 	if c.wafStatsSvc != nil {
 		wafStats, err := c.wafStatsSvc.GetWafGlobalStats(startTime.Format("2006-01-02 15:04:05"), endTime.Format("2006-01-02 15:04:05"))
 		if err == nil && wafStats != nil {
 			totalRequests = wafStats.TotalRequests
+			wafBlocked = wafStats.BlockedRequests
 		}
 	}
 
@@ -91,15 +96,17 @@ func (c *OverviewController) GetOverview(ctx *gin.Context) {
 	// 获取流量趋势数据
 	trafficData := c.visitLogMgr.GetTrafficTrend(time.Now(), time.Now())
 
-	// 使用 CrawlerLogManager 获取真实的爬虫和拦截统计数据
+	// 使用 CrawlerLogManager 获取真实的爬虫统计数据
+	// R17-F1：拦截总数以 WAF 权威计数(waf:stats:global)为准——此前取爬虫日志的
+	// 403/429 聚合，时间窗/口径与 WAF Log 面板均不同，同一概念两个数字。
 	var crawlerTotal, blockedTotal int64
+	blockedTotal = wafBlocked
 	if c.crawlerLogMgr != nil {
 		crawlerTrafficData := c.crawlerLogMgr.GetTrafficTrend(startTime, endTime)
 
-		// 计算爬虫请求总数和拦截总数
+		// 计算爬虫请求总数
 		for _, data := range crawlerTrafficData {
 			crawlerTotal += data.CrawlerRequests
-			blockedTotal += data.BlockedRequests
 		}
 
 		// 合并流量趋势数据
