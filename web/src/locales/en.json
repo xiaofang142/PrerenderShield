@@ -104,7 +104,15 @@
     "passwordChanged": "Password changed successfully",
     "passwordChangeFailed": "Failed to change password",
     "passwordMismatch": "Passwords do not match",
-    "desc2": "Note: The username and password you set now become the admin credentials (the password can be changed later in Settings). Keep them safe!"
+    "desc2": "Note: The username and password you set now become the admin credentials (the password can be changed later in Settings). Keep them safe!",
+    "twoFA": {
+      "title": "Two-Factor Verification",
+      "desc": "Two-factor authentication is enabled for this account. Enter the 6-digit code from your authenticator app.",
+      "placeholder": "6-digit code",
+      "verify": "Verify & Sign in",
+      "invalid": "Invalid or expired verification code",
+      "codeRequired": "Please enter the 6-digit code"
+    }
   },
   "push": {
     "title": "Push Management",

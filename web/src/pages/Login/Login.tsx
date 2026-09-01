@@ -24,6 +24,11 @@ const Login: React.FC = () => {
   const [forceChangeLoading, setForceChangeLoading] = useState(false)
   const [pendingToken, setPendingToken] = useState('')
   const [pendingUsername, setPendingUsername] = useState('')
+  // R16-BUG-1 配套：2FA 登录第二因子状态
+  const [twoFAVisible, setTwoFAVisible] = useState(false)
+  const [twoFALoading, setTwoFALoading] = useState(false)
+  const [twoFATmpToken, setTwoFATmpToken] = useState('')
+  const [twoFACode, setTwoFACode] = useState('')
   const navigate = useNavigate()
   const { login: authLogin } = useAuth()
 
@@ -78,12 +83,44 @@ const Login: React.FC = () => {
     checkFirstRun()
   }, [])
 
+  // 2FA 第二因子验证提交（R16-BUG-1 配套）
+  const handleTwoFAVerify = async (code: string) => {
+    if (!code || code.trim().length < 6) {
+      message.error(t('login.twoFA.codeRequired'))
+      return
+    }
+    setTwoFALoading(true)
+    try {
+      const res = await authApi.verify2FA(twoFATmpToken, code.trim())
+      if (res.code === 200 && res.data?.token) {
+        setTwoFAVisible(false)
+        setTwoFACode('')
+        authLogin(res.data.token, res.data.username || 'admin')
+        showModal('success', t('login.successTitle'), t('login.successContent'))
+        scheduleNavigateHome()
+      } else {
+        message.error(res.message || t('login.twoFA.invalid'))
+      }
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || t('login.twoFA.invalid')
+      message.error(errorMsg)
+    } finally {
+      setTwoFALoading(false)
+    }
+  }
+
   // 登录处理
   const handleLogin = async (values: { username: string; password: string }) => {
     setLoading(true)
     try {
       const response = await authApi.login(values.username, values.password)
       if (response.code === 200) {
+        // R16-BUG-1 配套：服务端要求第二因子验证
+        if (response.data.require_2fa) {
+          setTwoFATmpToken(response.data.tmp_token)
+          setTwoFAVisible(true)
+          return
+        }
         if (response.data.force_change_password) {
           setPendingToken(response.data.token)
           setPendingUsername(response.data.username)
@@ -262,6 +299,45 @@ const Login: React.FC = () => {
         <div style={{ color: modalType === 'error' ? '#ff4d4f' : modalType === 'success' ? '#52c41a' : '#1890ff' }}>
           {modalContent}
         </div>
+      </Modal>
+
+      {/* R16-BUG-1 配套：2FA 第二因子验证弹窗 */}
+      <Modal
+        title={t('login.twoFA.title')}
+        open={twoFAVisible}
+        closable={false}
+        maskClosable={false}
+        keyboard={false}
+        footer={null}
+        width={380}
+      >
+        <Alert
+          message={t('login.twoFA.desc')}
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+        <Input
+          prefix={<LockOutlined style={{ color: 'rgba(0,0,0,.25)' }} />}
+          placeholder={t('login.twoFA.placeholder')}
+          size="large"
+          maxLength={6}
+          style={{ marginBottom: 16, letterSpacing: 8, textAlign: 'center' }}
+          value={twoFACode}
+          onChange={(e) => setTwoFACode(e.target.value)}
+          onPressEnter={() => handleTwoFAVerify(twoFACode)}
+          disabled={twoFALoading}
+        />
+        <Button
+          type="primary"
+          block
+          size="large"
+          loading={twoFALoading}
+          onClick={() => handleTwoFAVerify(twoFACode)}
+          style={{ background: '#2f855a', borderColor: '#2f855a' }}
+        >
+          {t('login.twoFA.verify')}
+        </Button>
       </Modal>
 
       {/* 强制修改密码弹窗 */}

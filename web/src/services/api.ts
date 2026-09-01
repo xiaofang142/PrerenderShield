@@ -176,6 +176,8 @@ declare module 'axios' {
 export const authApi = {
   firstRun: () => api.get('/auth/first-run'),
   login: (username: string, password: string) => api.post('/auth/login', { username, password }),
+  // R16-BUG-1 配套：2FA 登录第二因子验证（tmp_token 经 Authorization 头携带）
+  verify2FA: (tmpToken: string, code: string) => api.post('/2fa/verify', { code }, { headers: { Authorization: `Bearer ${tmpToken}` } }),
   logout: () => api.post('/auth/logout'),
   changePassword: (oldPassword: string, newPassword: string) => api.post('/auth/change-password', { old_password: oldPassword, new_password: newPassword }),
 }

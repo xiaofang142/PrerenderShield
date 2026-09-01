@@ -104,7 +104,15 @@
     "passwordChanged": "密码修改成功",
     "passwordChangeFailed": "密码修改失败",
     "passwordMismatch": "两次输入的密码不一致",
-    "desc2": "注意：此次设置的用户名和密码将作为管理员凭据（密码后续可在设置中修改），请妥善保管！"
+    "desc2": "注意：此次设置的用户名和密码将作为管理员凭据（密码后续可在设置中修改），请妥善保管！",
+    "twoFA": {
+      "title": "两步验证",
+      "desc": "该账户已启用两步验证，请输入验证器 App 中的 6 位动态码。",
+      "placeholder": "6 位动态验证码",
+      "verify": "验证并登录",
+      "invalid": "验证码错误或已过期",
+      "codeRequired": "请输入 6 位验证码"
+    }
   },
   "push": {
     "title": "推送管理",
